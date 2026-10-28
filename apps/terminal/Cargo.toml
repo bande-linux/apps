@@ -23,3 +23,8 @@ The terminal of the Unbound desktop: xterm-compatible emulation with \
 10,000 lines of scrollback, Super+C and Super+V for the clipboard so \
 that Control+C stays the interrupt, and the light or dark appearance \
 of config.kdl."""
+assets = [
+    ["target/release/unbound-term", "usr/bin/", "755"],
+    ["data/unbound-term.desktop", "usr/share/applications/", "644"],
+    ["data/unbound-term.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+]

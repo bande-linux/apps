@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Terminal
+GenericName=Terminal Emulator
+Comment=Use the command line
+Icon=unbound-term
+Exec=unbound-term
+Categories=System;TerminalEmulator;
+Keywords=shell;prompt;command;commandline;cmd;
