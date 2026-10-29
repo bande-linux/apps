@@ -247,8 +247,5 @@ fn the_wheel_scrolls_the_list_under_the_pointer_and_a_double_click_opens_an_app(
         ..Scroll::default()
     }));
     view.handle(&Event::PointerDown(Pointer::at(at).with_count(2)));
-    assert_eq!(
-        view.monitor.rows()[0].disclosure,
-        Disclosure::Expanded
-    );
+    assert_eq!(view.monitor.rows()[0].disclosure, Disclosure::Expanded);
 }
