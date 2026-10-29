@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use fixture::{entry, process};
 use unbound_monitor::{
     AppList, Catalog, CpuShare, ForceQuitView, Icons, Memory, Monitor, MonitorView, Process,
-    Screen, Snapshot,
+    Request, Screen, Snapshot, Tab,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{CpuRenderer, Image, Palette, Scheme, TextSystem};
@@ -165,4 +165,58 @@ fn force_quit_matches_its_goldens_in_light_and_dark() {
         view.handle(&key(Key::Down));
         render(&mut view, &format!("force-quit-{suffix}"), FORCE_QUIT_SIZE);
     }
+}
+
+fn command(character: char) -> Event {
+    Event::Key {
+        key: Key::Character(character),
+        modifiers: Modifiers {
+            logo: true,
+            ..Modifiers::default()
+        },
+    }
+}
+
+fn monitor_view() -> MonitorView {
+    let mut view = MonitorView::new(
+        Monitor::new(catalog()),
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+        icons(),
+    );
+    view.update(snapshot(0));
+    view
+}
+
+#[test]
+fn the_memory_tab_resamples_at_once_to_show_proportional_memory() {
+    let mut view = monitor_view();
+    assert!(view.handle(&command('2')));
+    assert_eq!(view.monitor.tab(), Tab::Memory);
+    assert!(view.measures_proportional_memory());
+    assert_eq!(view.take_requests(), [Request::Resample]);
+    assert!(view.handle(&command('1')));
+    assert_eq!(view.take_requests(), [Request::Resample]);
+}
+
+#[test]
+fn super_f_searches_as_you_type_and_escape_clears_the_search() {
+    let mut view = monitor_view();
+    assert!(!view.handle(&key(Key::Character('p'))));
+    view.handle(&command('f'));
+    for character in "pipe".chars() {
+        view.handle(&key(Key::Character(character)));
+    }
+    let names = |view: &MonitorView| {
+        view.monitor
+            .rows()
+            .iter()
+            .map(|row| row.name.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(names(&view), ["pipewire"]);
+    view.handle(&key(Key::Enter));
+    assert_eq!(view.monitor.selected_index(), Some(0));
+    view.handle(&key(Key::Escape));
+    assert_eq!(names(&view).len(), 5);
 }
