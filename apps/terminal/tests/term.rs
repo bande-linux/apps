@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
-    CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, DirectoryReports, FIND_BAR_HEIGHT,
-    FindAction, FindBar, GridSize, MouseButton, MouseKind, Painter, SearchDirection, SelectionKind,
+    BANNER_HEIGHT, Banner, BannerAction, CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE,
+    DirectoryReports, GridSize, MouseButton, MouseKind, Painter, SearchDirection, SelectionKind,
     Session, TabBar, TabBarLayout, TabTarget, Terminal, bracketed, encode_key, is_openable,
     mouse_report, next_font_size, shortcut,
 };
@@ -478,7 +478,7 @@ fn find_starts_at_the_newest_match_and_steps_through_the_scrollback() {
 
 #[test]
 fn the_find_bar_reports_typing_and_its_keys() {
-    let mut bar = FindBar::new(unbound_toolkit::Palette::for_scheme(Scheme::Light), "old");
+    let mut bar = Banner::find(unbound_toolkit::Palette::for_scheme(Scheme::Light), "old");
     bar.handle(&unbound_toolkit::ui::Event::Key {
         key: Key::Character('n'),
         modifiers: plain(),
@@ -499,10 +499,10 @@ fn the_find_bar_reports_typing_and_its_keys() {
     assert_eq!(
         bar.take_actions(),
         [
-            FindAction::Changed,
-            FindAction::Older,
-            FindAction::Newer,
-            FindAction::Close
+            BannerAction::QueryChanged,
+            BannerAction::Older,
+            BannerAction::Newer,
+            BannerAction::Dismiss
         ]
     );
 }
@@ -515,15 +515,12 @@ fn found_text_and_the_find_bar_match_their_goldens() {
         terminal.feed(SESSION);
         terminal.set_focus(false);
         assert!(terminal.find("unbound"));
-        let mut bar = FindBar::new(unbound_toolkit::Palette::for_scheme(scheme), "unbound");
+        let mut bar = Banner::find(unbound_toolkit::Palette::for_scheme(scheme), "unbound");
         bar.set_found(true);
         let (width, height) = painter.metrics.content_size(terminal.size());
-        let size = (
-            width.ceil() as u32,
-            (height + FIND_BAR_HEIGHT).ceil() as u32,
-        );
+        let size = (width.ceil() as u32, (height + BANNER_HEIGHT).ceil() as u32);
         let highlights = terminal.highlights();
-        let mut items = painter.terminal(&terminal, Point::new(0.0, FIND_BAR_HEIGHT), &highlights);
+        let mut items = painter.terminal(&terminal, Point::new(0.0, BANNER_HEIGHT), &highlights);
         items.extend(bar.items(size.0, size.1));
         let scene = unbound_toolkit::Scene {
             width: size.0,
@@ -560,4 +557,33 @@ fn links_are_found_in_plain_text_and_in_hyperlink_escapes() {
     assert!(is_openable("HTTPS://example.org"));
     assert!(is_openable("mailto:me@example.org"));
     assert!(!is_openable("javascript:alert(1)"));
+}
+
+#[test]
+fn the_close_confirmation_answers_enter_and_escape_and_matches_its_goldens() {
+    let message = "Close this tab? \u{201C}vim\u{201D} is still running in it.";
+    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
+        let palette = unbound_toolkit::Palette::for_scheme(scheme);
+        let mut banner = Banner::confirm(palette, message, "Close");
+        let size = (480, BANNER_HEIGHT as u32);
+        let scene = unbound_toolkit::Scene {
+            width: size.0,
+            height: size.1,
+            background: palette.surface_background,
+            items: banner.items(size.0, size.1),
+        };
+        let frame = CpuRenderer::new().render(&scene).expect("frame");
+        check_golden(&format!("term-confirm-{suffix}"), size, frame.rgba);
+
+        for key in [Key::Enter, Key::Escape] {
+            banner.handle(&unbound_toolkit::ui::Event::Key {
+                key,
+                modifiers: plain(),
+            });
+        }
+        assert_eq!(
+            banner.take_actions(),
+            [BannerAction::Confirm, BannerAction::Dismiss]
+        );
+    }
 }

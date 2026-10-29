@@ -63,6 +63,10 @@ impl Session {
         Ok(session)
     }
 
+    pub fn id(&self) -> u32 {
+        self.shell
+    }
+
     pub fn fd(&self) -> BorrowedFd<'_> {
         self.pty.file().as_fd()
     }
