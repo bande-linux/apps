@@ -266,6 +266,125 @@ fn push_limited<T>(history: &mut VecDeque<T>, value: T) {
     history.push_back(value);
 }
 
+fn group_target(group: &Group, processes: &[Process], name: String) -> StopTarget {
+    let id = |process: &Process| (process.pid, process.start_ticks);
+    let members = group
+        .members
+        .iter()
+        .map(|member| &processes[*member])
+        .collect::<Vec<_>>();
+    StopTarget {
+        name,
+        roots: members
+            .iter()
+            .filter(|process| !members.iter().any(|parent| parent.pid == process.ppid))
+            .map(|process| id(process))
+            .collect(),
+        processes: members.into_iter().map(id).collect(),
+    }
+}
+
+pub fn stop_target(target: &StopTarget, how: Stop) -> Result<(), SignalError> {
+    let chosen = match how {
+        Stop::Quit => &target.roots,
+        Stop::ForceQuit => &target.processes,
+    };
+    let mut outcome = Ok(());
+    for (pid, start_ticks) in chosen {
+        match stop(*pid, *start_ticks, how) {
+            Ok(()) | Err(SignalError::Exited) => {}
+            Err(error) => {
+                if outcome.is_ok() {
+                    outcome = Err(error);
+                }
+            }
+        }
+    }
+    outcome
+}
+
+pub struct AppList {
+    catalog: Catalog,
+    uid: u32,
+    processes: Vec<Process>,
+    apps: Vec<Group>,
+    selection: Option<GroupKey>,
+}
+
+impl AppList {
+    pub fn new(catalog: Catalog, uid: u32) -> Self {
+        Self {
+            catalog,
+            uid,
+            processes: Vec::new(),
+            apps: Vec::new(),
+            selection: None,
+        }
+    }
+
+    pub fn update(&mut self, snapshot: Snapshot) {
+        let uid = self.uid;
+        let processes = snapshot.processes;
+        let mut apps = self
+            .catalog
+            .group(&processes)
+            .into_iter()
+            .filter(|group| group.app.is_some() && processes[group.leader].identity.uid == uid)
+            .collect::<Vec<_>>();
+        apps.sort_by_cached_key(|group| group.name.to_lowercase());
+        self.processes = processes;
+        self.apps = apps;
+        if let Some(selection) = &self.selection
+            && !self.apps.iter().any(|group| &group.key == selection)
+        {
+            self.selection = None;
+        }
+    }
+
+    pub fn rows(&self) -> impl Iterator<Item = (&str, Option<&str>)> {
+        self.apps.iter().map(|group| {
+            (
+                group.name.as_str(),
+                group.app.as_ref().and_then(|app| app.icon.as_deref()),
+            )
+        })
+    }
+
+    pub fn len(&self) -> usize {
+        self.apps.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.apps.is_empty()
+    }
+
+    pub fn selected_index(&self) -> Option<usize> {
+        let selection = self.selection.as_ref()?;
+        self.apps.iter().position(|group| &group.key == selection)
+    }
+
+    pub fn select(&mut self, index: usize) {
+        self.selection = self.apps.get(index).map(|group| group.key.clone());
+    }
+
+    pub fn move_selection(&mut self, delta: isize) {
+        let Some(last) = self.apps.len().checked_sub(1) else {
+            return;
+        };
+        let index = match self.selected_index() {
+            Some(index) => index.saturating_add_signed(delta).min(last),
+            None if delta < 0 => last,
+            None => 0,
+        };
+        self.select(index);
+    }
+
+    pub fn stop_target(&self) -> Option<StopTarget> {
+        let group = self.apps.get(self.selected_index()?)?;
+        Some(group_target(group, &self.processes, group.name.clone()))
+    }
+}
+
 pub struct Monitor {
     catalog: Catalog,
     snapshot: Snapshot,
@@ -477,21 +596,11 @@ impl Monitor {
         match self.selection.as_ref()? {
             RowKey::Group(key) => {
                 let group = self.groups.iter().find(|group| &group.key == key)?;
-                let members = group
-                    .members
-                    .iter()
-                    .map(|member| &self.snapshot.processes[*member])
-                    .collect::<Vec<_>>();
-                let roots = members
-                    .iter()
-                    .filter(|process| !members.iter().any(|parent| parent.pid == process.ppid))
-                    .map(|process| id(process))
-                    .collect();
-                Some(StopTarget {
-                    name: self.group_name(group),
-                    roots,
-                    processes: members.into_iter().map(id).collect(),
-                })
+                Some(group_target(
+                    group,
+                    &self.snapshot.processes,
+                    self.group_name(group),
+                ))
             }
             RowKey::Process { pid, start_ticks } => {
                 let process =
@@ -506,25 +615,6 @@ impl Monitor {
             }
             RowKey::Interface(_) => None,
         }
-    }
-
-    pub fn stop(target: &StopTarget, how: Stop) -> Result<(), SignalError> {
-        let chosen = match how {
-            Stop::Quit => &target.roots,
-            Stop::ForceQuit => &target.processes,
-        };
-        let mut outcome = Ok(());
-        for (pid, start_ticks) in chosen {
-            match stop(*pid, *start_ticks, how) {
-                Ok(()) | Err(SignalError::Exited) => {}
-                Err(error) => {
-                    if outcome.is_ok() {
-                        outcome = Err(error);
-                    }
-                }
-            }
-        }
-        outcome
     }
 
     pub fn executable(&self) -> Option<std::path::PathBuf> {

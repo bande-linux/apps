@@ -54,3 +54,19 @@ size-megabytes = { $value } MB
 size-gigabytes = { $value } GB
 size-terabytes = { $value } TB
 per-second = { $size }/s
+
+search-placeholder = Search
+button-ok = OK
+button-cancel = Cancel
+button-quit = Quit
+button-force-quit = Force Quit
+quit-title = Do you want to quit “{ $name }”?
+quit-message = Quit asks it to close. Force Quit ends it at once, and any unsaved changes are lost.
+quit-denied = “{ $name }” belongs to another user.
+quit-denied-message = Only its owner or an administrator can quit it.
+
+force-quit-title = Force Quit Apps
+force-quit-hint = If an app does not respond, select it and click Force Quit.
+force-quit-empty = No apps are open.
+force-quit-confirm = Do you want to force quit “{ $name }”?
+force-quit-confirm-message = Any unsaved changes are lost.
