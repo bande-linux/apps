@@ -83,7 +83,7 @@ pub fn encode_key(key: Key, modifiers: Modifiers, mode: TermMode) -> Option<Vec<
             let code = [15, 17, 18, 19, 20, 21, 23, 24][usize::from(number - 5)];
             tilde_key(code, modifiers)
         }
-        Key::Function(_) => return None,
+        Key::Function(_) | Key::Menu => return None,
         Key::Enter => with_meta(modifiers.alt, b"\r".to_vec()),
         Key::Tab if modifiers.shift => b"\x1b[Z".to_vec(),
         Key::Tab => with_meta(modifiers.alt, b"\t".to_vec()),
