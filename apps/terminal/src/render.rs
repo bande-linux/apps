@@ -7,6 +7,7 @@ use unbound_toolkit::{
     Appearance, Color, Item, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
 };
 
+use crate::tabs::{TAB_BAR_HEIGHT, TabBarLayout, TabTarget};
 use crate::terminal::{CellPoint, GridSize, Terminal};
 use crate::theme::{Theme, dimmed};
 
@@ -15,6 +16,14 @@ pub const PADDING: f32 = 4.0;
 const PARAGRAPH_CACHE: usize = 8192;
 const BOLD: f32 = 700.0;
 const MEASURE_SAMPLE: &str = "MMMMMMMMMM";
+const LABEL_SIZE: f32 = 12.0;
+const SYMBOL_SIZE: f32 = 16.0;
+const LABEL_CACHE: usize = 256;
+const TAB_LABEL_INSET: f32 = 28.0;
+const ELLIPSIS: char = '\u{2026}';
+const CLOSE_SYMBOL: &str = "\u{00D7}";
+const NEW_TAB_SYMBOL: &str = "+";
+const HOVER_ALPHA: u8 = 0x14;
 
 fn snap(value: f32, scale: f64) -> f32 {
     let scale = scale as f32;
@@ -83,6 +92,14 @@ impl Metrics {
 }
 
 type RunKey = (String, Color, bool);
+type LabelKey = (String, Color, u32, u32);
+
+pub struct TabBar<'a> {
+    pub titles: &'a [String],
+    pub active: usize,
+    pub hover: Option<TabTarget>,
+    pub focused: bool,
+}
 
 struct Run {
     line: usize,
@@ -116,6 +133,7 @@ fn push_span(spans: &mut Vec<Span>, line: usize, column: usize, cells: usize, co
 pub struct Painter {
     text: TextSystem,
     paragraphs: HashMap<RunKey, Paragraph>,
+    labels: HashMap<LabelKey, Paragraph>,
     pub metrics: Metrics,
     pub theme: Theme,
     font_size: f32,
@@ -128,6 +146,7 @@ impl Painter {
         Self {
             text,
             paragraphs: HashMap::new(),
+            labels: HashMap::new(),
             metrics,
             theme: Theme::new(appearance),
             font_size,
@@ -173,6 +192,133 @@ impl Painter {
             .paragraph(&run.text, style, None, TextAlign::Start);
         self.paragraphs.insert(key, paragraph.clone());
         paragraph
+    }
+
+    pub fn label(&mut self, text: &str, size: f32, color: Color, max_width: f32) -> Paragraph {
+        let key = (text.to_owned(), color, size.to_bits(), max_width.to_bits());
+        if let Some(paragraph) = self.labels.get(&key) {
+            return paragraph.clone();
+        }
+        if self.labels.len() >= LABEL_CACHE {
+            self.labels.clear();
+        }
+        let style = TextStyle::new(size, color);
+        let mut paragraph = self.text.paragraph(text, style, None, TextAlign::Start);
+        let mut characters: Vec<char> = text.chars().collect();
+        while paragraph.width() > max_width && !characters.is_empty() {
+            characters.pop();
+            let shortened: String = characters.iter().chain([&ELLIPSIS]).collect();
+            paragraph = self
+                .text
+                .paragraph(shortened.trim_start(), style, None, TextAlign::Start);
+        }
+        self.labels.insert(key, paragraph.clone());
+        paragraph
+    }
+
+    fn centred(&mut self, text: &str, size: f32, color: Color, rect: Rect) -> Item {
+        let paragraph = self.label(text, size, color, rect.width);
+        Item::Text {
+            origin: Point::new(
+                snap(
+                    rect.x + (rect.width - paragraph.width()) / 2.0,
+                    self.metrics.scale,
+                ),
+                snap(
+                    rect.y + (rect.height - paragraph.height()) / 2.0,
+                    self.metrics.scale,
+                ),
+            ),
+            paragraph,
+        }
+    }
+
+    pub fn tab_bar(&mut self, bar: &TabBar<'_>, width: f32) -> Vec<Item> {
+        let palette = self.theme.palette;
+        let line = hairline(1.0, self.metrics.scale);
+        let layout = TabBarLayout::new(bar.titles.len(), width);
+        let hover_paint = palette.label_primary.with_alpha(HOVER_ALPHA);
+        let label_color = |active: bool| {
+            if active && bar.focused {
+                palette.label_primary
+            } else {
+                palette.label_muted
+            }
+        };
+        let mut items = vec![
+            Item::Fill {
+                shape: Shape::rect(Rect::new(0.0, 0.0, width, TAB_BAR_HEIGHT)),
+                paint: palette.surface_background.into(),
+            },
+            Item::Fill {
+                shape: Shape::rect(Rect::new(0.0, TAB_BAR_HEIGHT - line, width, line)),
+                paint: palette.separator_color.into(),
+            },
+        ];
+        for (index, (tab, title)) in layout.tabs.iter().zip(bar.titles).enumerate() {
+            let active = index == bar.active;
+            let hovered = matches!(
+                bar.hover,
+                Some(TabTarget::Select(hovered) | TabTarget::Close(hovered)) if hovered == index
+            );
+            if active {
+                items.push(Item::Fill {
+                    shape: Shape::rect(*tab),
+                    paint: self.theme.background.into(),
+                });
+            } else if hovered {
+                items.push(Item::Fill {
+                    shape: Shape::rect(Rect::new(tab.x, tab.y, tab.width, tab.height - line)),
+                    paint: hover_paint.into(),
+                });
+            }
+            if index + 1 < layout.tabs.len() {
+                items.push(Item::Fill {
+                    shape: Shape::rect(Rect::new(
+                        tab.x + tab.width - line,
+                        0.0,
+                        line,
+                        TAB_BAR_HEIGHT,
+                    )),
+                    paint: palette.separator_color.into(),
+                });
+            }
+            let label_area = Rect::new(
+                tab.x + TAB_LABEL_INSET,
+                tab.y,
+                (tab.width - 2.0 * TAB_LABEL_INSET).max(0.0),
+                tab.height,
+            );
+            items.push(self.centred(title, LABEL_SIZE, label_color(active), label_area));
+            if hovered {
+                let close = TabBarLayout::close_button(*tab);
+                if bar.hover == Some(TabTarget::Close(index)) {
+                    items.push(Item::Fill {
+                        shape: Shape::rounded(close, close.width / 2.0),
+                        paint: palette.label_primary.with_alpha(2 * HOVER_ALPHA).into(),
+                    });
+                }
+                items.push(self.centred(CLOSE_SYMBOL, SYMBOL_SIZE, palette.label_muted, close));
+            }
+        }
+        if bar.hover == Some(TabTarget::NewTab) {
+            items.push(Item::Fill {
+                shape: Shape::rect(Rect::new(
+                    layout.new_tab.x,
+                    0.0,
+                    layout.new_tab.width,
+                    TAB_BAR_HEIGHT - line,
+                )),
+                paint: hover_paint.into(),
+            });
+        }
+        items.push(self.centred(
+            NEW_TAB_SYMBOL,
+            SYMBOL_SIZE,
+            palette.label_muted,
+            layout.new_tab,
+        ));
+        items
     }
 
     pub fn scene(&mut self, terminal: &Terminal, width: u32, height: u32) -> Scene {

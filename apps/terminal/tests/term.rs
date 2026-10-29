@@ -1,15 +1,14 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::collections::HashMap;
-use std::io::Read;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use alacritty_terminal::term::TermMode;
-use alacritty_terminal::tty::{self, Options, Shell};
+use alacritty_terminal::tty::Shell;
 use unbound_term::{
-    CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, GridSize, MouseButton, MouseKind, Painter,
-    SelectionKind, Terminal, bracketed, encode_key, mouse_report, next_font_size, shortcut,
+    CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, DirectoryReports, GridSize, MouseButton,
+    MouseKind, Painter, SelectionKind, Session, TabBar, TabBarLayout, TabTarget, Terminal,
+    bracketed, encode_key, mouse_report, next_font_size, shortcut,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{Appearance, CpuRenderer, Point, Scheme};
@@ -301,28 +300,81 @@ fn select_all_copies_the_scrollback_and_the_screen() {
     assert_eq!(terminal.selected_text().as_deref(), Some("one\ntwo\nthree"));
 }
 
-#[test]
-fn a_shell_runs_on_a_pty_and_its_output_is_shown() {
-    let mut terminal = terminal(40, 5);
-    let options = Options {
-        shell: Some(Shell::new(
-            "/bin/sh".to_owned(),
-            vec!["-c".to_owned(), "printf 'ready %s' \"$TERM\"".to_owned()],
-        )),
-        working_directory: None,
-        drain_on_exit: true,
-        env: HashMap::from([("TERM".to_owned(), "xterm-256color".to_owned())]),
-    };
-    let pty = tty::new(&options, terminal.window_size(), 0).expect("pty");
+fn wait_until(session: &mut Session, what: &str, done: impl Fn(&Session) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(10);
-    let mut buffer = [0u8; 4096];
-    while !terminal.screen_text()[0].contains("ready xterm-256color") {
-        assert!(Instant::now() < deadline, "{:?}", terminal.screen_text());
-        match pty.file().read(&mut buffer) {
-            Ok(read) => terminal.feed(&buffer[..read]),
-            Err(_) => std::thread::sleep(Duration::from_millis(5)),
-        }
+    while !done(session) {
+        assert!(
+            Instant::now() < deadline,
+            "{what}: {:?}",
+            session.terminal.screen_text()
+        );
+        session.read();
+        std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+#[test]
+fn a_shell_runs_on_a_pty_and_reports_its_folder_and_running_program() {
+    let start = std::env::temp_dir().canonicalize().unwrap();
+    let script = "printf 'ready %s' \"$TERM\"; set -m; read line; \
+                  printf '\\033]7;file://localhost/usr/sh%%61re\\007'; sleep 30";
+    let mut session = Session::spawn(
+        terminal(40, 5),
+        Some(Shell::new(
+            "/bin/sh".to_owned(),
+            vec!["-c".to_owned(), script.to_owned()],
+        )),
+        Some(start.clone()),
+    )
+    .expect("session");
+    wait_until(&mut session, "the shell starts", |session| {
+        session.terminal.screen_text()[0].contains("ready xterm-256color")
+    });
+    assert_eq!(session.working_directory(), Some(start));
+    assert_eq!(session.running_program(), None);
+
+    session.send(b"\r");
+    wait_until(&mut session, "sleep runs", |session| {
+        session.running_program() == Some("sleep")
+    });
+    assert_eq!(
+        session.working_directory(),
+        Some(PathBuf::from("/usr/share"))
+    );
+    assert_eq!(session.title(None), "share — sleep");
+}
+
+#[test]
+fn folder_reports_are_found_across_reads_and_only_for_this_machine() {
+    let mut reports = DirectoryReports::new(Some("unbound".to_owned()));
+    assert_eq!(reports.scan(b"ls\r\n\x1b]7;file://unb"), None);
+    assert_eq!(
+        reports.scan(b"ound/home/me/My%20Files\x1b\\$ "),
+        Some(PathBuf::from("/home/me/My Files"))
+    );
+    assert_eq!(
+        reports.scan(b"\x1b]7;file:///tmp\x07"),
+        Some(PathBuf::from("/tmp"))
+    );
+    assert_eq!(reports.scan(b"\x1b]7;file://elsewhere/tmp\x07"), None);
+    assert_eq!(reports.scan(b"\x1b]2;file:///tmp\x07"), None);
+}
+
+#[test]
+fn the_tab_bar_divides_its_width_and_keeps_room_for_close_and_new_tab() {
+    let layout = TabBarLayout::new(3, 632.0);
+    assert_eq!(layout.tabs.len(), 3);
+    assert_eq!(layout.tabs[1].x, 200.0);
+    assert_eq!(
+        layout.hit(Point::new(250.0, 14.0)),
+        Some(TabTarget::Select(1))
+    );
+    assert_eq!(
+        layout.hit(Point::new(210.0, 14.0)),
+        Some(TabTarget::Close(1))
+    );
+    assert_eq!(layout.hit(Point::new(620.0, 14.0)), Some(TabTarget::NewTab));
+    assert_eq!(layout.hit(Point::new(250.0, 40.0)), None);
 }
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
@@ -369,5 +421,32 @@ fn the_terminal_matches_its_goldens_focused_and_unfocused() {
         let scene = painter.scene(&terminal, size.0, size.1);
         let frame = CpuRenderer::new().render(&scene).expect("frame");
         check_golden(&format!("term-unfocused-{suffix}"), size, frame.rgba);
+    }
+}
+
+#[test]
+fn the_tab_bar_matches_its_goldens() {
+    let titles = [
+        "~ — bash".to_owned(),
+        "unbound — cargo build --release --workspace --all-targets".to_owned(),
+        "src — vim".to_owned(),
+    ];
+    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
+        let mut painter = painter(scheme);
+        let bar = TabBar {
+            titles: &titles,
+            active: 1,
+            hover: Some(TabTarget::Close(2)),
+            focused: true,
+        };
+        let size = (560, 28);
+        let scene = unbound_toolkit::Scene {
+            width: size.0,
+            height: size.1,
+            background: painter.theme.background,
+            items: painter.tab_bar(&bar, size.0 as f32),
+        };
+        let frame = CpuRenderer::new().render(&scene).expect("frame");
+        check_golden(&format!("term-tabs-{suffix}"), size, frame.rgba);
     }
 }

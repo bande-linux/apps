@@ -216,6 +216,12 @@ pub enum Command {
     BiggerText,
     SmallerText,
     DefaultTextSize,
+    NewTab,
+    NewWindow,
+    NextTab,
+    PreviousTab,
+    SelectTab(usize),
+    LastTab,
 }
 
 pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
@@ -233,6 +239,12 @@ pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
         ('=' | '+', _) => Command::BiggerText,
         ('-', false) => Command::SmallerText,
         ('0', false) => Command::DefaultTextSize,
+        ('t', false) => Command::NewTab,
+        ('n', false) => Command::NewWindow,
+        ('9', false) => Command::LastTab,
+        (digit @ '1'..='8', false) => Command::SelectTab(usize::from(digit as u8 - b'1')),
+        ('}' | ']', true) => Command::NextTab,
+        ('{' | '[', true) => Command::PreviousTab,
         _ => return None,
     };
     Some(command)
