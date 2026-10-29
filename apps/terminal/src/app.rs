@@ -203,17 +203,15 @@ impl TerminalApp {
         if index >= self.tabs.len() || index == self.active {
             return;
         }
-        let focused = self.focused;
-        if let Some(report) = self.session().terminal.set_focus(false) {
-            self.send(report);
+        if self.pending.is_some() {
+            self.close_banner();
         }
+        self.focus_terminal(false);
         self.session().terminal.end_find();
         self.active = index;
         self.gesture = Gesture::Idle;
         self.run_find();
-        if let Some(report) = self.session().terminal.set_focus(focused) {
-            self.send(report);
-        }
+        self.focus_terminal(self.focused && !self.banner_focused);
         window.request_redraw();
     }
 
@@ -299,18 +297,19 @@ impl TerminalApp {
             return;
         }
         let was_active = index == self.active;
-        self.tabs.remove(index);
+        let closed = self.tabs.remove(index);
         if self.tabs.is_empty() {
             return;
         }
         if index < self.active || self.active >= self.tabs.len() {
             self.active -= 1;
         }
+        if self.pending == Some(Pending::CloseTab(closed.id())) {
+            self.close_banner();
+        }
         if was_active {
-            let focused = self.focused;
-            if let Some(report) = self.session().terminal.set_focus(focused) {
-                self.send(report);
-            }
+            self.run_find();
+            self.focus_terminal(self.focused && !self.banner_focused);
         }
         self.gesture = Gesture::Idle;
         self.hover = None;
