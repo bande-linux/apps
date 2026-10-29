@@ -14,6 +14,7 @@ use unbound_term::{
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{App, Role, Scene, Scheme, Window, WindowError, WindowEvent};
 
+const APP_ID: &str = "org.unbound.Terminal";
 const TITLE: &str = "Terminal";
 const WRITE_RETRY: Duration = Duration::from_millis(5);
 
@@ -260,7 +261,7 @@ fn run() -> Result<(), WindowError> {
         scheme,
     );
     let size = terminal.metrics.window_size(terminal.size());
-    let mut window = Window::open(Role::toplevel(TITLE, "unbound-term"), size)?;
+    let mut window = Window::open(Role::toplevel(TITLE, APP_ID), size)?;
     let options = Options {
         shell: command(),
         working_directory: home,
