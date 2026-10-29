@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -6,16 +7,27 @@ use accesskit::TreeUpdate;
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
-    BANNER_HEIGHT, Banner, BannerAction, CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE,
-    GridSize, L10N, Link, MouseButton, MouseKind, Notice, Painter, SearchDirection, SelectionKind,
-    Session, TAB_BAR_HEIGHT, TabBar, TabBarLayout, TabTarget, Terminal, bracketed, encode_key,
-    is_openable, mouse_report, next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
+    BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, DEFAULT_FONT_SIZE, GridSize, L10N,
+    Link, MouseButton, MouseKind, Notice, Painter, SearchDirection, SelectionKind, Session,
+    TAB_BAR_HEIGHT, TabBar, TabBarLayout, TabTarget, Terminal, bracketed, encode_key, is_openable,
+    mouse_report, next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
 };
-use unbound_toolkit::ui::{Event, Key, Modifiers};
+use unbound_toolkit::ui::{
+    Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
+};
 use unbound_toolkit::{App, Point, Rect, Scene, Window, WindowEvent};
 
 pub const APP_ID: &str = "org.unbound.Terminal";
 const WRITE_RETRY: Duration = Duration::from_millis(5);
+const FRAME: Duration = Duration::from_millis(8);
+const VELOCITY_WINDOW: Duration = Duration::from_millis(100);
+const DECELERATION_PER_MILLISECOND: f32 = 0.998;
+const MIN_MOMENTUM: f32 = 30.0;
+
+struct Momentum {
+    velocity: f32,
+    last: Instant,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Gesture {
@@ -29,7 +41,6 @@ enum Gesture {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pending {
     CloseTab(u32),
-    CloseWindow,
 }
 
 pub struct TerminalApp {
@@ -41,7 +52,6 @@ pub struct TerminalApp {
     pointer: Point,
     gesture: Gesture,
     hover: Option<TabTarget>,
-    clicks: ClickCounter,
     reported_cell: Option<(usize, usize)>,
     scroll_remainder: f32,
     title: String,
@@ -51,6 +61,10 @@ pub struct TerminalApp {
     pending: Option<Pending>,
     last_query: String,
     link: Option<Link>,
+    samples: VecDeque<(Instant, f32)>,
+    momentum: Option<Momentum>,
+    retry_at: Option<Instant>,
+    cursor: Cursor,
 }
 
 impl TerminalApp {
@@ -64,7 +78,6 @@ impl TerminalApp {
             pointer: Point::default(),
             gesture: Gesture::Idle,
             hover: None,
-            clicks: ClickCounter::default(),
             reported_cell: None,
             scroll_remainder: 0.0,
             title: String::new(),
@@ -74,6 +87,10 @@ impl TerminalApp {
             pending: None,
             last_query: String::new(),
             link: None,
+            samples: VecDeque::new(),
+            momentum: None,
+            retry_at: None,
+            cursor: Cursor::Default,
         };
         app.tabs[0].terminal.set_focus(false);
         app
@@ -251,26 +268,6 @@ impl TerminalApp {
         self.ask(window, &message, pending);
     }
 
-    fn request_close_window(&mut self, window: &mut Window) {
-        let programs: Vec<String> = self
-            .tabs
-            .iter()
-            .filter_map(Session::running_program)
-            .map(quoted)
-            .collect();
-        if programs.is_empty() {
-            return self.tabs.clear();
-        }
-        let message = L10N.tr_args(
-            "confirm-close-window",
-            [
-                ("count", programs.len().into()),
-                ("programs", programs.join(", ").into()),
-            ],
-        );
-        self.ask(window, &message, Pending::CloseWindow);
-    }
-
     fn ask(&mut self, window: &mut Window, message: &str, pending: Pending) {
         self.close_banner();
         let palette = window.appearance().palette();
@@ -291,7 +288,6 @@ impl TerminalApp {
                     self.close_tab(window, index);
                 }
             }
-            Some(Pending::CloseWindow) => self.tabs.clear(),
             None => {}
         }
     }
@@ -327,6 +323,7 @@ impl TerminalApp {
     }
 
     fn key(&mut self, window: &mut Window, key: Key, modifiers: Modifiers) {
+        self.momentum = None;
         if self.link.take().is_some() {
             window.request_redraw();
         }
@@ -513,15 +510,16 @@ impl TerminalApp {
         true
     }
 
-    fn pointer_moved(&mut self, window: &mut Window, at: Point) {
+    fn pointer_moved(&mut self, window: &mut Window, pointer: Pointer) {
+        let at = pointer.position;
         self.pointer = at;
-        let modifiers = window.modifiers();
+        let modifiers = pointer.modifiers;
         let hover = self.tab_target(at);
         if hover != self.hover {
             self.hover = hover;
             window.request_redraw();
         }
-        self.hover_link(window, at, modifiers);
+        self.hover_link(window, modifiers);
         match self.gesture {
             Gesture::Reporting(button) => {
                 self.report_mouse(MouseKind::Drag(button), at, modifiers);
@@ -533,7 +531,7 @@ impl TerminalApp {
             }
             Gesture::Banner => {
                 if let Some(banner) = &mut self.banner {
-                    banner.handle(&Event::PointerMove(at));
+                    banner.handle(&Event::PointerMove(pointer));
                     window.request_redraw();
                 }
             }
@@ -541,7 +539,29 @@ impl TerminalApp {
             Gesture::Idle if hover.is_none() && !self.in_banner(at) => {
                 self.report_mouse(MouseKind::Move, at, modifiers);
             }
-            Gesture::Idle => {}
+            Gesture::Idle => {
+                if let Some(banner) = &mut self.banner {
+                    banner.handle(&Event::PointerMove(pointer));
+                }
+            }
+        }
+        self.update_cursor(window, modifiers);
+    }
+
+    fn update_cursor(&mut self, window: &mut Window, modifiers: Modifiers) {
+        let at = self.pointer;
+        let cursor = if self.link.is_some() {
+            Cursor::Pointer
+        } else if self.in_banner(at) {
+            self.banner.as_ref().map_or(Cursor::Default, Banner::cursor)
+        } else if !self.in_content(at) || (reports_mouse(self.mode()) && !modifiers.shift) {
+            Cursor::Default
+        } else {
+            Cursor::Text
+        };
+        if cursor != self.cursor {
+            self.cursor = cursor;
+            window.set_cursor(cursor);
         }
     }
 
@@ -549,7 +569,8 @@ impl TerminalApp {
         at.y >= self.content_origin().y
     }
 
-    fn hover_link(&mut self, window: &mut Window, at: Point, modifiers: Modifiers) {
+    fn hover_link(&mut self, window: &mut Window, modifiers: Modifiers) {
+        let at = self.pointer;
         let link = if modifiers.logo && self.gesture == Gesture::Idle && self.in_content(at) {
             let cell = self.cell_at(at);
             self.session().terminal.link_at(cell)
@@ -576,12 +597,13 @@ impl TerminalApp {
         }
     }
 
-    fn release(&mut self, window: &mut Window, at: Point) {
+    fn release(&mut self, window: &mut Window, pointer: Pointer) {
+        let at = pointer.position;
         match std::mem::replace(&mut self.gesture, Gesture::Idle) {
-            Gesture::Reporting(button) => {
-                self.report_mouse(MouseKind::Release(button), at, window.modifiers());
+            Gesture::Reporting(button) if mouse_button(pointer.button) == Some(button) => {
+                self.report_mouse(MouseKind::Release(button), at, pointer.modifiers);
             }
-            Gesture::Selecting => {
+            Gesture::Selecting if pointer.is_primary() => {
                 self.session().terminal.finish_selection();
                 window.request_redraw();
             }
@@ -592,16 +614,22 @@ impl TerminalApp {
             },
             Gesture::Banner => {
                 if let Some(banner) = &mut self.banner {
-                    banner.handle(&Event::PointerUp(at));
+                    banner.handle(&Event::PointerUp(pointer));
                     window.request_redraw();
                 }
             }
+            gesture @ (Gesture::Reporting(_) | Gesture::Selecting) => self.gesture = gesture,
             Gesture::Tab(_) | Gesture::Idle => {}
         }
     }
 
-    fn press(&mut self, window: &mut Window, at: Point) {
+    fn press(&mut self, window: &mut Window, pointer: Pointer) {
+        let at = pointer.position;
+        self.momentum = None;
         if let Some(target) = self.tab_target(at) {
+            if !pointer.is_primary() {
+                return;
+            }
             if let TabTarget::Select(index) = target {
                 self.select_tab(window, index);
             }
@@ -610,7 +638,7 @@ impl TerminalApp {
         }
         if self.in_banner(at) {
             if let Some(banner) = &mut self.banner {
-                banner.handle(&Event::PointerDown(at));
+                banner.handle(&Event::PointerDown(pointer));
             }
             self.gesture = Gesture::Banner;
             self.banner_focused = true;
@@ -621,31 +649,37 @@ impl TerminalApp {
             self.banner_focused = false;
             self.focus_terminal(self.focused);
         }
-        let modifiers = window.modifiers();
-        if modifiers.logo {
+        let modifiers = pointer.modifiers;
+        if modifiers.logo && pointer.is_primary() {
             let cell = self.cell_at(at);
             if let Some(link) = self.session().terminal.link_at(cell) {
                 self.open_link(window, &link.uri);
             }
             return;
         }
+        let Some(button) = mouse_button(pointer.button) else {
+            return;
+        };
         if !modifiers.shift && reports_mouse(self.mode()) {
             self.session().terminal.clear_selection();
             self.reported_cell = None;
-            if self.report_mouse(MouseKind::Press(MouseButton::Left), at, modifiers) {
-                self.gesture = Gesture::Reporting(MouseButton::Left);
+            if self.report_mouse(MouseKind::Press(button), at, modifiers) {
+                self.gesture = Gesture::Reporting(button);
             }
             window.request_redraw();
             return;
         }
-        let clicks = self.clicks.press(at, Instant::now());
+        if !pointer.is_primary() {
+            return;
+        }
         let cell = self.cell_at(at);
         self.gesture = Gesture::Selecting;
         let terminal = &mut self.session().terminal;
         if modifiers.shift && terminal.has_selection() {
             terminal.extend_selection(cell);
         } else {
-            terminal.start_selection(cell, SelectionKind::for_clicks(clicks, modifiers.alt));
+            let kind = SelectionKind::for_clicks(pointer.count, modifiers.alt);
+            terminal.start_selection(cell, kind);
         }
         window.request_redraw();
     }
@@ -661,7 +695,82 @@ impl TerminalApp {
         window.request_redraw();
     }
 
-    fn scroll(&mut self, window: &mut Window, dy: f32) {
+    fn scroll(&mut self, window: &mut Window, scroll: Scroll) {
+        self.pointer = scroll.position;
+        let dy = scroll.delta.y;
+        let program_scrolls = (!scroll.modifiers.shift && reports_mouse(self.mode()))
+            || wants_scroll_as_arrows(self.mode());
+        let smooth = scroll.source != ScrollSource::Wheel && !program_scrolls;
+        match scroll.phase {
+            ScrollPhase::Began => {
+                self.momentum = None;
+                self.samples.clear();
+            }
+            ScrollPhase::Changed => {}
+            ScrollPhase::Ended => {
+                if smooth {
+                    self.start_momentum();
+                }
+                return;
+            }
+        }
+        if smooth {
+            let now = Instant::now();
+            self.samples.push_back((now, dy));
+            while self
+                .samples
+                .front()
+                .is_some_and(|(when, _)| now.duration_since(*when) > VELOCITY_WINDOW)
+            {
+                self.samples.pop_front();
+            }
+            self.scroll_smoothly(window, dy);
+        } else {
+            self.scroll_by_lines(window, dy, scroll.modifiers);
+        }
+    }
+
+    fn scroll_smoothly(&mut self, window: &mut Window, dy: f32) {
+        let line_height = self.painter.metrics.cell_height;
+        self.session().terminal.scroll_smoothly(-dy, line_height);
+        window.request_redraw();
+    }
+
+    fn start_momentum(&mut self) {
+        let (Some((first, _)), Some((last, _))) = (self.samples.front(), self.samples.back())
+        else {
+            return;
+        };
+        let span = last
+            .duration_since(*first)
+            .as_secs_f32()
+            .max(FRAME.as_secs_f32());
+        let distance: f32 = self.samples.iter().map(|(_, delta)| delta).sum();
+        let velocity = distance / span;
+        self.samples.clear();
+        if velocity.abs() >= MIN_MOMENTUM {
+            self.momentum = Some(Momentum {
+                velocity,
+                last: Instant::now(),
+            });
+        }
+    }
+
+    fn glide(&mut self, window: &mut Window, now: Instant) {
+        let Some(momentum) = &mut self.momentum else {
+            return;
+        };
+        let elapsed = now.duration_since(momentum.last);
+        momentum.last = now;
+        let distance = momentum.velocity * elapsed.as_secs_f32();
+        momentum.velocity *= DECELERATION_PER_MILLISECOND.powf(elapsed.as_secs_f32() * 1000.0);
+        if momentum.velocity.abs() < MIN_MOMENTUM {
+            self.momentum = None;
+        }
+        self.scroll_smoothly(window, distance);
+    }
+
+    fn scroll_by_lines(&mut self, window: &mut Window, dy: f32, modifiers: Modifiers) {
         self.scroll_remainder += dy / self.painter.metrics.cell_height;
         let lines = self.scroll_remainder.trunc();
         self.scroll_remainder -= lines;
@@ -669,7 +778,6 @@ impl TerminalApp {
         if lines == 0 {
             return;
         }
-        let modifiers = window.modifiers();
         if !modifiers.shift && reports_mouse(self.mode()) {
             let button = if lines < 0 {
                 MouseButton::WheelUp
@@ -693,6 +801,15 @@ impl TerminalApp {
         }
         self.session().terminal.scroll_lines(-lines);
         window.request_redraw();
+    }
+
+    fn schedule_retry(&mut self) {
+        let pending = self.tabs.iter().any(Session::has_pending_output);
+        self.retry_at = match (pending, self.retry_at) {
+            (false, _) => None,
+            (true, Some(at)) => Some(at),
+            (true, None) => Some(Instant::now() + WRITE_RETRY),
+        };
     }
 
     fn focus(&mut self, window: &mut Window, focused: bool) {
@@ -744,15 +861,25 @@ impl App for TerminalApp {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::Input(Event::Key { key, modifiers }) => self.key(window, key, modifiers),
-            WindowEvent::Input(Event::PointerDown(at)) => self.press(window, at),
-            WindowEvent::Input(Event::PointerMove(at)) => self.pointer_moved(window, at),
-            WindowEvent::Input(Event::PointerUp(at)) => self.release(window, at),
-            WindowEvent::PointerLeft => {
-                if self.hover.take().is_some() {
+            WindowEvent::Input(Event::PointerDown(pointer)) => self.press(window, pointer),
+            WindowEvent::Input(Event::PointerMove(pointer) | Event::PointerEnter(pointer)) => {
+                self.pointer_moved(window, pointer)
+            }
+            WindowEvent::Input(Event::PointerUp(pointer)) => self.release(window, pointer),
+            WindowEvent::Input(Event::PointerLeave) => {
+                if self.hover.take().is_some() || self.link.take().is_some() {
                     window.request_redraw();
                 }
+                if let Some(banner) = &mut self.banner {
+                    banner.handle(&Event::PointerLeave);
+                }
+                self.cursor = Cursor::Default;
             }
-            WindowEvent::Scroll { dy, .. } => self.scroll(window, dy),
+            WindowEvent::Input(Event::ModifiersChanged(modifiers)) => {
+                self.hover_link(window, modifiers);
+                self.update_cursor(window, modifiers);
+            }
+            WindowEvent::Input(Event::Scroll(scroll)) => self.scroll(window, scroll),
             WindowEvent::Pasted(text) if self.banner_focused => {
                 if let Some(banner) = &mut self.banner {
                     banner.handle(&Event::Commit(text.replace(['\r', '\n'], " ")));
@@ -772,7 +899,6 @@ impl App for TerminalApp {
                     window.request_redraw();
                 }
             }
-            WindowEvent::CloseRequested => self.request_close_window(window),
             WindowEvent::Pasted(text) => {
                 let bytes = bracketed(&text, self.mode());
                 self.session().terminal.scroll_to_bottom();
@@ -789,7 +915,7 @@ impl App for TerminalApp {
         }
         self.handle_banner_actions(window);
         if self.tabs.is_empty() {
-            return;
+            return window.close();
         }
         let notices = self.session().take_notices();
         self.handle_notices(window, notices);
@@ -797,6 +923,7 @@ impl App for TerminalApp {
         if !self.tabs.is_empty() {
             self.sync_title(window);
         }
+        self.schedule_retry();
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
@@ -816,19 +943,37 @@ impl App for TerminalApp {
         if !self.tabs.is_empty() {
             self.sync_title(window);
         }
+        self.schedule_retry();
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.tabs
-            .iter()
-            .any(Session::has_pending_output)
-            .then(|| Instant::now() + WRITE_RETRY)
+        let glide = self.momentum.as_ref().map(|momentum| momentum.last + FRAME);
+        [glide, self.retry_at].into_iter().flatten().min()
     }
 
-    fn tick(&mut self, _window: &mut Window, _now: Instant) {
-        for tab in &mut self.tabs {
-            tab.flush();
+    fn tick(&mut self, window: &mut Window, now: Instant) {
+        if self.retry_at.is_some_and(|at| at <= now) {
+            self.retry_at = None;
+            for tab in &mut self.tabs {
+                tab.flush();
+            }
+            self.schedule_retry();
         }
+        if self
+            .momentum
+            .as_ref()
+            .is_some_and(|momentum| momentum.last + FRAME <= now)
+        {
+            self.glide(window, now);
+        }
+    }
+
+    fn should_close(&mut self, window: &mut Window) -> bool {
+        if self.tabs.len() == 1 && self.tabs[0].running_program().is_none() {
+            return true;
+        }
+        self.request_close_tab(window, self.active);
+        false
     }
 
     fn finished(&self) -> bool {
@@ -844,6 +989,15 @@ impl App for TerminalApp {
 
     fn accessibility(&self) -> Option<TreeUpdate> {
         self.banner.as_ref().map(Banner::accessibility)
+    }
+}
+
+fn mouse_button(button: PointerButton) -> Option<MouseButton> {
+    match button {
+        PointerButton::Primary => Some(MouseButton::Left),
+        PointerButton::Secondary => Some(MouseButton::Right),
+        PointerButton::Middle => Some(MouseButton::Middle),
+        PointerButton::Back | PointerButton::Forward => None,
     }
 }
 

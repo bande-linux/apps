@@ -6,10 +6,10 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
-    BANNER_HEIGHT, Banner, BannerAction, CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE,
-    DirectoryReports, GridSize, MouseButton, MouseKind, Painter, SearchDirection, SelectionKind,
-    Session, TabBar, TabBarLayout, TabTarget, Terminal, bracketed, encode_key, is_openable,
-    mouse_report, next_font_size, shortcut,
+    BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, DEFAULT_FONT_SIZE, DirectoryReports,
+    GridSize, MouseButton, MouseKind, Painter, SearchDirection, SelectionKind, Session, TabBar,
+    TabBarLayout, TabTarget, Terminal, bracketed, encode_key, is_openable, mouse_report,
+    next_font_size, shortcut,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{Appearance, CpuRenderer, Point, Scheme};
@@ -262,18 +262,9 @@ fn cell(column: usize, line: usize) -> CellPoint {
 }
 
 #[test]
-fn double_click_selects_a_word_triple_click_a_line_and_alt_drag_a_block() {
+fn two_clicks_select_a_word_three_a_line_and_alt_drag_a_block() {
     let mut terminal = terminal(20, 3);
     terminal.feed(b"cargo build --release\r\nsrc/main.rs ok\r\nabc def");
-    let mut clicks = ClickCounter::default();
-    let start = Instant::now();
-    let at = Point::new(10.0, 10.0);
-    let counts: Vec<u8> = (0..4)
-        .map(|step| clicks.press(at, start + Duration::from_millis(100 * step)))
-        .collect();
-    assert_eq!(counts, [1, 2, 3, 1]);
-    assert_eq!(clicks.press(at, start + Duration::from_secs(5)), 1);
-
     terminal.start_selection(cell(2, 1), SelectionKind::for_clicks(2, false));
     terminal.finish_selection();
     assert_eq!(terminal.selected_text().as_deref(), Some("src/main.rs"));
@@ -586,4 +577,31 @@ fn the_close_confirmation_answers_enter_and_escape_and_matches_its_goldens() {
             [BannerAction::Confirm, BannerAction::Dismiss]
         );
     }
+}
+
+#[test]
+fn precise_scrolling_moves_by_points_and_stops_at_both_ends_of_the_scrollback() {
+    let mut terminal = terminal(20, 2);
+    terminal.feed(b"one\r\ntwo\r\nthree\r\nfour");
+    let line = 10.0;
+
+    terminal.scroll_smoothly(4.0, line);
+    assert_eq!(terminal.scroll_shift(), 4.0);
+    assert_eq!(terminal.screen_text(), ["three", "four"]);
+
+    terminal.scroll_smoothly(7.0, line);
+    assert_eq!(terminal.scroll_shift(), 1.0);
+    assert_eq!(terminal.screen_text(), ["two", "three"]);
+
+    terminal.scroll_smoothly(25.0, line);
+    assert_eq!(terminal.scroll_shift(), 0.0);
+    assert_eq!(terminal.screen_text(), ["one", "two"]);
+
+    terminal.scroll_smoothly(-16.0, line);
+    assert_eq!(terminal.scroll_shift(), 4.0);
+    assert_eq!(terminal.screen_text(), ["three", "four"]);
+
+    terminal.scroll_smoothly(-30.0, line);
+    assert_eq!(terminal.scroll_shift(), 0.0);
+    assert_eq!(terminal.screen_text(), ["three", "four"]);
 }

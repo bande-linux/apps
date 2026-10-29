@@ -143,6 +143,7 @@ pub struct Terminal {
     cell_size: (u16, u16),
     search: Option<Search>,
     urls: Option<RegexSearch>,
+    shift: f32,
 }
 
 impl Terminal {
@@ -160,6 +161,7 @@ impl Terminal {
             cell_size: (0, 0),
             search: None,
             urls: None,
+            shift: 0.0,
         }
     }
 
@@ -204,6 +206,7 @@ impl Terminal {
             return false;
         }
         self.cell_size = cell_size;
+        self.shift = 0.0;
         if size != self.size {
             self.size = size;
             self.term.resize(size);
@@ -215,8 +218,32 @@ impl Terminal {
         self.term.grid().display_offset()
     }
 
+    fn scroll_display(&mut self, scroll: Scroll) {
+        self.shift = 0.0;
+        self.term.scroll_display(scroll);
+    }
+
+    pub fn scroll_shift(&self) -> f32 {
+        self.shift
+    }
+
+    pub fn scroll_smoothly(&mut self, points: f32, line_height: f32) {
+        let shift = self.shift + points;
+        let lines = (shift / line_height).floor();
+        let mut shift = shift - lines * line_height;
+        let history = self.term.grid().history_size() as i32;
+        let current = self.display_offset() as i32;
+        let wanted = current + lines as i32;
+        let offset = wanted.clamp(0, history);
+        if wanted < 0 || offset == history {
+            shift = 0.0;
+        }
+        self.term.scroll_display(Scroll::Delta(offset - current));
+        self.shift = shift;
+    }
+
     pub fn scroll_to_bottom(&mut self) {
-        self.term.scroll_display(Scroll::Bottom);
+        self.scroll_display(Scroll::Bottom);
     }
 
     pub fn scroll_pages(&mut self, pages: i32) {
@@ -226,15 +253,16 @@ impl Terminal {
             Scroll::PageDown
         };
         for _ in 0..pages.unsigned_abs() {
-            self.term.scroll_display(scroll);
+            self.scroll_display(scroll);
         }
     }
 
     pub fn scroll_lines(&mut self, lines: i32) {
-        self.term.scroll_display(Scroll::Delta(lines));
+        self.scroll_display(Scroll::Delta(lines));
     }
 
     pub fn clear_scrollback(&mut self) {
+        self.shift = 0.0;
         self.term.clear_screen(ClearMode::Saved);
     }
 
@@ -358,6 +386,7 @@ impl Terminal {
             .as_ref()
             .and_then(|search| search.current.clone())
         {
+            self.shift = 0.0;
             self.term.scroll_to_point(*current.start());
             self.term.scroll_to_point(*current.end());
         }

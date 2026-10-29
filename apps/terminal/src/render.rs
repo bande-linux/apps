@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
-use alacritty_terminal::index::Side;
-use alacritty_terminal::term::{self, cell::Flags};
+use alacritty_terminal::grid::{Dimensions, Indexed};
+use alacritty_terminal::index::{Column, Line, Point as GridPoint, Side};
+use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::CursorShape;
 use unbound_toolkit::{
     Appearance, Color, Item, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
@@ -102,7 +103,7 @@ pub struct TabBar<'a> {
 }
 
 struct Run {
-    line: usize,
+    line: i32,
     column: usize,
     text: String,
     color: Color,
@@ -110,13 +111,13 @@ struct Run {
 }
 
 struct Span {
-    line: usize,
+    line: i32,
     start: usize,
     end: usize,
     color: Color,
 }
 
-fn push_span(spans: &mut Vec<Span>, line: usize, column: usize, cells: usize, color: Color) {
+fn push_span(spans: &mut Vec<Span>, line: i32, column: usize, cells: usize, color: Color) {
     match spans.last_mut() {
         Some(span) if span.line == line && span.end == column && span.color == color => {
             span.end = column + cells;
@@ -337,6 +338,8 @@ impl Painter {
         highlights: &Highlights,
     ) -> Vec<Item> {
         let content = terminal.term.renderable_content();
+        let grid = terminal.term.grid();
+        let shift = terminal.scroll_shift();
         let colors = content.colors;
         let theme = self.theme;
         let metrics = self.metrics;
@@ -345,7 +348,7 @@ impl Painter {
         let cursor = content.cursor;
         let focused = terminal.is_focused();
         let x_of = |column: usize| origin.x + PADDING + column as f32 * metrics.cell_width;
-        let y_of = |line: usize| origin.y + PADDING + line as f32 * metrics.cell_height;
+        let y_of = |line: i32| origin.y + PADDING + line as f32 * metrics.cell_height + shift;
         let rect_of = |span: &Span| {
             Rect::new(
                 x_of(span.start),
@@ -362,11 +365,20 @@ impl Painter {
         let mut strikeouts: Vec<Span> = Vec::new();
         let mut runs: Vec<Run> = Vec::new();
         let mut cursor_items = Vec::new();
-        for indexed in content.display_iter {
-            let Some(viewport) = term::point_to_viewport(offset, indexed.point) else {
-                continue;
-            };
-            let (line, column) = (viewport.line, viewport.column.0);
+        let above = Line(-(offset as i32) - 1);
+        let shows_above = shift > 0.0 && offset < grid.history_size();
+        let row_above = shows_above
+            .then(|| {
+                (0..grid.columns()).map(move |column| Indexed {
+                    point: GridPoint::new(above, Column(column)),
+                    cell: &grid[above][Column(column)],
+                })
+            })
+            .into_iter()
+            .flatten();
+        for indexed in content.display_iter.chain(row_above) {
+            let line = indexed.point.line.0 + offset as i32;
+            let column = indexed.point.column.0;
             let cell = indexed.cell;
             if cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
                 continue;
@@ -500,7 +512,14 @@ impl Painter {
             }));
         }
         items.extend(cursor_items);
-        items
+        if !shows_above {
+            return items;
+        }
+        let (width, height) = metrics.content_size(terminal.size());
+        vec![Item::Clip {
+            shape: Shape::rect(Rect::new(origin.x, origin.y, width, height)),
+            items,
+        }]
     }
 
     fn cursor(&self, shape: CursorShape, focused: bool, cell: Rect) -> Item {

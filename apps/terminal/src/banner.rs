@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role, TreeId, TreeUpdate};
 use unbound_toolkit::ui::{
-    Button, Context, Event, Key, Modifiers, Size, TextField, Ui, Widget, WidgetId,
+    Button, Context, Cursor, Event, Key, Modifiers, Size, TextField, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
     Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
@@ -330,6 +330,10 @@ impl Banner {
 
     pub fn items(&mut self, width: u32, height: u32) -> Vec<Item> {
         self.ui.scene(width, height).items
+    }
+
+    pub fn cursor(&self) -> Cursor {
+        self.ui.cursor()
     }
 
     pub fn text_input_area(&self) -> Option<Rect> {
