@@ -1,0 +1,36 @@
+[package]
+name = "unbound-monitor"
+description = "Unbound Activity Monitor: CPU, memory, disk and network use per app"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+rustix.workspace = true
+tracing.workspace = true
+unbound-l10n.workspace = true
+unbound-log.workspace = true
+unbound-toolkit.workspace = true
+unbound-xdg.workspace = true
+
+[dev-dependencies]
+image.workspace = true
+image-compare.workspace = true
+tempfile.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto, fonts-inter"
+extended-description = """\
+The activity monitor of the Unbound desktop: lists running apps with their \
+processes and shows CPU, memory, disk and network use, and quits or force \
+quits any app."""
+assets = [
+    ["target/release/unbound-monitor", "usr/bin/", "755"],
+    ["data/org.unbound.ActivityMonitor.desktop", "usr/share/applications/", "644"],
+    ["data/org.unbound.ActivityMonitor.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+]
+
+[lints]
+workspace = true

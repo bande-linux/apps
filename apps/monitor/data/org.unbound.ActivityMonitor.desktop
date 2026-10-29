@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Activity Monitor
+GenericName=System Monitor
+Comment=See which apps use your CPU, memory, disk and network
+Icon=org.unbound.ActivityMonitor
+Exec=unbound-monitor
+Categories=System;Monitor;
+Keywords=process;task;cpu;memory;kill;force quit;
+Actions=force-quit;
+
+[Desktop Action force-quit]
+Name=Force Quit Apps
+Exec=unbound-monitor --force-quit
