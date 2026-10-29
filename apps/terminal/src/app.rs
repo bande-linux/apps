@@ -3,7 +3,7 @@ use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use accesskit::TreeUpdate;
+use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
@@ -18,6 +18,8 @@ use unbound_toolkit::ui::{
 use unbound_toolkit::{App, Point, Rect, Scene, Window, WindowEvent};
 
 pub const APP_ID: &str = "org.unbound.Terminal";
+const WINDOW_NODE: NodeId = NodeId(u64::MAX);
+const TERMINAL_NODE: NodeId = NodeId(u64::MAX - 1);
 const WRITE_RETRY: Duration = Duration::from_millis(5);
 const FRAME: Duration = Duration::from_millis(8);
 const VELOCITY_WINDOW: Duration = Duration::from_millis(100);
@@ -893,6 +895,13 @@ impl App for TerminalApp {
                     window.request_redraw();
                 }
             }
+            WindowEvent::Accessibility(request)
+                if request.target_node == TERMINAL_NODE && request.action == Action::Focus =>
+            {
+                self.banner_focused = false;
+                self.focus_terminal(self.focused);
+                window.request_redraw();
+            }
             WindowEvent::Accessibility(request) => {
                 if let Some(banner) = &mut self.banner {
                     banner.perform(&request);
@@ -988,7 +997,31 @@ impl App for TerminalApp {
     }
 
     fn accessibility(&self) -> Option<TreeUpdate> {
-        self.banner.as_ref().map(Banner::accessibility)
+        let mut terminal = Node::new(Role::Terminal);
+        terminal.set_label(self.title.clone());
+        terminal.set_value(self.terminal().screen_text().join("\n"));
+        terminal.add_action(Action::Focus);
+        let mut children = vec![TERMINAL_NODE];
+        let mut nodes = Vec::new();
+        let mut focus = TERMINAL_NODE;
+        if let Some(banner) = &self.banner {
+            let tree = banner.accessibility();
+            children.extend(tree.tree.map(|info| info.root));
+            if self.banner_focused {
+                focus = tree.focus;
+            }
+            nodes.extend(tree.nodes);
+        }
+        let mut root = Node::new(Role::Window);
+        root.set_label(self.title.clone());
+        root.set_children(children);
+        nodes.splice(0..0, [(WINDOW_NODE, root), (TERMINAL_NODE, terminal)]);
+        Some(TreeUpdate {
+            nodes,
+            tree: Some(TreeInfo::new(WINDOW_NODE)),
+            tree_id: TreeId::ROOT,
+            focus,
+        })
     }
 }
 
