@@ -7,7 +7,6 @@ repository.workspace = true
 
 [dependencies]
 alacritty_terminal.workspace = true
-unbound-config.workspace = true
 unbound-toolkit.workspace = true
 
 [dev-dependencies]
@@ -21,8 +20,8 @@ depends = "$auto, fonts-dejavu-core, fonts-inter"
 extended-description = """\
 The terminal of the Unbound desktop: xterm-compatible emulation with \
 10,000 lines of scrollback, Super+C and Super+V for the clipboard so \
-that Control+C stays the interrupt, and the light or dark appearance \
-of config.kdl."""
+that Control+C stays the interrupt, and the system's light or dark \
+appearance."""
 assets = [
     ["target/release/unbound-term", "usr/bin/", "755"],
     ["data/org.unbound.Terminal.desktop", "usr/share/applications/", "644"],

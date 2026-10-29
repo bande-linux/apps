@@ -266,6 +266,10 @@ impl Terminal {
         *self.term.mode()
     }
 
+    pub fn set_scheme(&mut self, scheme: Scheme) {
+        self.theme = Theme::for_scheme(scheme);
+    }
+
     pub fn set_focus(&mut self, focused: bool) {
         self.term.is_focused = focused;
     }
