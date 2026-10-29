@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 
 use alacritty_terminal::event::{Event as TermEvent, OnResize};
 use alacritty_terminal::tty::{self, Options, Pty, Shell};
-use unbound_config::{Appearance, Config, config_path};
 use unbound_term::{
     COLUMNS, GridSize, L10N, ROWS, Terminal, bracketed, encode_key, wants_scroll_as_arrows,
 };
@@ -185,6 +184,9 @@ impl App for TerminalApp {
                 self.terminal.set_focus(focused);
                 window.request_redraw();
             }
+            WindowEvent::AppearanceChanged(appearance) => {
+                self.terminal.set_scheme(appearance.scheme)
+            }
             _ => {}
         }
         self.handle_terminal_events(window);
@@ -243,21 +245,12 @@ fn command() -> Option<Shell> {
 
 fn run() -> Result<(), WindowError> {
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from);
-    let config = config_path(config_home.as_deref(), home.as_deref())
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|source| Config::parse(&source).ok())
-        .unwrap_or_default();
-    let scheme = match config.appearance {
-        Appearance::Dark => Scheme::Dark,
-        Appearance::Light | Appearance::Automatic => Scheme::Light,
-    };
     let terminal = Terminal::new(
         GridSize {
             columns: COLUMNS,
             lines: ROWS,
         },
-        scheme,
+        Scheme::default(),
     );
     let size = terminal.metrics.window_size(terminal.size());
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), size)?;
