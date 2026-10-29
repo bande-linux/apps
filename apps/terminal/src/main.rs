@@ -81,7 +81,7 @@ impl TerminalApp {
                 }
                 Key::Character('v') => {
                     if let Err(error) = window.paste() {
-                        eprintln!("unbound-term: cannot paste: {error}");
+                        tracing::warn!("cannot paste: {error}");
                     }
                 }
                 Key::Character('k') => {
@@ -285,10 +285,11 @@ fn run() -> Result<(), WindowError> {
 }
 
 fn main() -> ExitCode {
+    unbound_log::init("unbound-term");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("unbound-term: {error}");
+            tracing::error!("{error}");
             ExitCode::FAILURE
         }
     }

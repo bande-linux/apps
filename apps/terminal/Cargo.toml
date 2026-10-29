@@ -7,7 +7,9 @@ repository.workspace = true
 
 [dependencies]
 alacritty_terminal.workspace = true
+tracing.workspace = true
 unbound-config.workspace = true
+unbound-log.workspace = true
 unbound-toolkit.workspace = true
 
 [dev-dependencies]
