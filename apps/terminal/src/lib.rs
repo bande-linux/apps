@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::LazyLock;
 
 use alacritty_terminal::event::{Event as TermEvent, EventListener, WindowSize};
 use alacritty_terminal::grid::{Dimensions, Scroll};
@@ -12,10 +13,15 @@ use alacritty_terminal::term::{self, Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{
     ClearMode, Color as AnsiColor, CursorShape, Handler, NamedColor, Processor, Rgb,
 };
+use unbound_l10n::Localizer;
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{
     Color, Item, Paragraph, Point, Rect, Scene, Scheme, Shape, TextAlign, TextStyle, TextSystem,
 };
+
+const ENGLISH: &str = include_str!("../locales/en-US/unbound-term.ftl");
+
+pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const FONT_SIZE: f32 = 11.0;
 pub const PADDING: f32 = 4.0;
@@ -629,4 +635,16 @@ pub fn bracketed(text: &str, mode: TermMode) -> Vec<u8> {
 
 pub fn wants_scroll_as_arrows(mode: TermMode) -> bool {
     mode.contains(TermMode::ALT_SCREEN) && mode.contains(TermMode::ALTERNATE_SCROLL)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_message_id_used_in_code_is_in_the_english_file() {
+        let sources = [include_str!("lib.rs"), include_str!("main.rs")];
+        assert_eq!(
+            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            Vec::<&str>::new()
+        );
+    }
 }

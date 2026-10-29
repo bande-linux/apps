@@ -9,13 +9,12 @@ use alacritty_terminal::event::{Event as TermEvent, OnResize};
 use alacritty_terminal::tty::{self, Options, Pty, Shell};
 use unbound_config::{Appearance, Config, config_path};
 use unbound_term::{
-    COLUMNS, GridSize, ROWS, Terminal, bracketed, encode_key, wants_scroll_as_arrows,
+    COLUMNS, GridSize, L10N, ROWS, Terminal, bracketed, encode_key, wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{App, Role, Scene, Scheme, Window, WindowError, WindowEvent};
 
 const APP_ID: &str = "org.unbound.Terminal";
-const TITLE: &str = "Terminal";
 const WRITE_RETRY: Duration = Duration::from_millis(5);
 
 struct TerminalApp {
@@ -55,7 +54,7 @@ impl TerminalApp {
             match event {
                 TermEvent::PtyWrite(text) => self.send(text.as_bytes()),
                 TermEvent::Title(title) => window.set_title(&title),
-                TermEvent::ResetTitle => window.set_title(TITLE),
+                TermEvent::ResetTitle => window.set_title(&L10N.tr("title")),
                 TermEvent::ClipboardStore(_, text) => window.copy(&text),
                 TermEvent::TextAreaSizeRequest(reply) => {
                     let text = reply(self.terminal.window_size());
@@ -261,7 +260,7 @@ fn run() -> Result<(), WindowError> {
         scheme,
     );
     let size = terminal.metrics.window_size(terminal.size());
-    let mut window = Window::open(Role::toplevel(TITLE, APP_ID), size)?;
+    let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), size)?;
     let options = Options {
         shell: command(),
         working_directory: home,
