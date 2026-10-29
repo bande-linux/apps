@@ -160,21 +160,21 @@ impl App for TerminalApp {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::Input(Event::Key { key, modifiers }) => self.key(window, key, modifiers),
-            WindowEvent::Input(Event::PointerDown(at)) => {
+            WindowEvent::Input(Event::PointerDown(pointer)) if pointer.is_primary() => {
                 self.selecting = true;
-                self.terminal.start_selection(at);
+                self.terminal.start_selection(pointer.position);
                 window.request_redraw();
             }
-            WindowEvent::Input(Event::PointerMove(at)) if self.selecting => {
-                self.terminal.extend_selection(at);
+            WindowEvent::Input(Event::PointerMove(pointer)) if self.selecting => {
+                self.terminal.extend_selection(pointer.position);
                 window.request_redraw();
             }
-            WindowEvent::Input(Event::PointerUp(_)) => {
+            WindowEvent::Input(Event::PointerUp(pointer)) if pointer.is_primary() => {
                 self.selecting = false;
                 self.terminal.finish_selection();
                 window.request_redraw();
             }
-            WindowEvent::Scroll { dy, .. } => self.scroll(window, dy),
+            WindowEvent::Input(Event::Scroll(scroll)) => self.scroll(window, scroll.delta.y),
             WindowEvent::Pasted(text) => {
                 let bytes = bracketed(&text, self.terminal.mode());
                 self.terminal.scroll_to_bottom();
