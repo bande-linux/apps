@@ -70,6 +70,44 @@ pub enum SearchDirection {
     Newer,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Link {
+    pub range: Match,
+    pub uri: String,
+}
+
+const URL_PATTERN: &str = "(https?://|ftp://|file:|mailto:|gemini://|gopher://|news:|magnet:|ipfs:|ipns:|git://|ssh:|sftp:)[^\\u{0000}-\\u{001F}\\u{007F}-\\u{009F}<>\"\\s{-}\\^⟨⟩`]+";
+const TRAILING_PUNCTUATION: &[char] = &['.', ',', ':', ';', '!', '?', '\'', '"'];
+const OPENABLE_SCHEMES: &[&str] = &[
+    "http:", "https:", "ftp:", "file:", "mailto:", "gemini:", "gopher:", "news:", "magnet:",
+    "ipfs:", "ipns:", "git:", "ssh:", "sftp:",
+];
+
+pub fn is_openable(uri: &str) -> bool {
+    let lowercase = uri.to_ascii_lowercase();
+    OPENABLE_SCHEMES
+        .iter()
+        .any(|scheme| lowercase.starts_with(scheme))
+}
+
+fn trimmed_url(text: &str) -> &str {
+    let mut url = text;
+    loop {
+        let trimmed = url.trim_end_matches(TRAILING_PUNCTUATION);
+        let unbalanced =
+            trimmed.ends_with(')') && trimmed.matches(')').count() > trimmed.matches('(').count();
+        let trimmed = if unbalanced {
+            &trimmed[..trimmed.len() - 1]
+        } else {
+            trimmed
+        };
+        if trimmed.len() == url.len() {
+            return url;
+        }
+        url = trimmed;
+    }
+}
+
 struct Search {
     regex: RegexSearch,
     current: Option<Match>,
@@ -104,6 +142,7 @@ pub struct Terminal {
     size: GridSize,
     cell_size: (u16, u16),
     search: Option<Search>,
+    urls: Option<RegexSearch>,
 }
 
 impl Terminal {
@@ -120,6 +159,7 @@ impl Terminal {
             size,
             cell_size: (0, 0),
             search: None,
+            urls: None,
         }
     }
 
@@ -339,6 +379,42 @@ impl Terminal {
             current: search.current.clone(),
             link: None,
         }
+    }
+
+    pub fn link_at(&mut self, cell: CellPoint) -> Option<Link> {
+        let point = self.grid_point(cell);
+        let first = self.term.line_search_left(point);
+        let last = self.term.line_search_right(point);
+        if let Some(hyperlink) = self.term.grid()[point].hyperlink() {
+            let term = &self.term;
+            let same = |at: GridPoint| term.grid()[at].hyperlink().as_ref() == Some(&hyperlink);
+            let mut start = point;
+            while start > first && same(start.sub(term, Boundary::None, 1)) {
+                start = start.sub(term, Boundary::None, 1);
+            }
+            let mut end = point;
+            while end < last && same(end.add(term, Boundary::None, 1)) {
+                end = end.add(term, Boundary::None, 1);
+            }
+            return Some(Link {
+                range: start..=end,
+                uri: hyperlink.uri().to_owned(),
+            });
+        }
+        let urls = match &mut self.urls {
+            Some(urls) => urls,
+            None => self.urls.insert(RegexSearch::new(URL_PATTERN).ok()?),
+        };
+        let found = RegexIter::new(first, last, Direction::Right, &self.term, urls)
+            .find(|candidate| candidate.contains(&point))?;
+        let text = self.term.bounds_to_string(*found.start(), *found.end());
+        let url = trimmed_url(&text);
+        let trimmed = text[url.len()..].chars().count();
+        let end = found.end().sub(&self.term, Boundary::None, trimmed);
+        (point <= end).then(|| Link {
+            range: *found.start()..=end,
+            uri: url.to_owned(),
+        })
     }
 
     pub fn screen_text(&self) -> Vec<String> {

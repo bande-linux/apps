@@ -8,8 +8,8 @@ use alacritty_terminal::tty::Shell;
 use unbound_term::{
     CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, DirectoryReports, FIND_BAR_HEIGHT,
     FindAction, FindBar, GridSize, MouseButton, MouseKind, Painter, SearchDirection, SelectionKind,
-    Session, TabBar, TabBarLayout, TabTarget, Terminal, bracketed, encode_key, mouse_report,
-    next_font_size, shortcut,
+    Session, TabBar, TabBarLayout, TabTarget, Terminal, bracketed, encode_key, is_openable,
+    mouse_report, next_font_size, shortcut,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{Appearance, CpuRenderer, Point, Scheme};
@@ -534,4 +534,30 @@ fn found_text_and_the_find_bar_match_their_goldens() {
         let frame = CpuRenderer::new().render(&scene).expect("frame");
         check_golden(&format!("term-find-{suffix}"), size, frame.rgba);
     }
+}
+
+#[test]
+fn links_are_found_in_plain_text_and_in_hyperlink_escapes() {
+    let mut terminal = terminal(20, 4);
+    terminal.feed(b"see (https://example.org/a_(b)). ok\r\n");
+    terminal.feed(b"\x1b]8;;https://unbound.dev/docs\x1b\\the docs\x1b]8;;\x1b\\ here");
+    let uri = |terminal: &mut Terminal, column, line| {
+        terminal.link_at(cell(column, line)).map(|link| link.uri)
+    };
+    let example = Some("https://example.org/a_(b)".to_owned());
+    assert_eq!(uri(&mut terminal, 8, 0), example);
+    assert_eq!(uri(&mut terminal, 6, 1), example);
+    assert_eq!(uri(&mut terminal, 9, 1), example);
+    assert_eq!(uri(&mut terminal, 10, 1), None);
+    assert_eq!(uri(&mut terminal, 1, 0), None);
+
+    let link = terminal.link_at(cell(4, 2)).unwrap();
+    assert_eq!(link.uri, "https://unbound.dev/docs");
+    assert_eq!(link.range.start().column.0, 0);
+    assert_eq!(link.range.end().column.0, 7);
+    assert_eq!(uri(&mut terminal, 9, 2), None);
+
+    assert!(is_openable("HTTPS://example.org"));
+    assert!(is_openable("mailto:me@example.org"));
+    assert!(!is_openable("javascript:alert(1)"));
 }

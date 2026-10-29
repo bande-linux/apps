@@ -23,7 +23,8 @@ pub use render::{DEFAULT_FONT_SIZE, Metrics, PADDING, Painter, TabBar};
 pub use session::{Notice, Session, display_directory};
 pub use tabs::{TAB_BAR_HEIGHT, TabBarLayout, TabTarget};
 pub use terminal::{
-    CellPoint, GridSize, Highlights, SearchDirection, SelectionKind, Terminal, escape_regex,
+    CellPoint, GridSize, Highlights, Link, SearchDirection, SelectionKind, Terminal, escape_regex,
+    is_openable,
 };
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-term.ftl");

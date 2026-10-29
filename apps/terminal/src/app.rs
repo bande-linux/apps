@@ -7,9 +7,9 @@ use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
     CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, FIND_BAR_HEIGHT, FindAction, FindBar,
-    GridSize, L10N, MouseButton, MouseKind, Notice, Painter, SearchDirection, SelectionKind,
+    GridSize, L10N, Link, MouseButton, MouseKind, Notice, Painter, SearchDirection, SelectionKind,
     Session, TAB_BAR_HEIGHT, TabBar, TabBarLayout, TabTarget, Terminal, bracketed, encode_key,
-    mouse_report, next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
+    is_openable, mouse_report, next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{App, Point, Rect, Scene, Window, WindowEvent};
@@ -43,6 +43,7 @@ pub struct TerminalApp {
     find: Option<FindBar>,
     find_focused: bool,
     last_query: String,
+    link: Option<Link>,
 }
 
 impl TerminalApp {
@@ -64,6 +65,7 @@ impl TerminalApp {
             find: None,
             find_focused: false,
             last_query: String::new(),
+            link: None,
         };
         app.tabs[0].terminal.set_focus(false);
         app
@@ -262,6 +264,9 @@ impl TerminalApp {
     }
 
     fn key(&mut self, window: &mut Window, key: Key, modifiers: Modifiers) {
+        if self.link.take().is_some() {
+            window.request_redraw();
+        }
         let command = shortcut(key, modifiers);
         let edits_find = self.find_focused && command == Some(Command::SelectAll);
         if let Some(command) = command.filter(|_| !edits_find) {
@@ -441,6 +446,7 @@ impl TerminalApp {
             self.hover = hover;
             window.request_redraw();
         }
+        self.hover_link(window, at, modifiers);
         match self.gesture {
             Gesture::Reporting(button) => {
                 self.report_mouse(MouseKind::Drag(button), at, modifiers);
@@ -461,6 +467,37 @@ impl TerminalApp {
                 self.report_mouse(MouseKind::Move, at, modifiers);
             }
             Gesture::Idle => {}
+        }
+    }
+
+    fn in_content(&self, at: Point) -> bool {
+        at.y >= self.content_origin().y
+    }
+
+    fn hover_link(&mut self, window: &mut Window, at: Point, modifiers: Modifiers) {
+        let link = if modifiers.logo && self.gesture == Gesture::Idle && self.in_content(at) {
+            let cell = self.cell_at(at);
+            self.session().terminal.link_at(cell)
+        } else {
+            None
+        };
+        if link != self.link {
+            self.link = link;
+            window.request_redraw();
+        }
+    }
+
+    fn open_link(&mut self, window: &mut Window, uri: &str) {
+        if !is_openable(uri) {
+            return tracing::warn!("not opening a link of an unknown kind: {uri}");
+        }
+        let token = window
+            .activation_token(APP_ID)
+            .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+            .ok();
+        let command = ["xdg-open".to_owned(), uri.to_owned()];
+        if let Err(error) = unbound_xdg::spawn_detached(&command, None, token.as_deref()) {
+            tracing::warn!("cannot open {uri}: {error}");
         }
     }
 
@@ -510,6 +547,13 @@ impl TerminalApp {
             self.focus_terminal(self.focused);
         }
         let modifiers = window.modifiers();
+        if modifiers.logo {
+            let cell = self.cell_at(at);
+            if let Some(link) = self.session().terminal.link_at(cell) {
+                self.open_link(window, &link.uri);
+            }
+            return;
+        }
         if !modifiers.shift && reports_mouse(self.mode()) {
             self.session().terminal.clear_selection();
             self.reported_cell = None;
@@ -603,7 +647,8 @@ impl App for TerminalApp {
             items.extend(self.painter.tab_bar(&bar, size.0 as f32));
         }
         let origin = self.content_origin();
-        let highlights = self.session().terminal.highlights();
+        let mut highlights = self.session().terminal.highlights();
+        highlights.link = self.link.as_ref().map(|link| link.range.clone());
         items.extend(
             self.painter
                 .terminal(&self.tabs[self.active].terminal, origin, &highlights),
