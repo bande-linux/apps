@@ -1,4 +1,4 @@
-use unbound_toolkit::ui::{Event, Key, Modifiers};
+use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
 use unbound_toolkit::{
     Color, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
 };
@@ -7,8 +7,8 @@ use crate::L10N;
 use crate::model::AppList;
 use crate::sampler::Snapshot;
 use crate::view::{
-    Dialog, DialogButton, Icons, Painter, Request, Screen, contains, dialog_click, dialog_key,
-    press_dialog_button,
+    Dialog, DialogButton, Icons, Painter, Request, Screen, Scroller, contains, dialog_click,
+    dialog_key, press_dialog_button,
 };
 
 const PADDING: f32 = 16.0;
@@ -26,7 +26,7 @@ pub struct ForceQuitView {
     text: TextSystem,
     icons: Icons,
     size: (f32, f32),
-    top: usize,
+    scroller: Scroller,
     focused: bool,
     dialog: Option<Dialog>,
     requests: Vec<Request>,
@@ -41,7 +41,7 @@ impl ForceQuitView {
             text,
             icons,
             size: (0.0, 0.0),
-            top: 0,
+            scroller: Scroller::default(),
             focused: true,
             dialog: None,
             requests: Vec::new(),
@@ -72,15 +72,42 @@ impl ForceQuitView {
     }
 
     fn reveal_selection(&mut self) {
-        let visible = self.visible_rows();
-        if let Some(index) = self.apps.selected_index() {
-            if index < self.top {
-                self.top = index;
-            } else if index >= self.top + visible {
-                self.top = index + 1 - visible;
-            }
+        let rows = self.apps.len();
+        let height = self.list_frame().height;
+        match self.apps.selected_index() {
+            Some(index) => self.scroller.reveal(index, rows, ROW_HEIGHT, height),
+            None => self.scroller.clamp(rows, ROW_HEIGHT, height),
         }
-        self.top = self.top.min(self.apps.len().saturating_sub(visible));
+    }
+
+    fn row_at(&self, at: Point) -> Option<usize> {
+        let list = self.list_frame();
+        if !contains(list, at) {
+            return None;
+        }
+        let index = self.scroller.index_at(at.y - list.y, ROW_HEIGHT);
+        (index < self.apps.len()).then_some(index)
+    }
+
+    fn pointer_down(&mut self, pointer: &Pointer) -> bool {
+        if !pointer.is_primary() {
+            return false;
+        }
+        if pointer.count == 2 && self.dialog.is_none() && self.row_at(pointer.position).is_some() {
+            return self.confirm();
+        }
+        self.click(pointer.position)
+    }
+
+    fn scroll(&mut self, position: Point, delta: f32) -> bool {
+        if self.dialog.is_some() || !contains(self.list_frame(), position) {
+            return false;
+        }
+        let before = self.scroller;
+        let rows = self.apps.len();
+        let height = self.list_frame().height;
+        self.scroller.scroll(delta, rows, ROW_HEIGHT, height);
+        self.scroller != before
     }
 
     fn confirm(&mut self) -> bool {
@@ -136,16 +163,13 @@ impl ForceQuitView {
         if contains(self.button_frame(), at) {
             return self.confirm();
         }
-        let list = self.list_frame();
-        if !contains(list, at) {
-            return false;
+        match self.row_at(at) {
+            Some(index) => {
+                self.apps.select(index);
+                true
+            }
+            None => false,
         }
-        let index = self.top + ((at.y - list.y) / ROW_HEIGHT) as usize;
-        if index >= self.apps.len() {
-            return false;
-        }
-        self.apps.select(index);
-        true
     }
 }
 
@@ -192,12 +216,12 @@ impl Screen for ForceQuitView {
             .apps
             .rows()
             .enumerate()
-            .skip(self.top)
-            .take(self.visible_rows() + 1)
+            .skip(self.scroller.first(ROW_HEIGHT))
+            .take(self.visible_rows() + 2)
             .map(|(index, (name, icon))| (index, name.to_owned(), icon.map(str::to_owned)))
             .collect::<Vec<_>>();
         for (index, name, icon) in shown {
-            let y = list.y + (index - self.top) as f32 * ROW_HEIGHT;
+            let y = list.y + self.scroller.row_y(index, ROW_HEIGHT);
             let row = Rect::new(list.x + 4.0, y + 2.0, list.width - 8.0, ROW_HEIGHT - 4.0);
             let is_selected = selected == Some(index);
             if is_selected {
@@ -244,7 +268,7 @@ impl Screen for ForceQuitView {
             selected.is_some(),
         );
         if let Some(dialog) = self.dialog.clone() {
-            painter.dialog(self.size, &dialog);
+            painter.dialog(self.size, &dialog, false);
         }
         let items = painter.items;
         self.text = text;
@@ -267,7 +291,8 @@ impl Screen for ForceQuitView {
     fn handle(&mut self, event: &Event) -> bool {
         match event {
             Event::Key { key, modifiers } => self.key(*key, *modifiers),
-            Event::PointerDown(at) => self.click(*at),
+            Event::PointerDown(pointer) => self.pointer_down(pointer),
+            Event::Scroll(scroll) => self.scroll(scroll.position, scroll.delta.y),
             _ => false,
         }
     }

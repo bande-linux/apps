@@ -6,11 +6,11 @@ use std::path::PathBuf;
 
 use fixture::{entry, process};
 use unbound_monitor::{
-    AppList, Catalog, CpuShare, ForceQuitView, Icons, Memory, Monitor, MonitorView, Process,
-    Request, Screen, Snapshot, Tab,
+    AppList, Catalog, CpuShare, Disclosure, ForceQuitView, Icons, Memory, Monitor, MonitorView,
+    Process, ROW_HEIGHT, Request, Screen, Snapshot, Tab,
 };
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{CpuRenderer, Image, Palette, Scheme, TextSystem};
+use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, Scroll};
+use unbound_toolkit::{CpuRenderer, Image, Palette, Point, Scheme, TextSystem};
 
 const MIN_SSIM: f64 = 0.995;
 const MONITOR_SIZE: (u32, u32) = (860, 420);
@@ -219,4 +219,36 @@ fn super_f_searches_as_you_type_and_escape_clears_the_search() {
     assert_eq!(view.monitor.selected_index(), Some(0));
     view.handle(&key(Key::Escape));
     assert_eq!(names(&view).len(), 5);
+}
+
+#[test]
+fn the_wheel_scrolls_the_list_under_the_pointer_and_a_double_click_opens_an_app() {
+    let mut view = monitor_view();
+    let mut crowded = snapshot(0);
+    crowded
+        .processes
+        .extend((0..30).map(|index| process(2000 + index, 1, &format!("/usr/bin/daemon{index}"))));
+    view.update(crowded);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    let list_top = 48.0 + 26.0;
+    let at = Point::new(300.0, list_top + 5.0);
+    assert!(view.handle(&Event::Scroll(Scroll {
+        position: at,
+        delta: Point::new(0.0, 2.0 * ROW_HEIGHT),
+        ..Scroll::default()
+    })));
+    view.handle(&Event::PointerDown(Pointer::at(at)));
+    assert_eq!(view.monitor.selected_index(), Some(2));
+
+    assert_eq!(view.monitor.rows()[0].name, "Terminal");
+    view.handle(&Event::Scroll(Scroll {
+        position: at,
+        delta: Point::new(0.0, -10.0 * ROW_HEIGHT),
+        ..Scroll::default()
+    }));
+    view.handle(&Event::PointerDown(Pointer::at(at).with_count(2)));
+    assert_eq!(
+        view.monitor.rows()[0].disclosure,
+        Disclosure::Expanded
+    );
 }

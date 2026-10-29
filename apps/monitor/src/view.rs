@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use unbound_toolkit::ui::{Event, Key, Modifiers};
+use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{
     Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
     TextSystem,
@@ -131,6 +131,54 @@ pub(crate) fn contains(rect: Rect, at: Point) -> bool {
     at.x >= rect.x && at.x < rect.x + rect.width && at.y >= rect.y && at.y < rect.y + rect.height
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Scroller {
+    offset: f32,
+}
+
+impl Scroller {
+    pub fn first(self, row_height: f32) -> usize {
+        (self.offset / row_height).floor() as usize
+    }
+
+    pub fn row_y(self, index: usize, row_height: f32) -> f32 {
+        index as f32 * row_height - self.offset
+    }
+
+    pub fn index_at(self, y: f32, row_height: f32) -> usize {
+        ((y + self.offset) / row_height).floor().max(0.0) as usize
+    }
+
+    pub fn reset(&mut self) {
+        self.offset = 0.0;
+    }
+
+    pub fn scroll(&mut self, delta: f32, rows: usize, row_height: f32, height: f32) {
+        self.offset += delta;
+        self.clamp(rows, row_height, height);
+    }
+
+    pub fn clamp(&mut self, rows: usize, row_height: f32, height: f32) {
+        let end = (rows as f32 * row_height - height).max(0.0);
+        self.offset = self.offset.clamp(0.0, end);
+    }
+
+    pub fn reveal(&mut self, index: usize, rows: usize, row_height: f32, height: f32) {
+        let top = index as f32 * row_height;
+        if top < self.offset {
+            self.offset = top;
+        } else if top + row_height > self.offset + height {
+            self.offset = top + row_height - height;
+        }
+        self.clamp(rows, row_height, height);
+    }
+}
+
+pub fn is_secondary(pointer: &Pointer) -> bool {
+    pointer.button == PointerButton::Secondary
+        || (pointer.button == PointerButton::Primary && pointer.modifiers.control)
+}
+
 pub struct Painter<'a> {
     pub text: &'a mut TextSystem,
     pub palette: Palette,
@@ -189,7 +237,7 @@ impl Painter<'_> {
         );
     }
 
-    pub fn dialog(&mut self, size: (f32, f32), dialog: &Dialog) {
+    pub fn dialog(&mut self, size: (f32, f32), dialog: &Dialog, alternate: bool) {
         let panel = dialog_frame(size);
         self.fill(
             Shape::rect(Rect::new(0.0, 0.0, size.0, size.1)),
@@ -229,9 +277,9 @@ impl Painter<'_> {
             ),
             paragraph: message,
         });
-        let last = buttons.len().saturating_sub(1);
-        for (index, (button, frame)) in button_frames(panel, buttons).into_iter().enumerate() {
-            self.button(frame, &button_label(button, dialog), index == last);
+        let default = default_button(dialog, alternate);
+        for (button, frame) in button_frames(panel, buttons) {
+            self.button(frame, &button_label(button, dialog), button == default);
         }
     }
 }
@@ -311,12 +359,19 @@ pub fn press_dialog_button(dialog: Dialog, button: DialogButton) -> Option<Dialo
     }
 }
 
+pub fn default_button(dialog: &Dialog, alternate: bool) -> DialogButton {
+    match dialog {
+        Dialog::Denied(_) => DialogButton::Cancel,
+        Dialog::ConfirmForce(_) => DialogButton::ForceQuit,
+        Dialog::Confirm(_) if alternate => DialogButton::ForceQuit,
+        Dialog::Confirm(_) => DialogButton::Quit,
+    }
+}
+
 pub fn dialog_key(dialog: &Dialog, key: Key, modifiers: Modifiers) -> Option<DialogButton> {
-    match (key, dialog) {
-        (Key::Escape, _) | (Key::Enter, Dialog::Denied(_)) => Some(DialogButton::Cancel),
-        (Key::Enter, Dialog::ConfirmForce(_)) => Some(DialogButton::ForceQuit),
-        (Key::Enter, _) if modifiers.alt => Some(DialogButton::ForceQuit),
-        (Key::Enter, _) => Some(DialogButton::Quit),
+    match key {
+        Key::Escape => Some(DialogButton::Cancel),
+        Key::Enter => Some(default_button(dialog, modifiers.alt)),
         _ => None,
     }
 }
@@ -334,9 +389,10 @@ pub struct MonitorView {
     text: TextSystem,
     icons: Icons,
     size: (f32, f32),
-    top: usize,
+    scroller: Scroller,
     searching: bool,
     focused: bool,
+    alternate: bool,
     dialog: Option<Dialog>,
     requests: Vec<Request>,
 }
@@ -349,9 +405,10 @@ impl MonitorView {
             text,
             icons,
             size: (0.0, 0.0),
-            top: 0,
+            scroller: Scroller::default(),
             searching: false,
             focused: true,
+            alternate: false,
             dialog: None,
             requests: Vec::new(),
         }
@@ -361,32 +418,27 @@ impl MonitorView {
         self.dialog.as_ref()
     }
 
-    fn visible_rows(&self) -> usize {
-        let height = self.size.1 - TOOLBAR_HEIGHT - HEADER_HEIGHT - FOOTER_HEIGHT;
-        ((height / ROW_HEIGHT).floor() as usize).max(1)
+    fn list_height(&self) -> f32 {
+        (self.size.1 - TOOLBAR_HEIGHT - HEADER_HEIGHT - FOOTER_HEIGHT).max(ROW_HEIGHT)
     }
 
-    pub fn top(&self) -> usize {
-        self.top
+    fn visible_rows(&self) -> usize {
+        ((self.list_height() / ROW_HEIGHT).floor() as usize).max(1)
     }
 
     fn reveal_selection(&mut self) {
-        if let Some(index) = self.monitor.selected_index() {
-            let visible = self.visible_rows();
-            if index < self.top {
-                self.top = index;
-            } else if index >= self.top + visible {
-                self.top = index + 1 - visible;
-            }
+        let rows = self.monitor.rows().len();
+        let height = self.list_height();
+        match self.monitor.selected_index() {
+            Some(index) => self.scroller.reveal(index, rows, ROW_HEIGHT, height),
+            None => self.scroller.clamp(rows, ROW_HEIGHT, height),
         }
-        self.clamp_top();
     }
 
-    fn clamp_top(&mut self) {
-        let visible = self.visible_rows();
-        self.top = self
-            .top
-            .min(self.monitor.rows().len().saturating_sub(visible));
+    fn clamp_scroll(&mut self) {
+        let rows = self.monitor.rows().len();
+        let height = self.list_height();
+        self.scroller.clamp(rows, ROW_HEIGHT, height);
     }
 
     fn set_tab(&mut self, tab: Tab) {
@@ -395,7 +447,7 @@ impl MonitorView {
         if self.monitor.measures_proportional_memory() != measured {
             self.requests.push(Request::Resample);
         }
-        self.top = 0;
+        self.scroller.reset();
         self.reveal_selection();
     }
 
@@ -441,7 +493,7 @@ impl MonitorView {
             _ => return Some(false),
         }
         self.monitor.set_search(&search);
-        self.top = 0;
+        self.scroller.reset();
         self.reveal_selection();
         Some(true)
     }
@@ -508,7 +560,7 @@ impl MonitorView {
         }
         let search = format!("{}{text}", self.monitor.search());
         self.monitor.set_search(&search);
-        self.top = 0;
+        self.scroller.reset();
         true
     }
 
@@ -573,6 +625,56 @@ impl MonitorView {
             .collect()
     }
 
+    fn row_at(&self, at: Point) -> Option<usize> {
+        let list_top = TOOLBAR_HEIGHT + HEADER_HEIGHT;
+        if at.y < list_top || at.y >= self.size.1 - FOOTER_HEIGHT {
+            return None;
+        }
+        let index = self.scroller.index_at(at.y - list_top, ROW_HEIGHT);
+        (index < self.monitor.rows().len()).then_some(index)
+    }
+
+    fn pointer_down(&mut self, pointer: &Pointer) -> bool {
+        if is_secondary(pointer) {
+            return match self.row_at(pointer.position) {
+                Some(index) if self.dialog.is_none() => {
+                    self.monitor.select(index);
+                    true
+                }
+                _ => false,
+            };
+        }
+        if !pointer.is_primary() {
+            return false;
+        }
+        if pointer.count == 2
+            && self.dialog.is_none()
+            && let Some(index) = self.row_at(pointer.position)
+        {
+            if self.monitor.rows()[index].disclosure != Disclosure::None {
+                self.monitor.toggle(index);
+                self.clamp_scroll();
+            }
+            return true;
+        }
+        self.click(pointer.position)
+    }
+
+    fn scroll(&mut self, position: Point, delta: f32) -> bool {
+        let list_top = TOOLBAR_HEIGHT + HEADER_HEIGHT;
+        if self.dialog.is_some()
+            || position.y < list_top
+            || position.y >= self.size.1 - FOOTER_HEIGHT
+        {
+            return false;
+        }
+        let before = self.scroller;
+        let rows = self.monitor.rows().len();
+        let height = self.list_height();
+        self.scroller.scroll(delta, rows, ROW_HEIGHT, height);
+        self.scroller != before
+    }
+
     fn click(&mut self, at: Point) -> bool {
         if let Some(dialog) = &self.dialog {
             return match dialog_click(dialog, self.size, at) {
@@ -608,14 +710,10 @@ impl MonitorView {
             }
             return true;
         }
-        let list_bottom = self.size.1 - FOOTER_HEIGHT;
-        if at.y >= list_bottom {
-            return true;
-        }
-        let index = self.top + ((at.y - TOOLBAR_HEIGHT - HEADER_HEIGHT) / ROW_HEIGHT) as usize;
-        let Some(row) = self.monitor.rows().get(index) else {
+        let Some(index) = self.row_at(at) else {
             return true;
         };
+        let row = &self.monitor.rows()[index];
         let disclosure_x = SIDE + f32::from(row.depth) * INDENT;
         if row.disclosure != Disclosure::None
             && at.x >= disclosure_x - 4.0
@@ -625,7 +723,7 @@ impl MonitorView {
         } else {
             self.monitor.select(index);
         }
-        self.clamp_top();
+        self.clamp_scroll();
         true
     }
 
@@ -889,8 +987,8 @@ impl MonitorView {
             .rows()
             .iter()
             .enumerate()
-            .skip(self.top)
-            .take(self.visible_rows() + 1)
+            .skip(self.scroller.first(ROW_HEIGHT))
+            .take(self.visible_rows() + 2)
             .map(|(index, row)| (index, row.clone()))
             .collect::<Vec<_>>();
         let mut list = Painter {
@@ -899,7 +997,7 @@ impl MonitorView {
             items: Vec::new(),
         };
         for (index, row) in rows {
-            let y = top + (index - self.top) as f32 * ROW_HEIGHT;
+            let y = top + self.scroller.row_y(index, ROW_HEIGHT);
             self.paint_row(&mut list, &row, y, index % 2 == 1);
         }
         let items = list.items;
@@ -1011,14 +1109,20 @@ impl Screen for MonitorView {
         match event {
             Event::Key { key, modifiers } => self.key(*key, *modifiers),
             Event::Commit(text) => self.commit(text),
-            Event::PointerDown(at) => self.click(*at),
+            Event::PointerDown(pointer) => self.pointer_down(pointer),
+            Event::Scroll(scroll) => self.scroll(scroll.position, scroll.delta.y),
+            Event::ModifiersChanged(modifiers) => {
+                let changed = self.alternate != modifiers.alt;
+                self.alternate = modifiers.alt;
+                changed && self.dialog.is_some()
+            }
             _ => false,
         }
     }
 
     fn scene(&mut self, width: u32, height: u32) -> Scene {
         self.size = (width as f32, height as f32);
-        self.clamp_top();
+        self.clamp_scroll();
         let mut text = std::mem::take(&mut self.text);
         let mut painter = Painter {
             text: &mut text,
@@ -1030,7 +1134,7 @@ impl Screen for MonitorView {
         self.paint_rows(&mut painter);
         self.paint_footer(&mut painter);
         if let Some(dialog) = self.dialog.clone() {
-            painter.dialog(self.size, &dialog);
+            painter.dialog(self.size, &dialog, self.alternate);
         }
         let items = painter.items;
         self.text = text;
@@ -1044,7 +1148,7 @@ impl Screen for MonitorView {
 
     fn update(&mut self, snapshot: Snapshot) {
         self.monitor.update(snapshot);
-        self.clamp_top();
+        self.clamp_scroll();
     }
 
     fn measures_proportional_memory(&self) -> bool {
