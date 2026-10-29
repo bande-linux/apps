@@ -1,26 +1,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::path::{Path, PathBuf};
+mod fixture;
+
 use std::rc::Rc;
 
-use unbound_monitor::{Catalog, Group, GroupKey, Identity, Process};
-use unbound_xdg::DesktopEntry;
-
-fn entry(id: &str, name: &str, exec: &str, terminal: bool) -> DesktopEntry {
-    let text = format!(
-        "[Desktop Entry]\nType=Application\nName={name}\nExec={exec}\nTerminal={terminal}\n"
-    );
-    DesktopEntry::parse(
-        &format!("{id}.desktop"),
-        Path::new("/usr/share/applications")
-            .join(format!("{id}.desktop"))
-            .as_path(),
-        &text,
-        None,
-        &[],
-    )
-    .expect("valid entry")
-}
+use fixture::{entry, process};
+use unbound_monitor::{Catalog, Group, GroupKey, Process};
 
 fn catalog() -> Catalog {
     Catalog::new(&[
@@ -43,33 +28,6 @@ fn catalog() -> Catalog {
         entry("viewer-a", "Viewer A", "viewer --a", false),
         entry("viewer-b", "Viewer B", "viewer --b", false),
     ])
-}
-
-fn process(pid: u32, ppid: u32, command: &str) -> Process {
-    let program = command.split(' ').next().unwrap_or_default();
-    Process {
-        pid,
-        ppid,
-        start_ticks: u64::from(pid),
-        identity: Rc::new(Identity {
-            name: Path::new(program)
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-            command: command.split(' ').map(str::to_owned).collect(),
-            executable: Some(PathBuf::from(program)),
-            uid: 1000,
-            user: "mikael".to_owned(),
-            unit: Some("session-1.scope".to_owned()),
-            kernel_thread: ppid == 2 || pid == 2,
-        }),
-        cpu_percent: 0.0,
-        cpu_seconds: 0.0,
-        threads: 1,
-        proportional: None,
-        resident: 0,
-        disk: None,
-    }
 }
 
 fn in_unit(mut process: Process, unit: &str) -> Process {

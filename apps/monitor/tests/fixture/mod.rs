@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use tempfile::TempDir;
-use unbound_monitor::Sampler;
+use unbound_monitor::{Identity, Process, Sampler};
+use unbound_xdg::DesktopEntry;
 
 pub const TICKS_PER_SECOND: u64 = 100;
 pub const PAGE_SIZE: u64 = 4096;
@@ -175,4 +177,47 @@ impl Fixture {
     pub fn exit(&self, pid: u32) {
         fs::remove_dir_all(self.path().join(format!("proc/{pid}"))).expect("remove process");
     }
+}
+
+pub fn process(pid: u32, ppid: u32, command: &str) -> Process {
+    let program = command.split(' ').next().unwrap_or_default();
+    Process {
+        pid,
+        ppid,
+        start_ticks: u64::from(pid),
+        identity: Rc::new(Identity {
+            name: Path::new(program)
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            command: command.split(' ').map(str::to_owned).collect(),
+            executable: Some(PathBuf::from(program)),
+            uid: 1000,
+            user: "mikael".to_owned(),
+            unit: Some("session-1.scope".to_owned()),
+            kernel_thread: ppid == 2 || pid == 2,
+        }),
+        cpu_percent: 0.0,
+        cpu_seconds: 0.0,
+        threads: 1,
+        proportional: None,
+        resident: 0,
+        disk: None,
+    }
+}
+
+pub fn entry(id: &str, name: &str, exec: &str, terminal: bool) -> DesktopEntry {
+    let text = format!(
+        "[Desktop Entry]\nType=Application\nName={name}\nExec={exec}\nTerminal={terminal}\n"
+    );
+    DesktopEntry::parse(
+        &format!("{id}.desktop"),
+        Path::new("/usr/share/applications")
+            .join(format!("{id}.desktop"))
+            .as_path(),
+        &text,
+        None,
+        &[],
+    )
+    .expect("valid entry")
 }
