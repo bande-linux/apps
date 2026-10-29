@@ -208,6 +208,7 @@ fn painter(scheme: Scheme) -> Painter {
         Appearance {
             scheme,
             accent: None,
+            reduce_motion: false,
         },
         DEFAULT_FONT_SIZE,
         1.0,
