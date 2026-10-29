@@ -414,10 +414,6 @@ impl MonitorView {
         }
     }
 
-    pub fn dialog(&self) -> Option<&Dialog> {
-        self.dialog.as_ref()
-    }
-
     fn list_height(&self) -> f32 {
         (self.size.1 - TOOLBAR_HEIGHT - HEADER_HEIGHT - FOOTER_HEIGHT).max(ROW_HEIGHT)
     }
