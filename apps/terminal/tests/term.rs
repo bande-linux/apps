@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::{self, Options, Shell};
 use unbound_term::{
-    Command, DEFAULT_FONT_SIZE, GridSize, Painter, Terminal, bracketed, encode_key, next_font_size,
-    shortcut,
+    CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, GridSize, Painter, SelectionKind,
+    Terminal, bracketed, encode_key, next_font_size, shortcut,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{Appearance, CpuRenderer, Point, Scheme};
@@ -183,15 +183,55 @@ fn a_drag_selects_text_for_copying() {
         ))
     };
 
-    terminal.start_selection(at(6.0));
+    terminal.start_selection(at(6.0), SelectionKind::Characters);
     terminal.extend_selection(at(10.6));
     terminal.finish_selection();
 
     assert_eq!(terminal.selected_text().as_deref(), Some("world"));
 
-    terminal.start_selection(at(2.0));
+    terminal.start_selection(at(2.0), SelectionKind::Characters);
     terminal.finish_selection();
     assert_eq!(terminal.selected_text(), None);
+}
+
+fn cell(column: usize, line: usize) -> CellPoint {
+    CellPoint {
+        column,
+        line,
+        side: alacritty_terminal::index::Side::Left,
+    }
+}
+
+#[test]
+fn double_click_selects_a_word_triple_click_a_line_and_alt_drag_a_block() {
+    let mut terminal = terminal(20, 3);
+    terminal.feed(b"cargo build --release\r\nsrc/main.rs ok\r\nabc def");
+    let mut clicks = ClickCounter::default();
+    let start = Instant::now();
+    let at = Point::new(10.0, 10.0);
+    let counts: Vec<u8> = (0..4)
+        .map(|step| clicks.press(at, start + Duration::from_millis(100 * step)))
+        .collect();
+    assert_eq!(counts, [1, 2, 3, 1]);
+    assert_eq!(clicks.press(at, start + Duration::from_secs(5)), 1);
+
+    terminal.start_selection(cell(2, 1), SelectionKind::for_clicks(2, false));
+    terminal.finish_selection();
+    assert_eq!(terminal.selected_text().as_deref(), Some("src/main.rs"));
+
+    terminal.start_selection(cell(14, 1), SelectionKind::for_clicks(3, false));
+    terminal.finish_selection();
+    assert_eq!(
+        terminal.selected_text().as_deref(),
+        Some("src/main.rs ok\n")
+    );
+
+    terminal.start_selection(cell(1, 1), SelectionKind::for_clicks(1, true));
+    terminal.extend_selection(CellPoint {
+        side: alacritty_terminal::index::Side::Right,
+        ..cell(2, 2)
+    });
+    assert_eq!(terminal.selected_text().as_deref(), Some("rc\nbc"));
 }
 
 #[test]

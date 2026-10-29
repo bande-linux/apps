@@ -37,6 +37,25 @@ pub struct CellPoint {
     pub side: Side,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionKind {
+    Characters,
+    Words,
+    Lines,
+    Block,
+}
+
+impl SelectionKind {
+    pub fn for_clicks(clicks: u8, block: bool) -> Self {
+        match clicks {
+            2 => Self::Words,
+            3.. => Self::Lines,
+            _ if block => Self::Block,
+            _ => Self::Characters,
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Listener(Rc<RefCell<Vec<TermEvent>>>);
 
@@ -151,9 +170,23 @@ impl Terminal {
         term::viewport_to_point(self.display_offset(), GridPoint::new(line, Column(column)))
     }
 
-    pub fn start_selection(&mut self, cell: CellPoint) {
+    pub fn start_selection(&mut self, cell: CellPoint, kind: SelectionKind) {
         let point = self.grid_point(cell);
-        self.term.selection = Some(Selection::new(SelectionType::Simple, point, cell.side));
+        let kind = match kind {
+            SelectionKind::Characters => SelectionType::Simple,
+            SelectionKind::Words => SelectionType::Semantic,
+            SelectionKind::Lines => SelectionType::Lines,
+            SelectionKind::Block => SelectionType::Block,
+        };
+        self.term.selection = Some(Selection::new(kind, point, cell.side));
+    }
+
+    pub fn has_selection(&self) -> bool {
+        self.term.selection.is_some()
+    }
+
+    pub fn clear_selection(&mut self) {
+        self.term.selection = None;
     }
 
     pub fn extend_selection(&mut self, cell: CellPoint) {

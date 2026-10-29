@@ -1,3 +1,4 @@
+mod click;
 mod keys;
 mod render;
 mod terminal;
@@ -7,9 +8,10 @@ use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
+pub use click::ClickCounter;
 pub use keys::{Command, bracketed, encode_key, next_font_size, shortcut, wants_scroll_as_arrows};
 pub use render::{DEFAULT_FONT_SIZE, Metrics, PADDING, Painter};
-pub use terminal::{CellPoint, GridSize, Terminal};
+pub use terminal::{CellPoint, GridSize, SelectionKind, Terminal};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-term.ftl");
 

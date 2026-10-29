@@ -8,8 +8,9 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::event::{Event as TermEvent, OnResize};
 use alacritty_terminal::tty::{self, Options, Pty, Shell};
 use unbound_term::{
-    COLUMNS, Command, DEFAULT_FONT_SIZE, GridSize, L10N, Painter, ROWS, Terminal, bracketed,
-    encode_key, next_font_size, shortcut, wants_scroll_as_arrows,
+    COLUMNS, ClickCounter, Command, DEFAULT_FONT_SIZE, GridSize, L10N, Painter, ROWS,
+    SelectionKind, Terminal, bracketed, encode_key, next_font_size, shortcut,
+    wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{App, Point, Role, Scene, Window, WindowError, WindowEvent};
@@ -24,6 +25,7 @@ struct TerminalApp {
     pty: Pty,
     output: Vec<u8>,
     selecting: bool,
+    clicks: ClickCounter,
     exited: bool,
 }
 
@@ -138,6 +140,20 @@ impl TerminalApp {
         self.scroll_remainder = 0.0;
     }
 
+    fn press(&mut self, window: &mut Window, at: Point) {
+        let modifiers = window.modifiers();
+        let clicks = self.clicks.press(at, Instant::now());
+        let cell = self.cell_at(at);
+        self.selecting = true;
+        if modifiers.shift && self.terminal.has_selection() {
+            self.terminal.extend_selection(cell);
+        } else {
+            let kind = SelectionKind::for_clicks(clicks, modifiers.alt);
+            self.terminal.start_selection(cell, kind);
+        }
+        window.request_redraw();
+    }
+
     fn cell_at(&self, at: Point) -> unbound_term::CellPoint {
         self.painter.metrics.cell_at(at)
     }
@@ -185,11 +201,7 @@ impl App for TerminalApp {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::Input(Event::Key { key, modifiers }) => self.key(window, key, modifiers),
-            WindowEvent::Input(Event::PointerDown(at)) => {
-                self.selecting = true;
-                self.terminal.start_selection(self.cell_at(at));
-                window.request_redraw();
-            }
+            WindowEvent::Input(Event::PointerDown(at)) => self.press(window, at),
             WindowEvent::Input(Event::PointerMove(at)) if self.selecting => {
                 self.terminal.extend_selection(self.cell_at(at));
                 window.request_redraw();
@@ -300,6 +312,7 @@ fn run() -> Result<(), WindowError> {
         pty,
         output: Vec::new(),
         selecting: false,
+        clicks: ClickCounter::default(),
         exited: false,
     };
     app.terminal.set_focus(false);
