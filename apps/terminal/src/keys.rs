@@ -117,6 +117,97 @@ pub fn wants_scroll_as_arrows(mode: TermMode) -> bool {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseButton {
+    Left,
+    Middle,
+    Right,
+    WheelUp,
+    WheelDown,
+}
+
+impl MouseButton {
+    fn code(self) -> u32 {
+        match self {
+            Self::Left => 0,
+            Self::Middle => 1,
+            Self::Right => 2,
+            Self::WheelUp => 64,
+            Self::WheelDown => 65,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseKind {
+    Press(MouseButton),
+    Release(MouseButton),
+    Drag(MouseButton),
+    Move,
+}
+
+const MOTION: u32 = 32;
+const X10_RELEASE: u32 = 3;
+const X10_OFFSET: u32 = 32;
+
+pub fn reports_mouse(mode: TermMode) -> bool {
+    mode.intersects(TermMode::MOUSE_MODE)
+}
+
+pub fn mouse_report(
+    kind: MouseKind,
+    column: usize,
+    line: usize,
+    modifiers: Modifiers,
+    mode: TermMode,
+) -> Option<Vec<u8>> {
+    let wanted = match kind {
+        MouseKind::Press(_) | MouseKind::Release(_) => reports_mouse(mode),
+        MouseKind::Drag(_) => mode.intersects(TermMode::MOUSE_DRAG | TermMode::MOUSE_MOTION),
+        MouseKind::Move => mode.contains(TermMode::MOUSE_MOTION),
+    };
+    if !wanted {
+        return None;
+    }
+    let sgr = mode.contains(TermMode::SGR_MOUSE);
+    let code = match kind {
+        MouseKind::Press(button) => button.code(),
+        MouseKind::Release(MouseButton::WheelUp | MouseButton::WheelDown) => return None,
+        MouseKind::Release(button) if sgr => button.code(),
+        MouseKind::Release(_) => X10_RELEASE,
+        MouseKind::Drag(button) => button.code() + MOTION,
+        MouseKind::Move => X10_RELEASE + MOTION,
+    };
+    let code = code
+        + 4 * u32::from(modifiers.shift)
+        + 8 * u32::from(modifiers.alt)
+        + 16 * u32::from(modifiers.control);
+    let (x, y) = (
+        u32::try_from(column + 1).unwrap_or(u32::MAX),
+        u32::try_from(line + 1).unwrap_or(u32::MAX),
+    );
+    if sgr {
+        let end = if matches!(kind, MouseKind::Release(_)) {
+            'm'
+        } else {
+            'M'
+        };
+        return Some(format!("\x1b[<{code};{x};{y}{end}").into_bytes());
+    }
+    let mut bytes = b"\x1b[M".to_vec();
+    if mode.contains(TermMode::UTF8_MOUSE) {
+        for value in [code, x, y] {
+            let character = char::from_u32((value + X10_OFFSET).min(2047))?;
+            bytes.extend(character.to_string().into_bytes());
+        }
+    } else {
+        for value in [code, x, y] {
+            bytes.push(u8::try_from((value + X10_OFFSET).min(255)).unwrap_or(u8::MAX));
+        }
+    }
+    Some(bytes)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
     Copy,
     Paste,

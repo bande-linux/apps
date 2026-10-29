@@ -8,9 +8,9 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::event::{Event as TermEvent, OnResize};
 use alacritty_terminal::tty::{self, Options, Pty, Shell};
 use unbound_term::{
-    COLUMNS, ClickCounter, Command, DEFAULT_FONT_SIZE, GridSize, L10N, Painter, ROWS,
-    SelectionKind, Terminal, bracketed, encode_key, next_font_size, shortcut,
-    wants_scroll_as_arrows,
+    COLUMNS, ClickCounter, Command, DEFAULT_FONT_SIZE, GridSize, L10N, MouseButton, MouseKind,
+    Painter, ROWS, SelectionKind, Terminal, bracketed, encode_key, mouse_report, next_font_size,
+    reports_mouse, shortcut, wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{App, Point, Role, Scene, Window, WindowError, WindowEvent};
@@ -26,6 +26,9 @@ struct TerminalApp {
     output: Vec<u8>,
     selecting: bool,
     clicks: ClickCounter,
+    pointer: Point,
+    reporting: Option<MouseButton>,
+    reported_cell: Option<(usize, usize)>,
     exited: bool,
 }
 
@@ -140,8 +143,60 @@ impl TerminalApp {
         self.scroll_remainder = 0.0;
     }
 
+    fn report_mouse(&mut self, kind: MouseKind, at: Point, modifiers: Modifiers) -> bool {
+        let cell = self.cell_at(at);
+        let size = self.terminal.size();
+        let place = (
+            cell.column.min(size.columns - 1),
+            cell.line.min(size.lines - 1),
+        );
+        if matches!(kind, MouseKind::Drag(_) | MouseKind::Move) && self.reported_cell == Some(place)
+        {
+            return true;
+        }
+        let Some(bytes) = mouse_report(kind, place.0, place.1, modifiers, self.terminal.mode())
+        else {
+            return false;
+        };
+        self.reported_cell = Some(place);
+        self.send(&bytes);
+        true
+    }
+
+    fn pointer_moved(&mut self, window: &mut Window, at: Point) {
+        self.pointer = at;
+        let modifiers = window.modifiers();
+        if let Some(button) = self.reporting {
+            self.report_mouse(MouseKind::Drag(button), at, modifiers);
+        } else if self.selecting {
+            self.terminal.extend_selection(self.cell_at(at));
+            window.request_redraw();
+        } else {
+            self.report_mouse(MouseKind::Move, at, modifiers);
+        }
+    }
+
+    fn release(&mut self, window: &mut Window, at: Point) {
+        if let Some(button) = self.reporting.take() {
+            self.report_mouse(MouseKind::Release(button), at, window.modifiers());
+            return;
+        }
+        self.selecting = false;
+        self.terminal.finish_selection();
+        window.request_redraw();
+    }
+
     fn press(&mut self, window: &mut Window, at: Point) {
         let modifiers = window.modifiers();
+        if !modifiers.shift && reports_mouse(self.terminal.mode()) {
+            self.terminal.clear_selection();
+            self.reported_cell = None;
+            if self.report_mouse(MouseKind::Press(MouseButton::Left), at, modifiers) {
+                self.reporting = Some(MouseButton::Left);
+            }
+            window.request_redraw();
+            return;
+        }
         let clicks = self.clicks.press(at, Instant::now());
         let cell = self.cell_at(at);
         self.selecting = true;
@@ -169,6 +224,19 @@ impl TerminalApp {
         self.scroll_remainder -= lines;
         let lines = lines as i32;
         if lines == 0 {
+            return;
+        }
+        let modifiers = window.modifiers();
+        if !modifiers.shift && reports_mouse(self.terminal.mode()) {
+            let button = if lines < 0 {
+                MouseButton::WheelUp
+            } else {
+                MouseButton::WheelDown
+            };
+            for _ in 0..lines.unsigned_abs() {
+                self.reported_cell = None;
+                self.report_mouse(MouseKind::Press(button), self.pointer, modifiers);
+            }
             return;
         }
         if wants_scroll_as_arrows(self.terminal.mode()) {
@@ -202,15 +270,8 @@ impl App for TerminalApp {
         match event {
             WindowEvent::Input(Event::Key { key, modifiers }) => self.key(window, key, modifiers),
             WindowEvent::Input(Event::PointerDown(at)) => self.press(window, at),
-            WindowEvent::Input(Event::PointerMove(at)) if self.selecting => {
-                self.terminal.extend_selection(self.cell_at(at));
-                window.request_redraw();
-            }
-            WindowEvent::Input(Event::PointerUp(_)) => {
-                self.selecting = false;
-                self.terminal.finish_selection();
-                window.request_redraw();
-            }
+            WindowEvent::Input(Event::PointerMove(at)) => self.pointer_moved(window, at),
+            WindowEvent::Input(Event::PointerUp(at)) => self.release(window, at),
             WindowEvent::Scroll { dy, .. } => self.scroll(window, dy),
             WindowEvent::Pasted(text) => {
                 let bytes = bracketed(&text, self.terminal.mode());
@@ -313,6 +374,9 @@ fn run() -> Result<(), WindowError> {
         output: Vec::new(),
         selecting: false,
         clicks: ClickCounter::default(),
+        pointer: Point::default(),
+        reporting: None,
+        reported_cell: None,
         exited: false,
     };
     app.terminal.set_focus(false);

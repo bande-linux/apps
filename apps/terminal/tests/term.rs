@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::{self, Options, Shell};
 use unbound_term::{
-    CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, GridSize, Painter, SelectionKind,
-    Terminal, bracketed, encode_key, next_font_size, shortcut,
+    CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, GridSize, MouseButton, MouseKind, Painter,
+    SelectionKind, Terminal, bracketed, encode_key, mouse_report, next_font_size, shortcut,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{Appearance, CpuRenderer, Point, Scheme};
@@ -116,6 +116,65 @@ fn text_size_steps_through_a_ladder_and_stops_at_its_ends() {
     assert_eq!(next_font_size(8.0, false), 8.0);
     assert_eq!(next_font_size(40.0, true), 40.0);
     assert_eq!(next_font_size(12.5, true), 13.0);
+}
+
+#[test]
+fn the_mouse_is_reported_in_the_encoding_and_detail_the_program_asked_for() {
+    let left = MouseButton::Left;
+    let report = |kind, mode| mouse_report(kind, 4, 9, plain(), mode);
+    assert_eq!(report(MouseKind::Press(left), TermMode::empty()), None);
+
+    let clicks = TermMode::MOUSE_REPORT_CLICK;
+    assert_eq!(
+        report(MouseKind::Press(left), clicks).unwrap(),
+        b"\x1b[M\x20\x25\x2a"
+    );
+    assert_eq!(
+        report(MouseKind::Release(left), clicks).unwrap(),
+        b"\x1b[M\x23\x25\x2a"
+    );
+    assert_eq!(report(MouseKind::Drag(left), clicks), None);
+    assert_eq!(
+        mouse_report(MouseKind::Press(left), 4, 9, control(), clicks).unwrap(),
+        b"\x1b[M\x30\x25\x2a"
+    );
+
+    let sgr = TermMode::MOUSE_DRAG | TermMode::SGR_MOUSE;
+    assert_eq!(
+        report(MouseKind::Press(left), sgr).unwrap(),
+        b"\x1b[<0;5;10M"
+    );
+    assert_eq!(
+        report(MouseKind::Release(left), sgr).unwrap(),
+        b"\x1b[<0;5;10m"
+    );
+    assert_eq!(
+        report(MouseKind::Drag(left), sgr).unwrap(),
+        b"\x1b[<32;5;10M"
+    );
+    assert_eq!(report(MouseKind::Move, sgr), None);
+    assert_eq!(
+        report(MouseKind::Press(MouseButton::WheelDown), sgr).unwrap(),
+        b"\x1b[<65;5;10M"
+    );
+    assert_eq!(
+        report(
+            MouseKind::Move,
+            TermMode::MOUSE_MOTION | TermMode::SGR_MOUSE
+        )
+        .unwrap(),
+        b"\x1b[<35;5;10M"
+    );
+
+    let far = mouse_report(
+        MouseKind::Press(left),
+        299,
+        0,
+        plain(),
+        clicks | TermMode::UTF8_MOUSE,
+    )
+    .unwrap();
+    assert_eq!(far, "\x1b[M\u{20}\u{14c}\u{21}".as_bytes());
 }
 
 #[test]
