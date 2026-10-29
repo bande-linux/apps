@@ -174,6 +174,15 @@ impl Terminal {
         }
     }
 
+    pub fn select_all(&mut self) {
+        let grid = self.term.grid();
+        let start = GridPoint::new(grid.topmost_line(), Column(0));
+        let end = GridPoint::new(grid.bottommost_line(), grid.last_column());
+        let mut selection = Selection::new(SelectionType::Simple, start, Side::Left);
+        selection.update(end, Side::Right);
+        self.term.selection = Some(selection);
+    }
+
     pub fn screen_text(&self) -> Vec<String> {
         let grid = self.term.grid();
         let offset = grid.display_offset();

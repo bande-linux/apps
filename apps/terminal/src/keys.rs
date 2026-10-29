@@ -115,3 +115,47 @@ pub fn bracketed(text: &str, mode: TermMode) -> Vec<u8> {
 pub fn wants_scroll_as_arrows(mode: TermMode) -> bool {
     mode.contains(TermMode::ALT_SCREEN) && mode.contains(TermMode::ALTERNATE_SCROLL)
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Command {
+    Copy,
+    Paste,
+    SelectAll,
+    ClearScrollback,
+    BiggerText,
+    SmallerText,
+    DefaultTextSize,
+}
+
+pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
+    if !modifiers.logo || modifiers.control || modifiers.alt {
+        return None;
+    }
+    let Key::Character(character) = key else {
+        return None;
+    };
+    let command = match (character.to_ascii_lowercase(), modifiers.shift) {
+        ('c', false) => Command::Copy,
+        ('v', false) => Command::Paste,
+        ('a', false) => Command::SelectAll,
+        ('k', false) => Command::ClearScrollback,
+        ('=' | '+', _) => Command::BiggerText,
+        ('-', false) => Command::SmallerText,
+        ('0', false) => Command::DefaultTextSize,
+        _ => return None,
+    };
+    Some(command)
+}
+
+const FONT_SIZES: [f32; 14] = [
+    8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 40.0,
+];
+
+pub fn next_font_size(size: f32, bigger: bool) -> f32 {
+    let found = if bigger {
+        FONT_SIZES.iter().find(|candidate| **candidate > size)
+    } else {
+        FONT_SIZES.iter().rev().find(|candidate| **candidate < size)
+    };
+    found.copied().unwrap_or(size)
+}

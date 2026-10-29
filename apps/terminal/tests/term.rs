@@ -7,7 +7,10 @@ use std::time::{Duration, Instant};
 
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::{self, Options, Shell};
-use unbound_term::{DEFAULT_FONT_SIZE, GridSize, Painter, Terminal, bracketed, encode_key};
+use unbound_term::{
+    Command, DEFAULT_FONT_SIZE, GridSize, Painter, Terminal, bracketed, encode_key, next_font_size,
+    shortcut,
+};
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{Appearance, CpuRenderer, Point, Scheme};
 
@@ -76,6 +79,43 @@ fn control_sends_signals_and_super_is_kept_for_the_app() {
     };
     assert_eq!(encode_key(Key::Character('c'), logo, normal), None);
     assert_eq!(encode_key(Key::Character('v'), logo, normal), None);
+}
+
+fn logo(shift: bool) -> Modifiers {
+    Modifiers {
+        logo: true,
+        shift,
+        ..Modifiers::default()
+    }
+}
+
+#[test]
+fn super_chords_are_app_commands_whatever_the_shift_state_of_plus() {
+    let bigger = Some(Command::BiggerText);
+    assert_eq!(shortcut(Key::Character('='), logo(false)), bigger);
+    assert_eq!(shortcut(Key::Character('+'), logo(true)), bigger);
+    assert_eq!(
+        shortcut(Key::Character('-'), logo(false)),
+        Some(Command::SmallerText)
+    );
+    assert_eq!(
+        shortcut(Key::Character('0'), logo(false)),
+        Some(Command::DefaultTextSize)
+    );
+    assert_eq!(
+        shortcut(Key::Character('C'), logo(false)),
+        Some(Command::Copy)
+    );
+    assert_eq!(shortcut(Key::Character('c'), control()), None);
+}
+
+#[test]
+fn text_size_steps_through_a_ladder_and_stops_at_its_ends() {
+    assert_eq!(next_font_size(DEFAULT_FONT_SIZE, true), 12.0);
+    assert_eq!(next_font_size(DEFAULT_FONT_SIZE, false), 10.0);
+    assert_eq!(next_font_size(8.0, false), 8.0);
+    assert_eq!(next_font_size(40.0, true), 40.0);
+    assert_eq!(next_font_size(12.5, true), 13.0);
 }
 
 #[test]
@@ -152,6 +192,14 @@ fn a_drag_selects_text_for_copying() {
     terminal.start_selection(at(2.0));
     terminal.finish_selection();
     assert_eq!(terminal.selected_text(), None);
+}
+
+#[test]
+fn select_all_copies_the_scrollback_and_the_screen() {
+    let mut terminal = terminal(20, 2);
+    terminal.feed(b"one\r\ntwo\r\nthree");
+    terminal.select_all();
+    assert_eq!(terminal.selected_text().as_deref(), Some("one\ntwo\nthree"));
 }
 
 #[test]

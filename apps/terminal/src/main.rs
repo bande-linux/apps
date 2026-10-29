@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::event::{Event as TermEvent, OnResize};
 use alacritty_terminal::tty::{self, Options, Pty, Shell};
 use unbound_term::{
-    COLUMNS, DEFAULT_FONT_SIZE, GridSize, L10N, Painter, ROWS, Terminal, bracketed, encode_key,
-    wants_scroll_as_arrows,
+    COLUMNS, Command, DEFAULT_FONT_SIZE, GridSize, L10N, Painter, ROWS, Terminal, bracketed,
+    encode_key, next_font_size, shortcut, wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{App, Point, Role, Scene, Window, WindowError, WindowEvent};
@@ -69,28 +69,10 @@ impl TerminalApp {
     }
 
     fn key(&mut self, window: &mut Window, key: Key, modifiers: Modifiers) {
-        let only_logo = Modifiers {
-            logo: true,
-            ..Modifiers::default()
-        };
-        if modifiers == only_logo {
-            match key {
-                Key::Character('c') => {
-                    if let Some(text) = self.terminal.selected_text() {
-                        window.copy(&text);
-                    }
-                }
-                Key::Character('v') => {
-                    if let Err(error) = window.paste() {
-                        tracing::warn!("cannot paste: {error}");
-                    }
-                }
-                Key::Character('k') => {
-                    self.terminal.clear_scrollback();
-                    window.request_redraw();
-                }
-                _ => {}
-            }
+        if let Some(command) = shortcut(key, modifiers) {
+            return self.perform(window, command);
+        }
+        if modifiers.logo {
             return;
         }
         let mode = self.terminal.mode();
@@ -124,6 +106,36 @@ impl TerminalApp {
             self.send(&bytes);
             window.request_redraw();
         }
+    }
+
+    fn perform(&mut self, window: &mut Window, command: Command) {
+        match command {
+            Command::Copy => {
+                if let Some(text) = self.terminal.selected_text() {
+                    window.copy(&text);
+                }
+            }
+            Command::Paste => {
+                if let Err(error) = window.paste() {
+                    tracing::warn!("cannot paste: {error}");
+                }
+            }
+            Command::SelectAll => self.terminal.select_all(),
+            Command::ClearScrollback => self.terminal.clear_scrollback(),
+            Command::BiggerText => {
+                self.set_font_size(window, next_font_size(self.painter.font_size(), true))
+            }
+            Command::SmallerText => {
+                self.set_font_size(window, next_font_size(self.painter.font_size(), false))
+            }
+            Command::DefaultTextSize => self.set_font_size(window, DEFAULT_FONT_SIZE),
+        }
+        window.request_redraw();
+    }
+
+    fn set_font_size(&mut self, window: &Window, size: f32) {
+        self.painter.set_metrics(size, window.scale());
+        self.scroll_remainder = 0.0;
     }
 
     fn cell_at(&self, at: Point) -> unbound_term::CellPoint {

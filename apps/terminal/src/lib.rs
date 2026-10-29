@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
-pub use keys::{bracketed, encode_key, wants_scroll_as_arrows};
+pub use keys::{Command, bracketed, encode_key, next_font_size, shortcut, wants_scroll_as_arrows};
 pub use render::{DEFAULT_FONT_SIZE, Metrics, PADDING, Painter};
 pub use terminal::{CellPoint, GridSize, Terminal};
 
