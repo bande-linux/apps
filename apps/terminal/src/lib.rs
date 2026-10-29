@@ -1,4 +1,5 @@
 mod click;
+mod find;
 mod keys;
 mod process;
 mod render;
@@ -12,6 +13,7 @@ use std::sync::LazyLock;
 use unbound_l10n::Localizer;
 
 pub use click::ClickCounter;
+pub use find::{FIND_BAR_HEIGHT, FindAction, FindBar};
 pub use keys::{
     Command, MouseButton, MouseKind, bracketed, encode_key, mouse_report, next_font_size,
     reports_mouse, shortcut, wants_scroll_as_arrows,
@@ -20,7 +22,9 @@ pub use process::DirectoryReports;
 pub use render::{DEFAULT_FONT_SIZE, Metrics, PADDING, Painter, TabBar};
 pub use session::{Notice, Session, display_directory};
 pub use tabs::{TAB_BAR_HEIGHT, TabBarLayout, TabTarget};
-pub use terminal::{CellPoint, GridSize, SelectionKind, Terminal};
+pub use terminal::{
+    CellPoint, GridSize, Highlights, SearchDirection, SelectionKind, Terminal, escape_regex,
+};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-term.ftl");
 
@@ -38,6 +42,7 @@ mod tests {
             include_str!("lib.rs"),
             include_str!("main.rs"),
             include_str!("app.rs"),
+            include_str!("find.rs"),
             include_str!("render.rs"),
             include_str!("session.rs"),
         ];

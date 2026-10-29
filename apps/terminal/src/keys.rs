@@ -222,6 +222,9 @@ pub enum Command {
     PreviousTab,
     SelectTab(usize),
     LastTab,
+    Find,
+    FindNext,
+    FindPrevious,
 }
 
 pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
@@ -239,6 +242,9 @@ pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
         ('=' | '+', _) => Command::BiggerText,
         ('-', false) => Command::SmallerText,
         ('0', false) => Command::DefaultTextSize,
+        ('f', false) => Command::Find,
+        ('g', false) => Command::FindNext,
+        ('g', true) => Command::FindPrevious,
         ('t', false) => Command::NewTab,
         ('n', false) => Command::NewWindow,
         ('9', false) => Command::LastTab,

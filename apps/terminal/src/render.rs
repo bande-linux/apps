@@ -8,7 +8,7 @@ use unbound_toolkit::{
 };
 
 use crate::tabs::{TAB_BAR_HEIGHT, TabBarLayout, TabTarget};
-use crate::terminal::{CellPoint, GridSize, Terminal};
+use crate::terminal::{CellPoint, GridSize, Highlights, Terminal};
 use crate::theme::{Theme, dimmed};
 
 pub const DEFAULT_FONT_SIZE: f32 = 11.0;
@@ -326,11 +326,16 @@ impl Painter {
             width,
             height,
             background: self.theme.background,
-            items: self.terminal(terminal, Point::default()),
+            items: self.terminal(terminal, Point::default(), &Highlights::default()),
         }
     }
 
-    pub fn terminal(&mut self, terminal: &Terminal, origin: Point) -> Vec<Item> {
+    pub fn terminal(
+        &mut self,
+        terminal: &Terminal,
+        origin: Point,
+        highlights: &Highlights,
+    ) -> Vec<Item> {
         let content = terminal.term.renderable_content();
         let colors = content.colors;
         let theme = self.theme;
@@ -352,6 +357,7 @@ impl Painter {
 
         let mut backgrounds: Vec<Span> = Vec::new();
         let mut selected: Vec<Span> = Vec::new();
+        let mut found: Vec<Span> = Vec::new();
         let mut underlines: Vec<Span> = Vec::new();
         let mut strikeouts: Vec<Span> = Vec::new();
         let mut runs: Vec<Run> = Vec::new();
@@ -382,6 +388,27 @@ impl Painter {
             } else {
                 1
             };
+            let point = indexed.point;
+            if highlights
+                .current
+                .as_ref()
+                .is_some_and(|current| current.contains(&point))
+            {
+                push_span(&mut found, line, column, cells, theme.current_match);
+            } else if highlights
+                .matches
+                .iter()
+                .any(|candidate| candidate.contains(&point))
+            {
+                push_span(&mut found, line, column, cells, theme.match_highlight);
+            }
+            let in_link = highlights
+                .link
+                .as_ref()
+                .is_some_and(|link| link.contains(&point));
+            if in_link {
+                foreground = theme.link;
+            }
             if selection.is_some_and(|range| range.contains(indexed.point)) {
                 let color = if focused {
                     theme.selection
@@ -411,7 +438,7 @@ impl Painter {
                 );
                 cursor_items.push(self.cursor(cursor.shape, focused, rect));
             }
-            if cell.flags.intersects(Flags::ALL_UNDERLINES) {
+            if in_link || cell.flags.intersects(Flags::ALL_UNDERLINES) {
                 push_span(&mut underlines, line, column, cells, foreground);
             }
             if cell.flags.contains(Flags::STRIKEOUT) {
@@ -444,6 +471,7 @@ impl Painter {
         let line_width = hairline(1.0, metrics.scale);
         let mut items: Vec<Item> = backgrounds
             .iter()
+            .chain(&found)
             .chain(&selected)
             .map(|span| Item::Fill {
                 shape: Shape::rect(rect_of(span)),

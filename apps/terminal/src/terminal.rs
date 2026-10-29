@@ -3,8 +3,9 @@ use std::rc::Rc;
 
 use alacritty_terminal::event::{Event as TermEvent, EventListener, WindowSize};
 use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::index::{Column, Point as GridPoint, Side};
+use alacritty_terminal::index::{Boundary, Column, Direction, Line, Point as GridPoint, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
+use alacritty_terminal::term::search::{Match, RegexIter, RegexSearch};
 use alacritty_terminal::term::{self, Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{ClearMode, Handler, Processor};
 
@@ -56,6 +57,37 @@ impl SelectionKind {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Highlights {
+    pub matches: Vec<Match>,
+    pub current: Option<Match>,
+    pub link: Option<Match>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchDirection {
+    Older,
+    Newer,
+}
+
+struct Search {
+    regex: RegexSearch,
+    current: Option<Match>,
+}
+
+const REGEX_SPECIAL: &str = "\\.+*?()|[]{}^$#&-~";
+
+pub fn escape_regex(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for character in text.chars() {
+        if REGEX_SPECIAL.contains(character) {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
+}
+
 #[derive(Clone, Default)]
 pub struct Listener(Rc<RefCell<Vec<TermEvent>>>);
 
@@ -71,6 +103,7 @@ pub struct Terminal {
     events: Listener,
     size: GridSize,
     cell_size: (u16, u16),
+    search: Option<Search>,
 }
 
 impl Terminal {
@@ -86,6 +119,7 @@ impl Terminal {
             events,
             size,
             cell_size: (0, 0),
+            search: None,
         }
     }
 
@@ -214,6 +248,97 @@ impl Terminal {
         let mut selection = Selection::new(SelectionType::Simple, start, Side::Left);
         selection.update(end, Side::Right);
         self.term.selection = Some(selection);
+    }
+
+    fn viewport_end(&self) -> GridPoint {
+        let line = Line(self.size.lines as i32 - 1 - self.display_offset() as i32);
+        GridPoint::new(line, self.term.grid().last_column())
+    }
+
+    fn viewport_start(&self) -> GridPoint {
+        GridPoint::new(Line(-(self.display_offset() as i32)), Column(0))
+    }
+
+    pub fn find(&mut self, query: &str) -> bool {
+        self.search = None;
+        if query.is_empty() {
+            return true;
+        }
+        let Ok(regex) = RegexSearch::new(&escape_regex(query)) else {
+            return false;
+        };
+        let mut search = Search {
+            regex,
+            current: None,
+        };
+        let origin = self.viewport_end();
+        search.current = self.term.search_next(
+            &mut search.regex,
+            origin,
+            Direction::Left,
+            Side::Right,
+            None,
+        );
+        let found = search.current.is_some();
+        self.search = Some(search);
+        self.reveal_match();
+        found
+    }
+
+    pub fn find_again(&mut self, direction: SearchDirection) -> bool {
+        let fallback = self.viewport_end();
+        let Some(search) = &mut self.search else {
+            return false;
+        };
+        let (origin, direction, side) = match (&search.current, direction) {
+            (Some(current), SearchDirection::Older) => (
+                current.start().sub(&self.term, Boundary::None, 1),
+                Direction::Left,
+                Side::Left,
+            ),
+            (Some(current), SearchDirection::Newer) => (
+                current.end().add(&self.term, Boundary::None, 1),
+                Direction::Right,
+                Side::Right,
+            ),
+            (None, SearchDirection::Older) => (fallback, Direction::Left, Side::Right),
+            (None, SearchDirection::Newer) => (fallback, Direction::Right, Side::Left),
+        };
+        search.current = self
+            .term
+            .search_next(&mut search.regex, origin, direction, side, None);
+        let found = search.current.is_some();
+        self.reveal_match();
+        found
+    }
+
+    fn reveal_match(&mut self) {
+        if let Some(current) = self
+            .search
+            .as_ref()
+            .and_then(|search| search.current.clone())
+        {
+            self.term.scroll_to_point(*current.start());
+            self.term.scroll_to_point(*current.end());
+        }
+    }
+
+    pub fn end_find(&mut self) {
+        self.search = None;
+    }
+
+    pub fn highlights(&mut self) -> Highlights {
+        let (start, end) = (self.viewport_start(), self.viewport_end());
+        let Some(search) = &mut self.search else {
+            return Highlights::default();
+        };
+        let matches =
+            RegexIter::new(start, end, Direction::Right, &self.term, &mut search.regex).collect();
+        Highlights {
+            matches,
+            current: search.current.clone(),
+            link: None,
+        }
     }
 
     pub fn screen_text(&self) -> Vec<String> {

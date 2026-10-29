@@ -2,16 +2,17 @@ use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use accesskit::TreeUpdate;
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
-    CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, GridSize, L10N, MouseButton, MouseKind,
-    Notice, Painter, SelectionKind, Session, TAB_BAR_HEIGHT, TabBar, TabBarLayout, TabTarget,
-    Terminal, bracketed, encode_key, mouse_report, next_font_size, reports_mouse, shortcut,
-    wants_scroll_as_arrows,
+    CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, FIND_BAR_HEIGHT, FindAction, FindBar,
+    GridSize, L10N, MouseButton, MouseKind, Notice, Painter, SearchDirection, SelectionKind,
+    Session, TAB_BAR_HEIGHT, TabBar, TabBarLayout, TabTarget, Terminal, bracketed, encode_key,
+    mouse_report, next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{App, Point, Scene, Window, WindowEvent};
+use unbound_toolkit::{App, Point, Rect, Scene, Window, WindowEvent};
 
 pub const APP_ID: &str = "org.unbound.Terminal";
 const WRITE_RETRY: Duration = Duration::from_millis(5);
@@ -22,6 +23,7 @@ enum Gesture {
     Selecting,
     Reporting(MouseButton),
     Tab(TabTarget),
+    FindBar,
 }
 
 pub struct TerminalApp {
@@ -38,6 +40,9 @@ pub struct TerminalApp {
     scroll_remainder: f32,
     title: String,
     size: (u32, u32),
+    find: Option<FindBar>,
+    find_focused: bool,
+    last_query: String,
 }
 
 impl TerminalApp {
@@ -56,6 +61,9 @@ impl TerminalApp {
             scroll_remainder: 0.0,
             title: String::new(),
             size: window.size(),
+            find: None,
+            find_focused: false,
+            last_query: String::new(),
         };
         app.tabs[0].terminal.set_focus(false);
         app
@@ -81,13 +89,21 @@ impl TerminalApp {
         self.tabs.len() > 1
     }
 
-    fn content_origin(&self) -> Point {
-        let top = if self.shows_tab_bar() {
+    fn tab_bar_height(&self) -> f32 {
+        if self.shows_tab_bar() {
             TAB_BAR_HEIGHT
         } else {
             0.0
+        }
+    }
+
+    fn content_origin(&self) -> Point {
+        let find = if self.find.is_some() {
+            FIND_BAR_HEIGHT
+        } else {
+            0.0
         };
-        Point::new(0.0, top)
+        Point::new(0.0, self.tab_bar_height() + find)
     }
 
     fn grid(&self) -> GridSize {
@@ -98,6 +114,10 @@ impl TerminalApp {
     }
 
     fn layout(&mut self) {
+        let top = self.tab_bar_height();
+        if let Some(find) = &mut self.find {
+            find.set_top(top);
+        }
         let grid = self.grid();
         let cell_size = self.painter.metrics.pixel_cell_size();
         for tab in &mut self.tabs {
@@ -158,8 +178,10 @@ impl TerminalApp {
         if let Some(report) = self.session().terminal.set_focus(false) {
             self.send(report);
         }
+        self.session().terminal.end_find();
         self.active = index;
         self.gesture = Gesture::Idle;
+        self.run_find();
         if let Some(report) = self.session().terminal.set_focus(focused) {
             self.send(report);
         }
@@ -240,8 +262,16 @@ impl TerminalApp {
     }
 
     fn key(&mut self, window: &mut Window, key: Key, modifiers: Modifiers) {
-        if let Some(command) = shortcut(key, modifiers) {
+        let command = shortcut(key, modifiers);
+        let edits_find = self.find_focused && command == Some(Command::SelectAll);
+        if let Some(command) = command.filter(|_| !edits_find) {
             return self.perform(window, command);
+        }
+        if self.find_focused
+            && let Some(find) = &mut self.find
+        {
+            find.handle(&Event::Key { key, modifiers });
+            return window.request_redraw();
         }
         if modifiers.logo {
             return;
@@ -307,8 +337,75 @@ impl TerminalApp {
             }
             Command::SelectTab(index) => self.select_tab(window, index),
             Command::LastTab => self.select_tab(window, self.tabs.len() - 1),
+            Command::Find => self.open_find(window),
+            Command::FindNext => self.find_again(window, SearchDirection::Newer),
+            Command::FindPrevious => self.find_again(window, SearchDirection::Older),
         }
         window.request_redraw();
+    }
+
+    fn open_find(&mut self, window: &Window) {
+        match &mut self.find {
+            Some(find) => find.focus_field(),
+            None => {
+                let palette = window.appearance().palette();
+                self.find = Some(FindBar::new(palette, &self.last_query));
+                self.layout();
+                self.run_find();
+            }
+        }
+        self.find_focused = true;
+        self.focus_terminal(false);
+    }
+
+    fn find_again(&mut self, window: &Window, direction: SearchDirection) {
+        if self.find.is_none() {
+            return self.open_find(window);
+        }
+        let found = self.session().terminal.find_again(direction);
+        if let Some(find) = &mut self.find {
+            find.set_found(found);
+        }
+    }
+
+    fn run_find(&mut self) {
+        let Some(query) = self.find.as_ref().map(FindBar::query) else {
+            return;
+        };
+        let found = self.session().terminal.find(&query);
+        if let Some(find) = &mut self.find {
+            find.set_found(found);
+        }
+        self.last_query = query;
+    }
+
+    fn close_find(&mut self) {
+        self.session().terminal.end_find();
+        self.find = None;
+        self.find_focused = false;
+        self.focus_terminal(self.focused);
+        self.layout();
+    }
+
+    fn handle_find_actions(&mut self, window: &mut Window) {
+        let Some(actions) = self.find.as_mut().map(FindBar::take_actions) else {
+            return;
+        };
+        for action in actions {
+            match action {
+                FindAction::Changed => self.run_find(),
+                FindAction::Older => self.find_again(window, SearchDirection::Older),
+                FindAction::Newer => self.find_again(window, SearchDirection::Newer),
+                FindAction::Close => self.close_find(),
+            }
+        }
+        window.request_redraw();
+    }
+
+    fn focus_terminal(&mut self, focused: bool) {
+        if let Some(report) = self.session().terminal.set_focus(focused) {
+            self.send(report);
+        }
     }
 
     fn set_font_size(&mut self, window: &Window, size: f32) {
@@ -353,8 +450,14 @@ impl TerminalApp {
                 self.session().terminal.extend_selection(cell);
                 window.request_redraw();
             }
+            Gesture::FindBar => {
+                if let Some(find) = &mut self.find {
+                    find.handle(&Event::PointerMove(at));
+                    window.request_redraw();
+                }
+            }
             Gesture::Tab(_) => {}
-            Gesture::Idle if hover.is_none() => {
+            Gesture::Idle if hover.is_none() && !self.in_find_bar(at) => {
                 self.report_mouse(MouseKind::Move, at, modifiers);
             }
             Gesture::Idle => {}
@@ -375,6 +478,12 @@ impl TerminalApp {
                 TabTarget::NewTab => self.new_tab(window),
                 TabTarget::Select(_) => {}
             },
+            Gesture::FindBar => {
+                if let Some(find) = &mut self.find {
+                    find.handle(&Event::PointerUp(at));
+                    window.request_redraw();
+                }
+            }
             Gesture::Tab(_) | Gesture::Idle => {}
         }
     }
@@ -386,6 +495,19 @@ impl TerminalApp {
             }
             self.gesture = Gesture::Tab(target);
             return;
+        }
+        if self.in_find_bar(at) {
+            if let Some(find) = &mut self.find {
+                find.handle(&Event::PointerDown(at));
+            }
+            self.gesture = Gesture::FindBar;
+            self.find_focused = true;
+            self.focus_terminal(false);
+            return window.request_redraw();
+        }
+        if self.find_focused {
+            self.find_focused = false;
+            self.focus_terminal(self.focused);
         }
         let modifiers = window.modifiers();
         if !modifiers.shift && reports_mouse(self.mode()) {
@@ -407,6 +529,10 @@ impl TerminalApp {
             terminal.start_selection(cell, SelectionKind::for_clicks(clicks, modifiers.alt));
         }
         window.request_redraw();
+    }
+
+    fn in_find_bar(&self, at: Point) -> bool {
+        self.find.as_ref().is_some_and(|find| find.contains(at))
     }
 
     fn scroll_pages(&mut self, window: &mut Window, pages: i32) {
@@ -450,9 +576,7 @@ impl TerminalApp {
 
     fn focus(&mut self, window: &mut Window, focused: bool) {
         self.focused = focused;
-        if let Some(report) = self.session().terminal.set_focus(focused) {
-            self.send(report);
-        }
+        self.focus_terminal(focused && !self.find_focused);
         window.request_redraw();
     }
 }
@@ -479,10 +603,14 @@ impl App for TerminalApp {
             items.extend(self.painter.tab_bar(&bar, size.0 as f32));
         }
         let origin = self.content_origin();
+        let highlights = self.session().terminal.highlights();
         items.extend(
             self.painter
-                .terminal(&self.tabs[self.active].terminal, origin),
+                .terminal(&self.tabs[self.active].terminal, origin, &highlights),
         );
+        if let Some(find) = &mut self.find {
+            items.extend(find.items(size.0, size.1));
+        }
         Scene {
             width: size.0,
             height: size.1,
@@ -503,15 +631,40 @@ impl App for TerminalApp {
                 }
             }
             WindowEvent::Scroll { dy, .. } => self.scroll(window, dy),
+            WindowEvent::Pasted(text) if self.find_focused => {
+                if let Some(find) = &mut self.find {
+                    find.handle(&Event::Commit(text.replace(['\r', '\n'], " ")));
+                }
+            }
+            WindowEvent::Input(event @ (Event::Commit(_) | Event::Preedit { .. })) => {
+                if self.find_focused
+                    && let Some(find) = &mut self.find
+                {
+                    find.handle(&event);
+                    window.request_redraw();
+                }
+            }
+            WindowEvent::Accessibility(request) => {
+                if let Some(find) = &mut self.find {
+                    find.perform(&request);
+                    window.request_redraw();
+                }
+            }
             WindowEvent::Pasted(text) => {
                 let bytes = bracketed(&text, self.mode());
                 self.session().terminal.scroll_to_bottom();
                 self.send(&bytes);
             }
             WindowEvent::Focus(focused) => self.focus(window, focused),
-            WindowEvent::AppearanceChanged(appearance) => self.painter.set_appearance(appearance),
+            WindowEvent::AppearanceChanged(appearance) => {
+                self.painter.set_appearance(appearance);
+                if let Some(find) = &mut self.find {
+                    find.set_palette(appearance.palette());
+                }
+            }
             _ => {}
         }
+        self.handle_find_actions(window);
         let notices = self.session().take_notices();
         self.handle_notices(window, notices);
         self.remove_exited(window);
@@ -554,6 +707,17 @@ impl App for TerminalApp {
 
     fn finished(&self) -> bool {
         self.tabs.is_empty()
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        self.find
+            .as_ref()
+            .filter(|_| self.find_focused)
+            .and_then(FindBar::text_input_area)
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        self.find.as_ref().map(FindBar::accessibility)
     }
 }
 

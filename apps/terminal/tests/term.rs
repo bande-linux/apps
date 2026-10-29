@@ -6,9 +6,10 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
-    CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, DirectoryReports, GridSize, MouseButton,
-    MouseKind, Painter, SelectionKind, Session, TabBar, TabBarLayout, TabTarget, Terminal,
-    bracketed, encode_key, mouse_report, next_font_size, shortcut,
+    CellPoint, ClickCounter, Command, DEFAULT_FONT_SIZE, DirectoryReports, FIND_BAR_HEIGHT,
+    FindAction, FindBar, GridSize, MouseButton, MouseKind, Painter, SearchDirection, SelectionKind,
+    Session, TabBar, TabBarLayout, TabTarget, Terminal, bracketed, encode_key, mouse_report,
+    next_font_size, shortcut,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{Appearance, CpuRenderer, Point, Scheme};
@@ -448,5 +449,89 @@ fn the_tab_bar_matches_its_goldens() {
         };
         let frame = CpuRenderer::new().render(&scene).expect("frame");
         check_golden(&format!("term-tabs-{suffix}"), size, frame.rgba);
+    }
+}
+
+#[test]
+fn find_starts_at_the_newest_match_and_steps_through_the_scrollback() {
+    let mut terminal = terminal(30, 3);
+    terminal.feed(b"error: one\r\nok\r\nerror: two (x+1)\r\nok\r\nERROR: three\r\nok");
+    assert!(terminal.find("error"));
+    let line_of = |terminal: &mut Terminal| terminal.highlights().current.unwrap().start().line.0;
+    assert_eq!(line_of(&mut terminal), 1);
+    assert_eq!(terminal.highlights().matches.len(), 1);
+
+    assert!(terminal.find_again(SearchDirection::Older));
+    assert_eq!(line_of(&mut terminal), -1);
+    assert_eq!(terminal.screen_text()[0], "error: two (x+1)");
+    assert!(terminal.find_again(SearchDirection::Older));
+    assert_eq!(line_of(&mut terminal), -3);
+    assert!(terminal.find_again(SearchDirection::Newer));
+    assert_eq!(line_of(&mut terminal), -1);
+
+    assert!(terminal.find("(x+1)"));
+    assert!(!terminal.find("Error"));
+    assert!(!terminal.find("missing"));
+    terminal.end_find();
+    assert_eq!(terminal.highlights().matches.len(), 0);
+}
+
+#[test]
+fn the_find_bar_reports_typing_and_its_keys() {
+    let mut bar = FindBar::new(unbound_toolkit::Palette::for_scheme(Scheme::Light), "old");
+    bar.handle(&unbound_toolkit::ui::Event::Key {
+        key: Key::Character('n'),
+        modifiers: plain(),
+    });
+    assert_eq!(bar.query(), "n");
+    bar.handle(&unbound_toolkit::ui::Event::Key {
+        key: Key::Enter,
+        modifiers: plain(),
+    });
+    bar.handle(&unbound_toolkit::ui::Event::Key {
+        key: Key::Enter,
+        modifiers: shift(),
+    });
+    bar.handle(&unbound_toolkit::ui::Event::Key {
+        key: Key::Escape,
+        modifiers: plain(),
+    });
+    assert_eq!(
+        bar.take_actions(),
+        [
+            FindAction::Changed,
+            FindAction::Older,
+            FindAction::Newer,
+            FindAction::Close
+        ]
+    );
+}
+
+#[test]
+fn found_text_and_the_find_bar_match_their_goldens() {
+    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
+        let mut painter = painter(scheme);
+        let mut terminal = terminal(60, 4);
+        terminal.feed(SESSION);
+        terminal.set_focus(false);
+        assert!(terminal.find("unbound"));
+        let mut bar = FindBar::new(unbound_toolkit::Palette::for_scheme(scheme), "unbound");
+        bar.set_found(true);
+        let (width, height) = painter.metrics.content_size(terminal.size());
+        let size = (
+            width.ceil() as u32,
+            (height + FIND_BAR_HEIGHT).ceil() as u32,
+        );
+        let highlights = terminal.highlights();
+        let mut items = painter.terminal(&terminal, Point::new(0.0, FIND_BAR_HEIGHT), &highlights);
+        items.extend(bar.items(size.0, size.1));
+        let scene = unbound_toolkit::Scene {
+            width: size.0,
+            height: size.1,
+            background: painter.theme.background,
+            items,
+        };
+        let frame = CpuRenderer::new().render(&scene).expect("frame");
+        check_golden(&format!("term-find-{suffix}"), size, frame.rgba);
     }
 }
