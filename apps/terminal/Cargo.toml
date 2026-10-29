@@ -16,7 +16,7 @@ image-compare.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "x11"
+section = "misc"
 depends = "$auto, fonts-dejavu-core, fonts-inter"
 extended-description = """\
 The terminal of the Unbound desktop: xterm-compatible emulation with \
