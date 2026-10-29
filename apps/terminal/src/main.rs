@@ -8,16 +8,19 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::event::{Event as TermEvent, OnResize};
 use alacritty_terminal::tty::{self, Options, Pty, Shell};
 use unbound_term::{
-    COLUMNS, GridSize, L10N, ROWS, Terminal, bracketed, encode_key, wants_scroll_as_arrows,
+    COLUMNS, DEFAULT_FONT_SIZE, GridSize, L10N, Painter, ROWS, Terminal, bracketed, encode_key,
+    wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{App, Role, Scene, Scheme, Window, WindowError, WindowEvent};
+use unbound_toolkit::{App, Point, Role, Scene, Window, WindowError, WindowEvent};
 
 const APP_ID: &str = "org.unbound.Terminal";
 const WRITE_RETRY: Duration = Duration::from_millis(5);
 
 struct TerminalApp {
     terminal: Terminal,
+    painter: Painter,
+    scroll_remainder: f32,
     pty: Pty,
     output: Vec<u8>,
     selecting: bool,
@@ -123,13 +126,20 @@ impl TerminalApp {
         }
     }
 
+    fn cell_at(&self, at: Point) -> unbound_term::CellPoint {
+        self.painter.metrics.cell_at(at)
+    }
+
     fn scroll_pages(&mut self, window: &mut Window, pages: i32) {
         self.terminal.scroll_pages(pages);
         window.request_redraw();
     }
 
     fn scroll(&mut self, window: &mut Window, dy: f32) {
-        let lines = self.terminal.scroll_pixels(dy);
+        self.scroll_remainder += dy / self.painter.metrics.cell_height;
+        let lines = self.scroll_remainder.trunc();
+        self.scroll_remainder -= lines;
+        let lines = lines as i32;
         if lines == 0 {
             return;
         }
@@ -150,11 +160,14 @@ impl TerminalApp {
 impl App for TerminalApp {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
-        let grid = self.terminal.metrics.grid_for(width, height);
-        if self.terminal.resize(grid) {
+        self.painter
+            .set_metrics(self.painter.font_size(), window.scale());
+        let metrics = self.painter.metrics;
+        let grid = metrics.grid_for(width as f32, height as f32);
+        if self.terminal.resize(grid, metrics.pixel_cell_size()) {
             self.pty.on_resize(self.terminal.window_size());
         }
-        self.terminal.scene(width, height)
+        self.painter.scene(&self.terminal, width, height)
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
@@ -162,11 +175,11 @@ impl App for TerminalApp {
             WindowEvent::Input(Event::Key { key, modifiers }) => self.key(window, key, modifiers),
             WindowEvent::Input(Event::PointerDown(at)) => {
                 self.selecting = true;
-                self.terminal.start_selection(at);
+                self.terminal.start_selection(self.cell_at(at));
                 window.request_redraw();
             }
             WindowEvent::Input(Event::PointerMove(at)) if self.selecting => {
-                self.terminal.extend_selection(at);
+                self.terminal.extend_selection(self.cell_at(at));
                 window.request_redraw();
             }
             WindowEvent::Input(Event::PointerUp(_)) => {
@@ -181,12 +194,12 @@ impl App for TerminalApp {
                 self.send(&bytes);
             }
             WindowEvent::Focus(focused) => {
-                self.terminal.set_focus(focused);
+                if let Some(report) = self.terminal.set_focus(focused) {
+                    self.send(report);
+                }
                 window.request_redraw();
             }
-            WindowEvent::AppearanceChanged(appearance) => {
-                self.terminal.set_scheme(appearance.scheme)
-            }
+            WindowEvent::AppearanceChanged(appearance) => self.painter.set_appearance(appearance),
             _ => {}
         }
         self.handle_terminal_events(window);
@@ -245,15 +258,18 @@ fn command() -> Option<Shell> {
 
 fn run() -> Result<(), WindowError> {
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-    let terminal = Terminal::new(
-        GridSize {
-            columns: COLUMNS,
-            lines: ROWS,
-        },
-        Scheme::default(),
-    );
-    let size = terminal.metrics.window_size(terminal.size());
+    let grid = GridSize {
+        columns: COLUMNS,
+        lines: ROWS,
+    };
+    let mut painter = Painter::new(Default::default(), DEFAULT_FONT_SIZE, 1.0);
+    let (width, height) = painter.metrics.content_size(grid);
+    let size = (width.ceil() as u32, height.ceil() as u32);
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), size)?;
+    painter.set_appearance(window.appearance());
+    painter.set_metrics(DEFAULT_FONT_SIZE, window.scale());
+    let mut terminal = Terminal::new(grid);
+    terminal.resize(grid, painter.metrics.pixel_cell_size());
     let options = Options {
         shell: command(),
         working_directory: home,
@@ -267,6 +283,8 @@ fn run() -> Result<(), WindowError> {
     let pty = tty::new(&options, terminal.window_size(), 0)?;
     let mut app = TerminalApp {
         terminal,
+        painter,
+        scroll_remainder: 0.0,
         pty,
         output: Vec::new(),
         selecting: false,

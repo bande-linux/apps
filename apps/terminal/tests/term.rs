@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::{self, Options, Shell};
-use unbound_term::{GridSize, Terminal, bracketed, encode_key};
+use unbound_term::{DEFAULT_FONT_SIZE, GridSize, Painter, Terminal, bracketed, encode_key};
 use unbound_toolkit::ui::{Key, Modifiers};
-use unbound_toolkit::{CpuRenderer, Point, Scheme};
+use unbound_toolkit::{Appearance, CpuRenderer, Point, Scheme};
 
 const MIN_SSIM: f64 = 0.99;
 
@@ -101,7 +101,18 @@ fn pastes_are_bracketed_when_the_program_asks() {
 }
 
 fn terminal(columns: usize, lines: usize) -> Terminal {
-    Terminal::new(GridSize { columns, lines }, Scheme::Light)
+    Terminal::new(GridSize { columns, lines })
+}
+
+fn painter(scheme: Scheme) -> Painter {
+    Painter::new(
+        Appearance {
+            scheme,
+            accent: None,
+        },
+        DEFAULT_FONT_SIZE,
+        1.0,
+    )
 }
 
 #[test]
@@ -124,12 +135,12 @@ fn output_lands_on_the_grid_and_scrolls_into_the_scrollback() {
 fn a_drag_selects_text_for_copying() {
     let mut terminal = terminal(20, 3);
     terminal.feed(b"hello world");
-    let metrics = terminal.metrics;
+    let metrics = painter(Scheme::Light).metrics;
     let at = |column: f32| {
-        Point::new(
+        metrics.cell_at(Point::new(
             unbound_term::PADDING + column * metrics.cell_width + 1.0,
             unbound_term::PADDING + metrics.cell_height / 2.0,
-        )
+        ))
     };
 
     terminal.start_selection(at(6.0));
@@ -198,21 +209,17 @@ selected underlined red 256 truecolor\r\n\
 #[test]
 fn the_terminal_matches_its_goldens_focused_and_unfocused() {
     for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
-        let mut terminal = Terminal::new(
-            GridSize {
-                columns: 80,
-                lines: 8,
-            },
-            scheme,
-        );
+        let mut painter = painter(scheme);
+        let mut terminal = terminal(80, 8);
         terminal.feed(SESSION);
-        let size = terminal.metrics.window_size(terminal.size());
+        let (width, height) = painter.metrics.content_size(terminal.size());
+        let size = (width.ceil() as u32, height.ceil() as u32);
         terminal.set_focus(true);
-        let scene = terminal.scene(size.0, size.1);
+        let scene = painter.scene(&terminal, size.0, size.1);
         let frame = CpuRenderer::new().render(&scene).expect("frame");
         check_golden(&format!("term-focused-{suffix}"), size, frame.rgba);
         terminal.set_focus(false);
-        let scene = terminal.scene(size.0, size.1);
+        let scene = painter.scene(&terminal, size.0, size.1);
         let frame = CpuRenderer::new().render(&scene).expect("frame");
         check_golden(&format!("term-unfocused-{suffix}"), size, frame.rgba);
     }
