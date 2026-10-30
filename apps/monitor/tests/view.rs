@@ -260,6 +260,51 @@ fn the_memory_tab_resamples_at_once_to_show_proportional_memory() {
 }
 
 #[test]
+fn another_tab_shows_its_own_columns_sorted_by_its_measure_and_keeps_the_selection() {
+    let mut view = monitor_view();
+    view.handle(&key(Key::Down));
+    view.handle(&command('2'));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    let tree = view.accessibility().expect("an accessibility tree");
+    let headers = tree
+        .nodes
+        .iter()
+        .filter(|(_, node)| node.role() == Role::ColumnHeader)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        headers,
+        ["Name", "Memory", "Resident", "Threads", "PID", "User"]
+    );
+    assert_eq!(
+        shown_rows(&view),
+        [
+            "Terminal",
+            "Files",
+            "Settings",
+            "systemd-journald",
+            "pipewire"
+        ]
+    );
+    assert_eq!(
+        view.table().expect("table").selection(),
+        ["app:org.unbound.Terminal"]
+    );
+    view.handle(&Event::Key {
+        key: Key::Character('r'),
+        modifiers: Modifiers {
+            logo: true,
+            shift: true,
+            ..Modifiers::default()
+        },
+    });
+    assert!(matches!(
+        view.take_requests().as_slice(),
+        [Request::Resample, Request::ShowInFiles(_)]
+    ));
+}
+
+#[test]
 fn super_f_searches_as_you_type_and_escape_clears_the_search() {
     let mut view = monitor_view();
     view.handle(&command('f'));
