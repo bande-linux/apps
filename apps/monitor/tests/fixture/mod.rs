@@ -174,6 +174,21 @@ impl Fixture {
         );
     }
 
+    pub fn set_gpu(&self, pid: u32, fd: u32, client: u64, engine_ns: u64) {
+        let fds = self.path().join(format!("proc/{pid}/fd"));
+        fs::create_dir_all(&fds).expect("fd folder");
+        let link = fds.join(fd.to_string());
+        if fs::symlink_metadata(&link).is_err() {
+            std::os::unix::fs::symlink("/dev/dri/renderD128", link).expect("link");
+        }
+        self.write(
+            &format!("proc/{pid}/fdinfo/{fd}"),
+            &format!(
+                "pos:\t0\ndrm-driver:\tasahi\ndrm-client-id:\t{client}\ndrm-engine-render:\t{engine_ns} ns\ndrm-engine-compute:\t0 ns\ndrm-resident-memory:\t2048 KiB\n"
+            ),
+        );
+    }
+
     pub fn exit(&self, pid: u32) {
         fs::remove_dir_all(self.path().join(format!("proc/{pid}"))).expect("remove process");
     }
@@ -203,6 +218,7 @@ pub fn process(pid: u32, ppid: u32, command: &str) -> Process {
         proportional: None,
         resident: 0,
         disk: None,
+        gpu: None,
     }
 }
 

@@ -18,7 +18,7 @@ pub enum MenuCommand {
     Show(Tab),
 }
 
-const ACTIONS: [(MenuCommand, &str); 11] = [
+const ACTIONS: [(MenuCommand, &str); 12] = [
     (MenuCommand::Quit, "quit"),
     (MenuCommand::ForceQuit, "force-quit"),
     (MenuCommand::ShowInFiles, "show-in-files"),
@@ -30,6 +30,7 @@ const ACTIONS: [(MenuCommand, &str); 11] = [
     (MenuCommand::Show(Tab::Memory), "show-memory"),
     (MenuCommand::Show(Tab::Disk), "show-disk"),
     (MenuCommand::Show(Tab::Network), "show-network"),
+    (MenuCommand::Show(Tab::Gpu), "show-gpu"),
 ];
 
 impl MenuCommand {
@@ -108,8 +109,8 @@ fn entry(message: &str, command: MenuCommand) -> Entry {
     Entry::item(&L10N.tr(message), command.action())
 }
 
-pub fn app_menus() -> Vec<Entry> {
-    let mut view = Tab::ALL
+pub fn app_menus(tabs: &[Tab]) -> Vec<Entry> {
+    let mut view = tabs
         .iter()
         .zip(1..)
         .map(|(tab, digit)| {

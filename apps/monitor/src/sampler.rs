@@ -6,8 +6,8 @@ use std::rc::Rc;
 
 use crate::cpu::{CpuShare, CpuTicks, read_cpu_ticks};
 use crate::proc::{
-    IoBytes, Stat, display_name, parse_cgroup_unit, parse_cmdline, parse_io, parse_kilobytes,
-    parse_passwd, parse_stat, parse_uid,
+    DrmUse, IoBytes, Stat, display_name, parse_cgroup_unit, parse_cmdline, parse_drm_fdinfo,
+    parse_io, parse_kilobytes, parse_passwd, parse_stat, parse_uid,
 };
 use crate::system::{Memory, Transferred, read_disks, read_interfaces, read_memory};
 
@@ -36,6 +36,14 @@ pub struct Process {
     pub proportional: Option<u64>,
     pub resident: u64,
     pub disk: Option<Rates>,
+    pub gpu: Option<GpuUse>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct GpuUse {
+    pub percent: f32,
+    pub seconds: f64,
+    pub memory: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -64,6 +72,7 @@ pub struct Snapshot {
     pub memory: Memory,
     pub disk: Rates,
     pub interfaces: Vec<Interface>,
+    pub gpu: bool,
 }
 
 struct Known {
@@ -73,6 +82,7 @@ struct Known {
     io: Option<IoBytes>,
     reads_io: bool,
     reads_rollup: bool,
+    gpu_ns: Option<u64>,
 }
 
 struct Previous {
@@ -90,7 +100,29 @@ pub struct Sampler {
     known: HashMap<u32, Known>,
     previous: Option<Previous>,
     proportional: bool,
+    gpu: bool,
+    gpu_seen: bool,
     buffer: Vec<u8>,
+}
+
+const DRM_DEVICES: &str = "/dev/dri/";
+
+fn read_gpu(folder: &Path) -> Option<DrmUse> {
+    let mut clients = HashMap::new();
+    for entry in fs::read_dir(folder.join("fd")).ok()?.filter_map(Result::ok) {
+        let drm = fs::read_link(entry.path()).is_ok_and(|target| target.starts_with(DRM_DEVICES));
+        if !drm {
+            continue;
+        }
+        let info = fs::read_to_string(folder.join("fdinfo").join(entry.file_name()));
+        if let Some((client, used)) = info.ok().as_deref().and_then(parse_drm_fdinfo) {
+            clients.insert(client, used);
+        }
+    }
+    (!clients.is_empty()).then(|| DrmUse {
+        engine_ns: clients.values().map(|used| used.engine_ns).sum(),
+        memory: clients.values().map(|used| used.memory).sum(),
+    })
 }
 
 fn rate(now: u64, then: u64, seconds: f64) -> f64 {
@@ -114,6 +146,8 @@ impl Sampler {
             known: HashMap::new(),
             previous: None,
             proportional: false,
+            gpu: false,
+            gpu_seen: false,
             buffer: Vec::new(),
         }
     }
@@ -128,6 +162,10 @@ impl Sampler {
 
     pub fn measure_proportional_memory(&mut self, measure: bool) {
         self.proportional = measure;
+    }
+
+    pub fn measure_gpu(&mut self, measure: bool) {
+        self.gpu = measure;
     }
 
     fn read(&mut self, path: &Path) -> io::Result<&str> {
@@ -183,13 +221,21 @@ impl Sampler {
                     io: (!first).then_some(IoBytes::default()),
                     reads_io: readable,
                     reads_rollup: readable,
+                    gpu_ns: None,
                 },
             );
         }
-        let (reads_io, reads_rollup) = self
-            .known
-            .get(&pid)
-            .map(|known| (known.reads_io, known.reads_rollup))?;
+        let (reads_io, reads_rollup, kernel_thread) = self.known.get(&pid).map(|known| {
+            (
+                known.reads_io,
+                known.reads_rollup,
+                known.identity.kernel_thread,
+            )
+        })?;
+        let drm = ((self.gpu || first) && !kernel_thread)
+            .then(|| read_gpu(&folder))
+            .flatten();
+        self.gpu_seen |= drm.is_some();
         let io = reads_io
             .then(|| self.read(&folder.join("io")).ok().and_then(parse_io))
             .flatten();
@@ -212,6 +258,15 @@ impl Sampler {
                 written_total: now.written,
             }
         });
+        let gpu = drm.map(|now| {
+            let then = known.gpu_ns.unwrap_or(now.engine_ns);
+            GpuUse {
+                percent: (rate(now.engine_ns, then, seconds) / 1e7) as f32,
+                seconds: now.engine_ns as f64 / 1e9,
+                memory: now.memory,
+            }
+        });
+        known.gpu_ns = drm.map(|now| now.engine_ns);
         let cpu_percent = rate(stat.cpu_ticks, known.cpu_ticks, seconds) / ticks_per_second * 100.0;
         known.cpu_ticks = stat.cpu_ticks;
         known.io = io;
@@ -228,6 +283,7 @@ impl Sampler {
             proportional,
             resident,
             disk,
+            gpu,
         })
     }
 
@@ -287,6 +343,7 @@ impl Sampler {
                     }
                 })
                 .collect(),
+            gpu: self.gpu_seen,
         };
         self.previous = Some(Previous {
             cpu,

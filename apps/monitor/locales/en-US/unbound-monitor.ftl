@@ -4,6 +4,7 @@ tab-cpu = CPU
 tab-memory = Memory
 tab-disk = Disk
 tab-network = Network
+tab-gpu = GPU
 
 column-name = Name
 column-interface = Interface
@@ -22,6 +23,9 @@ column-received = Received/s
 column-sent = Sent/s
 column-received-total = Bytes Received
 column-sent-total = Bytes Sent
+column-gpu = % GPU
+column-gpu-time = GPU Time
+column-gpu-memory = GPU Memory
 
 group-kernel = Kernel
 
@@ -44,6 +48,9 @@ summary-received-rate = Data Received/s
 summary-sent-rate = Data Sent/s
 summary-received = Data Received
 summary-sent = Data Sent
+summary-gpu = GPU Usage
+summary-gpu-memory = GPU Memory
+summary-gpu-processes = Processes Using the GPU
 
 size-bytes = { $count ->
     [one] { $count } byte

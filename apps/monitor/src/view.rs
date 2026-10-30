@@ -210,6 +210,10 @@ pub trait Screen {
 
     fn set_full_screen(&mut self, _full_screen: bool) {}
 
+    fn measures_gpu(&self) -> bool {
+        false
+    }
+
     fn inspects(&self, _pid: u32) -> bool {
         false
     }

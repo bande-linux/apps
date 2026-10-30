@@ -120,6 +120,7 @@ pub struct MonitorView {
     icons: Icons,
     list: List,
     toolbar: Toolbar,
+    tabs: Vec<Tab>,
     ids: HashMap<String, RowKey>,
     revealed: HashSet<String>,
     size: (f32, f32),
@@ -129,8 +130,15 @@ pub struct MonitorView {
     requests: Vec<Request>,
 }
 
-fn tab_titles() -> Vec<String> {
-    Tab::ALL.iter().map(|tab| tab.title()).collect()
+fn tabs_control(list: &List, tabs: &[Tab], tab: Tab) -> SegmentedControl {
+    let send = sender(list.signals());
+    let titles = tabs.iter().map(|tab| tab.title()).collect::<Vec<_>>();
+    SegmentedControl::new(
+        &L10N.tr("tab-label"),
+        &titles,
+        tabs.iter().position(|shown| *shown == tab),
+        move |index| send(Signal::Tab(index)),
+    )
 }
 
 impl MonitorView {
@@ -147,14 +155,8 @@ impl MonitorView {
             &L10N.tr("inspect-label"),
             move || send(Signal::Inspect),
         ));
-        let send = sender(list.signals());
-        let selected = Tab::ALL.iter().position(|shown| *shown == tab);
-        let tabs = list.insert(SegmentedControl::new(
-            &L10N.tr("tab-label"),
-            &tab_titles(),
-            selected,
-            move |index| send(Signal::Tab(index)),
-        ));
+        let shown_tabs = monitor.tabs();
+        let tabs = list.insert(tabs_control(&list, &shown_tabs, tab));
         let search = list.insert(search_field(&list));
         let mut view = Self {
             monitor,
@@ -167,6 +169,7 @@ impl MonitorView {
                 tabs,
                 search,
             },
+            tabs: shown_tabs,
             ids: HashMap::new(),
             revealed: HashSet::new(),
             size: (0.0, 0.0),
@@ -275,7 +278,7 @@ impl MonitorView {
                 }
             }
             Signal::Tab(index) => {
-                if let Some(tab) = Tab::ALL.get(index) {
+                if let Some(tab) = self.tabs.get(index) {
                     self.set_tab(*tab);
                 }
             }
@@ -369,7 +372,7 @@ impl MonitorView {
             SEARCH_WIDTH,
             TEXT_FIELD_HEIGHT,
         );
-        let tabs_width = SEGMENT_WIDTH * Tab::ALL.len() as f32;
+        let tabs_width = SEGMENT_WIDTH * self.tabs.len() as f32;
         let tabs = Rect::new(
             search.x - ITEM_GAP - tabs_width,
             middle(SEGMENTED_HEIGHT),
@@ -400,7 +403,7 @@ impl MonitorView {
     }
 
     fn set_tab(&mut self, tab: Tab) {
-        if let Some(index) = Tab::ALL.iter().position(|shown| *shown == tab) {
+        if let Some(index) = self.tabs.iter().position(|shown| *shown == tab) {
             self.list
                 .update::<SegmentedControl>(self.toolbar.tabs, |control, cx| {
                     control.set_selected(cx, index)
@@ -409,12 +412,19 @@ impl MonitorView {
         if tab == self.monitor.tab() {
             return;
         }
-        let measured = self.monitor.measures_proportional_memory();
+        let measured = self.measures();
         self.monitor.set_tab(tab);
-        if self.monitor.measures_proportional_memory() != measured {
+        if self.measures() != measured {
             self.requests.push(Request::Resample);
         }
         self.show_columns();
+    }
+
+    fn measures(&self) -> (bool, bool) {
+        (
+            self.monitor.measures_proportional_memory(),
+            self.monitor.measures_gpu(),
+        )
     }
 
     fn show_columns(&mut self) {
@@ -432,8 +442,12 @@ impl MonitorView {
         let Some(column) = Column::parse(id) else {
             return false;
         };
+        let measured = self.measures();
         if !self.monitor.toggle_column(column) {
             return false;
+        }
+        if self.measures() != measured {
+            self.requests.push(Request::Resample);
         }
         self.show_columns();
         self.requests
@@ -550,9 +564,9 @@ impl MonitorView {
         match key {
             Key::Character(digit @ '1'..='9') if modifiers.logo => {
                 let index = digit as usize - '1' as usize;
-                match Tab::ALL.get(index) {
+                match self.tabs.get(index).copied() {
                     Some(tab) => {
-                        self.set_tab(*tab);
+                        self.set_tab(tab);
                         true
                     }
                     None => false,
@@ -791,7 +805,17 @@ impl Screen for MonitorView {
 
     fn update(&mut self, snapshot: Snapshot) {
         self.monitor.update(snapshot);
+        let tabs = self.monitor.tabs();
+        if tabs != self.tabs {
+            let control = tabs_control(&self.list, &tabs, self.monitor.tab());
+            self.toolbar.tabs = self.list.replace(self.toolbar.tabs, control);
+            self.tabs = tabs;
+        }
         self.sync();
+    }
+
+    fn measures_gpu(&self) -> bool {
+        self.monitor.measures_gpu()
     }
 
     fn measures_proportional_memory(&self) -> bool {

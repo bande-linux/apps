@@ -27,7 +27,7 @@ pub use inspector::{INSPECTOR_SIZE, InspectorView, Section};
 pub use menu::{MenuCommand, Selected, app_menus, force_quit_menu, process_menu};
 pub use model::{AppList, AppRow, Column, Graph, Monitor, Row, RowKey, StopTarget, Tab};
 pub use monitor_view::{MonitorView, TOOLBAR_HEIGHT};
-pub use sampler::{Identity, Interface, Process, Rates, Sampler, Snapshot};
+pub use sampler::{GpuUse, Identity, Interface, Process, Rates, Sampler, Snapshot};
 pub use signal::{SignalError, Stop, stop};
 pub use system::Memory;
 pub use view::{Icons, Request, Screen};

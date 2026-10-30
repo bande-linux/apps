@@ -611,3 +611,27 @@ fn a_right_click_on_the_header_chooses_columns_and_the_choice_is_remembered() {
     again.choose_columns(&remembered);
     assert_eq!(again.columns(), view.monitor.columns());
 }
+
+#[test]
+fn the_gpu_tab_appears_once_the_system_reports_gpu_use() {
+    let mut view = monitor_view();
+    assert!(!view.handle(&command('5')));
+    let mut busy = snapshot(1);
+    busy.gpu = true;
+    busy.processes[3].gpu = Some(unbound_monitor::GpuUse {
+        percent: 30.0,
+        seconds: 4.0,
+        memory: 64_000_000,
+    });
+    view.update(busy);
+    assert!(view.handle(&command('5')));
+    assert_eq!(view.monitor.tab(), Tab::Gpu);
+    assert!(view.measures_gpu());
+    assert_eq!(view.take_requests(), [Request::Resample]);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view)[0], "Files");
+    assert_eq!(
+        column_headers(&view),
+        ["Name", "% GPU", "GPU Time", "GPU Memory", "PID", "User"]
+    );
+}

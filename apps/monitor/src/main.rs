@@ -44,6 +44,8 @@ impl ActivityMonitor {
             .iter()
             .any(|screen| screen.measures_proportional_memory());
         self.sampler.measure_proportional_memory(proportional);
+        let gpu = self.screens.iter().any(|screen| screen.measures_gpu());
+        self.sampler.measure_gpu(gpu);
         match self.sampler.sample() {
             Ok(snapshot) => {
                 for screen in &mut self.screens {
@@ -349,8 +351,24 @@ fn icons() -> Icons {
     })
 }
 
+fn first_sample(sampler: &mut Sampler, screen: &mut impl Screen) -> Snapshot {
+    sampler.measure_gpu(screen.measures_gpu());
+    match sampler.sample() {
+        Ok(snapshot) => {
+            screen.update(snapshot.clone());
+            snapshot
+        }
+        Err(error) => {
+            tracing::warn!("cannot sample: {error}");
+            Snapshot::default()
+        }
+    }
+}
+
 fn open(
     mut screen: impl Screen + 'static,
+    sampler: Sampler,
+    snapshot: Snapshot,
     title: &str,
     size: (u32, u32),
     app_menu: Option<AppMenu>,
@@ -360,13 +378,12 @@ fn open(
     let mut app = ActivityMonitor {
         windows: vec![window],
         screens: vec![Box::new(screen)],
-        sampler: Sampler::live(),
-        snapshot: Snapshot::default(),
+        sampler,
+        snapshot,
         next_sample: Instant::now() + FIRST_INTERVAL,
         app_menu,
         focused: 0,
     };
-    app.sample();
     unbound_toolkit::run_surfaces(&mut app)
 }
 
@@ -377,20 +394,25 @@ fn run() -> Result<(), WindowError> {
         &current_desktops(),
     ));
     let palette = Appearance::default().palette();
+    let mut sampler = Sampler::live();
     if std::env::args().any(|argument| argument == "--force-quit") {
         let apps = AppList::new(catalog, rustix::process::getuid().as_raw());
-        let screen = ForceQuitView::new(apps, palette, TextSystem::new(), icons());
-        open(screen, &L10N.tr("force-quit-title"), FORCE_QUIT_SIZE, None)
+        let mut screen = ForceQuitView::new(apps, palette, TextSystem::new(), icons());
+        let snapshot = first_sample(&mut sampler, &mut screen);
+        let title = L10N.tr("force-quit-title");
+        open(screen, sampler, snapshot, &title, FORCE_QUIT_SIZE, None)
     } else {
         let mut monitor = Monitor::new(catalog);
         if let Some(text) = columns_file().and_then(|file| std::fs::read_to_string(file).ok()) {
             monitor.choose_columns(&text);
         }
-        let screen = MonitorView::new(monitor, palette, TextSystem::new(), icons());
-        let app_menu = AppMenu::export(APP_ID, app_menus())
+        let mut screen = MonitorView::new(monitor, palette, TextSystem::new(), icons());
+        let snapshot = first_sample(&mut sampler, &mut screen);
+        let app_menu = AppMenu::export(APP_ID, app_menus(&screen.monitor.tabs()))
             .inspect_err(|error| tracing::warn!("{error}"))
             .ok();
-        open(screen, &L10N.tr("window-title"), WINDOW_SIZE, app_menu)
+        let title = L10N.tr("window-title");
+        open(screen, sampler, snapshot, &title, WINDOW_SIZE, app_menu)
     }
 }
 

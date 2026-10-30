@@ -220,3 +220,46 @@ fn system_totals_cover_memory_physical_disks_and_interfaces_without_loopback() {
     assert_eq!(snapshot.interfaces[0].received_per_second, 4_000_000.0);
     assert_eq!(snapshot.interfaces[0].sent_per_second, 2_000_000.0);
 }
+
+#[test]
+fn gpu_use_comes_from_drm_fdinfo_once_per_client_and_only_while_asked_for() {
+    let fixture = Fixture::new();
+    fixture.spawn(&Task::default());
+    fixture.spawn(&Task {
+        pid: 101,
+        ..Task::default()
+    });
+    fixture.set_gpu(100, 7, 42, 1_000_000_000);
+    fixture.set_gpu(100, 8, 42, 1_000_000_000);
+    let mut sampler = fixture.sampler();
+
+    let first = sampler.sample().expect("first sample");
+    assert!(first.gpu);
+    let used = process(&first, 100).gpu.expect("gpu use");
+    assert_eq!((used.percent, used.seconds), (0.0, 1.0));
+    assert_eq!(used.memory, 2 * 1024 * 1024);
+    assert_eq!(process(&first, 101).gpu, None);
+
+    fixture.set_cpu(2, 0);
+    fixture.set_gpu(100, 7, 42, 2_000_000_000);
+    fixture.set_gpu(100, 8, 42, 2_000_000_000);
+    let idle = sampler.sample().expect("sample");
+    assert_eq!(process(&idle, 100).gpu, None);
+    assert!(idle.gpu);
+
+    sampler.measure_gpu(true);
+    sampler.sample().expect("sample");
+    fixture.set_cpu(4, 0);
+    fixture.set_gpu(100, 7, 42, 3_000_000_000);
+    fixture.set_gpu(100, 8, 42, 3_000_000_000);
+    let measured = sampler.sample().expect("sample");
+    assert_eq!(process(&measured, 100).gpu.expect("gpu use").percent, 50.0);
+}
+
+#[test]
+fn a_system_without_gpu_statistics_reports_none() {
+    let fixture = Fixture::new();
+    fixture.spawn(&Task::default());
+    let snapshot = fixture.sampler().sample().expect("sample");
+    assert!(!snapshot.gpu);
+}

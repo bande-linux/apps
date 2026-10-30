@@ -17,6 +17,7 @@ pub enum Tab {
     Memory,
     Disk,
     Network,
+    Gpu,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +38,9 @@ pub enum Column {
     Sent,
     ReceivedTotal,
     SentTotal,
+    Gpu,
+    GpuTime,
+    GpuMemory,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -146,7 +150,7 @@ impl Measure {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 4] = [Tab::Cpu, Tab::Memory, Tab::Disk, Tab::Network];
+    pub const ALL: [Tab; 5] = [Tab::Cpu, Tab::Memory, Tab::Disk, Tab::Network, Tab::Gpu];
 
     pub fn title(self) -> String {
         match self {
@@ -154,6 +158,7 @@ impl Tab {
             Tab::Memory => L10N.tr("tab-memory"),
             Tab::Disk => L10N.tr("tab-disk"),
             Tab::Network => L10N.tr("tab-network"),
+            Tab::Gpu => L10N.tr("tab-gpu"),
         }
     }
 
@@ -190,6 +195,14 @@ impl Tab {
                 Column::ReceivedTotal,
                 Column::SentTotal,
             ],
+            Tab::Gpu => &[
+                Column::Name,
+                Column::Gpu,
+                Column::GpuTime,
+                Column::GpuMemory,
+                Column::Pid,
+                Column::User,
+            ],
         }
     }
 
@@ -203,6 +216,7 @@ impl Tab {
             Tab::Memory => "memory",
             Tab::Disk => "disk",
             Tab::Network => "network",
+            Tab::Gpu => "gpu",
         }
     }
 
@@ -216,12 +230,13 @@ impl Tab {
             Tab::Memory => Column::Memory,
             Tab::Disk => Column::Written,
             Tab::Network => Column::Received,
+            Tab::Gpu => Column::Gpu,
         }
     }
 }
 
 impl Column {
-    pub const CHOOSABLE: [Column; 11] = [
+    pub const CHOOSABLE: [Column; 14] = [
         Column::Cpu,
         Column::CpuTime,
         Column::Threads,
@@ -233,7 +248,14 @@ impl Column {
         Column::Written,
         Column::ReadTotal,
         Column::WrittenTotal,
+        Column::Gpu,
+        Column::GpuTime,
+        Column::GpuMemory,
     ];
+
+    fn uses_gpu(self) -> bool {
+        matches!(self, Column::Gpu | Column::GpuTime | Column::GpuMemory)
+    }
 
     pub fn id(self) -> &'static str {
         match self {
@@ -253,6 +275,9 @@ impl Column {
             Column::Sent => "sent",
             Column::ReceivedTotal => "received-total",
             Column::SentTotal => "sent-total",
+            Column::Gpu => "gpu",
+            Column::GpuTime => "gpu-time",
+            Column::GpuMemory => "gpu-memory",
         }
     }
 
@@ -282,6 +307,9 @@ impl Column {
             Column::Sent => L10N.tr("column-sent"),
             Column::ReceivedTotal => L10N.tr("column-received-total"),
             Column::SentTotal => L10N.tr("column-sent-total"),
+            Column::Gpu => L10N.tr("column-gpu"),
+            Column::GpuTime => L10N.tr("column-gpu-time"),
+            Column::GpuMemory => L10N.tr("column-gpu-memory"),
         }
     }
 
@@ -297,9 +325,10 @@ impl Column {
             };
         };
         match self {
-            Column::Cpu => format_percent(*value),
-            Column::CpuTime => format_cpu_time(*value),
-            Column::Memory
+            Column::Cpu | Column::Gpu => format_percent(*value),
+            Column::CpuTime | Column::GpuTime => format_cpu_time(*value),
+            Column::GpuMemory
+            | Column::Memory
             | Column::Resident
             | Column::ReadTotal
             | Column::WrittenTotal
@@ -325,8 +354,22 @@ impl Column {
                 Measure::Number(known.into_iter().map(value).sum())
             }
         };
+        let gpu = |value: fn(&crate::sampler::GpuUse) -> f64| {
+            let known = processes
+                .iter()
+                .filter_map(|process| process.gpu.as_ref())
+                .collect::<Vec<_>>();
+            if known.is_empty() {
+                Measure::Missing
+            } else {
+                Measure::Number(known.into_iter().map(value).sum())
+            }
+        };
         match self {
             Column::Name => Measure::Text(name.to_owned()),
+            Column::Gpu => gpu(|used| f64::from(used.percent)),
+            Column::GpuTime => gpu(|used| used.seconds),
+            Column::GpuMemory => gpu(|used| used.memory as f64),
             Column::Cpu => sum(|process| f64::from(process.cpu_percent)),
             Column::CpuTime => sum(|process| process.cpu_seconds),
             Column::Threads => sum(|process| f64::from(process.threads)),
@@ -514,11 +557,12 @@ pub struct Monitor {
     search: String,
     rows: Vec<Row>,
     unresponsive: Unresponsive,
-    chosen: [Vec<Column>; 4],
+    chosen: [Vec<Column>; Tab::ALL.len()],
     cpu: VecDeque<(f32, f32)>,
     memory: VecDeque<f32>,
     disk: VecDeque<(f64, f64)>,
     network: VecDeque<(f64, f64)>,
+    gpu: VecDeque<f32>,
 }
 
 fn find_row<'a>(rows: &'a [Row], key: &RowKey) -> Option<&'a Row> {
@@ -546,6 +590,7 @@ impl Monitor {
             memory: VecDeque::new(),
             disk: VecDeque::new(),
             network: VecDeque::new(),
+            gpu: VecDeque::new(),
         }
     }
 
@@ -561,6 +606,10 @@ impl Monitor {
                 } else {
                     0.0
                 },
+            );
+            push_limited(
+                &mut self.gpu,
+                (gpu_percent(&snapshot) / 100.0).clamp(0.0, 1.0) as f32,
             );
             push_limited(
                 &mut self.disk,
@@ -718,6 +767,17 @@ impl Monitor {
 
     pub fn measures_proportional_memory(&self) -> bool {
         self.tab == Tab::Memory
+    }
+
+    pub fn measures_gpu(&self) -> bool {
+        self.tab == Tab::Gpu || self.columns().iter().any(|column| column.uses_gpu())
+    }
+
+    pub fn tabs(&self) -> Vec<Tab> {
+        Tab::ALL
+            .into_iter()
+            .filter(|tab| *tab != Tab::Gpu || self.snapshot.gpu)
+            .collect()
     }
 
     fn process(&self, pid: u32, start_ticks: u64) -> Option<&Process> {
@@ -950,6 +1010,7 @@ impl Monitor {
             Tab::Memory => Graph::Filled(self.memory.iter().copied().collect()),
             Tab::Disk => mirrored(&self.disk),
             Tab::Network => mirrored(&self.network),
+            Tab::Gpu => Graph::Filled(self.gpu.iter().copied().collect()),
         }
     }
 
@@ -1034,8 +1095,36 @@ impl Monitor {
                     ),
                 ]
             }
+            Tab::Gpu => {
+                let users = snapshot
+                    .processes
+                    .iter()
+                    .filter_map(|process| process.gpu)
+                    .filter(|used| used.percent > 0.0 || used.memory > 0)
+                    .collect::<Vec<_>>();
+                vec![
+                    (
+                        L10N.tr("summary-gpu"),
+                        format!("{} %", format_percent(gpu_percent(snapshot))),
+                    ),
+                    (
+                        L10N.tr("summary-gpu-memory"),
+                        format_bytes(users.iter().map(|used| used.memory).sum()),
+                    ),
+                    (L10N.tr("summary-gpu-processes"), users.len().to_string()),
+                ]
+            }
         }
     }
+}
+
+fn gpu_percent(snapshot: &Snapshot) -> f64 {
+    snapshot
+        .processes
+        .iter()
+        .filter_map(|process| process.gpu)
+        .map(|used| f64::from(used.percent))
+        .sum()
 }
 
 fn mirrored(history: &VecDeque<(f64, f64)>) -> Graph {

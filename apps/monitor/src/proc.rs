@@ -21,6 +21,52 @@ pub(crate) struct IoBytes {
     pub(crate) written: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct DrmUse {
+    pub(crate) engine_ns: u64,
+    pub(crate) memory: u64,
+}
+
+fn parse_size(value: &str) -> Option<u64> {
+    let mut words = value.split_whitespace();
+    let number = words.next()?.parse::<u64>().ok()?;
+    let scale = match words.next() {
+        None => 1,
+        Some("KiB") => KILOBYTE,
+        Some("MiB") => KILOBYTE * KILOBYTE,
+        Some("GiB") => KILOBYTE * KILOBYTE * KILOBYTE,
+        Some(_) => return None,
+    };
+    Some(number * scale)
+}
+
+pub(crate) fn parse_drm_fdinfo(text: &str) -> Option<(u64, DrmUse)> {
+    let client = field(text, "drm-client-id")?.parse().ok()?;
+    let mut engines = None;
+    let (mut resident, mut memory) = (0, 0);
+    for (key, value) in text.lines().filter_map(|line| line.split_once(':')) {
+        let value = value.trim();
+        if key.starts_with("drm-engine-capacity-") {
+            continue;
+        }
+        if key.starts_with("drm-engine-") {
+            let busy = value.strip_suffix("ns")?.trim().parse::<u64>().ok()?;
+            engines = Some(engines.unwrap_or(0) + busy);
+        } else if key.starts_with("drm-resident-") {
+            resident += parse_size(value).unwrap_or(0);
+        } else if key.starts_with("drm-memory-") {
+            memory += parse_size(value).unwrap_or(0);
+        }
+    }
+    Some((
+        client,
+        DrmUse {
+            engine_ns: engines?,
+            memory: if resident > 0 { resident } else { memory },
+        },
+    ))
+}
+
 pub(crate) fn parse_stat(text: &str) -> Option<Stat> {
     let open = text.find('(')?;
     let close = text.rfind(')')?;
