@@ -392,22 +392,21 @@ impl TerminalApp {
         self.tab_layout().hit(at)
     }
 
+    fn tab_title(&self, tab: &Tab) -> String {
+        let title = tab.focused().title(self.home.as_deref());
+        if title.is_empty() {
+            L10N.tr("title")
+        } else {
+            title
+        }
+    }
+
     fn titles(&self) -> Vec<String> {
-        self.tabs
-            .iter()
-            .map(|tab| {
-                let title = tab.focused().title(self.home.as_deref());
-                if title.is_empty() {
-                    L10N.tr("title")
-                } else {
-                    title
-                }
-            })
-            .collect()
+        self.tabs.iter().map(|tab| self.tab_title(tab)).collect()
     }
 
     fn sync_title(&mut self, window: &mut Window) {
-        let title = self.titles().swap_remove(self.active);
+        let title = self.tab_title(self.tab());
         if title != self.title {
             window.set_title(&title);
             self.title = title;
@@ -467,7 +466,11 @@ impl TerminalApp {
                         ),
                         _ => L10N.tr_args("command-finished", [("command", command.into())]),
                     };
-                    let body = self.titles().get(tab).cloned().unwrap_or_default();
+                    let body = self
+                        .tabs
+                        .get(tab)
+                        .map(|tab| self.tab_title(tab))
+                        .unwrap_or_default();
                     self.bus.send(Outgoing::Notify { summary, body });
                 }
                 Notice::Finished { .. } => {}
@@ -633,7 +636,8 @@ impl TerminalApp {
                 L10N.tr("close")
             }
         };
-        self.banner = Some(Banner::confirm(palette, message, &button));
+        let text = self.painter.text_system().sharing_fonts();
+        self.banner = Some(Banner::confirm(palette, text, message, &button));
         self.pending = Some(pending);
         self.banner_focused = true;
         self.focus_terminal(false);
@@ -692,6 +696,9 @@ impl TerminalApp {
     }
 
     fn remove_other_tabs(&mut self, window: &mut Window, keep: u32) {
+        if !self.tabs.iter().any(|tab| tab.id == keep) {
+            return;
+        }
         while let Some(index) = self.tabs.iter().position(|tab| tab.id != keep) {
             self.close_tab(window, index);
         }
@@ -741,7 +748,12 @@ impl TerminalApp {
         if index < self.active || self.active >= self.tabs.len() {
             self.active -= 1;
         }
-        if self.pending == Some(Pending::CloseTab(closed.id)) {
+        let stale = match self.pending {
+            Some(Pending::CloseTab(id) | Pending::CloseOtherTabs(id)) => id == closed.id,
+            Some(Pending::ClosePane(id)) => closed.session(id).is_some(),
+            Some(Pending::Quit) | None => false,
+        };
+        if stale {
             self.close_banner();
         }
         if was_active {
@@ -955,7 +967,8 @@ impl TerminalApp {
             None => {
                 self.close_banner();
                 let palette = window.appearance().palette();
-                self.banner = Some(Banner::find(palette, &self.last_query));
+                let text = self.painter.text_system().sharing_fonts();
+                self.banner = Some(Banner::find(palette, text, &self.last_query));
                 self.layout();
                 self.run_find();
             }
@@ -1703,6 +1716,9 @@ impl App for TerminalApp {
                 .map(AppMenu::take_actions)
                 .unwrap_or_default();
             for action in actions {
+                if self.tabs.is_empty() {
+                    return;
+                }
                 self.menu_action(window, &action);
             }
             self.handle_banner_actions(window);
