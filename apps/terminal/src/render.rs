@@ -5,26 +5,28 @@ use alacritty_terminal::index::{Column, Line, Point as GridPoint, Side};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::CursorShape;
 use unbound_toolkit::{
-    Appearance, Color, Item, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
+    Appearance, Color, Item, Paragraph, Path, Point, Radius, Rect, Scene, Shape, TextAlign,
+    TextRole, TextStyle, TextSystem,
 };
 
-use crate::tabs::{TAB_BAR_HEIGHT, TabBarLayout, TabTarget};
+use crate::tabs::{TabBarLayout, TabTarget};
 use crate::terminal::{CellPoint, GridSize, Highlights, Terminal};
-use crate::theme::{Theme, dimmed};
+use crate::theme::{Profile, Theme, dimmed};
 
-pub const DEFAULT_FONT_SIZE: f32 = 11.0;
-pub const PADDING: f32 = 4.0;
+pub const DEFAULT_FONT_SIZE: f32 = 13.0;
+pub const PADDING: f32 = 8.0;
 const PARAGRAPH_CACHE: usize = 8192;
 const BOLD: f32 = 700.0;
 const MEASURE_SAMPLE: &str = "MMMMMMMMMM";
-const LABEL_SIZE: f32 = 12.0;
-const SYMBOL_SIZE: f32 = 16.0;
 const LABEL_CACHE: usize = 256;
-const TAB_LABEL_INSET: f32 = 28.0;
+const TAB_LABEL_INSET: f32 = 26.0;
 const ELLIPSIS: char = '\u{2026}';
-const CLOSE_SYMBOL: &str = "\u{00D7}";
-const NEW_TAB_SYMBOL: &str = "+";
-const HOVER_ALPHA: u8 = 0x14;
+const HOVER_OPACITY: f32 = 0.5;
+const PRESSED_OPACITY: f32 = 0.12;
+const BELL_MARK: f32 = 6.0;
+const GLYPH_STROKE: f32 = 1.5;
+const CROSS_ARM: f32 = 3.5;
+const PLUS_ARM: f32 = 5.5;
 
 fn snap(value: f32, scale: f64) -> f32 {
     let scale = scale as f32;
@@ -104,9 +106,43 @@ type LabelKey = (String, Color, u32, u32);
 
 pub struct TabBar<'a> {
     pub titles: &'a [String],
+    pub bells: &'a [bool],
     pub active: usize,
     pub hover: Option<TabTarget>,
     pub focused: bool,
+    pub leading: f32,
+}
+
+fn stroke(path: Path, color: Color) -> Item {
+    Item::StrokePath {
+        path,
+        width: GLYPH_STROKE,
+        paint: color.into(),
+    }
+}
+
+fn centre(rect: Rect) -> Point {
+    Point::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0)
+}
+
+fn cross(rect: Rect, color: Color) -> [Item; 2] {
+    let middle = centre(rect);
+    let at = |x: f32, y: f32| Point::new(middle.x + x, middle.y + y);
+    let arm = CROSS_ARM;
+    [
+        stroke(Path::through(&[at(-arm, -arm), at(arm, arm)]), color),
+        stroke(Path::through(&[at(-arm, arm), at(arm, -arm)]), color),
+    ]
+}
+
+fn plus(rect: Rect, color: Color) -> [Item; 2] {
+    let middle = centre(rect);
+    let at = |x: f32, y: f32| Point::new(middle.x + x, middle.y + y);
+    let arm = PLUS_ARM;
+    [
+        stroke(Path::through(&[at(-arm, 0.0), at(arm, 0.0)]), color),
+        stroke(Path::through(&[at(0.0, -arm), at(0.0, arm)]), color),
+    ]
 }
 
 struct Run {
@@ -144,11 +180,13 @@ pub struct Painter {
     labels: HashMap<LabelKey, Paragraph>,
     pub metrics: Metrics,
     pub theme: Theme,
+    appearance: Appearance,
+    profile: Profile,
     font_size: f32,
 }
 
 impl Painter {
-    pub fn new(appearance: Appearance, font_size: f32, scale: f64) -> Self {
+    pub fn new(appearance: Appearance, profile: Profile, font_size: f32, scale: f64) -> Self {
         let mut text = TextSystem::new();
         let metrics = Metrics::measure(&mut text, font_size, scale);
         Self {
@@ -156,13 +194,26 @@ impl Painter {
             paragraphs: HashMap::new(),
             labels: HashMap::new(),
             metrics,
-            theme: Theme::new(appearance),
+            theme: Theme::new(appearance, profile),
+            appearance,
+            profile,
             font_size,
         }
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
-        self.theme = Theme::new(appearance);
+        self.appearance = appearance;
+        self.theme = Theme::new(appearance, self.profile);
+        self.labels.clear();
+    }
+
+    pub fn set_profile(&mut self, profile: Profile) -> bool {
+        if profile == self.profile {
+            return false;
+        }
+        self.profile = profile;
+        self.theme = Theme::new(self.appearance, profile);
+        true
     }
 
     pub fn font_size(&self) -> f32 {
@@ -202,15 +253,20 @@ impl Painter {
         paragraph
     }
 
-    pub fn label(&mut self, text: &str, size: f32, color: Color, max_width: f32) -> Paragraph {
-        let key = (text.to_owned(), color, size.to_bits(), max_width.to_bits());
+    pub fn label(&mut self, text: &str, weight: f32, color: Color, max_width: f32) -> Paragraph {
+        let key = (
+            text.to_owned(),
+            color,
+            weight.to_bits(),
+            max_width.to_bits(),
+        );
         if let Some(paragraph) = self.labels.get(&key) {
             return paragraph.clone();
         }
         if self.labels.len() >= LABEL_CACHE {
             self.labels.clear();
         }
-        let style = TextStyle::new(size, color);
+        let style = TextStyle::role(TextRole::Body, color).weight(weight);
         let mut paragraph = self.text.paragraph(text, style, None, TextAlign::Start);
         let mut characters: Vec<char> = text.chars().collect();
         while paragraph.width() > max_width && !characters.is_empty() {
@@ -224,8 +280,8 @@ impl Painter {
         paragraph
     }
 
-    fn centred(&mut self, text: &str, size: f32, color: Color, rect: Rect) -> Item {
-        let paragraph = self.label(text, size, color, rect.width);
+    fn centred(&mut self, text: &str, weight: f32, color: Color, rect: Rect) -> Item {
+        let paragraph = self.label(text, weight, color, rect.width);
         Item::Text {
             origin: Point::new(
                 snap(
@@ -242,85 +298,77 @@ impl Painter {
     }
 
     pub fn tab_bar(&mut self, bar: &TabBar<'_>, width: f32) -> Vec<Item> {
-        let palette = self.theme.palette;
-        let line = hairline(1.0, self.metrics.scale);
-        let layout = TabBarLayout::new(bar.titles.len(), width);
-        let hover_paint = palette.ink.with_alpha(HOVER_ALPHA);
-        let label_color = |active: bool| {
-            if active && bar.focused {
-                palette.ink
-            } else {
-                palette.ink2
-            }
-        };
-        let mut items = vec![
-            Item::Fill {
-                shape: Shape::rect(Rect::new(0.0, 0.0, width, TAB_BAR_HEIGHT)),
-                paint: palette.sheet.into(),
-            },
-            Item::Fill {
-                shape: Shape::rect(Rect::new(0.0, TAB_BAR_HEIGHT - line, width, line)),
-                paint: palette.hairline.into(),
-            },
-        ];
+        let palette = self.theme.chrome;
+        let layout = TabBarLayout::new(bar.titles.len(), width, bar.leading);
+        let mut items = Vec::new();
         for (index, (tab, title)) in layout.tabs.iter().zip(bar.titles).enumerate() {
             let active = index == bar.active;
             let hovered = matches!(
                 bar.hover,
                 Some(TabTarget::Select(hovered) | TabTarget::Close(hovered)) if hovered == index
             );
-            if active {
+            let fill = match (active, hovered) {
+                (true, _) => Some(palette.well),
+                (false, true) => Some(palette.well.with_opacity(HOVER_OPACITY)),
+                (false, false) => None,
+            };
+            if let Some(fill) = fill {
                 items.push(Item::Fill {
-                    shape: Shape::rect(*tab),
-                    paint: self.theme.background.into(),
-                });
-            } else if hovered {
-                items.push(Item::Fill {
-                    shape: Shape::rect(Rect::new(tab.x, tab.y, tab.width, tab.height - line)),
-                    paint: hover_paint.into(),
-                });
-            }
-            if index + 1 < layout.tabs.len() {
-                items.push(Item::Fill {
-                    shape: Shape::rect(Rect::new(
-                        tab.x + tab.width - line,
-                        0.0,
-                        line,
-                        TAB_BAR_HEIGHT,
-                    )),
-                    paint: palette.hairline.into(),
+                    shape: Shape::rounded(*tab, Radius::S),
+                    paint: fill.into(),
                 });
             }
+            let color = if active && bar.focused {
+                palette.ink
+            } else {
+                palette.ink2
+            };
             let label_area = Rect::new(
                 tab.x + TAB_LABEL_INSET,
                 tab.y,
                 (tab.width - 2.0 * TAB_LABEL_INSET).max(0.0),
                 tab.height,
             );
-            items.push(self.centred(title, LABEL_SIZE, label_color(active), label_area));
+            let weight = if active {
+                TextStyle::MEDIUM
+            } else {
+                TextStyle::REGULAR
+            };
+            items.push(self.centred(title, weight, color, label_area));
+            if bar.bells.get(index).copied().unwrap_or(false) && !active && !hovered {
+                let close = TabBarLayout::close_button(*tab);
+                let mark = Rect::new(
+                    close.x + ((close.width - BELL_MARK) / 2.0).round(),
+                    close.y + ((close.height - BELL_MARK) / 2.0).round(),
+                    BELL_MARK,
+                    BELL_MARK,
+                );
+                items.push(Item::Fill {
+                    shape: Shape::rounded(mark, 1.0),
+                    paint: palette.accent.into(),
+                });
+            }
             if hovered {
                 let close = TabBarLayout::close_button(*tab);
                 if bar.hover == Some(TabTarget::Close(index)) {
                     items.push(Item::Fill {
-                        shape: Shape::rounded(close, close.width / 2.0),
-                        paint: palette.ink.with_alpha(2 * HOVER_ALPHA).into(),
+                        shape: Shape::rounded(close, Radius::XS),
+                        paint: palette.ink.with_opacity(PRESSED_OPACITY).into(),
                     });
                 }
-                items.push(self.centred(CLOSE_SYMBOL, SYMBOL_SIZE, palette.ink2, close));
+                items.extend(cross(close, palette.ink2));
             }
         }
-        if bar.hover == Some(TabTarget::NewTab) {
+        let new_tab = layout.new_tab;
+        let hovered = bar.hover == Some(TabTarget::NewTab);
+        if hovered {
             items.push(Item::Fill {
-                shape: Shape::rect(Rect::new(
-                    layout.new_tab.x,
-                    0.0,
-                    layout.new_tab.width,
-                    TAB_BAR_HEIGHT - line,
-                )),
-                paint: hover_paint.into(),
+                shape: Shape::rounded(new_tab, Radius::S),
+                paint: palette.well.into(),
             });
         }
-        items.push(self.centred(NEW_TAB_SYMBOL, SYMBOL_SIZE, palette.ink2, layout.new_tab));
+        let glyph = if hovered { palette.ink } else { palette.ink2 };
+        items.extend(plus(new_tab, glyph));
         items
     }
 
@@ -409,6 +457,7 @@ impl Painter {
                 .is_some_and(|current| current.contains(&point))
             {
                 push_span(&mut found, line, column, cells, theme.current_match);
+                foreground = theme.on_current_match;
             } else if highlights
                 .matches
                 .iter()
@@ -434,11 +483,8 @@ impl Painter {
             let is_cursor = cursor.shape != CursorShape::Hidden && cursor.point == indexed.point;
             let block_cursor = is_cursor && focused && cursor.shape == CursorShape::Block;
             if block_cursor {
-                std::mem::swap(&mut foreground, &mut background);
-                if background == foreground {
-                    background = theme.foreground;
-                    foreground = theme.background;
-                }
+                background = theme.cursor;
+                foreground = theme.on_cursor;
             }
             if background != theme.background {
                 push_span(&mut backgrounds, line, column, cells, background);
@@ -526,7 +572,7 @@ impl Painter {
 
     fn cursor(&self, shape: CursorShape, focused: bool, cell: Rect) -> Item {
         let scale = self.metrics.scale;
-        let paint = self.theme.foreground.into();
+        let paint = self.theme.cursor.into();
         match shape {
             CursorShape::Beam if focused => Item::Fill {
                 shape: Shape::rect(Rect::new(cell.x, cell.y, hairline(2.0, scale), cell.height)),

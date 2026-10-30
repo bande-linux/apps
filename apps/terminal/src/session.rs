@@ -2,11 +2,12 @@ use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use alacritty_terminal::event::{Event as TermEvent, OnResize};
 use alacritty_terminal::tty::{self, Options, Pty, Shell};
 
-use crate::process::{self, DirectoryReports};
+use crate::process::{self, Report, Reports};
 use crate::terminal::{GridSize, Terminal};
 
 const READ_BUFFER: usize = 65536;
@@ -16,6 +17,15 @@ const TITLE_SEPARATOR: &str = " — ";
 pub enum Notice {
     Copy(String),
     Bell,
+    Finished {
+        command: String,
+        elapsed: Duration,
+        code: Option<i32>,
+    },
+    Notify {
+        title: String,
+        body: String,
+    },
 }
 
 pub struct Session {
@@ -23,10 +33,12 @@ pub struct Session {
     pty: Pty,
     shell: u32,
     output: Vec<u8>,
-    directories: DirectoryReports,
+    reports: Reports,
     reported_directory: Option<PathBuf>,
     program_title: Option<String>,
     foreground: Option<(u32, String)>,
+    command: Option<(Instant, String)>,
+    notices: Vec<Notice>,
     exited: bool,
 }
 
@@ -53,10 +65,12 @@ impl Session {
             pty,
             shell,
             output: Vec::new(),
-            directories: DirectoryReports::new(process::host_name()),
+            reports: Reports::new(process::host_name()),
             reported_directory: None,
             program_title: None,
             foreground: None,
+            command: None,
+            notices: Vec::new(),
             exited: false,
         };
         session.refresh_foreground();
@@ -109,8 +123,8 @@ impl Session {
                 }
                 Ok(read) => {
                     let chunk = &buffer[..read];
-                    if let Some(directory) = self.directories.scan(chunk) {
-                        self.reported_directory = Some(directory);
+                    for report in self.reports.scan(chunk) {
+                        self.reported(report);
                     }
                     self.terminal.feed(chunk);
                 }
@@ -128,8 +142,32 @@ impl Session {
         notices
     }
 
+    fn reported(&mut self, report: Report) {
+        match report {
+            Report::Directory(directory) => self.reported_directory = Some(directory),
+            Report::CommandStarted => {
+                if self.command.is_none() {
+                    let name = self.running_program().unwrap_or_default().to_owned();
+                    self.command = Some((Instant::now(), name));
+                }
+            }
+            Report::CommandFinished(code) => self.finish_command(code),
+            Report::Notify { title, body } => self.notices.push(Notice::Notify { title, body }),
+        }
+    }
+
+    fn finish_command(&mut self, code: Option<i32>) {
+        if let Some((started, command)) = self.command.take() {
+            self.notices.push(Notice::Finished {
+                command,
+                elapsed: started.elapsed(),
+                code,
+            });
+        }
+    }
+
     pub fn take_notices(&mut self) -> Vec<Notice> {
-        let mut notices = Vec::new();
+        let mut notices = std::mem::take(&mut self.notices);
         for event in self.terminal.take_events() {
             match event {
                 TermEvent::PtyWrite(text) => self.send(text.as_bytes()),
@@ -164,6 +202,14 @@ impl Session {
             return false;
         }
         self.foreground = process::name(group).map(|name| (group, name));
+        match self.running_program().map(str::to_owned) {
+            Some(name) => match &mut self.command {
+                Some((_, command)) if command.is_empty() => *command = name,
+                Some(_) => {}
+                None => self.command = Some((Instant::now(), name)),
+            },
+            None => self.finish_command(None),
+        }
         true
     }
 

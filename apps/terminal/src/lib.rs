@@ -1,9 +1,13 @@
 mod banner;
 mod keys;
 mod menu;
+mod panes;
 mod process;
 mod render;
+mod restore;
 mod session;
+mod settings;
+mod settings_view;
 mod tabs;
 mod terminal;
 mod theme;
@@ -18,14 +22,21 @@ pub use keys::{
     reports_mouse, shortcut, wants_scroll_as_arrows,
 };
 pub use menu::{MenuCommand, TerminalContext, app_menus, tab_menu, terminal_menu};
-pub use process::DirectoryReports;
+pub use panes::{Axis, DIVIDER, Divider, Layout, Side};
+pub use process::{Report, Reports};
 pub use render::{DEFAULT_FONT_SIZE, Metrics, PADDING, Painter, TabBar};
+pub use restore::{SavedWindow, claim, left_behind, window_file, windows_folder};
 pub use session::{Notice, Session, display_directory};
-pub use tabs::{TAB_BAR_HEIGHT, TabBarLayout, TabTarget};
+pub use settings::{CursorStyle, FONT_SIZES, Settings, is_settings_file, settings_folder};
+pub use settings_view::{SETTINGS_SIZE, SharedSettings, settings_view};
+pub use tabs::{
+    FULL_SCREEN_LEADING, HEADER_LEADING, STRIP_HEIGHT, TAB_HEIGHT, TabBarLayout, TabTarget,
+};
 pub use terminal::{
     CellPoint, GridSize, Highlights, Link, SearchDirection, SelectionKind, Terminal, escape_regex,
     is_openable,
 };
+pub use theme::{Profile, Theme, ansi_colors};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-term.ftl");
 
@@ -47,6 +58,9 @@ mod tests {
             include_str!("menu.rs"),
             include_str!("render.rs"),
             include_str!("session.rs"),
+            include_str!("settings.rs"),
+            include_str!("theme.rs"),
+            include_str!("settings_view.rs"),
         ];
         assert_eq!(
             unbound_l10n::missing_ids(super::ENGLISH, &sources),

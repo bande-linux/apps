@@ -7,7 +7,7 @@ use alacritty_terminal::index::{Boundary, Column, Direction, Line, Point as Grid
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::search::{Match, RegexIter, RegexSearch};
 use alacritty_terminal::term::{self, Config, Term, TermMode};
-use alacritty_terminal::vte::ansi::{ClearMode, Handler, Processor};
+use alacritty_terminal::vte::ansi::{ClearMode, CursorShape, CursorStyle, Handler, Processor};
 
 use crate::SCROLLBACK;
 
@@ -126,6 +126,17 @@ pub fn escape_regex(text: &str) -> String {
     escaped
 }
 
+fn config(shape: CursorShape) -> Config {
+    Config {
+        scrolling_history: SCROLLBACK,
+        default_cursor_style: CursorStyle {
+            shape,
+            blinking: false,
+        },
+        ..Config::default()
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Listener(Rc<RefCell<Vec<TermEvent>>>);
 
@@ -144,17 +155,14 @@ pub struct Terminal {
     search: Option<Search>,
     urls: Option<RegexSearch>,
     shift: f32,
+    cursor_shape: CursorShape,
 }
 
 impl Terminal {
     pub fn new(size: GridSize) -> Self {
         let events = Listener::default();
-        let config = Config {
-            scrolling_history: SCROLLBACK,
-            ..Config::default()
-        };
         Self {
-            term: Term::new(config, &size, events.clone()),
+            term: Term::new(config(CursorShape::Block), &size, events.clone()),
             parser: Processor::new(),
             events,
             size,
@@ -162,6 +170,14 @@ impl Terminal {
             search: None,
             urls: None,
             shift: 0.0,
+            cursor_shape: CursorShape::Block,
+        }
+    }
+
+    pub fn set_cursor_shape(&mut self, shape: CursorShape) {
+        if self.cursor_shape != shape {
+            self.cursor_shape = shape;
+            self.term.set_options(config(shape));
         }
     }
 

@@ -39,3 +39,33 @@ confirm-quit = Quit Terminal? { $count ->
     [one] A program is still running in one tab.
    *[other] Programs are still running in { $count } tabs.
 }
+menu-split-side-by-side = Split Side by Side
+menu-split-stacked = Split Top and Bottom
+menu-next-pane = Select Next Pane
+menu-previous-pane = Select Previous Pane
+menu-settings = Settings…
+new-tab = New Tab
+tabs = Tabs
+confirm-close-pane = Close this pane? { $program } is still running in it.
+command-finished = { $command } finished
+command-failed = { $command } failed with exit code { $code }
+profile-datum = Datum
+profile-paper = Paper
+profile-ink = Ink
+profile-midnight = Midnight
+profile-contrast = High Contrast
+cursor-block = Block
+cursor-bar = Bar
+cursor-underline = Underline
+settings-title = Terminal Settings
+settings-appearance = Appearance
+settings-profile = Profile
+settings-preview-sample = ~/unbound $ cargo build --release
+settings-font-size = Text size
+settings-points = { $size } pt
+settings-cursor = Cursor
+settings-bell = Bell
+settings-flash = Flash the window
+settings-badge = Show a badge in the bar
+settings-notifications = Notifications
+settings-notify = Notify when long commands finish

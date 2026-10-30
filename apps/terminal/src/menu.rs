@@ -4,7 +4,7 @@ use unbound_toolkit::ui::{Menu, MenuItem};
 use crate::L10N;
 use crate::keys::Command;
 
-const COMMANDS: [(Command, &str, &str, &str); 14] = [
+const COMMANDS: [(Command, &str, &str, &str); 19] = [
     (Command::Copy, "copy", "menu-copy", "Super+C"),
     (Command::Paste, "paste", "menu-paste", "Super+V"),
     (
@@ -48,6 +48,26 @@ const COMMANDS: [(Command, &str, &str, &str); 14] = [
     ),
     (Command::Find, "find", "menu-find", "Super+F"),
     (Command::FindNext, "find-next", "menu-find-next", "Super+G"),
+    (
+        Command::SplitSideBySide,
+        "split-side-by-side",
+        "menu-split-side-by-side",
+        "Super+D",
+    ),
+    (
+        Command::SplitStacked,
+        "split-stacked",
+        "menu-split-stacked",
+        "Shift+Super+D",
+    ),
+    (Command::NextPane, "next-pane", "menu-next-pane", "Super+]"),
+    (
+        Command::PreviousPane,
+        "previous-pane",
+        "menu-previous-pane",
+        "Super+[",
+    ),
+    (Command::Settings, "settings", "menu-settings", "Super+,"),
     (
         Command::FindPrevious,
         "find-previous",
@@ -156,6 +176,9 @@ pub fn terminal_menu(context: &TerminalContext) -> Menu {
         command_item(Command::NewTab),
         command_item(Command::NewWindow),
         MenuItem::separator(),
+        command_item(Command::SplitSideBySide),
+        command_item(Command::SplitStacked),
+        MenuItem::separator(),
         item("menu-close-tab", MenuCommand::CloseTab(context.tab)).shortcut("Super+W"),
     ]);
     Menu::new(items)
@@ -197,7 +220,10 @@ pub fn app_menus() -> Vec<Entry> {
         Entry::item(&L10N.tr("menu-close-tab"), Standard::CloseWindow.action()).shortcut("Super+W"),
     ]);
     vec![
-        app_submenu(&L10N.tr("title"), Vec::new()),
+        app_submenu(
+            &L10N.tr("title"),
+            command_entries(&[Some(Command::Settings)]),
+        ),
         Entry::submenu(&L10N.tr("menu-shell"), shell),
         Entry::submenu(
             &L10N.tr("menu-edit"),
@@ -219,11 +245,17 @@ pub fn app_menus() -> Vec<Entry> {
                 Some(Command::BiggerText),
                 Some(Command::SmallerText),
                 Some(Command::DefaultTextSize),
+                None,
+                Some(Command::SplitSideBySide),
+                Some(Command::SplitStacked),
             ]),
         ),
         window_submenu(command_entries(&[
             Some(Command::NextTab),
             Some(Command::PreviousTab),
+            None,
+            Some(Command::NextPane),
+            Some(Command::PreviousPane),
         ])),
     ]
 }

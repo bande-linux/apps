@@ -225,6 +225,11 @@ pub enum Command {
     Find,
     FindNext,
     FindPrevious,
+    SplitSideBySide,
+    SplitStacked,
+    NextPane,
+    PreviousPane,
+    Settings,
 }
 
 pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
@@ -246,6 +251,11 @@ pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
         ('g', false) => Command::FindNext,
         ('g', true) => Command::FindPrevious,
         ('t', false) => Command::NewTab,
+        ('d', false) => Command::SplitSideBySide,
+        ('d', true) => Command::SplitStacked,
+        (']', false) => Command::NextPane,
+        ('[', false) => Command::PreviousPane,
+        (',', false) => Command::Settings,
         ('n', false) => Command::NewWindow,
         ('9', false) => Command::LastTab,
         (digit @ '1'..='8', false) => Command::SelectTab(usize::from(digit as u8 - b'1')),

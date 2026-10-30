@@ -40,7 +40,7 @@ struct Model {
     query: String,
     status: Option<String>,
     actions: Vec<BannerAction>,
-    top: f32,
+    area: Rect,
 }
 
 type Shared = Rc<RefCell<Model>>;
@@ -57,12 +57,8 @@ struct BannerView {
 
 impl BannerView {
     fn bar(&self) -> Rect {
-        Rect::new(
-            self.frame.x,
-            self.model.borrow().top,
-            self.frame.width,
-            BANNER_HEIGHT,
-        )
+        let area = self.model.borrow().area;
+        Rect::new(area.x, area.y, area.width, BANNER_HEIGHT)
     }
 
     fn status_origin(&self, bar: Rect, status: &Paragraph) -> Point {
@@ -83,7 +79,8 @@ impl Widget for BannerView {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        let bar = Size::new(available.width, BANNER_HEIGHT);
+        let width = self.model.borrow().area.width;
+        let bar = Size::new(width, BANNER_HEIGHT);
         let mut sizes: Vec<Size> = self
             .children
             .iter_mut()
@@ -92,7 +89,7 @@ impl Widget for BannerView {
         let model = self.model.borrow();
         if model.kind == Kind::Find {
             let buttons: f32 = sizes.iter().skip(1).map(|size| size.width).sum();
-            let room = available.width - 2.0 * MARGIN - buttons - SPACING * sizes.len() as f32;
+            let room = width - 2.0 * MARGIN - buttons - SPACING * sizes.len() as f32;
             if let Some(field) = sizes.first_mut() {
                 field.width = (room - STATUS_ROOM).clamp(MIN_FIELD_WIDTH, FIELD_WIDTH);
             }
@@ -224,7 +221,7 @@ impl Banner {
             query: query.to_owned(),
             status: None,
             actions: Vec::new(),
-            top: 0.0,
+            area: Rect::default(),
         }));
         let changed = model.clone();
         let field = TextField::new(&L10N.tr("find-placeholder"), query, move |text| {
@@ -248,7 +245,7 @@ impl Banner {
             query: String::new(),
             status: Some(message.to_owned()),
             actions: Vec::new(),
-            top: 0.0,
+            area: Rect::default(),
         }));
         let cancel = action_button(&model, &L10N.tr("cancel"), BannerAction::Dismiss);
         let confirm = action_button(&model, confirm, BannerAction::Confirm);
@@ -282,8 +279,8 @@ impl Banner {
         self.ui.context().palette = palette;
     }
 
-    pub fn set_top(&mut self, top: f32) {
-        self.model.borrow_mut().top = top;
+    pub fn set_area(&mut self, area: Rect) {
+        self.model.borrow_mut().area = area;
     }
 
     pub fn query(&self) -> String {
@@ -295,8 +292,11 @@ impl Banner {
     }
 
     pub fn contains(&self, point: Point) -> bool {
-        let top = self.model.borrow().top;
-        point.y >= top && point.y < top + BANNER_HEIGHT
+        let area = self.model.borrow().area;
+        point.x >= area.x
+            && point.x < area.x + area.width
+            && point.y >= area.y
+            && point.y < area.y + BANNER_HEIGHT
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {

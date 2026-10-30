@@ -1,6 +1,8 @@
 use std::collections::VecDeque;
-use std::os::fd::BorrowedFd;
-use std::path::PathBuf;
+use std::io::Read;
+use std::os::fd::{AsFd, BorrowedFd};
+use std::os::unix::net::UnixStream;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
@@ -8,52 +10,148 @@ use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_term::{
-    BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, DEFAULT_FONT_SIZE, GridSize, L10N,
-    Link, MenuCommand, MouseButton, MouseKind, Notice, Painter, SearchDirection, SelectionKind,
-    Session, TAB_BAR_HEIGHT, TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed,
-    encode_key, is_openable, mouse_report, next_font_size, reports_mouse, shortcut, tab_menu,
-    terminal_menu, wants_scroll_as_arrows,
+    Axis, BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, Divider, FULL_SCREEN_LEADING,
+    GridSize, HEADER_LEADING, Highlights, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind,
+    Notice, Painter, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings,
+    TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed, encode_key, is_openable,
+    is_settings_file, mouse_report, next_font_size, reports_mouse, settings_folder, shortcut,
+    tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
-use unbound_toolkit::{App, MenuPlacement, Point, Rect, Scene, Window, WindowEvent};
+use unbound_toolkit::{
+    App, FrameRegions, Header, Item, MenuPlacement, Point, Radius, Rect, SHEET_INSET, Scene, Shape,
+    Window, WindowEvent,
+};
+use unbound_watch::{Changes, FolderWatch};
+
+use crate::bus::{Bus, Outgoing};
 
 pub const APP_ID: &str = "org.unbound.Terminal";
 const FILES: &str = "unbound-files";
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
 const TERMINAL_NODE: NodeId = NodeId(u64::MAX - 1);
+const TAB_LIST_NODE: NodeId = NodeId(u64::MAX - 2);
+const NEW_TAB_NODE: NodeId = NodeId(u64::MAX - 3);
+const TAB_NODES: u64 = u64::MAX - 1024;
 const WRITE_RETRY: Duration = Duration::from_millis(5);
 const FRAME: Duration = Duration::from_millis(8);
 const VELOCITY_WINDOW: Duration = Duration::from_millis(100);
 const DECELERATION_PER_MILLISECOND: f32 = 0.998;
 const MIN_MOMENTUM: f32 = 30.0;
+const LONG_COMMAND: Duration = Duration::from_secs(10);
+const FLASH: Duration = Duration::from_millis(220);
+const FLASH_OPACITY: f32 = 0.14;
+const RESTING_PANE_OPACITY: f32 = 0.3;
+const MIN_PANE: f32 = 64.0;
 
 struct Momentum {
     velocity: f32,
     last: Instant,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Gesture {
     Idle,
     Selecting,
     Reporting(MouseButton),
     Tab(TabTarget),
     Banner,
+    Divider(Divider),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pending {
     CloseTab(u32),
+    ClosePane(u32),
     CloseOtherTabs(u32),
     Quit,
 }
 
+struct Tab {
+    id: u32,
+    sessions: Vec<Session>,
+    layout: Layout,
+    focused: u32,
+    bell: bool,
+}
+
+impl Tab {
+    fn new(session: Session) -> Self {
+        let id = session.id();
+        Self {
+            id,
+            sessions: vec![session],
+            layout: Layout::Pane(id),
+            focused: id,
+            bell: false,
+        }
+    }
+
+    fn focused_index(&self) -> usize {
+        self.sessions
+            .iter()
+            .position(|session| session.id() == self.focused)
+            .unwrap_or_default()
+    }
+
+    fn focused(&self) -> &Session {
+        &self.sessions[self.focused_index()]
+    }
+
+    fn focused_mut(&mut self) -> &mut Session {
+        let index = self.focused_index();
+        &mut self.sessions[index]
+    }
+
+    fn session(&self, id: u32) -> Option<&Session> {
+        self.sessions.iter().find(|session| session.id() == id)
+    }
+
+    fn running_program(&self) -> Option<&str> {
+        self.sessions.iter().find_map(Session::running_program)
+    }
+}
+
+struct SettingsWatch {
+    _watch: FolderWatch,
+    wake: UnixStream,
+}
+
+impl SettingsWatch {
+    fn start(folder: &Path) -> Option<Self> {
+        let started = std::fs::create_dir_all(folder).and_then(|()| {
+            let (wake, mut signal) = UnixStream::pair()?;
+            wake.set_nonblocking(true)?;
+            let watch = FolderWatch::spawn(Changes::Saved, move |paths| {
+                if paths.iter().any(|path| is_settings_file(path)) {
+                    std::io::Write::write_all(&mut signal, &[1]).ok();
+                }
+            })?;
+            watch.watch(folder)?;
+            Ok(Self {
+                _watch: watch,
+                wake,
+            })
+        });
+        started
+            .inspect_err(|error| tracing::warn!("cannot follow the settings: {error}"))
+            .ok()
+    }
+
+    fn drain(&mut self) {
+        let mut buffer = [0u8; 64];
+        while matches!(self.wake.read(&mut buffer), Ok(read) if read > 0) {}
+    }
+}
+
 pub struct TerminalApp {
-    tabs: Vec<Session>,
+    tabs: Vec<Tab>,
     active: usize,
     painter: Painter,
+    settings: Settings,
+    settings_watch: Option<SettingsWatch>,
     home: Option<PathBuf>,
     focused: bool,
     pointer: Point,
@@ -63,6 +161,7 @@ pub struct TerminalApp {
     scroll_remainder: f32,
     title: String,
     size: (u32, u32),
+    header: f32,
     banner: Option<Banner>,
     banner_focused: bool,
     pending: Option<Pending>,
@@ -71,22 +170,31 @@ pub struct TerminalApp {
     samples: VecDeque<(Instant, f32)>,
     momentum: Option<Momentum>,
     retry_at: Option<Instant>,
+    flash: Option<Instant>,
+    badge: u32,
     cursor: Cursor,
     app_menu: Option<AppMenu>,
+    bus: Bus,
+    saved: Option<(PathBuf, SavedWindow)>,
 }
 
 impl TerminalApp {
     pub fn new(
-        window: &Window,
+        window: &mut Window,
         painter: Painter,
-        first: Session,
+        settings: Settings,
+        (sessions, active): (Vec<Session>, usize),
         home: Option<PathBuf>,
+        saved_file: Option<PathBuf>,
         app_menu: Option<AppMenu>,
     ) -> Self {
+        let settings_watch = settings_folder().and_then(|folder| SettingsWatch::start(&folder));
         let mut app = Self {
-            tabs: vec![first],
-            active: 0,
+            active: active.min(sessions.len().saturating_sub(1)),
+            tabs: sessions.into_iter().map(Tab::new).collect(),
             painter,
+            settings,
+            settings_watch,
             home,
             focused: false,
             pointer: Point::default(),
@@ -96,6 +204,7 @@ impl TerminalApp {
             scroll_remainder: 0.0,
             title: String::new(),
             size: window.size(),
+            header: window.header_height() as f32,
             banner: None,
             banner_focused: false,
             pending: None,
@@ -104,19 +213,35 @@ impl TerminalApp {
             samples: VecDeque::new(),
             momentum: None,
             retry_at: None,
+            flash: None,
+            badge: 0,
             cursor: Cursor::Default,
             app_menu,
+            bus: Bus::start(APP_ID),
+            saved: saved_file.map(|file| (file, SavedWindow::default())),
         };
-        app.tabs[0].terminal.set_focus(false);
+        for tab in &mut app.tabs {
+            for session in &mut tab.sessions {
+                session.terminal.set_focus(false);
+            }
+        }
+        app.frame_window(window);
+        app.size = window.size();
+        app.frame_window(window);
+        app.layout();
         app
     }
 
+    fn tab(&self) -> &Tab {
+        &self.tabs[self.active]
+    }
+
     fn session(&mut self) -> &mut Session {
-        &mut self.tabs[self.active]
+        self.tabs[self.active].focused_mut()
     }
 
     fn terminal(&self) -> &Terminal {
-        &self.tabs[self.active].terminal
+        &self.tab().focused().terminal
     }
 
     fn mode(&self) -> TermMode {
@@ -127,65 +252,148 @@ impl TerminalApp {
         self.session().send(bytes);
     }
 
-    fn shows_tab_bar(&self) -> bool {
-        self.tabs.len() > 1
+    fn has_strip(&self) -> bool {
+        self.header > 0.0 || self.tabs.len() > 1
     }
 
-    fn tab_bar_height(&self) -> f32 {
-        if self.shows_tab_bar() {
-            TAB_BAR_HEIGHT
+    fn leading(&self) -> f32 {
+        if self.header > 0.0 {
+            HEADER_LEADING
         } else {
-            0.0
+            FULL_SCREEN_LEADING
         }
     }
 
-    fn content_origin(&self) -> Point {
+    fn tab_layout(&self) -> TabBarLayout {
+        TabBarLayout::new(self.tabs.len(), self.size.0 as f32, self.leading())
+    }
+
+    fn frame_window(&self, window: &mut Window) {
+        let toolbar = if self.header == 0.0 && self.tabs.len() > 1 {
+            STRIP_HEIGHT
+        } else {
+            0.0
+        };
+        window.set_frame_regions(FrameRegions {
+            sidebar: 0.0,
+            toolbar,
+        });
+        let layout = self.tab_layout();
+        let title_x = if self.tabs.len() > 1 {
+            self.size.0 as f32
+        } else {
+            self.leading()
+        };
+        window.set_header(Header {
+            title_x,
+            items: if self.header > 0.0 {
+                layout.items()
+            } else {
+                Vec::new()
+            },
+        });
+    }
+
+    fn sheet(&self) -> Rect {
+        let inset = if self.header > 0.0 {
+            SHEET_INSET as f32
+        } else {
+            0.0
+        };
+        let top = if self.has_strip() { STRIP_HEIGHT } else { 0.0 };
+        let (width, height) = (self.size.0 as f32, self.size.1 as f32);
+        Rect::new(
+            inset,
+            top,
+            (width - 2.0 * inset).max(0.0),
+            (height - top - inset).max(0.0),
+        )
+    }
+
+    fn pane_area(&self) -> Rect {
+        let sheet = self.sheet();
         let banner = if self.banner.is_some() {
             BANNER_HEIGHT
         } else {
             0.0
         };
-        Point::new(0.0, self.tab_bar_height() + banner)
+        Rect::new(
+            sheet.x,
+            sheet.y + banner,
+            sheet.width,
+            (sheet.height - banner).max(0.0),
+        )
     }
 
-    fn grid(&self) -> GridSize {
-        let origin = self.content_origin();
-        self.painter
-            .metrics
-            .grid_for(self.size.0 as f32 - origin.x, self.size.1 as f32 - origin.y)
+    fn frames(&self) -> Vec<(u32, Rect)> {
+        self.tab().layout.frames(self.pane_area())
+    }
+
+    fn pane_frame(&self, id: u32) -> Rect {
+        self.frames()
+            .into_iter()
+            .find(|(pane, _)| *pane == id)
+            .map_or_else(|| self.pane_area(), |(_, frame)| frame)
+    }
+
+    fn focused_frame(&self) -> Rect {
+        self.pane_frame(self.tab().focused)
+    }
+
+    fn pane_at(&self, at: Point) -> Option<u32> {
+        self.frames()
+            .into_iter()
+            .find(|(_, frame)| contains(*frame, at))
+            .map(|(id, _)| id)
+    }
+
+    fn divider_at(&self, at: Point) -> Option<Divider> {
+        self.tab()
+            .layout
+            .dividers(self.pane_area())
+            .into_iter()
+            .find(|divider| contains(divider.reach(), at))
     }
 
     fn layout(&mut self) {
-        let top = self.tab_bar_height();
+        let sheet = self.sheet();
         if let Some(banner) = &mut self.banner {
-            banner.set_top(top);
+            banner.set_area(Rect::new(sheet.x, sheet.y, sheet.width, BANNER_HEIGHT));
         }
-        let grid = self.grid();
-        let cell_size = self.painter.metrics.pixel_cell_size();
+        let area = self.pane_area();
+        let metrics = self.painter.metrics;
+        let cell_size = metrics.pixel_cell_size();
+        let shape = self.settings.cursor.shape();
         for tab in &mut self.tabs {
-            tab.resize(grid, cell_size);
+            for (id, frame) in tab.layout.frames(area) {
+                let grid = metrics.grid_for(frame.width, frame.height);
+                if let Some(session) = tab.sessions.iter_mut().find(|session| session.id() == id) {
+                    session.resize(grid, cell_size);
+                    session.terminal.set_cursor_shape(shape);
+                }
+            }
         }
     }
 
     fn cell_at(&self, at: Point) -> CellPoint {
-        let origin = self.content_origin();
+        let frame = self.focused_frame();
         self.painter
             .metrics
-            .cell_at(Point::new(at.x - origin.x, at.y - origin.y))
+            .cell_at(Point::new(at.x - frame.x, at.y - frame.y))
     }
 
     fn tab_target(&self, at: Point) -> Option<TabTarget> {
-        if !self.shows_tab_bar() || at.y >= TAB_BAR_HEIGHT {
+        if !self.has_strip() || at.y >= STRIP_HEIGHT {
             return None;
         }
-        TabBarLayout::new(self.tabs.len(), self.size.0 as f32).hit(at)
+        self.tab_layout().hit(at)
     }
 
     fn titles(&self) -> Vec<String> {
         self.tabs
             .iter()
             .map(|tab| {
-                let title = tab.title(self.home.as_deref());
+                let title = tab.focused().title(self.home.as_deref());
                 if title.is_empty() {
                     L10N.tr("title")
                 } else {
@@ -201,14 +409,90 @@ impl TerminalApp {
             window.set_title(&title);
             self.title = title;
         }
+        self.save_window();
     }
 
-    fn handle_notices(&mut self, window: &mut Window, notices: Vec<Notice>) {
+    fn save_window(&mut self) {
+        let Some((file, last)) = &mut self.saved else {
+            return;
+        };
+        let home = self.home.clone();
+        let current = SavedWindow {
+            tabs: self
+                .tabs
+                .iter()
+                .filter_map(|tab| tab.focused().working_directory().or_else(|| home.clone()))
+                .collect(),
+            active: self.active,
+        };
+        if current != *last {
+            match current.save(file) {
+                Ok(()) => *last = current,
+                Err(error) => tracing::warn!("cannot remember the window: {error}"),
+            }
+        }
+    }
+
+    fn forget_window(&mut self) {
+        if let Some((file, _)) = self.saved.take()
+            && let Err(error) = std::fs::remove_file(&file)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::warn!("cannot forget the window: {error}");
+        }
+    }
+
+    fn handle_notices(&mut self, window: &mut Window, tab: usize, notices: Vec<Notice>) {
+        let background = !self.focused || tab != self.active;
         for notice in notices {
             match notice {
                 Notice::Copy(text) => window.copy(&text),
-                Notice::Bell => {}
+                Notice::Bell => self.bell(window, tab),
+                Notice::Finished {
+                    command,
+                    elapsed,
+                    code,
+                } if background
+                    && self.settings.notify_finished
+                    && elapsed >= LONG_COMMAND
+                    && !command.is_empty() =>
+                {
+                    let summary = match code {
+                        Some(code) if code != 0 => L10N.tr_args(
+                            "command-failed",
+                            [("command", command.into()), ("code", code.into())],
+                        ),
+                        _ => L10N.tr_args("command-finished", [("command", command.into())]),
+                    };
+                    let body = self.titles().get(tab).cloned().unwrap_or_default();
+                    self.bus.send(Outgoing::Notify { summary, body });
+                }
+                Notice::Finished { .. } => {}
+                Notice::Notify { title, body } if background => {
+                    self.bus.send(Outgoing::Notify {
+                        summary: title,
+                        body,
+                    });
+                }
+                Notice::Notify { .. } => {}
             }
+        }
+    }
+
+    fn bell(&mut self, window: &mut Window, tab: usize) {
+        if tab != self.active
+            && let Some(tab) = self.tabs.get_mut(tab)
+        {
+            tab.bell = true;
+            window.request_redraw();
+        }
+        if !self.focused && self.settings.badge_on_bell {
+            self.badge += 1;
+            self.bus.send(Outgoing::Badge(self.badge));
+        }
+        if self.settings.flash_on_bell && tab == self.active {
+            self.flash = Some(Instant::now());
+            window.request_redraw();
         }
     }
 
@@ -222,30 +506,81 @@ impl TerminalApp {
         self.focus_terminal(false);
         self.session().terminal.end_find();
         self.active = index;
+        self.tabs[index].bell = false;
         self.gesture = Gesture::Idle;
         self.run_find();
         self.focus_terminal(self.focused && !self.banner_focused);
         window.request_redraw();
     }
 
-    fn new_tab(&mut self, window: &mut Window) {
+    fn spawn_session(&mut self, size: GridSize) -> Option<Session> {
         let directory = self
             .session()
             .working_directory()
             .or_else(|| self.home.clone());
-        let mut terminal = Terminal::new(self.terminal().size());
-        terminal.resize(
-            self.terminal().size(),
-            self.painter.metrics.pixel_cell_size(),
-        );
-        match Session::spawn(terminal, None, directory) {
-            Ok(session) => {
-                self.tabs.push(session);
-                self.layout();
-                self.select_tab(window, self.tabs.len() - 1);
-            }
-            Err(error) => tracing::warn!("cannot open a tab: {error}"),
+        let mut terminal = Terminal::new(size);
+        terminal.resize(size, self.painter.metrics.pixel_cell_size());
+        Session::spawn(terminal, None, directory)
+            .inspect_err(|error| tracing::warn!("cannot start a shell: {error}"))
+            .ok()
+    }
+
+    fn new_tab(&mut self, window: &mut Window) {
+        let Some(session) = self.spawn_session(self.terminal().size()) else {
+            return;
+        };
+        self.tabs.push(Tab::new(session));
+        self.after_tabs_changed(window);
+        self.select_tab(window, self.tabs.len() - 1);
+    }
+
+    fn after_tabs_changed(&mut self, window: &mut Window) {
+        self.frame_window(window);
+        self.size = window.size();
+        self.layout();
+        window.request_redraw();
+    }
+
+    fn split(&mut self, window: &mut Window, axis: Axis) {
+        let frame = self.focused_frame();
+        let small = match axis {
+            Axis::SideBySide => frame.width / 2.0 < MIN_PANE,
+            Axis::Stacked => frame.height / 2.0 < MIN_PANE,
+        };
+        if small {
+            return;
         }
+        let Some(session) = self.spawn_session(self.terminal().size()) else {
+            return;
+        };
+        let id = session.id();
+        let tab = &mut self.tabs[self.active];
+        let focused = tab.focused;
+        tab.sessions.push(session);
+        tab.layout.split(focused, axis, id);
+        self.layout();
+        self.focus_pane(window, id);
+    }
+
+    fn focus_pane(&mut self, window: &mut Window, id: u32) {
+        if self.tab().focused == id || self.tab().session(id).is_none() {
+            return;
+        }
+        if self.find_banner().is_some() {
+            self.session().terminal.end_find();
+        }
+        self.focus_terminal(false);
+        self.tabs[self.active].focused = id;
+        self.run_find();
+        self.focus_terminal(self.focused && !self.banner_focused);
+        self.sync_title(window);
+        window.request_redraw();
+    }
+
+    fn move_focus(&mut self, window: &mut Window, forward: bool) {
+        let tab = self.tab();
+        let next = tab.layout.neighbour(tab.focused, forward);
+        self.focus_pane(window, next);
     }
 
     fn new_window(&mut self, window: &mut Window) {
@@ -253,32 +588,37 @@ impl TerminalApp {
             .session()
             .working_directory()
             .or_else(|| self.home.clone());
-        let program = match std::env::current_exe() {
-            Ok(program) => program.to_string_lossy().into_owned(),
-            Err(error) => return tracing::warn!("cannot find the terminal program: {error}"),
-        };
-        let token = window
-            .activation_token(APP_ID)
-            .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
-            .ok();
-        let mut command = vec![program];
+        let mut command = vec![];
         if let Some(directory) = directory {
             command.push(DIRECTORY_OPTION.to_owned());
             command.push(directory.to_string_lossy().into_owned());
         }
-        if let Err(error) = unbound_xdg::spawn_detached(&command, None, token.as_deref()) {
-            tracing::warn!("cannot open a window: {error}");
-        }
+        spawn_self(window, command);
     }
 
     fn request_close_tab(&mut self, window: &mut Window, index: usize) {
-        let Some(program) = self.tabs.get(index).and_then(Session::running_program) else {
+        let Some(program) = self.tabs.get(index).and_then(Tab::running_program) else {
             return self.close_tab(window, index);
         };
         let message = L10N.tr_args("confirm-close-tab", [("program", quoted(program).into())]);
-        let pending = Pending::CloseTab(self.tabs[index].id());
+        let pending = Pending::CloseTab(self.tabs[index].id);
         self.select_tab(window, index);
         self.ask(window, &message, pending);
+    }
+
+    fn request_close(&mut self, window: &mut Window) {
+        if self.tab().sessions.len() == 1 {
+            return self.request_close_tab(window, self.active);
+        }
+        let id = self.tab().focused;
+        match self.tab().focused().running_program() {
+            Some(program) => {
+                let message =
+                    L10N.tr_args("confirm-close-pane", [("program", quoted(program).into())]);
+                self.ask(window, &message, Pending::ClosePane(id));
+            }
+            None => self.close_pane(window, self.active, id),
+        }
     }
 
     fn ask(&mut self, window: &mut Window, message: &str, pending: Pending) {
@@ -286,7 +626,9 @@ impl TerminalApp {
         let palette = window.appearance().palette();
         let button = match pending {
             Pending::Quit => L10N.tr("quit"),
-            Pending::CloseTab(_) | Pending::CloseOtherTabs(_) => L10N.tr("close"),
+            Pending::CloseTab(_) | Pending::ClosePane(_) | Pending::CloseOtherTabs(_) => {
+                L10N.tr("close")
+            }
         };
         self.banner = Some(Banner::confirm(palette, message, &button));
         self.pending = Some(pending);
@@ -301,8 +643,13 @@ impl TerminalApp {
         self.close_banner();
         match pending {
             Some(Pending::CloseTab(id)) => {
-                if let Some(index) = self.tabs.iter().position(|tab| tab.id() == id) {
+                if let Some(index) = self.tabs.iter().position(|tab| tab.id == id) {
                     self.close_tab(window, index);
+                }
+            }
+            Some(Pending::ClosePane(id)) => {
+                if let Some(index) = self.tabs.iter().position(|tab| tab.session(id).is_some()) {
+                    self.close_pane(window, index, id);
                 }
             }
             Some(Pending::CloseOtherTabs(keep)) => self.remove_other_tabs(window, keep),
@@ -312,13 +659,13 @@ impl TerminalApp {
     }
 
     fn close_other_tabs(&mut self, window: &mut Window, keep: u32) {
-        let Some(index) = self.tabs.iter().position(|tab| tab.id() == keep) else {
+        let Some(index) = self.tabs.iter().position(|tab| tab.id == keep) else {
             return;
         };
         let busy = self
             .tabs
             .iter()
-            .filter(|tab| tab.id() != keep && tab.running_program().is_some())
+            .filter(|tab| tab.id != keep && tab.running_program().is_some())
             .count();
         if busy == 0 {
             return self.remove_other_tabs(window, keep);
@@ -342,9 +689,40 @@ impl TerminalApp {
     }
 
     fn remove_other_tabs(&mut self, window: &mut Window, keep: u32) {
-        while let Some(index) = self.tabs.iter().position(|tab| tab.id() != keep) {
+        while let Some(index) = self.tabs.iter().position(|tab| tab.id != keep) {
             self.close_tab(window, index);
         }
+    }
+
+    fn close_pane(&mut self, window: &mut Window, tab: usize, id: u32) {
+        let Some(entry) = self.tabs.get_mut(tab) else {
+            return;
+        };
+        if entry.sessions.len() == 1 {
+            return self.close_tab(window, tab);
+        }
+        let was_focused = entry.focused == id;
+        if was_focused && tab == self.active {
+            self.focus_terminal(false);
+            self.session().terminal.end_find();
+        }
+        let entry = &mut self.tabs[tab];
+        let next = entry.layout.neighbour(id, false);
+        entry.layout.remove(id);
+        entry.sessions.retain(|session| session.id() != id);
+        if was_focused {
+            entry.focused = next;
+        }
+        if self.pending == Some(Pending::ClosePane(id)) {
+            self.close_banner();
+        }
+        if was_focused && tab == self.active {
+            self.run_find();
+            self.focus_terminal(self.focused && !self.banner_focused);
+        }
+        self.gesture = Gesture::Idle;
+        self.layout();
+        window.request_redraw();
     }
 
     fn close_tab(&mut self, window: &mut Window, index: usize) {
@@ -354,27 +732,33 @@ impl TerminalApp {
         let was_active = index == self.active;
         let closed = self.tabs.remove(index);
         if self.tabs.is_empty() {
+            self.forget_window();
             return;
         }
         if index < self.active || self.active >= self.tabs.len() {
             self.active -= 1;
         }
-        if self.pending == Some(Pending::CloseTab(closed.id())) {
+        if self.pending == Some(Pending::CloseTab(closed.id)) {
             self.close_banner();
         }
         if was_active {
+            self.tabs[self.active].bell = false;
             self.run_find();
             self.focus_terminal(self.focused && !self.banner_focused);
         }
         self.gesture = Gesture::Idle;
         self.hover = None;
-        self.layout();
-        window.request_redraw();
+        self.after_tabs_changed(window);
     }
 
     fn remove_exited(&mut self, window: &mut Window) {
-        while let Some(index) = self.tabs.iter().position(Session::exited) {
-            self.close_tab(window, index);
+        while let Some((tab, id)) = self.tabs.iter().enumerate().find_map(|(index, tab)| {
+            tab.sessions
+                .iter()
+                .find(|session| session.exited())
+                .map(|session| (index, session.id()))
+        }) {
+            self.close_pane(window, tab, id);
         }
     }
 
@@ -451,7 +835,7 @@ impl TerminalApp {
             Command::SmallerText => {
                 self.set_font_size(window, next_font_size(self.painter.font_size(), false))
             }
-            Command::DefaultTextSize => self.set_font_size(window, DEFAULT_FONT_SIZE),
+            Command::DefaultTextSize => self.set_font_size(window, self.settings.font_size),
             Command::NewTab => self.new_tab(window),
             Command::NewWindow => self.new_window(window),
             Command::NextTab => self.select_tab(window, (self.active + 1) % self.tabs.len()),
@@ -464,6 +848,11 @@ impl TerminalApp {
             Command::Find => self.open_find(window),
             Command::FindNext => self.find_again(window, SearchDirection::Newer),
             Command::FindPrevious => self.find_again(window, SearchDirection::Older),
+            Command::SplitSideBySide => self.split(window, Axis::SideBySide),
+            Command::SplitStacked => self.split(window, Axis::Stacked),
+            Command::NextPane => self.move_focus(window, true),
+            Command::PreviousPane => self.move_focus(window, false),
+            Command::Settings => spawn_self(window, vec![SETTINGS_OPTION.to_owned()]),
         }
         window.request_redraw();
     }
@@ -479,7 +868,7 @@ impl TerminalApp {
                 Ok(())
             }
             Some(Standard::CloseWindow) => {
-                window.request_close();
+                self.request_close(window);
                 Ok(())
             }
             None => {
@@ -501,7 +890,7 @@ impl TerminalApp {
             MenuCommand::CopyLink(uri) => window.copy(&uri),
             MenuCommand::ShowInFiles => self.show_in_files(window),
             MenuCommand::CloseTab(id) => {
-                if let Some(index) = self.tabs.iter().position(|tab| tab.id() == id) {
+                if let Some(index) = self.tabs.iter().position(|tab| tab.id == id) {
                     self.request_close_tab(window, index);
                 }
             }
@@ -535,21 +924,18 @@ impl TerminalApp {
             link: link.map(|link| link.uri),
             has_selection: self.terminal().selected_text().is_some(),
             knows_directory: self.session().working_directory().is_some(),
-            tab: self.tabs[self.active].id(),
+            tab: self.tab().id,
         };
         self.show_menu(window, terminal_menu(&context), at);
     }
 
     fn menu_from_keyboard(&mut self, window: &mut Window) {
-        let origin = self.content_origin();
+        let frame = self.focused_frame();
         let below = match self.terminal().cursor_cell() {
             Some((column, line)) => self.painter.metrics.below_cell(column, line),
-            None => Point::new(
-                (self.size.0 as f32 - origin.x) / 2.0,
-                (self.size.1 as f32 - origin.y) / 2.0,
-            ),
+            None => Point::new(frame.width / 2.0, frame.height / 2.0),
         };
-        let at = Point::new(origin.x + below.x, origin.y + below.y);
+        let at = Point::new(frame.x + below.x, frame.y + below.y);
         self.terminal_menu(window, at, None);
     }
 
@@ -635,6 +1021,23 @@ impl TerminalApp {
         self.layout();
     }
 
+    fn reload_settings(&mut self, window: &mut Window) {
+        let Some(folder) = settings_folder() else {
+            return;
+        };
+        let settings = Settings::load(&folder);
+        if settings == self.settings {
+            return;
+        }
+        let old = std::mem::replace(&mut self.settings, settings);
+        self.painter.set_profile(settings.profile);
+        if old.font_size != settings.font_size {
+            self.painter.set_metrics(settings.font_size, window.scale());
+        }
+        self.layout();
+        window.request_redraw();
+    }
+
     fn report_mouse(&mut self, kind: MouseKind, at: Point, modifiers: Modifiers) -> bool {
         let cell = self.cell_at(at);
         let size = self.terminal().size();
@@ -664,7 +1067,7 @@ impl TerminalApp {
             window.request_redraw();
         }
         self.hover_link(window, modifiers);
-        match self.gesture {
+        match self.gesture.clone() {
             Gesture::Reporting(button) => {
                 self.report_mouse(MouseKind::Drag(button), at, modifiers);
             }
@@ -679,9 +1082,19 @@ impl TerminalApp {
                     window.request_redraw();
                 }
             }
+            Gesture::Divider(divider) => {
+                let ratio = divider.ratio_at(at);
+                self.tabs[self.active]
+                    .layout
+                    .set_ratio(&divider.path, ratio);
+                self.layout();
+                window.request_redraw();
+            }
             Gesture::Tab(_) => {}
-            Gesture::Idle if hover.is_none() && !self.in_banner(at) => {
-                self.report_mouse(MouseKind::Move, at, modifiers);
+            Gesture::Idle if hover.is_none() && self.in_content(at) => {
+                if self.pane_at(at) == Some(self.tab().focused) {
+                    self.report_mouse(MouseKind::Move, at, modifiers);
+                }
             }
             Gesture::Idle => {
                 if let Some(banner) = &mut self.banner {
@@ -694,7 +1107,16 @@ impl TerminalApp {
 
     fn update_cursor(&mut self, window: &mut Window, modifiers: Modifiers) {
         let at = self.pointer;
-        let cursor = if self.link.is_some() {
+        let divider = match &self.gesture {
+            Gesture::Divider(divider) => Some(divider.axis),
+            _ => self.divider_at(at).map(|divider| divider.axis),
+        };
+        let cursor = if let Some(axis) = divider {
+            match axis {
+                Axis::SideBySide => Cursor::ColumnResize,
+                Axis::Stacked => Cursor::RowResize,
+            }
+        } else if self.link.is_some() {
             Cursor::Pointer
         } else if self.in_banner(at) {
             self.banner.as_ref().map_or(Cursor::Default, Banner::cursor)
@@ -710,12 +1132,13 @@ impl TerminalApp {
     }
 
     fn in_content(&self, at: Point) -> bool {
-        at.y >= self.content_origin().y
+        contains(self.pane_area(), at)
     }
 
     fn hover_link(&mut self, window: &mut Window, modifiers: Modifiers) {
         let at = self.pointer;
-        let link = if modifiers.logo && self.gesture == Gesture::Idle && self.in_content(at) {
+        let over_focused = self.pane_at(at) == Some(self.tab().focused);
+        let link = if modifiers.logo && self.gesture == Gesture::Idle && over_focused {
             let cell = self.cell_at(at);
             self.session().terminal.link_at(cell)
         } else {
@@ -763,8 +1186,9 @@ impl TerminalApp {
                 }
             }
             gesture @ (Gesture::Reporting(_) | Gesture::Selecting) => self.gesture = gesture,
-            Gesture::Tab(_) | Gesture::Idle => {}
+            Gesture::Divider(_) | Gesture::Tab(_) | Gesture::Idle => {}
         }
+        self.update_cursor(window, pointer.modifiers);
     }
 
     fn press(&mut self, window: &mut Window, pointer: Pointer) {
@@ -774,7 +1198,7 @@ impl TerminalApp {
             if asks_for_menu(&pointer) {
                 let tab = match target {
                     TabTarget::Select(index) | TabTarget::Close(index) => {
-                        self.tabs.get(index).map(Session::id)
+                        self.tabs.get(index).map(|tab| tab.id)
                     }
                     TabTarget::NewTab => None,
                 };
@@ -798,9 +1222,21 @@ impl TerminalApp {
             self.focus_terminal(false);
             return window.request_redraw();
         }
+        if pointer.is_primary()
+            && let Some(divider) = self.divider_at(at)
+        {
+            self.gesture = Gesture::Divider(divider);
+            return;
+        }
+        if !self.in_content(at) {
+            return;
+        }
         if self.banner_focused {
             self.banner_focused = false;
             self.focus_terminal(self.focused);
+        }
+        if let Some(pane) = self.pane_at(at) {
+            self.focus_pane(window, pane);
         }
         let modifiers = pointer.modifiers;
         let program_takes_mouse = !modifiers.shift && reports_mouse(self.mode());
@@ -856,6 +1292,11 @@ impl TerminalApp {
 
     fn scroll(&mut self, window: &mut Window, scroll: Scroll) {
         self.pointer = scroll.position;
+        if let Some(pane) = self.pane_at(scroll.position)
+            && pane != self.tab().focused
+        {
+            return;
+        }
         let dy = scroll.delta.y;
         let program_scrolls = (!scroll.modifiers.shift && reports_mouse(self.mode()))
             || wants_scroll_as_arrows(self.mode());
@@ -963,7 +1404,11 @@ impl TerminalApp {
     }
 
     fn schedule_retry(&mut self) {
-        let pending = self.tabs.iter().any(Session::has_pending_output);
+        let pending = self
+            .tabs
+            .iter()
+            .flat_map(|tab| &tab.sessions)
+            .any(Session::has_pending_output);
         self.retry_at = match (pending, self.retry_at) {
             (false, _) => None,
             (true, Some(at)) => Some(at),
@@ -973,45 +1418,122 @@ impl TerminalApp {
 
     fn focus(&mut self, window: &mut Window, focused: bool) {
         self.focused = focused;
-        if focused && let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
-            tracing::warn!("{error}");
+        if focused {
+            if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
+                tracing::warn!("{error}");
+            }
+            if self.badge > 0 {
+                self.badge = 0;
+                self.bus.send(Outgoing::Badge(0));
+            }
         }
         self.focus_terminal(focused && !self.banner_focused);
         window.request_redraw();
+    }
+
+    fn flash_opacity(&self, now: Instant) -> Option<f32> {
+        let elapsed = now.duration_since(self.flash?);
+        (elapsed < FLASH)
+            .then(|| FLASH_OPACITY * (1.0 - elapsed.as_secs_f32() / FLASH.as_secs_f32()))
+    }
+
+    fn sheet_items(&mut self) -> Vec<Item> {
+        let frames = self.frames();
+        let focused = self.tab().focused;
+        let split = frames.len() > 1;
+        let mut items = Vec::new();
+        let mut focused_highlights = self.session().terminal.highlights();
+        focused_highlights.link = self.link.as_ref().map(|link| link.range.clone());
+        let resting = Highlights::default();
+        let tab = &self.tabs[self.active];
+        for (id, frame) in &frames {
+            let Some(session) = tab.session(*id) else {
+                continue;
+            };
+            let highlights = if *id == focused {
+                &focused_highlights
+            } else {
+                &resting
+            };
+            let mut pane =
+                self.painter
+                    .terminal(&session.terminal, Point::new(frame.x, frame.y), highlights);
+            if split && *id != focused {
+                pane.push(Item::Fill {
+                    shape: Shape::rect(*frame),
+                    paint: self
+                        .painter
+                        .theme
+                        .background
+                        .with_opacity(RESTING_PANE_OPACITY)
+                        .into(),
+                });
+            }
+            items.push(Item::Clip {
+                shape: Shape::rect(*frame),
+                items: pane,
+            });
+        }
+        for divider in tab.layout.dividers(self.pane_area()) {
+            items.push(Item::Fill {
+                shape: Shape::rect(divider.line),
+                paint: self.painter.theme.palette.edge.into(),
+            });
+        }
+        items
     }
 }
 
 impl App for TerminalApp {
     fn scene(&mut self, window: &mut Window) -> Scene {
+        let header = window.header_height() as f32;
+        if header != self.header {
+            self.header = header;
+            self.frame_window(window);
+        }
         let size = window.size();
         let rescaled = self
             .painter
             .set_metrics(self.painter.font_size(), window.scale());
         if rescaled || size != self.size {
             self.size = size;
+            self.frame_window(window);
             self.layout();
         }
         let mut items = Vec::new();
-        if self.shows_tab_bar() {
+        if self.has_strip() {
             let titles = self.titles();
+            let bells: Vec<bool> = self.tabs.iter().map(|tab| tab.bell).collect();
             let bar = TabBar {
                 titles: &titles,
+                bells: &bells,
                 active: self.active,
                 hover: self.hover,
                 focused: self.focused,
+                leading: self.leading(),
             };
             items.extend(self.painter.tab_bar(&bar, size.0 as f32));
         }
-        let origin = self.content_origin();
-        let mut highlights = self.session().terminal.highlights();
-        highlights.link = self.link.as_ref().map(|link| link.range.clone());
-        items.extend(
-            self.painter
-                .terminal(&self.tabs[self.active].terminal, origin, &highlights),
-        );
+        let sheet = self.sheet();
+        let mut inside = self.sheet_items();
         if let Some(banner) = &mut self.banner {
-            items.extend(banner.items(size.0, size.1));
+            inside.extend(banner.items(size.0, size.1));
         }
+        if let Some(opacity) = self.flash_opacity(Instant::now()) {
+            inside.push(Item::Fill {
+                shape: Shape::rect(sheet),
+                paint: self.painter.theme.foreground.with_opacity(opacity).into(),
+            });
+        }
+        let radius = if self.header > 0.0 {
+            Radius::concentric(Radius::XL, SHEET_INSET as f32)
+        } else {
+            0.0
+        };
+        items.push(Item::Clip {
+            shape: Shape::rounded(sheet, radius),
+            items: inside,
+        });
         Scene {
             width: size.0,
             height: size.1,
@@ -1062,6 +1584,18 @@ impl App for TerminalApp {
                 self.focus_terminal(self.focused);
                 window.request_redraw();
             }
+            WindowEvent::Accessibility(request)
+                if request.target_node == NEW_TAB_NODE && request.action == Action::Click =>
+            {
+                self.new_tab(window);
+            }
+            WindowEvent::Accessibility(request)
+                if request.target_node.0 >= TAB_NODES
+                    && request.target_node.0 < TAB_NODES + self.tabs.len() as u64 =>
+            {
+                let index = (request.target_node.0 - TAB_NODES) as usize;
+                self.select_tab(window, index);
+            }
             WindowEvent::Accessibility(request) => {
                 if let Some(banner) = &mut self.banner {
                     banner.perform(&request);
@@ -1088,7 +1622,7 @@ impl App for TerminalApp {
             return window.close();
         }
         let notices = self.session().take_notices();
-        self.handle_notices(window, notices);
+        self.handle_notices(window, self.active, notices);
         self.remove_exited(window);
         if !self.tabs.is_empty() {
             self.sync_title(window);
@@ -1097,13 +1631,20 @@ impl App for TerminalApp {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = self.tabs.iter().map(Session::fd).collect::<Vec<_>>();
+        let mut sources = self
+            .tabs
+            .iter()
+            .flat_map(|tab| tab.sessions.iter().map(Session::fd))
+            .collect::<Vec<_>>();
         sources.extend(self.app_menu.as_ref().map(AppMenu::fd));
+        sources.extend(self.settings_watch.as_ref().map(|watch| watch.wake.as_fd()));
         sources
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        if index == self.tabs.len() {
+        let sessions: usize = self.tabs.iter().map(|tab| tab.sessions.len()).sum();
+        let menu_index = self.app_menu.as_ref().map(|_| sessions);
+        if Some(index) == menu_index {
             let actions = self
                 .app_menu
                 .as_mut()
@@ -1115,12 +1656,25 @@ impl App for TerminalApp {
             self.handle_banner_actions(window);
             return window.request_redraw();
         }
-        let Some(tab) = self.tabs.get_mut(index) else {
+        if index >= sessions {
+            if let Some(watch) = &mut self.settings_watch {
+                watch.drain();
+            }
+            return self.reload_settings(window);
+        }
+        let mut remaining = index;
+        let Some(tab) = self.tabs.iter().position(|tab| {
+            let inside = remaining < tab.sessions.len();
+            if !inside {
+                remaining -= tab.sessions.len();
+            }
+            inside
+        }) else {
             return;
         };
-        let notices = tab.read();
-        self.handle_notices(window, notices);
-        if index == self.active || self.shows_tab_bar() {
+        let notices = self.tabs[tab].sessions[remaining].read();
+        self.handle_notices(window, tab, notices);
+        if tab == self.active || self.has_strip() {
             window.request_redraw();
         }
         self.remove_exited(window);
@@ -1138,8 +1692,8 @@ impl App for TerminalApp {
     fn tick(&mut self, window: &mut Window, now: Instant) {
         if self.retry_at.is_some_and(|at| at <= now) {
             self.retry_at = None;
-            for tab in &mut self.tabs {
-                tab.flush();
+            for session in self.tabs.iter_mut().flat_map(|tab| &mut tab.sessions) {
+                session.flush();
             }
             self.schedule_retry();
         }
@@ -1152,11 +1706,22 @@ impl App for TerminalApp {
         }
     }
 
+    fn animating(&self) -> bool {
+        self.flash_opacity(Instant::now()).is_some()
+    }
+
     fn should_close(&mut self, window: &mut Window) -> bool {
-        if self.tabs.len() == 1 && self.tabs[0].running_program().is_none() {
+        let by_button = window.close_requested_by_button();
+        let last = self.tabs.len() == 1 && (by_button || self.tabs[0].sessions.len() == 1);
+        if last && self.tabs[0].running_program().is_none() {
+            self.forget_window();
             return true;
         }
-        self.request_close_tab(window, self.active);
+        if by_button {
+            self.request_close_tab(window, self.active);
+        } else {
+            self.request_close(window);
+        }
         false
     }
 
@@ -1180,8 +1745,35 @@ impl App for TerminalApp {
         terminal.set_label(self.title.clone());
         terminal.set_value(self.terminal().screen_text().join("\n"));
         terminal.add_action(Action::Focus);
-        let mut children = vec![TERMINAL_NODE];
+        let mut children = Vec::new();
         let mut nodes = Vec::new();
+        if self.has_strip() {
+            let layout = self.tab_layout();
+            let mut list = Node::new(Role::TabList);
+            list.set_label(L10N.tr("tabs"));
+            let titles = self.titles();
+            let mut tabs = Vec::new();
+            for (index, (rect, title)) in layout.tabs.iter().zip(&titles).enumerate() {
+                let id = NodeId(TAB_NODES + index as u64);
+                let mut tab = Node::new(Role::Tab);
+                tab.set_label(title.clone());
+                tab.set_bounds(bounds(*rect));
+                tab.set_selected(index == self.active);
+                tab.add_action(Action::Click);
+                tabs.push(id);
+                nodes.push((id, tab));
+            }
+            let mut new_tab = Node::new(Role::Button);
+            new_tab.set_label(L10N.tr("new-tab"));
+            new_tab.set_bounds(bounds(layout.new_tab));
+            new_tab.add_action(Action::Click);
+            nodes.push((NEW_TAB_NODE, new_tab));
+            tabs.push(NEW_TAB_NODE);
+            list.set_children(tabs);
+            nodes.push((TAB_LIST_NODE, list));
+            children.push(TAB_LIST_NODE);
+        }
+        children.push(TERMINAL_NODE);
         let mut focus = TERMINAL_NODE;
         if let Some(banner) = &self.banner {
             let tree = banner.accessibility();
@@ -1201,6 +1793,38 @@ impl App for TerminalApp {
             tree_id: TreeId::ROOT,
             focus,
         })
+    }
+}
+
+fn bounds(rect: Rect) -> accesskit::Rect {
+    accesskit::Rect {
+        x0: f64::from(rect.x),
+        y0: f64::from(rect.y),
+        x1: f64::from(rect.x + rect.width),
+        y1: f64::from(rect.y + rect.height),
+    }
+}
+
+fn contains(rect: Rect, point: Point) -> bool {
+    point.x >= rect.x
+        && point.y >= rect.y
+        && point.x < rect.x + rect.width
+        && point.y < rect.y + rect.height
+}
+
+pub fn spawn_self(window: &mut Window, arguments: Vec<String>) {
+    let program = match std::env::current_exe() {
+        Ok(program) => program.to_string_lossy().into_owned(),
+        Err(error) => return tracing::warn!("cannot find the terminal program: {error}"),
+    };
+    let token = window
+        .activation_token(APP_ID)
+        .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+        .ok();
+    let mut command = vec![program];
+    command.extend(arguments);
+    if let Err(error) = unbound_xdg::spawn_detached(&command, None, token.as_deref()) {
+        tracing::warn!("cannot open a window: {error}");
     }
 }
 
@@ -1231,11 +1855,15 @@ fn quoted(name: &str) -> String {
 }
 
 pub const DIRECTORY_OPTION: &str = "--working-directory";
+pub const SETTINGS_OPTION: &str = "--settings";
+pub const RESTORE_OPTION: &str = "--restore";
 
 #[derive(Debug, Default)]
 pub struct Arguments {
     pub command: Option<Shell>,
     pub directory: Option<PathBuf>,
+    pub settings: bool,
+    pub restore: Option<PathBuf>,
 }
 
 impl Arguments {
@@ -1250,9 +1878,15 @@ impl Arguments {
                     break;
                 }
                 DIRECTORY_OPTION => parsed.directory = args.next().map(PathBuf::from),
+                SETTINGS_OPTION => parsed.settings = true,
+                RESTORE_OPTION => parsed.restore = args.next().map(PathBuf::from),
                 _ => {}
             }
         }
         parsed
+    }
+
+    pub fn is_plain(&self) -> bool {
+        self.command.is_none() && self.directory.is_none() && !self.settings
     }
 }

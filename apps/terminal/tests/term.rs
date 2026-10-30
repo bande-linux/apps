@@ -6,13 +6,18 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
-    BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, DEFAULT_FONT_SIZE, DirectoryReports,
-    GridSize, MenuCommand, MouseButton, MouseKind, Painter, SearchDirection, SelectionKind,
-    Session, TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed, encode_key,
-    is_openable, mouse_report, next_font_size, shortcut, tab_menu, terminal_menu,
+    Axis, BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, CursorStyle, DEFAULT_FONT_SIZE,
+    GridSize, HEADER_LEADING, Layout, MenuCommand, MouseButton, MouseKind, Notice, Painter,
+    Profile, Report, Reports, SETTINGS_SIZE, STRIP_HEIGHT, SavedWindow, SearchDirection,
+    SelectionKind, Session, Settings, Side, TabBar, TabBarLayout, TabTarget, Terminal,
+    TerminalContext, bracketed, claim, encode_key, is_openable, left_behind, mouse_report,
+    next_font_size, settings_view, shortcut, tab_menu, terminal_menu, window_file,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
-use unbound_toolkit::{Appearance, CpuRenderer, Point, Scheme};
+use unbound_toolkit::{
+    Appearance, CpuRenderer, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene,
+    Scheme, Shape, framed_scene,
+};
 
 const MIN_SSIM: f64 = 0.99;
 
@@ -111,8 +116,8 @@ fn super_chords_are_app_commands_whatever_the_shift_state_of_plus() {
 
 #[test]
 fn text_size_steps_through_a_ladder_and_stops_at_its_ends() {
-    assert_eq!(next_font_size(DEFAULT_FONT_SIZE, true), 12.0);
-    assert_eq!(next_font_size(DEFAULT_FONT_SIZE, false), 10.0);
+    assert_eq!(next_font_size(DEFAULT_FONT_SIZE, true), 14.0);
+    assert_eq!(next_font_size(DEFAULT_FONT_SIZE, false), 12.0);
     assert_eq!(next_font_size(8.0, false), 8.0);
     assert_eq!(next_font_size(40.0, true), 40.0);
     assert_eq!(next_font_size(12.5, true), 13.0);
@@ -203,15 +208,29 @@ fn terminal(columns: usize, lines: usize) -> Terminal {
     Terminal::new(GridSize { columns, lines })
 }
 
+fn appearance(scheme: Scheme) -> Appearance {
+    Appearance {
+        scheme,
+        ..Appearance::default()
+    }
+}
+
 fn painter(scheme: Scheme) -> Painter {
-    Painter::new(
-        Appearance {
-            scheme,
-            ..Appearance::default()
-        },
-        DEFAULT_FONT_SIZE,
-        1.0,
-    )
+    Painter::new(appearance(scheme), Profile::Datum, DEFAULT_FONT_SIZE, 1.0)
+}
+
+const SCHEMES: [(Scheme, &str); 2] = [(Scheme::Light, "light"), (Scheme::Dark, "dark")];
+
+fn shoot(name: &str, scene: &Scene) {
+    for (scale, suffix) in [(1.0, ""), (1.5, "@1.5x")] {
+        let width = (f64::from(scene.width) * scale).round() as u32;
+        let height = (f64::from(scene.height) * scale).round() as u32;
+        let mut rgba = vec![0; (width * height * 4) as usize];
+        CpuRenderer::new()
+            .render_into(scene, scale, &mut rgba)
+            .expect("render");
+        check_golden(&format!("{name}{suffix}"), (width, height), rgba);
+    }
 }
 
 #[test]
@@ -341,37 +360,77 @@ fn a_shell_runs_on_a_pty_and_reports_its_folder_and_running_program() {
     assert_eq!(session.title(None), "share — sleep");
 }
 
-#[test]
-fn folder_reports_are_found_across_reads_and_only_for_this_machine() {
-    let mut reports = DirectoryReports::new(Some("unbound".to_owned()));
-    assert_eq!(reports.scan(b"ls\r\n\x1b]7;file://unb"), None);
-    assert_eq!(
-        reports.scan(b"ound/home/me/My%20Files\x1b\\$ "),
-        Some(PathBuf::from("/home/me/My Files"))
-    );
-    assert_eq!(
-        reports.scan(b"\x1b]7;file:///tmp\x07"),
-        Some(PathBuf::from("/tmp"))
-    );
-    assert_eq!(reports.scan(b"\x1b]7;file://elsewhere/tmp\x07"), None);
-    assert_eq!(reports.scan(b"\x1b]2;file:///tmp\x07"), None);
+fn directory(reports: Vec<Report>) -> Option<PathBuf> {
+    reports.into_iter().find_map(|report| match report {
+        Report::Directory(directory) => Some(directory),
+        _ => None,
+    })
 }
 
 #[test]
-fn the_tab_bar_divides_its_width_and_keeps_room_for_close_and_new_tab() {
-    let layout = TabBarLayout::new(3, 632.0);
-    assert_eq!(layout.tabs.len(), 3);
-    assert_eq!(layout.tabs[1].x, 200.0);
+fn folder_reports_are_found_across_reads_and_only_for_this_machine() {
+    let mut reports = Reports::new(Some("unbound".to_owned()));
+    assert_eq!(directory(reports.scan(b"ls\r\n\x1b]7;file://unb")), None);
     assert_eq!(
-        layout.hit(Point::new(250.0, 14.0)),
-        Some(TabTarget::Select(1))
+        directory(reports.scan(b"ound/home/me/My%20Files\x1b\\$ ")),
+        Some(PathBuf::from("/home/me/My Files"))
     );
     assert_eq!(
-        layout.hit(Point::new(210.0, 14.0)),
+        directory(reports.scan(b"\x1b]7;file:///tmp\x07")),
+        Some(PathBuf::from("/tmp"))
+    );
+    assert_eq!(
+        directory(reports.scan(b"\x1b]7;file://elsewhere/tmp\x07")),
+        None
+    );
+    assert_eq!(directory(reports.scan(b"\x1b]2;file:///tmp\x07")), None);
+}
+
+#[test]
+fn prompt_marks_and_notifications_are_reported() {
+    let mut reports = Reports::new(None);
+    assert_eq!(
+        reports.scan(b"\x1b]133;A\x07$ make\x1b]133;C\x07building"),
+        [Report::CommandStarted]
+    );
+    assert_eq!(
+        reports.scan(b"done\x1b]133;D;2\x1b\\\x1b]777;notify;Build;All targets\x07"),
+        [
+            Report::CommandFinished(Some(2)),
+            Report::Notify {
+                title: "Build".to_owned(),
+                body: "All targets".to_owned()
+            }
+        ]
+    );
+    assert_eq!(
+        reports.scan(b"\x1b]133;D\x07"),
+        [Report::CommandFinished(None)]
+    );
+}
+
+#[test]
+fn the_tab_strip_shares_the_header_after_the_window_controls_and_keeps_room_for_new_tab() {
+    let layout = TabBarLayout::new(3, 700.0, HEADER_LEADING);
+    assert_eq!(layout.tabs.len(), 3);
+    assert_eq!(layout.tabs[0].x, HEADER_LEADING);
+    assert!(layout.tabs[2].x + layout.tabs[2].width < layout.new_tab.x);
+    let middle = layout.tabs[1];
+    let inside = Point::new(middle.x + middle.width / 2.0, STRIP_HEIGHT / 2.0);
+    assert_eq!(layout.hit(inside), Some(TabTarget::Select(1)));
+    assert_eq!(
+        layout.hit(Point::new(middle.x + 10.0, STRIP_HEIGHT / 2.0)),
         Some(TabTarget::Close(1))
     );
-    assert_eq!(layout.hit(Point::new(620.0, 14.0)), Some(TabTarget::NewTab));
-    assert_eq!(layout.hit(Point::new(250.0, 40.0)), None);
+    assert_eq!(
+        layout.hit(Point::new(layout.new_tab.x + 4.0, layout.new_tab.y + 4.0)),
+        Some(TabTarget::NewTab)
+    );
+    assert_eq!(layout.hit(Point::new(40.0, STRIP_HEIGHT / 2.0)), None);
+
+    let alone = TabBarLayout::new(1, 700.0, HEADER_LEADING);
+    assert!(alone.tabs.is_empty());
+    assert_eq!(alone.items(), [alone.new_tab]);
 }
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
@@ -404,47 +463,100 @@ selected underlined red 256 truecolor\r\n\
 
 #[test]
 fn the_terminal_matches_its_goldens_focused_and_unfocused() {
-    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
+    for (scheme, suffix) in SCHEMES {
         let mut painter = painter(scheme);
         let mut terminal = terminal(80, 8);
         terminal.feed(SESSION);
         let (width, height) = painter.metrics.content_size(terminal.size());
         let size = (width.ceil() as u32, height.ceil() as u32);
         terminal.set_focus(true);
-        let scene = painter.scene(&terminal, size.0, size.1);
-        let frame = CpuRenderer::new().render(&scene).expect("frame");
-        check_golden(&format!("term-focused-{suffix}"), size, frame.rgba);
+        shoot(
+            &format!("term-focused-{suffix}"),
+            &painter.scene(&terminal, size.0, size.1),
+        );
         terminal.set_focus(false);
-        let scene = painter.scene(&terminal, size.0, size.1);
-        let frame = CpuRenderer::new().render(&scene).expect("frame");
-        check_golden(&format!("term-unfocused-{suffix}"), size, frame.rgba);
+        shoot(
+            &format!("term-unfocused-{suffix}"),
+            &painter.scene(&terminal, size.0, size.1),
+        );
     }
 }
 
 #[test]
-fn the_tab_bar_matches_its_goldens() {
+fn every_profile_keeps_text_and_ansi_colours_legible() {
+    for profile in Profile::ALL {
+        for (scheme, _) in SCHEMES {
+            let theme = unbound_term::Theme::new(appearance(scheme), profile);
+            let contrast = unbound_design::wcag(theme.foreground, theme.background);
+            assert!(contrast >= 7.0, "{profile:?} {scheme:?}: {contrast}");
+            for index in 1..7 {
+                let color = unbound_term::ansi_colors(&theme.palette)[index];
+                let contrast = unbound_design::wcag(color, theme.background);
+                assert!(
+                    contrast >= 3.0,
+                    "{profile:?} {scheme:?} {index}: {contrast}"
+                );
+            }
+        }
+    }
+}
+
+fn window_scene(painter: &mut Painter, titles: &[String], bells: &[bool], width: f32) -> Scene {
+    let mut terminal = terminal(72, 9);
+    terminal.feed(SESSION);
+    terminal.set_focus(true);
+    let (_, height) = painter.metrics.content_size(terminal.size());
+    let sheet = Rect::new(
+        SHEET_INSET as f32,
+        STRIP_HEIGHT,
+        width - 2.0 * SHEET_INSET as f32,
+        height.ceil(),
+    );
+    let bar = TabBar {
+        titles,
+        bells,
+        active: 1,
+        hover: Some(TabTarget::Close(2)),
+        focused: true,
+        leading: HEADER_LEADING,
+    };
+    let mut items = painter.tab_bar(&bar, width);
+    items.push(Item::Clip {
+        shape: Shape::rounded(sheet, Radius::concentric(Radius::XL, SHEET_INSET as f32)),
+        items: painter.terminal(&terminal, Point::new(sheet.x, sheet.y), &Default::default()),
+    });
+    Scene {
+        width: width as u32,
+        height: (sheet.y + sheet.height + SHEET_INSET as f32) as u32,
+        background: painter.theme.background,
+        items,
+    }
+}
+
+#[test]
+fn the_window_with_tabs_in_its_header_matches_its_goldens() {
     let titles = [
         "~ — bash".to_owned(),
         "unbound — cargo build --release --workspace --all-targets".to_owned(),
         "src — vim".to_owned(),
     ];
-    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
+    let bells = [true, false, false];
+    for (scheme, suffix) in SCHEMES {
         let mut painter = painter(scheme);
-        let bar = TabBar {
-            titles: &titles,
-            active: 1,
-            hover: Some(TabTarget::Close(2)),
-            focused: true,
-        };
-        let size = (560, 28);
-        let scene = unbound_toolkit::Scene {
-            width: size.0,
-            height: size.1,
-            background: painter.theme.background,
-            items: painter.tab_bar(&bar, size.0 as f32),
-        };
-        let frame = CpuRenderer::new().render(&scene).expect("frame");
-        check_golden(&format!("term-tabs-{suffix}"), size, frame.rgba);
+        let width = 720.0;
+        let content = window_scene(&mut painter, &titles, &bells, width);
+        let layout = TabBarLayout::new(titles.len(), width, HEADER_LEADING);
+        let framed = framed_scene(
+            &content,
+            "",
+            Some(Default::default()),
+            Some(Header {
+                title_x: width,
+                items: layout.items(),
+            }),
+            &Palette::for_scheme(scheme),
+        );
+        shoot(&format!("term-window-{suffix}"), &framed);
     }
 }
 
@@ -505,7 +617,7 @@ fn the_find_bar_reports_typing_and_its_keys() {
 
 #[test]
 fn found_text_and_the_find_bar_match_their_goldens() {
-    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
+    for (scheme, suffix) in SCHEMES {
         let mut painter = painter(scheme);
         let mut terminal = terminal(60, 4);
         terminal.feed(SESSION);
@@ -515,17 +627,17 @@ fn found_text_and_the_find_bar_match_their_goldens() {
         bar.set_found(true);
         let (width, height) = painter.metrics.content_size(terminal.size());
         let size = (width.ceil() as u32, (height + BANNER_HEIGHT).ceil() as u32);
+        bar.set_area(Rect::new(0.0, 0.0, size.0 as f32, BANNER_HEIGHT));
         let highlights = terminal.highlights();
         let mut items = painter.terminal(&terminal, Point::new(0.0, BANNER_HEIGHT), &highlights);
         items.extend(bar.items(size.0, size.1));
-        let scene = unbound_toolkit::Scene {
+        let scene = Scene {
             width: size.0,
             height: size.1,
             background: painter.theme.background,
             items,
         };
-        let frame = CpuRenderer::new().render(&scene).expect("frame");
-        check_golden(&format!("term-find-{suffix}"), size, frame.rgba);
+        shoot(&format!("term-find-{suffix}"), &scene);
     }
 }
 
@@ -558,18 +670,18 @@ fn links_are_found_in_plain_text_and_in_hyperlink_escapes() {
 #[test]
 fn the_close_confirmation_answers_enter_and_escape_and_matches_its_goldens() {
     let message = "Close this tab? \u{201C}vim\u{201D} is still running in it.";
-    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
-        let palette = unbound_toolkit::Palette::for_scheme(scheme);
+    for (scheme, suffix) in SCHEMES {
+        let palette = Palette::for_scheme(scheme);
         let mut banner = Banner::confirm(palette, message, "Close");
         let size = (480, BANNER_HEIGHT as u32);
-        let scene = unbound_toolkit::Scene {
+        banner.set_area(Rect::new(0.0, 0.0, 480.0, BANNER_HEIGHT));
+        let scene = Scene {
             width: size.0,
             height: size.1,
             background: palette.sheet,
             items: banner.items(size.0, size.1),
         };
-        let frame = CpuRenderer::new().render(&scene).expect("frame");
-        check_golden(&format!("term-confirm-{suffix}"), size, frame.rgba);
+        shoot(&format!("term-confirm-{suffix}"), &scene);
 
         for key in [Key::Enter, Key::Escape] {
             banner.handle(&unbound_toolkit::ui::Event::Key {
@@ -676,4 +788,121 @@ fn closing_other_tabs_is_offered_only_when_there_are_others() {
     assert_eq!(enabled(tab_menu(Some(2), 1)), Some(false));
     assert_eq!(enabled(tab_menu(Some(2), 3)), Some(true));
     assert_eq!(enabled(tab_menu(None, 3)), None);
+}
+
+#[test]
+fn splitting_nests_panes_and_closing_one_gives_its_room_back() {
+    let area = Rect::new(0.0, 0.0, 801.0, 401.0);
+    let mut layout = Layout::Pane(1);
+    assert!(layout.split(1, Axis::SideBySide, 2));
+    assert!(layout.split(2, Axis::Stacked, 3));
+    assert!(!layout.split(9, Axis::Stacked, 4));
+    assert_eq!(layout.panes(), [1, 2, 3]);
+    let frames = layout.frames(area);
+    assert_eq!(frames[0], (1, Rect::new(0.0, 0.0, 400.0, 401.0)));
+    assert_eq!(frames[1], (2, Rect::new(401.0, 0.0, 400.0, 200.0)));
+    assert_eq!(frames[2], (3, Rect::new(401.0, 201.0, 400.0, 200.0)));
+    assert_eq!(layout.neighbour(3, true), 1);
+    assert_eq!(layout.neighbour(1, false), 3);
+
+    let dividers = layout.dividers(area);
+    assert_eq!(dividers.len(), 2);
+    let inner = &dividers[1];
+    assert_eq!(inner.path, [Side::Second]);
+    let ratio = inner.ratio_at(Point::new(600.0, 100.0));
+    layout.set_ratio(&inner.path, ratio);
+    assert_eq!(layout.frames(area)[1].1.height, 100.0);
+    assert_eq!(dividers[0].ratio_at(Point::new(-50.0, 0.0)), 0.1);
+
+    assert!(layout.remove(2));
+    assert_eq!(layout.panes(), [1, 3]);
+    assert_eq!(
+        layout.frames(area)[1],
+        (3, Rect::new(401.0, 0.0, 400.0, 401.0))
+    );
+    assert!(layout.remove(1));
+    assert_eq!(layout, Layout::Pane(3));
+    assert!(!layout.remove(3));
+}
+
+#[test]
+fn settings_keep_their_defaults_for_unknown_or_broken_values_and_round_trip() {
+    let settings = Settings::parse(
+        "profile = ink\nfont-size = 99\ncursor = bar\nflash-on-bell = false\nshape = round\nnotify-finished = maybe\n",
+    );
+    assert_eq!(settings.profile, Profile::Ink);
+    assert_eq!(settings.font_size, Settings::default().font_size);
+    assert_eq!(settings.cursor, CursorStyle::Bar);
+    assert!(!settings.flash_on_bell);
+    assert!(settings.notify_finished);
+    assert_eq!(Settings::parse(&settings.to_text()), settings);
+}
+
+#[test]
+fn windows_left_behind_are_restored_once_and_running_ones_are_left_alone() {
+    let folder = tempfile::tempdir().expect("folder");
+    let saved = SavedWindow {
+        tabs: vec![PathBuf::from("/tmp"), PathBuf::from("/usr/share")],
+        active: 1,
+    };
+    saved.save(&window_file(folder.path(), 10)).expect("save");
+    saved.save(&window_file(folder.path(), 11)).expect("save");
+    std::fs::write(folder.path().join("notes.txt"), "x").expect("write");
+    let left = left_behind(folder.path(), |pid| pid == 11);
+    assert_eq!(left, [window_file(folder.path(), 10)]);
+    let mine = window_file(folder.path(), 12);
+    assert_eq!(claim(&left[0], &mine), Some(saved));
+    assert_eq!(claim(&left[0], &mine), None);
+    assert!(left_behind(folder.path(), |pid| pid == 11 || pid == 12).is_empty());
+    assert_eq!(SavedWindow::parse("active 5\ntab relative\n"), None);
+    assert_eq!(
+        SavedWindow::parse("active 5\ntab /srv\n").map(|window| window.active),
+        Some(0)
+    );
+}
+
+#[test]
+fn a_command_that_finishes_is_reported_with_its_name() {
+    let script = "set -m; read line; sleep 0.2; read line";
+    let mut session = Session::spawn(
+        terminal(40, 5),
+        Some(Shell::new(
+            "/bin/sh".to_owned(),
+            vec!["-c".to_owned(), script.to_owned()],
+        )),
+        None,
+    )
+    .expect("session");
+    std::thread::sleep(Duration::from_millis(100));
+    session.read();
+    session.send(b"\r");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut seen = Vec::new();
+    while Instant::now() < deadline {
+        seen.extend(session.read());
+        if seen
+            .iter()
+            .any(|notice| matches!(notice, Notice::Finished { command, .. } if command == "sleep"))
+        {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    panic!("no finished command among {seen:?}");
+}
+
+#[test]
+fn the_settings_window_matches_its_goldens() {
+    for (scheme, suffix) in SCHEMES {
+        let settings = std::rc::Rc::new(std::cell::RefCell::new(Settings {
+            profile: Profile::Midnight,
+            ..Settings::default()
+        }));
+        let mut ui = settings_view(appearance(scheme), &settings);
+        let mut content = ui.scene(SETTINGS_SIZE.0, SETTINGS_SIZE.1);
+        let palette = Palette::for_scheme(scheme);
+        content.background = palette.sheet;
+        let framed = framed_scene(&content, "Terminal Settings", None, None, &palette);
+        shoot(&format!("term-settings-{suffix}"), &framed);
+    }
 }

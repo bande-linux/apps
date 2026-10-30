@@ -10,19 +10,24 @@ accesskit.workspace = true
 alacritty_terminal.workspace = true
 tracing.workspace = true
 unbound-app-menu.workspace = true
+unbound-design.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
+unbound-notify.workspace = true
 unbound-toolkit.workspace = true
+unbound-watch.workspace = true
 unbound-xdg.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 image.workspace = true
 image-compare.workspace = true
+tempfile.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-dejavu-core, fonts-inter"
+depends = "$auto, fonts-jetbrains-mono, fonts-inter, fonts-manrope"
 extended-description = """\
 The terminal of the Unbound desktop: xterm-compatible emulation with \
 10,000 lines of scrollback, Super+C and Super+V for the clipboard so \
