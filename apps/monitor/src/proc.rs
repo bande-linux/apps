@@ -7,6 +7,7 @@ const COMM_LENGTH: usize = 15;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Stat {
     pub(crate) comm: String,
+    pub(crate) state: char,
     pub(crate) ppid: u32,
     pub(crate) cpu_ticks: u64,
     pub(crate) threads: u32,
@@ -31,6 +32,7 @@ pub(crate) fn parse_stat(text: &str) -> Option<Stat> {
     let number = |index: usize| fields.get(index)?.parse::<u64>().ok();
     Some(Stat {
         comm,
+        state: fields.first()?.chars().next()?,
         ppid: u32::try_from(number(1)?).ok()?,
         cpu_ticks: number(11)? + number(12)?,
         threads: u32::try_from(number(17)?).ok()?,

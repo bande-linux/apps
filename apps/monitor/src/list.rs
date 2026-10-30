@@ -21,11 +21,12 @@ pub(crate) fn group_id(key: &GroupKey) -> String {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Signal {
     Selection(Vec<String>),
-    Activate,
+    Activate(Vec<String>),
     Sort(Sort),
     Tab(usize),
     Search(String),
     Stop,
+    Inspect,
     Choice(String),
 }
 
@@ -49,7 +50,7 @@ impl List {
         let (selection, activate, sort) = (sender(&signals), sender(&signals), sender(&signals));
         let table = table
             .on_selection(move |keys| selection(Signal::Selection(keys.to_vec())))
-            .on_activate(move |_| activate(Signal::Activate))
+            .on_activate(move |keys| activate(Signal::Activate(keys.to_vec())))
             .on_sort(move |order| sort(Signal::Sort(order)));
         let table_id = Widget::id(&table);
         let mut host = FreeLayout::new();

@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
-use unbound_toolkit::ui::{Alert, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton};
+use unbound_toolkit::ui::{
+    Alert, Button, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton,
+};
 use unbound_toolkit::{
     Color, Header, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle,
     TextSystem,
@@ -18,6 +20,9 @@ pub(crate) const QUIT: &str = "quit";
 pub(crate) const FORCE_QUIT: &str = "force-quit";
 const CANCEL: &str = "cancel";
 pub(crate) const ALERT_ICON: &str = "org.unbound.ActivityMonitor";
+pub(crate) const INSPECT_SYMBOL: &str = "dialog-information-symbolic";
+const STOP_SYMBOL: &[u8] = include_bytes!("../data/process-stop-symbolic.svg");
+const SYMBOL_PIXELS: u32 = 32;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -92,6 +97,25 @@ impl Painter<'_> {
             paint: color.into(),
         });
     }
+}
+
+pub(crate) fn symbol_button(
+    symbol: Option<Image>,
+    label: &str,
+    on_click: impl FnMut() + 'static,
+) -> Button {
+    match symbol {
+        Some(symbol) => Button::symbol(symbol, label, on_click),
+        None => Button::new(label, on_click),
+    }
+}
+
+pub(crate) fn stop_button(on_click: impl FnMut() + 'static) -> Button {
+    symbol_button(
+        Image::from_svg(STOP_SYMBOL, SYMBOL_PIXELS, SYMBOL_PIXELS),
+        &L10N.tr("stop-label"),
+        on_click,
+    )
 }
 
 fn with_icon(alert: Alert, icon: Option<Image>) -> Alert {
@@ -184,4 +208,8 @@ pub trait Screen {
     }
 
     fn set_full_screen(&mut self, _full_screen: bool) {}
+
+    fn inspects(&self, _pid: u32) -> bool {
+        false
+    }
 }

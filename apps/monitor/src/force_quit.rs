@@ -134,11 +134,11 @@ impl ForceQuitView {
             for signal in signals {
                 match signal {
                     Signal::Selection(ids) => self.select_ids(&ids),
-                    Signal::Activate | Signal::Stop => {
+                    Signal::Activate(_) | Signal::Stop => {
                         self.confirm();
                     }
                     Signal::Choice(choice) => self.chosen(&choice),
-                    Signal::Sort(_) | Signal::Tab(_) | Signal::Search(_) => {}
+                    Signal::Sort(_) | Signal::Tab(_) | Signal::Search(_) | Signal::Inspect => {}
                 }
             }
         }

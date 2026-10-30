@@ -8,7 +8,7 @@ use unbound_toolkit::ui::{
     Table, WidgetId,
 };
 use unbound_toolkit::{
-    Color, Header, Image, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
+    Color, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
     TextRole, TextStyle, TextSystem,
 };
 
@@ -18,8 +18,8 @@ use crate::menu::{MenuCommand, Selected, process_menu};
 use crate::model::{Column, Graph, HISTORY, Monitor, Row, RowKey, StopTarget, Tab};
 use crate::sampler::Snapshot;
 use crate::view::{
-    ALERT_ICON, FORCE_QUIT, Icons, Painter, QUIT, Request, Screen, answer_stop, contains,
-    is_secondary, opens_menu, stop_alert,
+    ALERT_ICON, FORCE_QUIT, INSPECT_SYMBOL, Icons, Painter, QUIT, Request, Screen, answer_stop,
+    contains, is_secondary, opens_menu, stop_alert, stop_button, symbol_button,
 };
 
 pub const TOOLBAR_HEIGHT: f32 = unbound_toolkit::HEADER_HEIGHT as f32;
@@ -28,6 +28,7 @@ const SIDE: f32 = 12.0;
 const LEADING: f32 = 94.0;
 const BUTTON_SIZE: f32 = 28.0;
 const ITEM_GAP: f32 = 16.0;
+const BUTTON_GAP: f32 = 4.0;
 const SEGMENT_WIDTH: f32 = 80.0;
 const SEARCH_WIDTH: f32 = 200.0;
 const GRAPH_WIDTH: f32 = 240.0;
@@ -35,8 +36,6 @@ const NAME_WIDTH: f32 = 160.0;
 const SUMMARY_WIDTH: f32 = 210.0;
 const SUMMARY_ROW: f32 = 22.0;
 const SUMMARY_ROWS: usize = 3;
-const STOP_SYMBOL: &[u8] = include_bytes!("../data/process-stop-symbolic.svg");
-const SYMBOL_PIXELS: u32 = 32;
 
 fn column_width(column: Column) -> f32 {
     match column {
@@ -110,6 +109,7 @@ fn table_row(
 
 struct Toolbar {
     stop: WidgetId,
+    inspect: WidgetId,
     tabs: WidgetId,
     search: WidgetId,
 }
@@ -134,19 +134,19 @@ fn tab_titles() -> Vec<String> {
 }
 
 impl MonitorView {
-    pub fn new(monitor: Monitor, palette: Palette, text: TextSystem, icons: Icons) -> Self {
+    pub fn new(monitor: Monitor, palette: Palette, text: TextSystem, mut icons: Icons) -> Self {
         let tab = monitor.tab();
         let mut table = Table::new(table_columns(tab));
         table.set_sort(table_sort(tab, monitor.sort()));
         let mut list = List::new(table, palette, text);
         let send = sender(list.signals());
-        let stop_label = L10N.tr("stop-label");
-        let stop = match Image::from_svg(STOP_SYMBOL, SYMBOL_PIXELS, SYMBOL_PIXELS) {
-            Some(symbol) => list.insert(Button::symbol(symbol, &stop_label, move || {
-                send(Signal::Stop)
-            })),
-            None => list.insert(Button::new(&stop_label, move || send(Signal::Stop))),
-        };
+        let stop = list.insert(stop_button(move || send(Signal::Stop)));
+        let send = sender(list.signals());
+        let inspect = list.insert(symbol_button(
+            icons.get(INSPECT_SYMBOL),
+            &L10N.tr("inspect-label"),
+            move || send(Signal::Inspect),
+        ));
         let send = sender(list.signals());
         let selected = Tab::ALL.iter().position(|shown| *shown == tab);
         let tabs = list.insert(SegmentedControl::new(
@@ -161,7 +161,12 @@ impl MonitorView {
             palette,
             icons,
             list,
-            toolbar: Toolbar { stop, tabs, search },
+            toolbar: Toolbar {
+                stop,
+                inspect,
+                tabs,
+                search,
+            },
             ids: HashMap::new(),
             revealed: HashSet::new(),
             size: (0.0, 0.0),
@@ -235,6 +240,11 @@ impl MonitorView {
         let stoppable = self.monitor.stop_target().is_some();
         self.list
             .update::<Button>(self.toolbar.stop, |button, _| button.set_enabled(stoppable));
+        let inspectable = self.monitor.selected_pids().len() == 1;
+        self.list
+            .update::<Button>(self.toolbar.inspect, |button, _| {
+                button.set_enabled(inspectable)
+            });
     }
 
     fn drain(&mut self) {
@@ -254,7 +264,10 @@ impl MonitorView {
     fn signal(&mut self, signal: Signal) {
         match signal {
             Signal::Selection(ids) => self.select_ids(&ids),
-            Signal::Activate => self.toggle_selected_group(),
+            Signal::Activate(_) => self.activate(),
+            Signal::Inspect => {
+                self.inspect();
+            }
             Signal::Sort(sort) => {
                 if let Some(column) = self.monitor.tab().columns().get(sort.column) {
                     self.monitor.set_sort(*column, !sort.ascending);
@@ -292,10 +305,24 @@ impl MonitorView {
         self.list.focus();
     }
 
-    fn toggle_selected_group(&mut self) {
-        let [key @ RowKey::Group(_)] = self.monitor.selection() else {
+    fn inspect(&mut self) -> bool {
+        match self.monitor.selected_pids().as_slice() {
+            [pid] => {
+                self.requests.push(Request::Inspect(*pid));
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn activate(&mut self) {
+        let [key] = self.monitor.selection() else {
             return;
         };
+        if !matches!(key, RowKey::Group(_)) {
+            self.inspect();
+            return;
+        }
         let id = row_id(key);
         if let Some(table) = self.list.table() {
             let expanded = table.is_row_expanded(&id);
@@ -330,7 +357,7 @@ impl MonitorView {
         )
     }
 
-    fn toolbar_frames(&self) -> [(WidgetId, Rect); 3] {
+    fn toolbar_frames(&self) -> [(WidgetId, Rect); 4] {
         let middle = |height: f32| ((TOOLBAR_HEIGHT - height) / 2.0).round();
         let leading = match self.full_screen {
             true => SIDE,
@@ -349,11 +376,16 @@ impl MonitorView {
             tabs_width,
             SEGMENTED_HEIGHT,
         );
-        let stop_x = (tabs.x - ITEM_GAP - BUTTON_SIZE).max(leading);
+        let inspect_x = (tabs.x - ITEM_GAP - BUTTON_SIZE).max(leading);
+        let stop_x = (inspect_x - BUTTON_GAP - BUTTON_SIZE).max(leading);
         [
             (
                 self.toolbar.stop,
                 Rect::new(stop_x, middle(BUTTON_SIZE), BUTTON_SIZE, BUTTON_SIZE),
+            ),
+            (
+                self.toolbar.inspect,
+                Rect::new(inspect_x, middle(BUTTON_SIZE), BUTTON_SIZE, BUTTON_SIZE),
             ),
             (self.toolbar.tabs, tabs),
             (self.toolbar.search, search),
@@ -419,6 +451,7 @@ impl MonitorView {
             stoppable: self.monitor.stop_target().is_some(),
             located: self.monitor.location().is_some(),
             has_pid: !self.monitor.selected_pids().is_empty(),
+            inspectable: self.monitor.selected_pids().len() == 1,
         };
         self.requests
             .push(Request::Menu(process_menu(selected), at));
@@ -514,6 +547,7 @@ impl MonitorView {
                 self.open_stop_dialog(false)
             }
             Key::Character('r' | 'R') if modifiers.logo && modifiers.shift => self.show_in_files(),
+            Key::Character('i') if modifiers.logo => self.inspect(),
             Key::Escape if !self.monitor.search().is_empty() => {
                 self.clear_search();
                 true
@@ -656,6 +690,7 @@ impl Screen for MonitorView {
             Some(MenuCommand::Quit) => self.open_stop_dialog(false),
             Some(MenuCommand::ForceQuit) => self.open_stop_dialog(true),
             Some(MenuCommand::ShowInFiles) => self.show_in_files(),
+            Some(MenuCommand::Inspect) => self.inspect(),
             Some(MenuCommand::CopyName) => {
                 let names = self.monitor.selected_names();
                 if !names.is_empty() {

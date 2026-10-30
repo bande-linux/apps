@@ -43,6 +43,7 @@ fn icons() -> Icons {
     Icons::new(|name| {
         let theme = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/icons/Unbound");
         let path = match name {
+            "dialog-information-symbolic" => theme.join(format!("symbolic/status/{name}.svg")),
             "org.unbound.Terminal"
             | "org.unbound.Files"
             | "org.unbound.Settings"
@@ -492,6 +493,7 @@ fn a_right_click_selects_the_row_and_offers_quit_turning_into_force_quit_with_al
         menu_actions(view.take_requests()),
         [
             ("quit".to_owned(), true),
+            ("inspect".to_owned(), true),
             ("show-in-files".to_owned(), true),
             ("copy-name".to_owned(), true),
             ("copy-pid".to_owned(), true),

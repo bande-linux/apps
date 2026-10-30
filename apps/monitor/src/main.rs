@@ -7,12 +7,12 @@ use accesskit::TreeUpdate;
 
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_monitor::{
-    AppList, Catalog, ForceQuitView, Icons, L10N, Monitor, MonitorView, Request, Sampler, Screen,
-    TOOLBAR_HEIGHT, app_menus,
+    AppList, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, InspectorView, L10N, Monitor,
+    MonitorView, Request, Sampler, Screen, Snapshot, TOOLBAR_HEIGHT, app_menus,
 };
 use unbound_toolkit::{
-    App, FrameRegions, Image, MenuPlacement, Role, Scene, TextSystem, Window, WindowError,
-    WindowEvent,
+    Appearance, FrameRegions, Image, MenuPlacement, Role, Scene, Surfaces, TextSystem, Window,
+    WindowError, WindowEvent,
 };
 use unbound_xdg::{
     ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon, spawn_detached,
@@ -25,34 +25,54 @@ const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
 const ICON_PIXELS: u32 = 32;
 const FILES: &str = "unbound-files";
+const PROC_ROOT: &str = "/";
 
-struct ActivityMonitor<S> {
-    screen: S,
+struct ActivityMonitor {
+    windows: Vec<Window>,
+    screens: Vec<Box<dyn Screen>>,
     sampler: Sampler,
+    snapshot: Snapshot,
     next_sample: Instant,
     app_menu: Option<AppMenu>,
+    focused: usize,
 }
 
-impl<S: Screen> ActivityMonitor<S> {
+impl ActivityMonitor {
     fn sample(&mut self) {
-        self.sampler
-            .measure_proportional_memory(self.screen.measures_proportional_memory());
+        let proportional = self
+            .screens
+            .iter()
+            .any(|screen| screen.measures_proportional_memory());
+        self.sampler.measure_proportional_memory(proportional);
         match self.sampler.sample() {
-            Ok(snapshot) => self.screen.update(snapshot),
+            Ok(snapshot) => {
+                for screen in &mut self.screens {
+                    screen.update(snapshot.clone());
+                }
+                self.snapshot = snapshot;
+            }
             Err(error) => tracing::warn!("cannot sample: {error}"),
+        }
+        for window in &mut self.windows {
+            window.request_redraw();
         }
     }
 
-    fn menu_action(&mut self, window: &mut Window, action: &str) {
+    fn menu_action(&mut self, index: usize, action: &str) {
+        let window = &mut self.windows[index];
         let result = match Standard::parse(action) {
             Some(Standard::Hide | Standard::Minimize) => window.minimize(),
             Some(Standard::Zoom) => window.toggle_zoom(),
-            Some(Standard::Quit | Standard::CloseWindow) => {
-                window.close();
+            Some(Standard::Quit) => {
+                self.windows[0].close();
                 Ok(())
             }
+            Some(Standard::CloseWindow) => {
+                self.close(index);
+                return;
+            }
             None => {
-                if self.screen.menu_action(action) {
+                if self.screens[index].menu_action(action) {
                     window.request_redraw();
                 }
                 Ok(())
@@ -61,16 +81,59 @@ impl<S: Screen> ActivityMonitor<S> {
         if let Err(error) = result {
             tracing::warn!("cannot {action}: {error}");
         }
-        self.serve(window);
+        self.serve(index);
     }
 
-    fn serve(&mut self, window: &mut Window) {
-        for request in self.screen.take_requests() {
+    fn close(&mut self, index: usize) {
+        if index == 0 {
+            self.windows[0].close();
+            return;
+        }
+        self.windows.remove(index);
+        self.screens.remove(index);
+        self.focused = 0;
+    }
+
+    fn inspect(&mut self, pid: u32) {
+        if let Some(index) = self.screens.iter().position(|screen| screen.inspects(pid)) {
+            self.windows[index].request_redraw();
+            return;
+        }
+        let Some(process) = self
+            .snapshot
+            .processes
+            .iter()
+            .find(|process| process.pid == pid)
+        else {
+            return;
+        };
+        let palette = self.windows[0].appearance().palette();
+        let mut screen = InspectorView::new(
+            process,
+            Path::new(PROC_ROOT),
+            rustix::param::clock_ticks_per_second(),
+            palette,
+            TextSystem::new(),
+            icons(),
+        );
+        screen.update(self.snapshot.clone());
+        let role = Role::toplevel(&screen.title(), APP_ID);
+        match self.windows[0].open_beside(role, INSPECTOR_SIZE) {
+            Ok(window) => {
+                self.windows.push(window);
+                self.screens.push(Box::new(screen));
+            }
+            Err(error) => tracing::warn!("cannot open the inspector: {error}"),
+        }
+    }
+
+    fn serve(&mut self, index: usize) {
+        for request in self.screens[index].take_requests() {
+            let window = &mut self.windows[index];
             match request {
                 Request::Resample => {
                     self.sample();
                     self.next_sample = Instant::now() + INTERVAL;
-                    window.request_redraw();
                 }
                 Request::ShowInFiles(path) => show_in_files(window, &path),
                 Request::Copy(text) => window.copy(&text),
@@ -84,13 +147,28 @@ impl<S: Screen> ActivityMonitor<S> {
                         tracing::warn!("cannot show the emoji picker: {error}");
                     }
                 }
-                Request::Inspect(_) => {}
+                Request::Inspect(pid) => self.inspect(pid),
                 Request::Menu(menu, at) => {
                     if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
                         tracing::warn!("cannot show the menu: {error}");
                     }
                 }
             }
+        }
+        if index > 0
+            && self
+                .screens
+                .get(index)
+                .is_some_and(|screen| screen.finished())
+        {
+            self.close(index);
+        }
+    }
+
+    fn appearance(&mut self, appearance: Appearance) {
+        for (window, screen) in self.windows.iter_mut().zip(&mut self.screens) {
+            screen.set_palette(appearance.palette());
+            window.request_redraw();
         }
     }
 }
@@ -106,11 +184,21 @@ fn show_in_files(window: &mut Window, path: &Path) {
     }
 }
 
-impl<S: Screen> App for ActivityMonitor<S> {
-    fn scene(&mut self, window: &mut Window) -> Scene {
+impl Surfaces for ActivityMonitor {
+    fn windows(&self) -> &[Window] {
+        &self.windows
+    }
+
+    fn windows_mut(&mut self) -> &mut [Window] {
+        &mut self.windows
+    }
+
+    fn scene(&mut self, index: usize) -> Scene {
+        let window = &mut self.windows[index];
+        let screen = &mut self.screens[index];
         let full_screen = window.header_height() == 0;
-        self.screen.set_full_screen(full_screen);
-        if let Some(header) = self.screen.header() {
+        screen.set_full_screen(full_screen);
+        if let Some(header) = screen.header() {
             window.set_frame_regions(FrameRegions {
                 sidebar: 0.0,
                 toolbar: if full_screen { TOOLBAR_HEIGHT } else { 0.0 },
@@ -118,45 +206,52 @@ impl<S: Screen> App for ActivityMonitor<S> {
             window.set_header(header);
         }
         let (width, height) = window.size();
-        self.screen.scene(width, height)
+        screen.scene(width, height)
     }
 
-    fn event(&mut self, window: &mut Window, event: WindowEvent) {
+    fn event(&mut self, index: usize, event: WindowEvent) {
+        if index >= self.screens.len() {
+            return;
+        }
         match event {
-            WindowEvent::AppearanceChanged(appearance) => {
-                self.screen.set_palette(appearance.palette());
-            }
+            WindowEvent::AppearanceChanged(appearance) => self.appearance(appearance),
+            WindowEvent::CloseRequested => self.close(index),
+            WindowEvent::QuitRequested => self.windows[0].close(),
             WindowEvent::Focus(focused) => {
-                self.screen.set_focused(focused);
-                if focused && let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
-                    tracing::warn!("{error}");
+                self.screens[index].set_focused(focused);
+                if focused {
+                    self.focused = index;
+                    if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
+                        tracing::warn!("{error}");
+                    }
                 }
-                window.request_redraw();
+                self.windows[index].request_redraw();
             }
             WindowEvent::Input(input) => {
-                if self.screen.handle(&input) {
-                    window.request_redraw();
+                if self.screens[index].handle(&input) {
+                    self.windows[index].request_redraw();
                 }
-                window.set_cursor(self.screen.cursor());
-                self.serve(window);
+                let cursor = self.screens[index].cursor();
+                self.windows[index].set_cursor(cursor);
+                self.serve(index);
             }
             WindowEvent::Accessibility(request) => {
-                if self.screen.perform(&request) {
-                    window.request_redraw();
+                if self.screens[index].perform(&request) {
+                    self.windows[index].request_redraw();
                 }
-                self.serve(window);
+                self.serve(index);
             }
-            WindowEvent::MenuAction(action) => self.menu_action(window, &action),
+            WindowEvent::MenuAction(action) => self.menu_action(index, &action),
             WindowEvent::MenuClosed => {
-                if self.screen.menu_closed() {
-                    window.request_redraw();
+                if self.screens[index].menu_closed() {
+                    self.windows[index].request_redraw();
                 }
             }
             WindowEvent::Pasted(text) => {
-                if self.screen.pasted(&text) {
-                    window.request_redraw();
+                if self.screens[index].pasted(&text) {
+                    self.windows[index].request_redraw();
                 }
-                self.serve(window);
+                self.serve(index);
             }
             WindowEvent::AppResponding {
                 pid,
@@ -164,12 +259,15 @@ impl<S: Screen> App for ActivityMonitor<S> {
                 responding,
             } => {
                 let changed = u32::try_from(pid)
-                    .is_ok_and(|pid| self.screen.set_responding(pid, &app_id, responding));
+                    .is_ok_and(|pid| self.screens[0].set_responding(pid, &app_id, responding));
                 if changed {
-                    window.request_redraw();
+                    self.windows[0].request_redraw();
                 }
             }
             _ => {}
+        }
+        if index == 0 && self.screens[0].finished() {
+            self.windows[0].close();
         }
     }
 
@@ -177,43 +275,44 @@ impl<S: Screen> App for ActivityMonitor<S> {
         self.app_menu.iter().map(AppMenu::fd).collect()
     }
 
-    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+    fn source_ready(&mut self, _index: usize) {
         let actions = self
             .app_menu
             .as_mut()
             .map(AppMenu::take_actions)
             .unwrap_or_default();
         for action in actions {
-            self.menu_action(window, &action);
+            let focused = self.focused.min(self.windows.len() - 1);
+            self.menu_action(focused, &action);
         }
     }
 
     fn deadline(&self) -> Option<Instant> {
-        Some(
-            self.screen
-                .deadline()
-                .map_or(self.next_sample, |deadline| deadline.min(self.next_sample)),
-        )
+        self.screens
+            .iter()
+            .filter_map(|screen| screen.deadline())
+            .chain([self.next_sample])
+            .min()
     }
 
-    fn tick(&mut self, window: &mut Window, now: Instant) {
+    fn tick(&mut self, now: Instant) {
         if now >= self.next_sample {
             self.sample();
             self.next_sample = now + INTERVAL;
         }
-        window.request_redraw();
+        for window in &mut self.windows {
+            window.request_redraw();
+        }
     }
 
-    fn finished(&self) -> bool {
-        self.screen.finished()
+    fn animating(&self, index: usize) -> bool {
+        self.screens
+            .get(index)
+            .is_some_and(|screen| screen.animating())
     }
 
-    fn animating(&self) -> bool {
-        self.screen.animating()
-    }
-
-    fn accessibility(&self) -> Option<TreeUpdate> {
-        self.screen.accessibility()
+    fn accessibility(&self, index: usize) -> Option<TreeUpdate> {
+        self.screens.get(index)?.accessibility()
     }
 }
 
@@ -226,21 +325,24 @@ fn icons() -> Icons {
 }
 
 fn open(
-    mut screen: impl Screen,
+    mut screen: impl Screen + 'static,
     title: &str,
     size: (u32, u32),
     app_menu: Option<AppMenu>,
 ) -> Result<(), WindowError> {
-    let mut window = Window::open(Role::toplevel(title, APP_ID), size)?;
+    let window = Window::open(Role::toplevel(title, APP_ID), size)?;
     screen.set_palette(window.appearance().palette());
     let mut app = ActivityMonitor {
-        screen,
+        windows: vec![window],
+        screens: vec![Box::new(screen)],
         sampler: Sampler::live(),
+        snapshot: Snapshot::default(),
         next_sample: Instant::now() + FIRST_INTERVAL,
         app_menu,
+        focused: 0,
     };
     app.sample();
-    unbound_toolkit::run(&mut window, &mut app)
+    unbound_toolkit::run_surfaces(&mut app)
 }
 
 fn run() -> Result<(), WindowError> {
@@ -249,7 +351,7 @@ fn run() -> Result<(), WindowError> {
         Locale::from_env().as_ref(),
         &current_desktops(),
     ));
-    let palette = unbound_toolkit::Appearance::default().palette();
+    let palette = Appearance::default().palette();
     if std::env::args().any(|argument| argument == "--force-quit") {
         let apps = AppList::new(catalog, rustix::process::getuid().as_raw());
         let screen = ForceQuitView::new(apps, palette, TextSystem::new(), icons());

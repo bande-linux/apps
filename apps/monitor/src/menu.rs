@@ -9,16 +9,18 @@ pub enum MenuCommand {
     Quit,
     ForceQuit,
     ShowInFiles,
+    Inspect,
     CopyName,
     CopyPid,
     Find,
     Show(Tab),
 }
 
-const ACTIONS: [(MenuCommand, &str); 10] = [
+const ACTIONS: [(MenuCommand, &str); 11] = [
     (MenuCommand::Quit, "quit"),
     (MenuCommand::ForceQuit, "force-quit"),
     (MenuCommand::ShowInFiles, "show-in-files"),
+    (MenuCommand::Inspect, "inspect"),
     (MenuCommand::CopyName, "copy-name"),
     (MenuCommand::CopyPid, "copy-pid"),
     (MenuCommand::Find, "find"),
@@ -53,6 +55,7 @@ pub struct Selected {
     pub stoppable: bool,
     pub located: bool,
     pub has_pid: bool,
+    pub inspectable: bool,
 }
 
 pub fn process_menu(selected: Selected) -> Menu {
@@ -63,6 +66,9 @@ pub fn process_menu(selected: Selected) -> Menu {
             .enabled(selected.stoppable)
             .alternate(force_quit),
         MenuItem::separator(),
+        item("menu-inspect", MenuCommand::Inspect)
+            .shortcut("Super+I")
+            .enabled(selected.inspectable),
         item("menu-show-in-files", MenuCommand::ShowInFiles)
             .shortcut("Shift+Super+R")
             .enabled(selected.located),
@@ -97,6 +103,7 @@ pub fn app_menus() -> Vec<Entry> {
         Entry::separator(),
         entry("menu-quit-process", MenuCommand::Quit).shortcut("Alt+Super+Q"),
         entry("menu-force-quit-process", MenuCommand::ForceQuit),
+        entry("menu-inspect", MenuCommand::Inspect).shortcut("Super+I"),
         Entry::separator(),
         entry("menu-show-in-files", MenuCommand::ShowInFiles).shortcut("Shift+Super+R"),
     ]);
