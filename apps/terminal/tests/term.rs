@@ -601,7 +601,11 @@ fn find_starts_at_the_newest_match_and_steps_through_the_scrollback() {
 
 #[test]
 fn the_find_bar_reports_typing_and_its_keys() {
-    let mut bar = Banner::find(unbound_toolkit::Palette::for_scheme(Scheme::Light), "old");
+    let mut bar = Banner::find(
+        unbound_toolkit::Palette::for_scheme(Scheme::Light),
+        unbound_toolkit::TextSystem::new(),
+        "old",
+    );
     bar.handle(&unbound_toolkit::ui::Event::Key {
         key: Key::Character('n'),
         modifiers: plain(),
@@ -638,7 +642,11 @@ fn found_text_and_the_find_bar_match_their_goldens() {
         terminal.feed(SESSION);
         terminal.set_focus(false);
         assert!(terminal.find("unbound"));
-        let mut bar = Banner::find(unbound_toolkit::Palette::for_scheme(scheme), "unbound");
+        let mut bar = Banner::find(
+            unbound_toolkit::Palette::for_scheme(scheme),
+            unbound_toolkit::TextSystem::new(),
+            "unbound",
+        );
         bar.set_found(true);
         let (width, height) = painter.metrics.content_size(terminal.size());
         let size = (width.ceil() as u32, (height + BANNER_HEIGHT).ceil() as u32);
@@ -687,7 +695,12 @@ fn the_close_confirmation_answers_enter_and_escape_and_matches_its_goldens() {
     let message = "Close this tab? \u{201C}vim\u{201D} is still running in it.";
     for (scheme, suffix) in SCHEMES {
         let palette = Palette::for_scheme(scheme);
-        let mut banner = Banner::confirm(palette, message, "Close");
+        let mut banner = Banner::confirm(
+            palette,
+            unbound_toolkit::TextSystem::new(),
+            message,
+            "Close",
+        );
         let size = (480, BANNER_HEIGHT as u32);
         banner.set_area(Rect::new(0.0, 0.0, 480.0, BANNER_HEIGHT));
         let scene = Scene {
