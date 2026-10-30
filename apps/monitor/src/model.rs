@@ -766,7 +766,7 @@ impl Monitor {
     }
 
     pub fn measures_proportional_memory(&self) -> bool {
-        self.tab == Tab::Memory
+        self.columns().contains(&Column::Memory)
     }
 
     pub fn measures_gpu(&self) -> bool {
