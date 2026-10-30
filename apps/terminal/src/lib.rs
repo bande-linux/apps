@@ -17,7 +17,7 @@ pub use keys::{
     Command, MouseButton, MouseKind, bracketed, encode_key, mouse_report, next_font_size,
     reports_mouse, shortcut, wants_scroll_as_arrows,
 };
-pub use menu::{MenuCommand, TerminalContext, command_entry, tab_menu, terminal_menu};
+pub use menu::{MenuCommand, TerminalContext, app_menus, tab_menu, terminal_menu};
 pub use process::DirectoryReports;
 pub use render::{DEFAULT_FONT_SIZE, Metrics, PADDING, Painter, TabBar};
 pub use session::{Notice, Session, display_directory};

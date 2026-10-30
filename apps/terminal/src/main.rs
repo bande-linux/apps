@@ -3,7 +3,10 @@ mod app;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use unbound_term::{COLUMNS, DEFAULT_FONT_SIZE, GridSize, L10N, Painter, ROWS, Session, Terminal};
+use unbound_app_menu::AppMenu;
+use unbound_term::{
+    COLUMNS, DEFAULT_FONT_SIZE, GridSize, L10N, Painter, ROWS, Session, Terminal, app_menus,
+};
 use unbound_toolkit::{Role, Window, WindowError};
 
 use crate::app::{APP_ID, Arguments, TerminalApp};
@@ -25,7 +28,10 @@ fn run() -> Result<(), WindowError> {
     let mut terminal = Terminal::new(grid);
     terminal.resize(grid, painter.metrics.pixel_cell_size());
     let session = Session::spawn(terminal, arguments.command, directory)?;
-    let mut app = TerminalApp::new(&window, painter, session, home);
+    let app_menu = AppMenu::export(APP_ID, app_menus())
+        .inspect_err(|error| tracing::warn!("{error}"))
+        .ok();
+    let mut app = TerminalApp::new(&window, painter, session, home, app_menu);
     unbound_toolkit::run(&mut window, &mut app)
 }
 

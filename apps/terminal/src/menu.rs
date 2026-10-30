@@ -1,3 +1,4 @@
+use unbound_app_menu::{Entry, Standard, app_submenu, window_submenu};
 use unbound_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
@@ -110,7 +111,7 @@ impl MenuCommand {
     }
 }
 
-pub fn command_entry(command: Command) -> Option<(String, String, &'static str)> {
+fn command_entry(command: Command) -> Option<(String, String, &'static str)> {
     COMMANDS
         .iter()
         .find(|(known, ..)| *known == command)
@@ -170,4 +171,59 @@ pub fn tab_menu(tab: Option<u32>, tabs: usize) -> Menu {
         ]);
     }
     Menu::new(items)
+}
+
+fn command_entries(commands: &[Option<Command>]) -> Vec<Entry> {
+    commands
+        .iter()
+        .map(|command| {
+            command
+                .and_then(command_entry)
+                .map_or_else(Entry::separator, |(title, action, shortcut)| {
+                    Entry::item(&title, &action).shortcut(shortcut)
+                })
+        })
+        .collect()
+}
+
+pub fn app_menus() -> Vec<Entry> {
+    let mut shell = command_entries(&[Some(Command::NewWindow), Some(Command::NewTab), None]);
+    shell.extend([
+        Entry::item(
+            &L10N.tr("menu-show-in-files"),
+            &MenuCommand::ShowInFiles.action(),
+        ),
+        Entry::separator(),
+        Entry::item(&L10N.tr("menu-close-tab"), Standard::CloseWindow.action()).shortcut("Super+W"),
+    ]);
+    vec![
+        app_submenu(&L10N.tr("title"), Vec::new()),
+        Entry::submenu(&L10N.tr("menu-shell"), shell),
+        Entry::submenu(
+            &L10N.tr("menu-edit"),
+            command_entries(&[
+                Some(Command::Copy),
+                Some(Command::Paste),
+                Some(Command::SelectAll),
+                None,
+                Some(Command::ClearScrollback),
+                None,
+                Some(Command::Find),
+                Some(Command::FindNext),
+                Some(Command::FindPrevious),
+            ]),
+        ),
+        Entry::submenu(
+            &L10N.tr("menu-view"),
+            command_entries(&[
+                Some(Command::BiggerText),
+                Some(Command::SmallerText),
+                Some(Command::DefaultTextSize),
+            ]),
+        ),
+        window_submenu(command_entries(&[
+            Some(Command::NextTab),
+            Some(Command::PreviousTab),
+        ])),
+    ]
 }

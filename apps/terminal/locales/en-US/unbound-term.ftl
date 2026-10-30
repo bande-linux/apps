@@ -7,6 +7,7 @@ find-done = Done
 find-not-found = Not found
 cancel = Cancel
 close = Close
+quit = Quit
 confirm-close-tab = Close this tab? { $program } is still running in it.
 menu-copy = Copy
 menu-paste = Paste
@@ -30,4 +31,11 @@ menu-close-other-tabs = Close Other Tabs
 confirm-close-other-tabs = Close the other tabs? { $count ->
     [one] A program is still running in one of them.
    *[other] Programs are still running in { $count } of them.
+}
+menu-shell = Shell
+menu-edit = Edit
+menu-view = View
+confirm-quit = Quit Terminal? { $count ->
+    [one] A program is still running in one tab.
+   *[other] Programs are still running in { $count } tabs.
 }
