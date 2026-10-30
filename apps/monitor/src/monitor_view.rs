@@ -8,7 +8,7 @@ use unbound_toolkit::ui::{
     Table, WidgetId,
 };
 use unbound_toolkit::{
-    Color, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
+    Color, Header, Image, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
     TextRole, TextStyle, TextSystem,
 };
 
@@ -18,8 +18,8 @@ use crate::menu::{MenuCommand, Selected, process_menu};
 use crate::model::{Column, Graph, HISTORY, Monitor, Row, RowKey, StopTarget, Tab};
 use crate::sampler::Snapshot;
 use crate::view::{
-    ALERT_ICON, Icons, Painter, Request, Screen, answer_stop, contains, is_secondary, opens_menu,
-    stop_alert,
+    ALERT_ICON, FORCE_QUIT, Icons, Painter, QUIT, Request, Screen, answer_stop, contains,
+    is_secondary, opens_menu, stop_alert,
 };
 
 pub const TOOLBAR_HEIGHT: f32 = unbound_toolkit::HEADER_HEIGHT as f32;
@@ -27,7 +27,6 @@ pub const FOOTER_HEIGHT: f32 = 112.0;
 const SIDE: f32 = 12.0;
 const LEADING: f32 = 94.0;
 const BUTTON_SIZE: f32 = 28.0;
-const TITLE_GAP: f32 = 12.0;
 const ITEM_GAP: f32 = 16.0;
 const SEGMENT_WIDTH: f32 = 80.0;
 const SEARCH_WIDTH: f32 = 200.0;
@@ -36,14 +35,15 @@ const NAME_WIDTH: f32 = 160.0;
 const SUMMARY_WIDTH: f32 = 210.0;
 const SUMMARY_ROW: f32 = 22.0;
 const SUMMARY_ROWS: usize = 3;
-const STOP_SYMBOL: &str = "window-close-symbolic";
+const STOP_SYMBOL: &[u8] = include_bytes!("../data/process-stop-symbolic.svg");
+const SYMBOL_PIXELS: u32 = 32;
 
 fn column_width(column: Column) -> f32 {
     match column {
         Column::Name => NAME_WIDTH,
         Column::Cpu => 72.0,
         Column::Pid => 64.0,
-        Column::Threads => 68.0,
+        Column::Threads => 84.0,
         Column::CpuTime => 84.0,
         Column::User => 96.0,
         _ => 108.0,
@@ -134,14 +134,14 @@ fn tab_titles() -> Vec<String> {
 }
 
 impl MonitorView {
-    pub fn new(monitor: Monitor, palette: Palette, text: TextSystem, mut icons: Icons) -> Self {
+    pub fn new(monitor: Monitor, palette: Palette, text: TextSystem, icons: Icons) -> Self {
         let tab = monitor.tab();
         let mut table = Table::new(table_columns(tab));
         table.set_sort(table_sort(tab, monitor.sort()));
         let mut list = List::new(table, palette, text);
         let send = sender(list.signals());
         let stop_label = L10N.tr("stop-label");
-        let stop = match icons.get(STOP_SYMBOL) {
+        let stop = match Image::from_svg(STOP_SYMBOL, SYMBOL_PIXELS, SYMBOL_PIXELS) {
             Some(symbol) => list.insert(Button::symbol(symbol, &stop_label, move || {
                 send(Signal::Stop)
             })),
@@ -232,6 +232,9 @@ impl MonitorView {
             .filter_map(|id| self.ids.get(id).cloned())
             .collect();
         self.monitor.set_selection(keys);
+        let stoppable = self.monitor.stop_target().is_some();
+        self.list
+            .update::<Button>(self.toolbar.stop, |button, _| button.set_enabled(stoppable));
     }
 
     fn drain(&mut self) {
@@ -280,7 +283,7 @@ impl MonitorView {
         let denied = answer_stop(&target, choice, icon, move |choice| {
             send(Signal::Choice(choice.to_owned()))
         });
-        if denied.is_none() && self.monitor.stop_target().is_some() {
+        if matches!(choice, QUIT | FORCE_QUIT) {
             self.requests.push(Request::Resample);
         }
         if let Some(alert) = denied {
@@ -340,20 +343,19 @@ impl MonitorView {
             TEXT_FIELD_HEIGHT,
         );
         let tabs_width = SEGMENT_WIDTH * Tab::ALL.len() as f32;
+        let tabs = Rect::new(
+            search.x - ITEM_GAP - tabs_width,
+            middle(SEGMENTED_HEIGHT),
+            tabs_width,
+            SEGMENTED_HEIGHT,
+        );
+        let stop_x = (tabs.x - ITEM_GAP - BUTTON_SIZE).max(leading);
         [
             (
                 self.toolbar.stop,
-                Rect::new(leading, middle(BUTTON_SIZE), BUTTON_SIZE, BUTTON_SIZE),
+                Rect::new(stop_x, middle(BUTTON_SIZE), BUTTON_SIZE, BUTTON_SIZE),
             ),
-            (
-                self.toolbar.tabs,
-                Rect::new(
-                    search.x - ITEM_GAP - tabs_width,
-                    middle(SEGMENTED_HEIGHT),
-                    tabs_width,
-                    SEGMENTED_HEIGHT,
-                ),
-            ),
+            (self.toolbar.tabs, tabs),
             (self.toolbar.search, search),
         ]
     }
@@ -367,7 +369,10 @@ impl MonitorView {
 
     fn set_tab(&mut self, tab: Tab) {
         if let Some(index) = Tab::ALL.iter().position(|shown| *shown == tab) {
-            self.list.click_part(self.toolbar.tabs, index);
+            self.list
+                .update::<SegmentedControl>(self.toolbar.tabs, |control, cx| {
+                    control.set_selected(cx, index)
+                });
         }
         if tab == self.monitor.tab() {
             return;
@@ -536,88 +541,82 @@ impl MonitorView {
         self.drain();
         handled
     }
+}
 
-    fn paint_graph(&self, painter: &mut Painter, frame: Rect) {
-        let palette = self.palette;
-        painter.fill(Shape::rounded(frame, Radius::S), palette.well);
-        let inner = frame.inset(6.0);
-        let bar = inner.width / HISTORY as f32;
-        let bars =
-            |painter: &mut Painter, values: &[f32], color: Color, baseline: f32, reach: f32| {
-                let start = inner.x + inner.width - values.len() as f32 * bar;
-                for (index, value) in values.iter().enumerate() {
-                    let height = value.clamp(0.0, 1.0) * reach;
-                    if height.abs() < 0.5 {
-                        continue;
-                    }
-                    painter.fill(
-                        Shape::rect(Rect::new(
-                            start + index as f32 * bar,
-                            baseline.min(baseline - height),
-                            (bar - 1.0).max(1.0),
-                            height.abs(),
-                        )),
-                        color,
-                    );
-                }
-            };
-        let bottom = inner.y + inner.height;
-        match self.monitor.graph() {
-            Graph::Stacked { lower, upper } => {
-                bars(painter, &upper, palette.accent, bottom, inner.height);
-                bars(painter, &lower, palette.danger, bottom, inner.height);
+fn paint_graph(monitor: &Monitor, palette: Palette, painter: &mut Painter, frame: Rect) {
+    painter.fill(Shape::rounded(frame, Radius::S), palette.well);
+    let inner = frame.inset(6.0);
+    let bar = inner.width / HISTORY as f32;
+    let bars = |painter: &mut Painter, values: &[f32], color: Color, baseline: f32, reach: f32| {
+        let start = inner.x + inner.width - values.len() as f32 * bar;
+        for (index, value) in values.iter().enumerate() {
+            let height = value.clamp(0.0, 1.0) * reach;
+            if height.abs() < 0.5 {
+                continue;
             }
-            Graph::Filled(values) => bars(painter, &values, palette.accent, bottom, inner.height),
-            Graph::Mirrored { up, down } => {
-                let middle = (inner.y + inner.height / 2.0).round();
-                bars(painter, &up, palette.accent, middle, inner.height / 2.0);
-                bars(painter, &down, palette.danger, middle, -inner.height / 2.0);
-                painter.fill(
-                    Shape::rect(Rect::new(inner.x, middle, inner.width, 1.0)),
-                    palette.hairline,
-                );
-            }
+            painter.fill(
+                Shape::rect(Rect::new(
+                    start + index as f32 * bar,
+                    baseline.min(baseline - height),
+                    (bar - 1.0).max(1.0),
+                    height.abs(),
+                )),
+                color,
+            );
+        }
+    };
+    let bottom = inner.y + inner.height;
+    match monitor.graph() {
+        Graph::Stacked { lower, upper } => {
+            bars(painter, &upper, palette.accent, bottom, inner.height);
+            bars(painter, &lower, palette.danger, bottom, inner.height);
+        }
+        Graph::Filled(values) => bars(painter, &values, palette.accent, bottom, inner.height),
+        Graph::Mirrored { up, down } => {
+            let middle = (inner.y + inner.height / 2.0).round();
+            bars(painter, &up, palette.accent, middle, inner.height / 2.0);
+            bars(painter, &down, palette.danger, middle, -inner.height / 2.0);
+            painter.fill(
+                Shape::rect(Rect::new(inner.x, middle, inner.width, 1.0)),
+                palette.hairline,
+            );
         }
     }
+}
 
-    fn paint_footer(&self, painter: &mut Painter) {
-        let palette = self.palette;
-        let sheet = self.sheet();
-        let top = sheet.y + sheet.height - FOOTER_HEIGHT;
-        painter.fill(
-            Shape::rect(Rect::new(sheet.x, top, sheet.width, 1.0)),
-            palette.hairline,
+fn paint_footer(monitor: &Monitor, palette: Palette, sheet: Rect, painter: &mut Painter) {
+    let top = sheet.y + sheet.height - FOOTER_HEIGHT;
+    painter.fill(
+        Shape::rect(Rect::new(sheet.x, top, sheet.width, 1.0)),
+        palette.hairline,
+    );
+    for (index, (label, value)) in monitor.summary().iter().enumerate() {
+        let x = sheet.x + SIDE + (index / SUMMARY_ROWS) as f32 * (SUMMARY_WIDTH + 2.0 * SIDE);
+        let y = top + 16.0 + (index % SUMMARY_ROWS) as f32 * SUMMARY_ROW;
+        let row = Rect::new(x, y, SUMMARY_WIDTH, SUMMARY_ROW);
+        painter.text_in(
+            label,
+            TextStyle::role(TextRole::Callout, palette.ink2),
+            row,
+            TextAlign::Start,
         );
-        for (index, (label, value)) in self.monitor.summary().iter().enumerate() {
-            let x = sheet.x
-                + SIDE
-                + (index / SUMMARY_ROWS) as f32 * (SUMMARY_WIDTH + 2.0 * SIDE);
-            let y = top + 16.0 + (index % SUMMARY_ROWS) as f32 * SUMMARY_ROW;
-            let row = Rect::new(x, y, SUMMARY_WIDTH, SUMMARY_ROW);
-            painter.text_in(
-                label,
-                TextStyle::role(TextRole::Callout, palette.ink2),
-                row,
-                TextAlign::Start,
-            );
-            painter.text_in(
-                value,
-                TextStyle::role(TextRole::Callout, palette.ink)
-                    .weight(TextStyle::MEDIUM)
-                    .tabular(),
-                row,
-                TextAlign::End,
-            );
-        }
-        let graph = Rect::new(
-            sheet.x + sheet.width - SIDE - GRAPH_WIDTH,
-            top + SIDE,
-            GRAPH_WIDTH,
-            FOOTER_HEIGHT - 2.0 * SIDE,
+        painter.text_in(
+            value,
+            TextStyle::role(TextRole::Callout, palette.ink)
+                .weight(TextStyle::MEDIUM)
+                .tabular(),
+            row,
+            TextAlign::End,
         );
-        if graph.x > sheet.x + SIDE + 2.0 * (SUMMARY_WIDTH + 2.0 * SIDE) {
-            self.paint_graph(painter, graph);
-        }
+    }
+    let graph = Rect::new(
+        sheet.x + sheet.width - SIDE - GRAPH_WIDTH,
+        top + SIDE,
+        GRAPH_WIDTH,
+        FOOTER_HEIGHT - 2.0 * SIDE,
+    );
+    if graph.x > sheet.x + SIDE + 2.0 * (SUMMARY_WIDTH + 2.0 * SIDE) {
+        paint_graph(monitor, palette, painter, graph);
     }
 }
 
@@ -707,19 +706,16 @@ impl Screen for MonitorView {
         self.layout();
         let (controls, dialog) = self.list.paint(width, height);
         let sheet = self.sheet();
+        let radius = Radius::concentric(Radius::XL, self.inset());
+        let (monitor, palette) = (&self.monitor, self.palette);
         let mut painter = Painter {
             text: self.list.text(),
             items: Vec::new(),
         };
-        let view = &*self;
-        let mut footer = Painter {
-            text: painter.text,
-            items: Vec::new(),
-        };
-        view.paint_footer(&mut footer);
+        paint_footer(monitor, palette, sheet, &mut painter);
         painter.items = vec![Item::Clip {
-            shape: Shape::rounded(sheet, Radius::concentric(Radius::XL, view.inset())),
-            items: footer.items,
+            shape: Shape::rounded(sheet, radius),
+            items: std::mem::take(&mut painter.items),
         }];
         painter.items.extend(controls);
         painter.items.extend(dialog);
@@ -781,7 +777,7 @@ impl Screen for MonitorView {
             .map(|(_, frame)| frame)
             .collect();
         Some(Header {
-            title_x: LEADING + BUTTON_SIZE + TITLE_GAP,
+            title_x: LEADING,
             items,
         })
     }

@@ -22,7 +22,7 @@ pub use force_quit::ForceQuitView;
 pub use format::{format_bytes, format_cpu_time, format_rate};
 pub use menu::{MenuCommand, Selected, app_menus, force_quit_menu, process_menu};
 pub use model::{AppList, AppRow, Column, Graph, Monitor, Row, RowKey, StopTarget, Tab};
-pub use monitor_view::MonitorView;
+pub use monitor_view::{MonitorView, TOOLBAR_HEIGHT};
 pub use sampler::{Identity, Interface, Process, Rates, Sampler, Snapshot};
 pub use signal::{SignalError, Stop, stop};
 pub use system::Memory;

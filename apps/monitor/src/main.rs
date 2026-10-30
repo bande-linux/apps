@@ -8,12 +8,15 @@ use accesskit::TreeUpdate;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_monitor::{
     AppList, Catalog, ForceQuitView, Icons, L10N, Monitor, MonitorView, Request, Sampler, Screen,
-    app_menus,
+    TOOLBAR_HEIGHT, app_menus,
 };
 use unbound_toolkit::{
-    App, Image, MenuPlacement, Role, Scene, TextSystem, Window, WindowError, WindowEvent,
+    App, FrameRegions, Image, MenuPlacement, Role, Scene, TextSystem, Window, WindowError,
+    WindowEvent,
 };
-use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_icon, spawn_detached};
+use unbound_xdg::{
+    ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon, spawn_detached,
+};
 
 const APP_ID: &str = "org.unbound.ActivityMonitor";
 const WINDOW_SIZE: (u32, u32) = (860, 600);
@@ -71,6 +74,17 @@ impl<S: Screen> ActivityMonitor<S> {
                 }
                 Request::ShowInFiles(path) => show_in_files(window, &path),
                 Request::Copy(text) => window.copy(&text),
+                Request::Paste => {
+                    if let Err(error) = window.paste() {
+                        tracing::warn!("cannot paste: {error}");
+                    }
+                }
+                Request::EmojiPicker => {
+                    if let Err(error) = window.show_emoji_picker() {
+                        tracing::warn!("cannot show the emoji picker: {error}");
+                    }
+                }
+                Request::Inspect(_) => {}
                 Request::Menu(menu, at) => {
                     if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
                         tracing::warn!("cannot show the menu: {error}");
@@ -94,6 +108,15 @@ fn show_in_files(window: &mut Window, path: &Path) {
 
 impl<S: Screen> App for ActivityMonitor<S> {
     fn scene(&mut self, window: &mut Window) -> Scene {
+        let full_screen = window.header_height() == 0;
+        self.screen.set_full_screen(full_screen);
+        if let Some(header) = self.screen.header() {
+            window.set_frame_regions(FrameRegions {
+                sidebar: 0.0,
+                toolbar: if full_screen { TOOLBAR_HEIGHT } else { 0.0 },
+            });
+            window.set_header(header);
+        }
         let (width, height) = window.size();
         self.screen.scene(width, height)
     }
@@ -124,6 +147,17 @@ impl<S: Screen> App for ActivityMonitor<S> {
                 self.serve(window);
             }
             WindowEvent::MenuAction(action) => self.menu_action(window, &action),
+            WindowEvent::MenuClosed => {
+                if self.screen.menu_closed() {
+                    window.request_redraw();
+                }
+            }
+            WindowEvent::Pasted(text) => {
+                if self.screen.pasted(&text) {
+                    window.request_redraw();
+                }
+                self.serve(window);
+            }
             WindowEvent::AppResponding {
                 pid,
                 app_id,
@@ -155,12 +189,18 @@ impl<S: Screen> App for ActivityMonitor<S> {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        Some(self.next_sample)
+        Some(
+            self.screen
+                .deadline()
+                .map_or(self.next_sample, |deadline| deadline.min(self.next_sample)),
+        )
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
-        self.sample();
-        self.next_sample = now + INTERVAL;
+        if now >= self.next_sample {
+            self.sample();
+            self.next_sample = now + INTERVAL;
+        }
         window.request_redraw();
     }
 
@@ -180,7 +220,8 @@ impl<S: Screen> App for ActivityMonitor<S> {
 fn icons() -> Icons {
     let dirs = data_dirs();
     Icons::new(move |name| {
-        find_icon(name, ICON_PIXELS, &[], &dirs).and_then(|path| Image::load(&path, ICON_PIXELS))
+        find_icon(name, ICON_PIXELS, &ICON_THEMES, &dirs)
+            .and_then(|path| Image::load(&path, ICON_PIXELS))
     })
 }
 

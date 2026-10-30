@@ -1,37 +1,41 @@
 use std::collections::HashMap;
+use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
-use unbound_toolkit::ui::{Cell, Column, Cursor, Event, Key, Modifiers, Pointer, Row, Table};
-use unbound_toolkit::{Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem};
+use unbound_toolkit::ui::{
+    BUTTON_HEIGHT, Button, Cell, Column, Cursor, Event, Key, Modifiers, Pointer, Row, Table,
+    WidgetId,
+};
+use unbound_toolkit::{
+    Item, Palette, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle, TextSystem,
+};
 
 use crate::L10N;
 use crate::apps::GroupKey;
-use crate::list::{List, Signal, group_id};
+use crate::list::{List, Signal, group_id, sender};
 use crate::menu::{MenuCommand, force_quit_menu};
-use crate::model::AppList;
+use crate::model::{AppList, StopTarget};
 use crate::sampler::Snapshot;
 use crate::view::{
-    Dialog, DialogButton, Icons, NOT_RESPONDING, Painter, Request, Screen, contains, dialog_click,
-    dialog_key, is_secondary, opens_menu, press_dialog_button,
+    ALERT_ICON, FORCE_QUIT, Icons, Painter, QUIT, Request, Screen, answer_stop, contains,
+    is_secondary, opens_menu, stop_alert,
 };
 
 const PADDING: f32 = 16.0;
 const HINT_HEIGHT: f32 = 44.0;
 const LIST_INSET: f32 = 4.0;
-const BUTTON_WIDTH: f32 = 104.0;
-const BUTTON_HEIGHT: f32 = 26.0;
-const FOOTER_HEIGHT: f32 = 58.0;
-const TEXT_SIZE: f32 = 13.0;
+const BUTTON_WIDTH: f32 = 112.0;
+const FOOTER_HEIGHT: f32 = 60.0;
 
 pub struct ForceQuitView {
     apps: AppList,
     palette: Palette,
     icons: Icons,
     list: List,
+    button: WidgetId,
     ids: HashMap<String, GroupKey>,
     size: (f32, f32),
-
-    dialog: Option<Dialog>,
+    stopping: Option<StopTarget>,
     requests: Vec<Request>,
     finished: bool,
 }
@@ -39,15 +43,21 @@ pub struct ForceQuitView {
 impl ForceQuitView {
     pub fn new(apps: AppList, palette: Palette, text: TextSystem, icons: Icons) -> Self {
         let table = Table::new(vec![Column::new(&L10N.tr("column-name"), 120.0)]).without_header();
+        let mut list = List::new(table, palette, text);
+        let send = sender(list.signals());
+        let mut button =
+            Button::new(&L10N.tr("button-force-quit"), move || send(Signal::Stop)).primary();
+        button.set_enabled(false);
+        let button = list.insert(button);
         Self {
             apps,
             palette,
             icons,
-            list: List::new(table, palette, text),
+            list,
+            button,
             ids: HashMap::new(),
             size: (0.0, 0.0),
-
-            dialog: None,
+            stopping: None,
             requests: Vec::new(),
             finished: false,
         }
@@ -77,6 +87,7 @@ impl ForceQuitView {
 
     fn sync(&mut self) {
         let mut ids = HashMap::new();
+        let alarm = self.palette.danger;
         let rows = self
             .apps
             .rows()
@@ -89,7 +100,7 @@ impl ForceQuitView {
                     false => Cell::new(
                         L10N.tr_args("not-responding", [("name", row.name.to_owned().into())]),
                     )
-                    .tinted(NOT_RESPONDING),
+                    .tinted(alarm),
                 };
                 Row::new(id, vec![cell.icon(icon)])
             })
@@ -109,19 +120,47 @@ impl ForceQuitView {
             .filter_map(|id| self.ids.get(id).cloned())
             .collect();
         self.apps.set_selection(keys);
+        let selected = !self.apps.selection().is_empty();
+        self.list
+            .update::<Button>(self.button, |button, _| button.set_enabled(selected));
     }
 
-    fn drain_signals(&mut self) {
-        for signal in self.list.take_signals() {
-            match signal {
-                Signal::Selection(ids) => self.select_ids(&ids),
-                Signal::Activate => {
-                    self.confirm();
+    fn drain(&mut self) {
+        loop {
+            let signals = self.list.take_signals();
+            if signals.is_empty() {
+                break;
+            }
+            for signal in signals {
+                match signal {
+                    Signal::Selection(ids) => self.select_ids(&ids),
+                    Signal::Activate | Signal::Stop => {
+                        self.confirm();
+                    }
+                    Signal::Choice(choice) => self.chosen(&choice),
+                    Signal::Sort(_) | Signal::Tab(_) | Signal::Search(_) => {}
                 }
-                Signal::Sort(_) => {}
             }
         }
-        self.list.take_copy();
+        self.list.take_requests();
+    }
+
+    fn chosen(&mut self, choice: &str) {
+        let Some(target) = self.stopping.take() else {
+            return;
+        };
+        let icon = self.icons.get(ALERT_ICON);
+        let send = sender(self.list.signals());
+        let denied = answer_stop(&target, choice, icon, move |choice| {
+            send(Signal::Choice(choice.to_owned()))
+        });
+        if matches!(choice, QUIT | FORCE_QUIT) {
+            self.requests.push(Request::Resample);
+        }
+        if let Some(alert) = denied {
+            self.list.present_dialog(alert);
+        }
+        self.list.focus();
     }
 
     fn request_menu(&mut self, at: Point) {
@@ -144,30 +183,22 @@ impl ForceQuitView {
     }
 
     fn confirm(&mut self) -> bool {
-        match self.apps.stop_target() {
-            Some(target) => {
-                self.dialog = Some(Dialog::ConfirmForce(target));
-                true
-            }
-            None => false,
-        }
+        let Some(target) = self.apps.stop_target() else {
+            return false;
+        };
+        let icon = self.icons.get(ALERT_ICON);
+        let send = sender(self.list.signals());
+        let alert = stop_alert(&target, true, icon, move |choice| {
+            send(Signal::Choice(choice.to_owned()))
+        });
+        self.stopping = Some(target);
+        self.list.present_dialog(alert);
+        true
     }
 
-    fn press(&mut self, button: DialogButton) {
-        if let Some(dialog) = self.dialog.take() {
-            self.dialog = press_dialog_button(dialog, button);
-            if button != DialogButton::Cancel {
-                self.requests.push(Request::Resample);
-            }
-        }
-    }
-
-    fn key(&mut self, key: Key, modifiers: Modifiers) -> bool {
-        if let Some(dialog) = &self.dialog {
-            if let Some(button) = dialog_key(dialog, key, modifiers) {
-                self.press(button);
-            }
-            return true;
+    fn key(&mut self, event: &Event, key: Key, modifiers: Modifiers) -> bool {
+        if self.list.has_dialog() {
+            return self.pass(event);
         }
         if opens_menu(key, modifiers) {
             return self.menu_from_keyboard();
@@ -176,34 +207,17 @@ impl ForceQuitView {
             Key::Escape => self.finished = true,
             Key::Character('w') if modifiers.logo => self.finished = true,
             Key::Enter => return self.confirm(),
-            _ => {
-                let handled = self.list.handle(&Event::Key { key, modifiers });
-                self.drain_signals();
-                return handled;
-            }
+            _ => return self.pass(event),
         }
         true
     }
 
     fn pointer_down(&mut self, event: &Event, pointer: &Pointer) -> bool {
         let at = pointer.position;
-        if let Some(dialog) = &self.dialog {
-            return match dialog_click(dialog, self.size, at).filter(|_| pointer.is_primary()) {
-                Some(button) => {
-                    self.press(button);
-                    true
-                }
-                None => false,
-            };
+        let handled = self.pass(event);
+        if self.list.has_dialog() || !contains(self.list.frame(), at) {
+            return handled;
         }
-        if pointer.is_primary() && contains(self.button_frame(), at) {
-            return self.confirm();
-        }
-        if !contains(self.list.frame(), at) {
-            return false;
-        }
-        let handled = self.list.handle(event);
-        self.drain_signals();
         if is_secondary(pointer) && !self.apps.selection().is_empty() {
             self.request_menu(at);
             return true;
@@ -212,11 +226,8 @@ impl ForceQuitView {
     }
 
     fn pass(&mut self, event: &Event) -> bool {
-        if self.dialog.is_some() {
-            return false;
-        }
         let handled = self.list.handle(event);
-        self.drain_signals();
+        self.drain();
         handled
     }
 }
@@ -226,42 +237,37 @@ impl Screen for ForceQuitView {
         self.size = (width as f32, height as f32);
         let frame = self.box_frame();
         self.list.set_frame(frame.inset(LIST_INSET));
-        let list = self.list.paint(width, height);
+        self.list.place(self.button, self.button_frame());
+        let (controls, dialog) = self.list.paint(width, height);
         let palette = self.palette;
-        let button = self.button_frame();
-        let selected = !self.apps.selection().is_empty();
         let empty = self.apps.is_empty();
         let mut painter = Painter {
             text: self.list.text(),
-            palette,
             items: Vec::new(),
         };
         painter.text_in(
             &L10N.tr("force-quit-hint"),
-            TextStyle::new(TEXT_SIZE - 1.0, palette.ink2),
+            TextStyle::role(TextRole::Callout, palette.ink2),
             Rect::new(PADDING, 0.0, width as f32 - 2.0 * PADDING, HINT_HEIGHT),
             TextAlign::Start,
         );
-        let shape = Shape::rounded(frame, 8.0);
+        let shape = Shape::rounded(frame, Radius::M);
         painter.fill(shape, palette.overlay);
         painter.items.push(Item::Stroke {
-            shape,
+            shape: Shape::rounded(frame.inset(0.5), Radius::M - 0.5),
             width: 1.0,
             paint: palette.hairline.into(),
         });
         if empty {
             painter.text_in(
                 &L10N.tr("force-quit-empty"),
-                TextStyle::new(TEXT_SIZE, palette.ink2),
+                TextStyle::role(TextRole::Body, palette.ink2),
                 frame,
                 TextAlign::Center,
             );
         }
-        painter.items.extend(list);
-        painter.button(button, &L10N.tr("button-force-quit"), selected);
-        if let Some(dialog) = &self.dialog {
-            painter.dialog(self.size, dialog, false);
-        }
+        painter.items.extend(controls);
+        painter.items.extend(dialog);
         Scene {
             width,
             height,
@@ -273,6 +279,7 @@ impl Screen for ForceQuitView {
     fn set_palette(&mut self, palette: Palette) {
         self.palette = palette;
         self.list.set_palette(palette);
+        self.sync();
     }
 
     fn set_focused(&mut self, focused: bool) {
@@ -284,7 +291,7 @@ impl Screen for ForceQuitView {
 
     fn handle(&mut self, event: &Event) -> bool {
         match event {
-            Event::Key { key, modifiers } => self.key(*key, *modifiers),
+            Event::Key { key, modifiers } => self.key(event, *key, *modifiers),
             Event::PointerDown(pointer) => self.pointer_down(event, pointer),
             _ => self.pass(event),
         }
@@ -304,6 +311,10 @@ impl Screen for ForceQuitView {
     }
 
     fn menu_action(&mut self, action: &str) -> bool {
+        if self.list.menu_action(action) {
+            self.drain();
+            return true;
+        }
         match MenuCommand::parse(action) {
             Some(MenuCommand::ForceQuit) => self.confirm(),
             Some(MenuCommand::ShowInFiles) => {
@@ -313,6 +324,14 @@ impl Screen for ForceQuitView {
             }
             _ => false,
         }
+    }
+
+    fn menu_closed(&mut self) -> bool {
+        self.list.menu_closed()
+    }
+
+    fn pasted(&mut self, _text: &str) -> bool {
+        false
     }
 
     fn set_responding(&mut self, pid: u32, app_id: &str, responding: bool) -> bool {
@@ -333,7 +352,7 @@ impl Screen for ForceQuitView {
 
     fn perform(&mut self, request: &ActionRequest) -> bool {
         let performed = self.list.perform(request);
-        self.drain_signals();
+        self.drain();
         performed
     }
 
@@ -343,5 +362,9 @@ impl Screen for ForceQuitView {
 
     fn animating(&self) -> bool {
         self.list.animating()
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.list.deadline()
     }
 }

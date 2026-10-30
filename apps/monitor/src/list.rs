@@ -77,10 +77,6 @@ impl List {
         self.ui.widget_ref::<Table>(self.table)
     }
 
-    pub(crate) fn widget_as<T: Widget + 'static>(&mut self, id: WidgetId) -> Option<&mut T> {
-        self.ui.widget_as::<T>(id)
-    }
-
     pub(crate) fn insert(&mut self, widget: impl Widget + 'static) -> WidgetId {
         self.ui
             .widget_as::<FreeLayout>(self.host)
@@ -126,13 +122,12 @@ impl List {
         });
     }
 
-    pub(crate) fn click_part(&mut self, id: WidgetId, part: usize) {
-        self.ui.perform(&ActionRequest {
-            action: Action::Click,
-            target_tree: TreeId::ROOT,
-            target_node: id.part(part as u64),
-            data: None,
-        });
+    pub(crate) fn update<T: Widget + 'static>(
+        &mut self,
+        id: WidgetId,
+        update: impl FnOnce(&mut T, &Context),
+    ) {
+        self.ui.update_widget(id, update);
     }
 
     pub(crate) fn focus(&mut self) {
