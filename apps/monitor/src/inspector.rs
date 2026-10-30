@@ -26,7 +26,7 @@ const LEADING: f32 = 94.0;
 const BUTTON_SIZE: f32 = 28.0;
 const ITEM_GAP: f32 = 16.0;
 const SEGMENT_WIDTH: f32 = 96.0;
-const LABEL_WIDTH: f32 = 150.0;
+const LABEL_WIDTH: f32 = 190.0;
 const PARENT: &str = "parent:";
 const CHILD: &str = "child:";
 const FILE: &str = "file:";
@@ -498,6 +498,7 @@ impl InspectorView {
             name: self.name.clone(),
             count: 1,
             roots: vec![id],
+            apps: Vec::new(),
             processes: vec![id],
         };
         let icon = self.icons.get(ALERT_ICON);

@@ -83,6 +83,7 @@ pub struct StopTarget {
     pub name: String,
     pub count: usize,
     pub roots: Vec<(u32, u64)>,
+    pub apps: Vec<(String, Vec<(u32, u64)>)>,
     pub processes: Vec<(u32, u64)>,
 }
 
@@ -92,6 +93,11 @@ fn merged(targets: impl IntoIterator<Item = StopTarget>) -> Option<StopTarget> {
         for root in target.roots {
             if !all.roots.contains(&root) {
                 all.roots.push(root);
+            }
+        }
+        for app in target.apps {
+            if !all.apps.contains(&app) {
+                all.apps.push(app);
             }
         }
         for process in target.processes {
@@ -488,23 +494,32 @@ fn group_target(group: &Group, processes: &[Process], name: String) -> StopTarge
         .iter()
         .map(|member| &processes[*member])
         .collect::<Vec<_>>();
+    let roots = members
+        .iter()
+        .filter(|process| !members.iter().any(|parent| parent.pid == process.ppid))
+        .map(|process| id(process))
+        .collect::<Vec<_>>();
+    let (roots, apps) = match &group.key {
+        GroupKey::App(app_id) => (Vec::new(), vec![(app_id.clone(), roots)]),
+        _ => (roots, Vec::new()),
+    };
     StopTarget {
         name,
         count: 1,
-        roots: members
-            .iter()
-            .filter(|process| !members.iter().any(|parent| parent.pid == process.ppid))
-            .map(|process| id(process))
-            .collect(),
+        roots,
+        apps,
         processes: members.into_iter().map(id).collect(),
     }
 }
 
 pub fn stop_target(target: &StopTarget, how: Stop) -> Result<(), SignalError> {
-    let chosen = match how {
-        Stop::Quit => &target.roots,
-        Stop::ForceQuit => &target.processes,
-    };
+    match how {
+        Stop::Quit => stop_all(&target.roots, how),
+        Stop::ForceQuit => stop_all(&target.processes, how),
+    }
+}
+
+pub fn stop_all(chosen: &[(u32, u64)], how: Stop) -> Result<(), SignalError> {
     let mut outcome = Ok(());
     for (pid, start_ticks) in chosen {
         match stop(*pid, *start_ticks, how) {
@@ -980,6 +995,7 @@ impl Monitor {
                     name: process.identity.name.clone(),
                     count: 1,
                     roots: vec![id],
+                    apps: Vec::new(),
                     processes: vec![id],
                 })
             }

@@ -34,6 +34,10 @@ pub enum Request {
     Menu(Menu, Point),
     Inspect(u32),
     SaveState(String),
+    QuitApp {
+        app_id: String,
+        roots: Vec<(u32, u64)>,
+    },
 }
 
 type FindIcon = Box<dyn Fn(&str) -> Option<Image>>;

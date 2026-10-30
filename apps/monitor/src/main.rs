@@ -8,7 +8,8 @@ use accesskit::TreeUpdate;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_monitor::{
     AppList, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, Inhibitors, InspectorView, L10N,
-    Monitor, MonitorView, Request, Sampler, Screen, Snapshot, TOOLBAR_HEIGHT, app_menus,
+    Monitor, MonitorView, Request, Sampler, Screen, Snapshot, Stop, TOOLBAR_HEIGHT, app_menus,
+    stop_all,
 };
 use unbound_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Role, Scene, Surfaces, TextSystem, Window,
@@ -162,6 +163,14 @@ impl ActivityMonitor {
                     }
                 }
                 Request::Inspect(pid) => self.inspect(pid),
+                Request::QuitApp { app_id, roots } => {
+                    if let Err(error) = window.quit_app(&app_id) {
+                        tracing::debug!("cannot ask {app_id} to quit: {error}");
+                        if let Err(error) = stop_all(&roots, Stop::Quit) {
+                            tracing::warn!("cannot quit {app_id}: {error:?}");
+                        }
+                    }
+                }
                 Request::SaveState(text) => save_state(&text),
                 Request::Menu(menu, at) => {
                     if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {

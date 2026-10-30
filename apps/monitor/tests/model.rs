@@ -129,13 +129,18 @@ fn quitting_an_app_signals_its_roots_and_force_quitting_signals_every_process() 
     monitor.set_selection(vec![terminal()]);
     let target = monitor.stop_target().expect("the terminal");
     assert_eq!(target.name, "Terminal");
-    assert_eq!(target.roots, [(500, 500)]);
+    assert!(target.roots.is_empty());
+    assert_eq!(
+        target.apps,
+        [("org.unbound.Terminal".to_owned(), vec![(500, 500)])]
+    );
     assert_eq!(target.processes, [(500, 500), (501, 501), (502, 502)]);
 
     monitor.set_selection(vec![cargo(), terminal()]);
     let target = monitor.stop_target().expect("cargo and the terminal");
     assert_eq!((target.name.as_str(), target.count), ("cargo", 2));
-    assert_eq!(target.roots, [(502, 502), (500, 500)]);
+    assert_eq!(target.roots, [(502, 502)]);
+    assert_eq!(target.apps.len(), 1);
     assert_eq!(target.processes, [(502, 502), (500, 500), (501, 501)]);
 }
 

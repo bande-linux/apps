@@ -200,6 +200,9 @@ fn activity_monitor_matches_its_goldens() {
     view.menu_action("show-cores");
     render(&mut view, TITLE, "monitor-cores", (MONITOR_SIZE.0, 600));
     view.menu_action("show-cores");
+    view.menu_action("filter-mine");
+    render(&mut view, TITLE, "monitor-mine", MONITOR_SIZE);
+    view.menu_action("filter-all");
     view.handle(&Event::Key {
         key: Key::Character('q'),
         modifiers: Modifiers {
@@ -433,7 +436,11 @@ fn several_selected_rows_quit_together() {
     view.handle(&shifted(Key::Down));
     let target = view.monitor.stop_target().expect("two apps");
     assert_eq!(target.count, 2);
-    assert_eq!(target.roots, [(500, 500), (710, 710)]);
+    assert_eq!(target.roots, [(710, 710)]);
+    assert_eq!(
+        target.apps,
+        [("org.unbound.Terminal".to_owned(), vec![(500, 500)])]
+    );
     assert!(view.handle(&Event::Key {
         key: Key::Character('q'),
         modifiers: Modifiers {
@@ -859,4 +866,40 @@ fn the_view_filter_keeps_my_processes_or_apps_and_is_remembered() {
     let mut again = Monitor::new(catalog(), 1000);
     again.restore(&remembered);
     assert_eq!(again.filter(), unbound_monitor::Filter::Apps);
+}
+
+#[test]
+fn quit_asks_an_app_politely_and_signals_only_a_chosen_process() {
+    let mut view = monitor_view();
+    view.handle(&key(Key::Down));
+    assert_eq!(
+        view.monitor.selection(),
+        [RowKey::Group(unbound_monitor::GroupKey::App(
+            "org.unbound.Terminal".to_owned()
+        ))]
+    );
+    assert!(view.handle(&Event::Key {
+        key: Key::Character('q'),
+        modifiers: Modifiers {
+            logo: true,
+            alt: true,
+            ..Modifiers::default()
+        },
+    }));
+    view.handle(&key(Key::Enter));
+    assert_eq!(
+        view.take_requests(),
+        [
+            Request::QuitApp {
+                app_id: "org.unbound.Terminal".to_owned(),
+                roots: vec![(500, 500)],
+            },
+            Request::Resample,
+        ]
+    );
+
+    view.monitor.set_selection(vec![cargo()]);
+    let target = view.monitor.stop_target().expect("cargo");
+    assert_eq!(target.roots, [(502, 502)]);
+    assert!(target.apps.is_empty());
 }

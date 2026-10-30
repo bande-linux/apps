@@ -87,6 +87,7 @@ size-terabytes = { $value } TB
 per-second = { $size }/s
 
 search-placeholder = Search
+search-filtered = Search { $filter }
 stop-label = Quit Process
 inspect-label = Inspect Process
 tab-label = Show

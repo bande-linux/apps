@@ -46,7 +46,6 @@ const STRIP_GAP: f32 = 4.0;
 const STRIP_MIN_WIDTH: f32 = 200.0;
 const STRIP_COLUMNS: usize = 4;
 const GROUP_LABEL: f32 = 20.0;
-const FILTER_GAP: f32 = 12.0;
 const BAR_HEIGHT: f32 = 8.0;
 const KEY_SIZE: f32 = 8.0;
 const KEY_RADIUS: f32 = 2.0;
@@ -156,7 +155,6 @@ pub struct MonitorView {
     cores: Animated,
     cores_extent: f32,
     cores_moving: bool,
-    filter_width: f32,
 }
 
 fn tabs_control(list: &List, tabs: &[Tab], tab: Tab) -> SegmentedControl {
@@ -186,7 +184,7 @@ impl MonitorView {
         ));
         let shown_tabs = monitor.tabs();
         let tabs = list.insert(tabs_control(&list, &shown_tabs, tab));
-        let search = list.insert(search_field(&list));
+        let search = list.insert(search_field(&list, monitor.filter(), ""));
         let mut view = Self {
             monitor,
             palette,
@@ -211,7 +209,6 @@ impl MonitorView {
             cores: Animated::points(0.0),
             cores_extent: 0.0,
             cores_moving: false,
-            filter_width: 0.0,
         };
         view.sync();
         view
@@ -334,6 +331,13 @@ impl MonitorView {
         let denied = answer_stop(&target, choice, icon, move |choice| {
             send(Signal::Choice(choice.to_owned()))
         });
+        if choice == QUIT {
+            self.requests
+                .extend(target.apps.iter().map(|(app_id, roots)| Request::QuitApp {
+                    app_id: app_id.clone(),
+                    roots: roots.clone(),
+                }));
+        }
         if matches!(choice, QUIT | FORCE_QUIT) {
             self.requests.push(Request::Resample);
         }
@@ -409,12 +413,8 @@ impl MonitorView {
             TEXT_FIELD_HEIGHT,
         );
         let tabs_width = SEGMENT_WIDTH * self.tabs.len() as f32;
-        let filter = match self.filter_width {
-            0.0 => 0.0,
-            width => width + FILTER_GAP,
-        };
         let tabs = Rect::new(
-            search.x - ITEM_GAP - filter - tabs_width,
+            search.x - ITEM_GAP - tabs_width,
             middle(SEGMENTED_HEIGHT),
             tabs_width,
             SEGMENTED_HEIGHT,
@@ -491,33 +491,8 @@ impl MonitorView {
         self.readout_width = ((widest + key + READOUT_SPACE) / GRID).ceil() * GRID;
     }
 
-    fn filter_label(&self) -> Option<String> {
-        let filter = self.monitor.filter();
-        (filter != Filter::All).then(|| filter.title())
-    }
-
-    fn filter_frame(&self) -> Rect {
-        let search = self.toolbar_frames()[3].1;
-        Rect::new(
-            search.x - FILTER_GAP - self.filter_width,
-            ((TOOLBAR_HEIGHT - GRAPH_LABEL) / 2.0).round(),
-            self.filter_width,
-            GRAPH_LABEL,
-        )
-    }
-
     fn layout(&mut self) {
         self.measure_readouts();
-        let palette = self.palette;
-        self.filter_width = match self.filter_label() {
-            Some(label) => self
-                .list
-                .text()
-                .paragraph(&label, readout_label(palette), None, TextAlign::Start)
-                .width()
-                .ceil(),
-            None => 0.0,
-        };
         for (id, frame) in self.toolbar_frames() {
             self.list.place(id, frame);
         }
@@ -636,9 +611,22 @@ impl MonitorView {
     }
 
     fn clear_search(&mut self) {
-        let field = search_field(&self.list);
+        let field = search_field(&self.list, self.monitor.filter(), "");
         self.toolbar.search = self.list.replace(self.toolbar.search, field);
         self.set_search("");
+    }
+
+    fn set_filter(&mut self, filter: Filter) -> bool {
+        self.monitor.set_filter(filter);
+        let focused = self.searching();
+        let field = search_field(&self.list, filter, self.monitor.search());
+        self.toolbar.search = self.list.replace(self.toolbar.search, field);
+        if focused {
+            self.list.focus_widget(self.toolbar.search);
+        }
+        self.sync();
+        self.requests.push(Request::SaveState(self.monitor.state()));
+        true
     }
 
     fn search_key(&mut self, key: Key, modifiers: Modifiers) -> Option<bool> {
@@ -1139,9 +1127,13 @@ fn paint_memory_bar(painter: &mut Painter, bar: &[(usize, f32)], slot: Rect, pal
     painter.items.push(Item::Clip { shape, items });
 }
 
-fn search_field(list: &List) -> SearchField {
+fn search_field(list: &List, filter: Filter, text: &str) -> SearchField {
     let send = sender(list.signals());
-    SearchField::new(&L10N.tr("search-placeholder"), "", move |text| {
+    let placeholder = match filter {
+        Filter::All => L10N.tr("search-placeholder"),
+        filter => L10N.tr_args("search-filtered", [("filter", filter.title().into())]),
+    };
+    SearchField::new(&placeholder, text, move |text| {
         send(Signal::Search(text.to_owned()))
     })
 }
@@ -1203,12 +1195,7 @@ impl Screen for MonitorView {
                 true
             }
             Some(MenuCommand::ShowCores) => self.toggle_cores(),
-            Some(MenuCommand::Filter(filter)) => {
-                self.monitor.set_filter(filter);
-                self.sync();
-                self.requests.push(Request::SaveState(self.monitor.state()));
-                true
-            }
+            Some(MenuCommand::Filter(filter)) => self.set_filter(filter),
             None => false,
         }
     }
@@ -1239,9 +1226,6 @@ impl Screen for MonitorView {
         let (controls, dialog) = self.list.paint(width, height);
         let sheet = self.sheet();
         let radius = Radius::concentric(Radius::XL, self.inset());
-        let filter = self
-            .filter_label()
-            .map(|label| (label, self.filter_frame()));
         let footer = self.footer_layout();
         let (monitor, palette) = (&self.monitor, self.palette);
         let mut painter = Painter {
@@ -1253,9 +1237,6 @@ impl Screen for MonitorView {
             shape: Shape::rounded(sheet, radius),
             items: std::mem::take(&mut painter.items),
         }];
-        if let Some((label, frame)) = filter {
-            painter.text_in(&label, readout_label(palette), frame, TextAlign::End);
-        }
         painter.items.extend(controls);
         painter.items.extend(dialog);
         Scene {

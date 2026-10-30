@@ -29,7 +29,7 @@ pub use inspector::{INSPECTOR_SIZE, InspectorView, Section};
 pub use menu::{MenuCommand, Selected, app_menus, force_quit_menu, process_menu};
 pub use model::{
     AppList, AppRow, Column, CoreGroup, CoreKind, Filter, Graph, Monitor, Row, RowKey, StopTarget,
-    Tab,
+    Tab, stop_all,
 };
 pub use monitor_view::{MonitorView, TOOLBAR_HEIGHT};
 pub use sampler::{GpuUse, Identity, Interface, Process, Rates, Sampler, Snapshot};
