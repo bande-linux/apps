@@ -7,9 +7,9 @@ use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
     BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, DEFAULT_FONT_SIZE, DirectoryReports,
-    GridSize, MouseButton, MouseKind, Painter, SearchDirection, SelectionKind, Session, TabBar,
-    TabBarLayout, TabTarget, Terminal, bracketed, encode_key, is_openable, mouse_report,
-    next_font_size, shortcut,
+    GridSize, MenuCommand, MouseButton, MouseKind, Painter, SearchDirection, SelectionKind,
+    Session, TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed, encode_key,
+    is_openable, mouse_report, next_font_size, shortcut, tab_menu, terminal_menu,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{Appearance, CpuRenderer, Point, Scheme};
@@ -605,4 +605,71 @@ fn precise_scrolling_moves_by_points_and_stops_at_both_ends_of_the_scrollback() 
     terminal.scroll_smoothly(-30.0, line);
     assert_eq!(terminal.scroll_shift(), 0.0);
     assert_eq!(terminal.screen_text(), ["three", "four"]);
+}
+
+#[test]
+fn menu_actions_name_the_command_they_run() {
+    let commands = [
+        MenuCommand::Run(Command::Copy),
+        MenuCommand::Run(Command::FindPrevious),
+        MenuCommand::OpenLink("https://example.com/a:b?c=d".to_owned()),
+        MenuCommand::CopyLink("mailto:someone@example.com".to_owned()),
+        MenuCommand::ShowInFiles,
+        MenuCommand::CloseTab(7),
+        MenuCommand::CloseOtherTabs(3),
+    ];
+    for command in commands {
+        assert_eq!(MenuCommand::parse(&command.action()), Some(command));
+    }
+    assert_eq!(MenuCommand::parse("close-tab:x"), None);
+    assert_eq!(MenuCommand::parse("unknown"), None);
+}
+
+#[test]
+fn the_terminal_menu_offers_the_link_under_the_pointer_and_copy_only_with_a_selection() {
+    let mut context = TerminalContext {
+        link: None,
+        has_selection: false,
+        knows_directory: true,
+        tab: 4,
+    };
+    let plain = terminal_menu(&context);
+    let copy = plain
+        .items
+        .iter()
+        .find(|item| item.action == "copy")
+        .expect("copy");
+    assert!(!copy.enabled);
+    assert!(
+        !plain
+            .items
+            .iter()
+            .any(|item| item.action.starts_with("open-link:"))
+    );
+    assert!(plain.items.iter().any(|item| item.action == "close-tab:4"));
+
+    context.link = Some("https://example.com".to_owned());
+    context.has_selection = true;
+    let on_link = terminal_menu(&context);
+    assert_eq!(on_link.items[0].action, "open-link:https://example.com");
+    assert_eq!(on_link.items[1].action, "copy-link:https://example.com");
+    assert!(
+        on_link
+            .items
+            .iter()
+            .any(|item| item.action == "copy" && item.enabled)
+    );
+}
+
+#[test]
+fn closing_other_tabs_is_offered_only_when_there_are_others() {
+    let enabled = |menu: unbound_toolkit::ui::Menu| {
+        menu.items
+            .iter()
+            .find(|item| item.action == "close-other-tabs:2")
+            .map(|item| item.enabled)
+    };
+    assert_eq!(enabled(tab_menu(Some(2), 1)), Some(false));
+    assert_eq!(enabled(tab_menu(Some(2), 3)), Some(true));
+    assert_eq!(enabled(tab_menu(None, 3)), None);
 }

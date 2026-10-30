@@ -8,16 +8,18 @@ use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
     BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, DEFAULT_FONT_SIZE, GridSize, L10N,
-    Link, MouseButton, MouseKind, Notice, Painter, SearchDirection, SelectionKind, Session,
-    TAB_BAR_HEIGHT, TabBar, TabBarLayout, TabTarget, Terminal, bracketed, encode_key, is_openable,
-    mouse_report, next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
+    Link, MenuCommand, MouseButton, MouseKind, Notice, Painter, SearchDirection, SelectionKind,
+    Session, TAB_BAR_HEIGHT, TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed,
+    encode_key, is_openable, mouse_report, next_font_size, reports_mouse, shortcut, tab_menu,
+    terminal_menu, wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{
-    Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
+    Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
-use unbound_toolkit::{App, Point, Rect, Scene, Window, WindowEvent};
+use unbound_toolkit::{App, MenuPlacement, Point, Rect, Scene, Window, WindowEvent};
 
 pub const APP_ID: &str = "org.unbound.Terminal";
+const FILES: &str = "unbound-files";
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
 const TERMINAL_NODE: NodeId = NodeId(u64::MAX - 1);
 const WRITE_RETRY: Duration = Duration::from_millis(5);
@@ -43,6 +45,7 @@ enum Gesture {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pending {
     CloseTab(u32),
+    CloseOtherTabs(u32),
 }
 
 pub struct TerminalApp {
@@ -288,7 +291,31 @@ impl TerminalApp {
                     self.close_tab(window, index);
                 }
             }
+            Some(Pending::CloseOtherTabs(keep)) => self.remove_other_tabs(window, keep),
             None => {}
+        }
+    }
+
+    fn close_other_tabs(&mut self, window: &mut Window, keep: u32) {
+        let Some(index) = self.tabs.iter().position(|tab| tab.id() == keep) else {
+            return;
+        };
+        let busy = self
+            .tabs
+            .iter()
+            .filter(|tab| tab.id() != keep && tab.running_program().is_some())
+            .count();
+        if busy == 0 {
+            return self.remove_other_tabs(window, keep);
+        }
+        self.select_tab(window, index);
+        let message = L10N.tr_args("confirm-close-other-tabs", [("count", busy.into())]);
+        self.ask(window, &message, Pending::CloseOtherTabs(keep));
+    }
+
+    fn remove_other_tabs(&mut self, window: &mut Window, keep: u32) {
+        while let Some(index) = self.tabs.iter().position(|tab| tab.id() != keep) {
+            self.close_tab(window, index);
         }
     }
 
@@ -327,6 +354,9 @@ impl TerminalApp {
         self.momentum = None;
         if self.link.take().is_some() {
             window.request_redraw();
+        }
+        if opens_menu(key, modifiers) && !self.banner_focused {
+            return self.menu_from_keyboard(window);
         }
         let command = shortcut(key, modifiers);
         let edits_find = self.banner_focused && command == Some(Command::SelectAll);
@@ -408,6 +438,65 @@ impl TerminalApp {
             Command::FindPrevious => self.find_again(window, SearchDirection::Older),
         }
         window.request_redraw();
+    }
+
+    fn perform_menu(&mut self, window: &mut Window, command: MenuCommand) {
+        match command {
+            MenuCommand::Run(command) => self.perform(window, command),
+            MenuCommand::OpenLink(uri) => self.open_link(window, &uri),
+            MenuCommand::CopyLink(uri) => window.copy(&uri),
+            MenuCommand::ShowInFiles => self.show_in_files(window),
+            MenuCommand::CloseTab(id) => {
+                if let Some(index) = self.tabs.iter().position(|tab| tab.id() == id) {
+                    self.request_close_tab(window, index);
+                }
+            }
+            MenuCommand::CloseOtherTabs(id) => self.close_other_tabs(window, id),
+        }
+    }
+
+    fn show_in_files(&mut self, window: &mut Window) {
+        let Some(directory) = self.session().working_directory() else {
+            return;
+        };
+        let token = window
+            .activation_token(APP_ID)
+            .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+            .ok();
+        let command = [FILES.to_owned(), directory.to_string_lossy().into_owned()];
+        if let Err(error) = unbound_xdg::spawn_detached(&command, None, token.as_deref()) {
+            tracing::warn!("cannot show {} in Files: {error}", directory.display());
+        }
+    }
+
+    fn show_menu(&mut self, window: &mut Window, menu: Menu, at: Point) {
+        self.momentum = None;
+        if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
+            tracing::warn!("cannot show the menu: {error}");
+        }
+    }
+
+    fn terminal_menu(&mut self, window: &mut Window, at: Point, link: Option<Link>) {
+        let context = TerminalContext {
+            link: link.map(|link| link.uri),
+            has_selection: self.terminal().selected_text().is_some(),
+            knows_directory: self.session().working_directory().is_some(),
+            tab: self.tabs[self.active].id(),
+        };
+        self.show_menu(window, terminal_menu(&context), at);
+    }
+
+    fn menu_from_keyboard(&mut self, window: &mut Window) {
+        let origin = self.content_origin();
+        let below = match self.terminal().cursor_cell() {
+            Some((column, line)) => self.painter.metrics.below_cell(column, line),
+            None => Point::new(
+                (self.size.0 as f32 - origin.x) / 2.0,
+                (self.size.1 as f32 - origin.y) / 2.0,
+            ),
+        };
+        let at = Point::new(origin.x + below.x, origin.y + below.y);
+        self.terminal_menu(window, at, None);
     }
 
     fn find_banner(&mut self) -> Option<&mut Banner> {
@@ -628,6 +717,15 @@ impl TerminalApp {
         let at = pointer.position;
         self.momentum = None;
         if let Some(target) = self.tab_target(at) {
+            if asks_for_menu(&pointer) {
+                let tab = match target {
+                    TabTarget::Select(index) | TabTarget::Close(index) => {
+                        self.tabs.get(index).map(Session::id)
+                    }
+                    TabTarget::NewTab => None,
+                };
+                return self.show_menu(window, tab_menu(tab, self.tabs.len()), at);
+            }
             if !pointer.is_primary() {
                 return;
             }
@@ -651,6 +749,12 @@ impl TerminalApp {
             self.focus_terminal(self.focused);
         }
         let modifiers = pointer.modifiers;
+        let program_takes_mouse = !modifiers.shift && reports_mouse(self.mode());
+        if asks_for_menu(&pointer) && !program_takes_mouse {
+            let cell = self.cell_at(at);
+            let link = self.session().terminal.link_at(cell);
+            return self.terminal_menu(window, at, link);
+        }
         if modifiers.logo && pointer.is_primary() {
             let cell = self.cell_at(at);
             if let Some(link) = self.session().terminal.link_at(cell) {
@@ -661,7 +765,7 @@ impl TerminalApp {
         let Some(button) = mouse_button(pointer.button) else {
             return;
         };
-        if !modifiers.shift && reports_mouse(self.mode()) {
+        if program_takes_mouse {
             self.session().terminal.clear_selection();
             self.reported_cell = None;
             if self.report_mouse(MouseKind::Press(button), at, modifiers) {
@@ -912,6 +1016,11 @@ impl App for TerminalApp {
                 self.session().terminal.scroll_to_bottom();
                 self.send(&bytes);
             }
+            WindowEvent::MenuAction(action) => {
+                if let Some(command) = MenuCommand::parse(&action) {
+                    self.perform_menu(window, command);
+                }
+            }
             WindowEvent::Focus(focused) => self.focus(window, focused),
             WindowEvent::AppearanceChanged(appearance) => {
                 self.painter.set_appearance(appearance);
@@ -1031,6 +1140,19 @@ fn mouse_button(button: PointerButton) -> Option<MouseButton> {
         PointerButton::Middle => Some(MouseButton::Middle),
         PointerButton::Back | PointerButton::Forward => None,
     }
+}
+
+fn asks_for_menu(pointer: &Pointer) -> bool {
+    pointer.button == PointerButton::Secondary
+        || (pointer.is_primary() && pointer.modifiers.control)
+}
+
+fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
+    let shift_only = Modifiers {
+        shift: true,
+        ..Modifiers::default()
+    };
+    key == Key::Menu || (key == Key::Function(10) && modifiers == shift_only)
 }
 
 fn quoted(name: &str) -> String {

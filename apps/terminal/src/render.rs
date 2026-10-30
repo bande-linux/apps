@@ -86,6 +86,13 @@ impl Metrics {
         }
     }
 
+    pub fn below_cell(&self, column: usize, line: usize) -> Point {
+        Point::new(
+            PADDING + column as f32 * self.cell_width,
+            PADDING + (line + 1) as f32 * self.cell_height,
+        )
+    }
+
     pub fn pixel_cell_size(&self) -> (u16, u16) {
         let pixels = |points: f32| (f64::from(points) * self.scale).round() as u16;
         (pixels(self.cell_width), pixels(self.cell_height))

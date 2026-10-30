@@ -272,6 +272,12 @@ impl Terminal {
         term::viewport_to_point(self.display_offset(), GridPoint::new(line, Column(column)))
     }
 
+    pub fn cursor_cell(&self) -> Option<(usize, usize)> {
+        let cursor = self.term.grid().cursor.point;
+        term::point_to_viewport(self.display_offset(), cursor)
+            .map(|point| (point.column.0, point.line))
+    }
+
     pub fn start_selection(&mut self, cell: CellPoint, kind: SelectionKind) {
         let point = self.grid_point(cell);
         let kind = match kind {

@@ -1,5 +1,6 @@
 mod banner;
 mod keys;
+mod menu;
 mod process;
 mod render;
 mod session;
@@ -16,6 +17,7 @@ pub use keys::{
     Command, MouseButton, MouseKind, bracketed, encode_key, mouse_report, next_font_size,
     reports_mouse, shortcut, wants_scroll_as_arrows,
 };
+pub use menu::{MenuCommand, TerminalContext, command_entry, tab_menu, terminal_menu};
 pub use process::DirectoryReports;
 pub use render::{DEFAULT_FONT_SIZE, Metrics, PADDING, Painter, TabBar};
 pub use session::{Notice, Session, display_directory};
@@ -42,6 +44,7 @@ mod tests {
             include_str!("main.rs"),
             include_str!("app.rs"),
             include_str!("banner.rs"),
+            include_str!("menu.rs"),
             include_str!("render.rs"),
             include_str!("session.rs"),
         ];
