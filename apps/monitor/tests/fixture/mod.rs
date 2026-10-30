@@ -241,22 +241,8 @@ pub fn entry(id: &str, name: &str, exec: &str, terminal: bool) -> DesktopEntry {
 
 pub fn check_golden(name: &str, scene: &Scene) {
     let frame = CpuRenderer::new().render(scene).expect("frame");
-    let actual = image::RgbaImage::from_raw(scene.width, scene.height, frame.rgba).expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= 0.995,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
+    unbound_golden::assert_golden!(
+        name,
+        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
     );
 }
