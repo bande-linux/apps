@@ -14,6 +14,7 @@ unbound-design.workspace = true
 unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-notify.workspace = true
+unbound-spring.workspace = true
 unbound-toolkit.workspace = true
 unbound-watch.workspace = true
 unbound-xdg.workspace = true

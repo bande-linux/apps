@@ -9,6 +9,7 @@ use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_app_menu::{AppMenu, Standard};
+use unbound_spring::{Decay, State as SpringState};
 use unbound_term::{
     Axis, BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, Divider, FULL_SCREEN_LEADING,
     GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, Notice,
@@ -36,18 +37,17 @@ const TAB_LIST_NODE: NodeId = NodeId(u64::MAX - 2);
 const NEW_TAB_NODE: NodeId = NodeId(u64::MAX - 3);
 const TAB_NODES: u64 = u64::MAX - 1024;
 const WRITE_RETRY: Duration = Duration::from_millis(5);
-const FRAME: Duration = Duration::from_millis(8);
 const VELOCITY_WINDOW: Duration = Duration::from_millis(100);
-const DECELERATION_PER_MILLISECOND: f32 = 0.998;
-const MIN_MOMENTUM: f32 = 30.0;
+const MIN_MOMENTUM: f64 = 30.0;
 const LONG_COMMAND: Duration = Duration::from_secs(10);
 const FLASH: Duration = Duration::from_millis(220);
 const FLASH_OPACITY: f32 = 0.14;
 const MIN_PANE: f32 = 64.0;
 
 struct Momentum {
-    velocity: f32,
-    last: Instant,
+    velocity: f64,
+    since: Instant,
+    travelled: f64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -166,7 +166,7 @@ pub struct TerminalApp {
     pending: Option<Pending>,
     last_query: String,
     link: Option<Link>,
-    samples: VecDeque<(Instant, f32)>,
+    samples: VecDeque<(Duration, f32)>,
     momentum: Option<Momentum>,
     retry_at: Option<Instant>,
     flash: Option<Instant>,
@@ -1308,21 +1308,15 @@ impl TerminalApp {
             ScrollPhase::Changed => {}
             ScrollPhase::Ended => {
                 if smooth {
-                    self.start_momentum();
+                    self.forget_samples_before(scroll.time);
+                    self.start_momentum(window.frame_time().on_screen());
                 }
                 return;
             }
         }
         if smooth {
-            let now = Instant::now();
-            self.samples.push_back((now, dy));
-            while self
-                .samples
-                .front()
-                .is_some_and(|(when, _)| now.duration_since(*when) > VELOCITY_WINDOW)
-            {
-                self.samples.pop_front();
-            }
+            self.samples.push_back((scroll.time, dy));
+            self.forget_samples_before(scroll.time);
             self.scroll_smoothly(window, dy);
         } else {
             self.scroll_by_lines(window, dy, scroll.modifiers);
@@ -1335,22 +1329,32 @@ impl TerminalApp {
         window.request_redraw();
     }
 
-    fn start_momentum(&mut self) {
-        let (Some((first, _)), Some((last, _))) = (self.samples.front(), self.samples.back())
-        else {
+    fn forget_samples_before(&mut self, time: Duration) {
+        while self
+            .samples
+            .front()
+            .is_some_and(|(at, _)| time.saturating_sub(*at) > VELOCITY_WINDOW)
+        {
+            self.samples.pop_front();
+        }
+    }
+
+    fn start_momentum(&mut self, since: Instant) {
+        let samples = std::mem::take(&mut self.samples);
+        let (Some((first, _)), Some((last, _))) = (samples.front(), samples.back()) else {
             return;
         };
-        let span = last
-            .duration_since(*first)
-            .as_secs_f32()
-            .max(FRAME.as_secs_f32());
-        let distance: f32 = self.samples.iter().map(|(_, delta)| delta).sum();
-        let velocity = distance / span;
-        self.samples.clear();
+        let span = last.saturating_sub(*first).as_secs_f64();
+        if span <= 0.0 {
+            return;
+        }
+        let distance: f32 = samples.iter().skip(1).map(|(_, delta)| delta).sum();
+        let velocity = f64::from(distance) / span;
         if velocity.abs() >= MIN_MOMENTUM {
             self.momentum = Some(Momentum {
                 velocity,
-                last: Instant::now(),
+                since,
+                travelled: 0.0,
             });
         }
     }
@@ -1359,14 +1363,19 @@ impl TerminalApp {
         let Some(momentum) = &mut self.momentum else {
             return;
         };
-        let elapsed = now.duration_since(momentum.last);
-        momentum.last = now;
-        let distance = momentum.velocity * elapsed.as_secs_f32();
-        momentum.velocity *= DECELERATION_PER_MILLISECOND.powf(elapsed.as_secs_f32() * 1000.0);
-        if momentum.velocity.abs() < MIN_MOMENTUM {
+        let state = Decay::NORMAL.state_at(
+            SpringState {
+                position: 0.0,
+                velocity: momentum.velocity,
+            },
+            now.saturating_duration_since(momentum.since).as_secs_f64(),
+        );
+        let step = state.position - momentum.travelled;
+        momentum.travelled = state.position;
+        if state.velocity.abs() < MIN_MOMENTUM {
             self.momentum = None;
         }
-        self.scroll_smoothly(window, distance);
+        self.scroll_smoothly(window, step as f32);
     }
 
     fn scroll_by_lines(&mut self, window: &mut Window, dy: f32, modifiers: Modifiers) {
@@ -1474,6 +1483,7 @@ impl App for TerminalApp {
             self.frame_window(window);
             self.layout();
         }
+        self.glide(window, window.frame_time().presentation);
         let mut items = Vec::new();
         if self.has_strip() {
             let titles = self.titles();
@@ -1659,11 +1669,10 @@ impl App for TerminalApp {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        let glide = self.momentum.as_ref().map(|momentum| momentum.last + FRAME);
-        [glide, self.retry_at].into_iter().flatten().min()
+        self.retry_at
     }
 
-    fn tick(&mut self, window: &mut Window, now: Instant) {
+    fn tick(&mut self, _window: &mut Window, now: Instant) {
         if self.retry_at.is_some_and(|at| at <= now) {
             self.retry_at = None;
             for session in self.tabs.iter_mut().flat_map(|tab| &mut tab.sessions) {
@@ -1671,17 +1680,10 @@ impl App for TerminalApp {
             }
             self.schedule_retry();
         }
-        if self
-            .momentum
-            .as_ref()
-            .is_some_and(|momentum| momentum.last + FRAME <= now)
-        {
-            self.glide(window, now);
-        }
     }
 
     fn animating(&self) -> bool {
-        self.flash_opacity(Instant::now()).is_some()
+        self.momentum.is_some() || self.flash_opacity(Instant::now()).is_some()
     }
 
     fn should_close(&mut self, window: &mut Window) -> bool {
