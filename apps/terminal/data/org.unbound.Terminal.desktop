@@ -7,3 +7,8 @@ Icon=org.unbound.Terminal
 Exec=unbound-term
 Categories=System;TerminalEmulator;
 Keywords=shell;prompt;command;commandline;cmd;
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=unbound-term
