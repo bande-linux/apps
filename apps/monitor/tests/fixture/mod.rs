@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use tempfile::TempDir;
 use unbound_monitor::{Identity, Process, Sampler};
+use unbound_toolkit::{CpuRenderer, Scene};
 use unbound_xdg::DesktopEntry;
 
 pub const TICKS_PER_SECOND: u64 = 100;
@@ -236,4 +237,12 @@ pub fn entry(id: &str, name: &str, exec: &str, terminal: bool) -> DesktopEntry {
         &[],
     )
     .expect("valid entry")
+}
+
+pub fn check_golden(name: &str, scene: &Scene) {
+    let frame = CpuRenderer::new().render(scene).expect("frame");
+    unbound_golden::assert_golden!(
+        name,
+        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
+    );
 }
