@@ -658,6 +658,7 @@ impl Screen for InspectorView {
                 .into_iter()
                 .map(|(_, frame)| frame)
                 .collect(),
+            tabs: Vec::new(),
         })
     }
 
