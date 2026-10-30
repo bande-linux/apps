@@ -44,17 +44,15 @@ pub struct Selected {
     pub stoppable: bool,
     pub located: bool,
     pub has_pid: bool,
-    pub alternate: bool,
 }
 
 pub fn process_menu(selected: Selected) -> Menu {
-    let stop = if selected.alternate {
-        item("menu-force-quit", MenuCommand::ForceQuit)
-    } else {
-        item("menu-quit", MenuCommand::Quit)
-    };
+    let force_quit = item("menu-force-quit", MenuCommand::ForceQuit).enabled(selected.stoppable);
     Menu::new(vec![
-        stop.shortcut("Alt+Super+Q").enabled(selected.stoppable),
+        item("menu-quit", MenuCommand::Quit)
+            .shortcut("Alt+Super+Q")
+            .enabled(selected.stoppable)
+            .alternate(force_quit),
         MenuItem::separator(),
         item("menu-show-in-files", MenuCommand::ShowInFiles)
             .shortcut("Shift+Super+R")

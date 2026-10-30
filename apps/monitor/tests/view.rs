@@ -251,10 +251,9 @@ fn the_wheel_scrolls_the_list_under_the_pointer_and_a_double_click_opens_an_app(
     assert_eq!(view.monitor.rows()[0].disclosure, Disclosure::Expanded);
 }
 
-fn right_click(at: Point, alt: bool) -> Event {
+fn right_click(at: Point) -> Event {
     let mut pointer = Pointer::at(at);
     pointer.button = unbound_toolkit::ui::PointerButton::Secondary;
-    pointer.modifiers.alt = alt;
     Event::PointerDown(pointer)
 }
 
@@ -271,11 +270,11 @@ fn menu_actions(requests: Vec<Request>) -> Vec<(String, bool)> {
 }
 
 #[test]
-fn a_right_click_selects_the_row_and_offers_quit_or_with_alt_force_quit() {
+fn a_right_click_selects_the_row_and_offers_quit_turning_into_force_quit_with_alt() {
     let mut view = monitor_view();
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
     let row = Point::new(300.0, 48.0 + 26.0 + ROW_HEIGHT / 2.0);
-    assert!(view.handle(&right_click(row, false)));
+    assert!(view.handle(&right_click(row)));
     assert_eq!(view.monitor.selected_index(), Some(0));
     let name = view.monitor.rows()[0].name.clone();
     assert_eq!(
@@ -287,8 +286,17 @@ fn a_right_click_selects_the_row_and_offers_quit_or_with_alt_force_quit() {
             ("copy-pid".to_owned(), true),
         ]
     );
-    view.handle(&right_click(row, true));
-    assert_eq!(menu_actions(view.take_requests())[0].0, "force-quit");
+    view.handle(&right_click(row));
+    match view.take_requests().as_slice() {
+        [Request::Menu(menu, _)] => assert_eq!(
+            menu.items[0]
+                .alternate
+                .as_ref()
+                .map(|item| item.action.as_str()),
+            Some("force-quit")
+        ),
+        other => panic!("expected one menu, got {other:?}"),
+    }
 
     view.menu_action("copy-name");
     assert_eq!(view.take_requests(), [Request::Copy(name)]);

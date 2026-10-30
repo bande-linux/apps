@@ -498,24 +498,23 @@ impl MonitorView {
         }
     }
 
-    fn request_menu(&mut self, at: Point, alternate: bool) {
+    fn request_menu(&mut self, at: Point) {
         let selected = Selected {
             stoppable: self.monitor.stop_target().is_some(),
             located: self.monitor.location().is_some(),
             has_pid: self.monitor.selected_pid().is_some(),
-            alternate,
         };
         self.requests
             .push(Request::Menu(process_menu(selected), at));
     }
 
-    fn menu_from_keyboard(&mut self, alternate: bool) -> bool {
+    fn menu_from_keyboard(&mut self) -> bool {
         let Some(index) = self.monitor.selected_index() else {
             return false;
         };
         self.reveal_selection();
         let top = TOOLBAR_HEIGHT + HEADER_HEIGHT + self.scroller.row_y(index, ROW_HEIGHT);
-        self.request_menu(Point::new(SIDE + 40.0, top + ROW_HEIGHT), alternate);
+        self.request_menu(Point::new(SIDE + 40.0, top + ROW_HEIGHT));
         true
     }
 
@@ -558,7 +557,7 @@ impl MonitorView {
             return handled;
         }
         if opens_menu(key, modifiers) {
-            return self.menu_from_keyboard(modifiers.alt);
+            return self.menu_from_keyboard();
         }
         let page = self.visible_rows().saturating_sub(1).max(1) as isize;
         match key {
@@ -686,7 +685,7 @@ impl MonitorView {
                 Some(index) if self.dialog.is_none() => {
                     self.searching = false;
                     self.monitor.select(index);
-                    self.request_menu(pointer.position, pointer.modifiers.alt);
+                    self.request_menu(pointer.position);
                     true
                 }
                 _ => false,
