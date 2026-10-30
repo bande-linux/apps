@@ -22,7 +22,6 @@ const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
 const ICON_PIXELS: u32 = 32;
 const FILES: &str = "unbound-files";
-const ICON_THEMES: [&str; 1] = ["Adwaita"];
 
 struct ActivityMonitor<S> {
     screen: S,
@@ -181,8 +180,7 @@ impl<S: Screen> App for ActivityMonitor<S> {
 fn icons() -> Icons {
     let dirs = data_dirs();
     Icons::new(move |name| {
-        find_icon(name, ICON_PIXELS, &ICON_THEMES, &dirs)
-            .and_then(|path| Image::load(&path, ICON_PIXELS))
+        find_icon(name, ICON_PIXELS, &[], &dirs).and_then(|path| Image::load(&path, ICON_PIXELS))
     })
 }
 

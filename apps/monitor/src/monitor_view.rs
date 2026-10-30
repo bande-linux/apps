@@ -31,7 +31,6 @@ const SEARCH_WIDTH: f32 = 200.0;
 const STOP_SIZE: f32 = 28.0;
 const GRAPH_WIDTH: f32 = 240.0;
 const NAME_WIDTH: f32 = 160.0;
-const PROGRAM_ICON: &str = "application-x-executable";
 const SYSTEM_COLOR: Color = Color::hex(0xE5484D);
 const USER_COLOR: Color = Color::hex(0x3E8EF7);
 const MEMORY_COLOR: Color = Color::hex(0x30A46C);
@@ -126,11 +125,7 @@ fn table_row(icons: &mut Icons, row: &Row, ids: &mut HashMap<String, RowKey>) ->
         .map(|text| Cell::new(text.as_str()))
         .collect::<Vec<_>>();
     if let Some(name) = cells.first_mut() {
-        let icon = match &row.key {
-            RowKey::Interface(_) => None,
-            _ => Some(row.icon.as_deref().unwrap_or(PROGRAM_ICON)),
-        };
-        name.icon = icon.and_then(|icon| icons.get(icon));
+        name.icon = row.icon.as_deref().and_then(|icon| icons.get(icon));
         if !row.responding {
             name.text = L10N.tr_args("not-responding", [("name", row.name.clone().into())]);
             name.tint = Some(NOT_RESPONDING);
