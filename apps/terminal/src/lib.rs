@@ -18,8 +18,8 @@ use unbound_l10n::Localizer;
 
 pub use banner::{BANNER_HEIGHT, Banner, BannerAction};
 pub use keys::{
-    Command, MouseButton, MouseKind, bracketed, encode_key, mouse_report, next_font_size,
-    reports_mouse, shortcut, wants_scroll_as_arrows,
+    Command, MouseButton, MouseKind, bracketed, dropped_text, encode_key, mouse_report,
+    next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
 };
 pub use menu::{MenuCommand, TerminalContext, app_menus, tab_menu, terminal_menu};
 pub use panes::{Axis, DIVIDER, Divider, Layout, Side};

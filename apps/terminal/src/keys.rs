@@ -1,5 +1,6 @@
 use alacritty_terminal::term::TermMode;
 use unbound_toolkit::ui::{Key, Modifiers};
+use unbound_xdg::path_from_file_uri;
 
 fn modifier_parameter(modifiers: Modifiers) -> u8 {
     1 + u8::from(modifiers.shift) + 2 * u8::from(modifiers.alt) + 4 * u8::from(modifiers.control)
@@ -109,6 +110,30 @@ pub fn bracketed(text: &str, mode: TermMode) -> Vec<u8> {
         format!("\x1b[200~{cleaned}\x1b[201~").into_bytes()
     } else {
         text.replace("\r\n", "\r").replace('\n', "\r").into_bytes()
+    }
+}
+
+pub fn dropped_text(uris: &[String], text: &str) -> String {
+    if uris.is_empty() {
+        return text.to_owned();
+    }
+    uris.iter()
+        .map(|uri| {
+            let word = path_from_file_uri(uri)
+                .map_or_else(|| uri.clone(), |path| path.to_string_lossy().into_owned());
+            format!("{} ", shell_quoted(&word))
+        })
+        .collect()
+}
+
+fn shell_quoted(word: &str) -> String {
+    let plain = !word.is_empty()
+        && word
+            .chars()
+            .all(|character| character.is_alphanumeric() || "/._-+,:@".contains(character));
+    match plain {
+        true => word.to_owned(),
+        false => format!("'{}'", word.replace('\'', r"'\''")),
     }
 }
 

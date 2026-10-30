@@ -10,8 +10,8 @@ use unbound_term::{
     GridSize, HEADER_LEADING, Layout, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane,
     Profile, Report, Reports, SETTINGS_SIZE, STRIP_HEIGHT, SavedWindow, SearchDirection,
     SelectionKind, Session, Settings, Side, TabBar, TabBarLayout, TabTarget, Terminal,
-    TerminalContext, bracketed, claim, encode_key, is_openable, left_behind, mouse_report,
-    next_font_size, settings_view, shortcut, tab_menu, terminal_menu, window_file,
+    TerminalContext, bracketed, claim, dropped_text, encode_key, is_openable, left_behind,
+    mouse_report, next_font_size, settings_view, shortcut, tab_menu, terminal_menu, window_file,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{
@@ -202,6 +202,21 @@ fn pastes_are_bracketed_when_the_program_asks() {
         b"\x1b[200~x[201~y\x1b[201~"
     );
     assert_eq!(bracketed("echo a\nb", TermMode::empty()), b"echo a\rb");
+}
+
+#[test]
+fn dropped_files_become_shell_quoted_paths_and_dropped_text_stays_as_it_is() {
+    let uris = [
+        "file:///home/ada/notes.txt".to_owned(),
+        "file:///home/ada/Report%20one.pdf".to_owned(),
+        "file:///home/ada/it's%20%24HOME".to_owned(),
+        "https://example.org/a?b=c".to_owned(),
+    ];
+    assert_eq!(
+        dropped_text(&uris, "ignored"),
+        r"/home/ada/notes.txt '/home/ada/Report one.pdf' '/home/ada/it'\''s $HOME' 'https://example.org/a?b=c' "
+    );
+    assert_eq!(dropped_text(&[], "echo hi"), "echo hi");
 }
 
 fn terminal(columns: usize, lines: usize) -> Terminal {

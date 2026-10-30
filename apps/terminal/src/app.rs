@@ -14,16 +14,16 @@ use unbound_term::{
     Axis, BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, Divider, FULL_SCREEN_LEADING,
     GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, Notice,
     Painter, Pane, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings,
-    TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed, encode_key, is_openable,
-    is_settings_file, mouse_report, next_font_size, reports_mouse, settings_folder, shortcut,
-    tab_menu, terminal_menu, wants_scroll_as_arrows,
+    TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed, dropped_text,
+    encode_key, is_openable, is_settings_file, mouse_report, next_font_size, reports_mouse,
+    settings_folder, shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
 use unbound_toolkit::{
-    App, FrameRegions, Header, Item, MenuPlacement, Point, Radius, Rect, SHEET_INSET, Scene, Shape,
-    Window, WindowEvent,
+    App, DragAction, DragEvent, FrameRegions, Header, Item, MenuPlacement, Point, Radius, Rect,
+    SHEET_INSET, Scene, Shape, Window, WindowEvent,
 };
 use unbound_watch::{Changes, FolderWatch};
 
@@ -163,6 +163,7 @@ pub struct TerminalApp {
     header: f32,
     banner: Option<Banner>,
     banner_focused: bool,
+    droppable: bool,
     pending: Option<Pending>,
     last_query: String,
     link: Option<Link>,
@@ -206,6 +207,7 @@ impl TerminalApp {
             header: window.header_height() as f32,
             banner: None,
             banner_focused: false,
+            droppable: false,
             pending: None,
             last_query: String::new(),
             link: None,
@@ -826,7 +828,10 @@ impl TerminalApp {
                     tracing::warn!("cannot paste: {error}");
                 }
             }
-            Command::SelectAll => self.session().terminal.select_all(),
+            Command::SelectAll => {
+                self.session().terminal.select_all();
+                self.offer_primary(window);
+            }
             Command::ClearScrollback => self.session().terminal.clear_scrollback(),
             Command::BiggerText => {
                 self.set_font_size(window, next_font_size(self.painter.font_size(), true))
@@ -989,7 +994,63 @@ impl TerminalApp {
         self.layout();
     }
 
+    fn paste(&mut self, text: &str) {
+        let bytes = bracketed(text, self.mode());
+        self.session().terminal.scroll_to_bottom();
+        self.send(&bytes);
+    }
+
+    fn offer_primary(&mut self, window: &mut Window) {
+        if let Some(text) = self.terminal().selected_text() {
+            window.select_primary(&text);
+        }
+    }
+
+    fn drag(&mut self, window: &mut Window, drag: DragEvent) {
+        match drag {
+            DragEvent::Entered {
+                position,
+                uris,
+                text,
+            } => {
+                self.droppable = text || !uris.is_empty();
+                self.drag_over(window, position);
+            }
+            DragEvent::Moved(position) => self.drag_over(window, position),
+            DragEvent::Left => self.droppable = false,
+            DragEvent::Dropped {
+                position, transfer, ..
+            } => {
+                self.droppable = false;
+                let Some(pane) = self.pane_at(position) else {
+                    return;
+                };
+                self.focus_pane(window, pane);
+                if self.banner_focused {
+                    self.banner_focused = false;
+                    self.focus_terminal(self.focused);
+                }
+                self.paste(&dropped_text(&transfer.uris, &transfer.text));
+                window.request_redraw();
+            }
+            DragEvent::Finished(_) => {}
+        }
+    }
+
+    fn drag_over(&mut self, window: &mut Window, position: Point) {
+        let accepts = self.droppable && self.pane_at(position).is_some();
+        window.accept_drag_only(accepts.then_some(DragAction::Copy));
+    }
+
     fn handle_banner_actions(&mut self, window: &mut Window) {
+        if let Some(request) = self
+            .banner
+            .as_mut()
+            .and_then(Banner::take_clipboard_request)
+            && let Err(error) = window.serve_clipboard(request)
+        {
+            tracing::warn!("cannot use the clipboard: {error}");
+        }
         let Some(actions) = self.banner.as_mut().map(Banner::take_actions) else {
             return;
         };
@@ -1171,6 +1232,7 @@ impl TerminalApp {
             }
             Gesture::Selecting if pointer.is_primary() => {
                 self.session().terminal.finish_selection();
+                self.offer_primary(window);
                 window.request_redraw();
             }
             Gesture::Tab(target) if self.tab_target(at) == Some(target) => match target {
@@ -1261,6 +1323,12 @@ impl TerminalApp {
                 self.gesture = Gesture::Reporting(button);
             }
             window.request_redraw();
+            return;
+        }
+        if pointer.button == PointerButton::Middle {
+            if let Err(error) = window.paste_primary() {
+                tracing::warn!("cannot paste the selection: {error}");
+            }
             return;
         }
         if !pointer.is_primary() {
@@ -1587,11 +1655,8 @@ impl App for TerminalApp {
                     window.request_redraw();
                 }
             }
-            WindowEvent::Pasted(text) => {
-                let bytes = bracketed(&text, self.mode());
-                self.session().terminal.scroll_to_bottom();
-                self.send(&bytes);
-            }
+            WindowEvent::Pasted(text) => self.paste(&text),
+            WindowEvent::Drag(drag) => self.drag(window, drag),
             WindowEvent::MenuAction(action) => self.menu_action(window, &action),
             WindowEvent::Focus(focused) => self.focus(window, focused),
             WindowEvent::AppearanceChanged(appearance) => {

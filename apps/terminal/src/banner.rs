@@ -3,7 +3,8 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role, TreeId, TreeUpdate};
 use unbound_toolkit::ui::{
-    Button, Context, Cursor, Event, Key, Modifiers, Size, TextField, Ui, Widget, WidgetId,
+    Button, ClipboardRequest, Context, Cursor, Event, Key, Modifiers, Size, TextField, Ui, Widget,
+    WidgetId,
 };
 use unbound_toolkit::{
     Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
@@ -322,6 +323,10 @@ impl Banner {
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
         self.ui.perform(request)
+    }
+
+    pub fn take_clipboard_request(&mut self) -> Option<ClipboardRequest> {
+        self.ui.take_clipboard_request()
     }
 
     pub fn take_actions(&mut self) -> Vec<BannerAction> {
