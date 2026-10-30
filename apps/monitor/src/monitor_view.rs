@@ -865,6 +865,7 @@ impl Screen for MonitorView {
         Some(Header {
             title_x: LEADING,
             items,
+            tabs: Vec::new(),
         })
     }
 
