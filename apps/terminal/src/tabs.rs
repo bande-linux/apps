@@ -49,10 +49,6 @@ impl TabBarLayout {
         Self { tabs, new_tab }
     }
 
-    pub fn items(&self) -> Vec<Rect> {
-        self.tabs.iter().copied().chain([self.new_tab]).collect()
-    }
-
     pub fn close_button(tab: Rect) -> Rect {
         Rect::new(
             tab.x + CLOSE_INSET,
