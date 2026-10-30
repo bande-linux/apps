@@ -117,6 +117,33 @@ fn stop_frame() -> Rect {
     )
 }
 
+fn table_row(icons: &mut Icons, row: &Row, ids: &mut HashMap<String, RowKey>) -> TableRow {
+    let id = row_id(&row.key);
+    ids.insert(id.clone(), row.key.clone());
+    let mut cells = row
+        .cells
+        .iter()
+        .map(|text| Cell::new(text.as_str()))
+        .collect::<Vec<_>>();
+    if let Some(name) = cells.first_mut() {
+        let icon = match &row.key {
+            RowKey::Interface(_) => None,
+            _ => Some(row.icon.as_deref().unwrap_or(PROGRAM_ICON)),
+        };
+        name.icon = icon.and_then(|icon| icons.get(icon));
+        if !row.responding {
+            name.text = L10N.tr_args("not-responding", [("name", row.name.clone().into())]);
+            name.tint = Some(NOT_RESPONDING);
+        }
+    }
+    let children = row
+        .children
+        .iter()
+        .map(|child| table_row(icons, child, ids))
+        .collect();
+    TableRow::new(id, cells).children(children)
+}
+
 pub struct MonitorView {
     pub monitor: Monitor,
     palette: Palette,
@@ -159,39 +186,12 @@ impl MonitorView {
         self.list.shown_table()
     }
 
-    fn table_row(&mut self, row: &Row, ids: &mut HashMap<String, RowKey>) -> TableRow {
-        let id = row_id(&row.key);
-        ids.insert(id.clone(), row.key.clone());
-        let mut cells = row
-            .cells
-            .iter()
-            .map(|text| Cell::new(text.as_str()))
-            .collect::<Vec<_>>();
-        if let Some(name) = cells.first_mut() {
-            let icon = match &row.key {
-                RowKey::Interface(_) => None,
-                _ => Some(row.icon.as_deref().unwrap_or(PROGRAM_ICON)),
-            };
-            name.icon = icon.and_then(|icon| self.icons.get(icon));
-            if !row.responding {
-                name.text = L10N.tr_args("not-responding", [("name", row.name.clone().into())]);
-                name.tint = Some(NOT_RESPONDING);
-            }
-        }
-        let children = row
-            .children
-            .iter()
-            .map(|child| self.table_row(child, ids))
-            .collect();
-        TableRow::new(id, cells).children(children)
-    }
-
     fn sync(&mut self) {
         let mut ids = HashMap::new();
-        let rows = self.monitor.rows().to_vec();
+        let rows = self.monitor.rows();
         let table_rows = rows
             .iter()
-            .map(|row| self.table_row(row, &mut ids))
+            .map(|row| table_row(&mut self.icons, row, &mut ids))
             .collect();
         let revealed = rows
             .iter()
