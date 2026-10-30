@@ -283,13 +283,15 @@ impl TerminalApp {
         } else {
             self.leading()
         };
+        let (items, tabs) = if self.header > 0.0 {
+            (vec![layout.new_tab], layout.tabs)
+        } else {
+            (Vec::new(), Vec::new())
+        };
         window.set_header(Header {
             title_x,
-            items: if self.header > 0.0 {
-                layout.items()
-            } else {
-                Vec::new()
-            },
+            items,
+            tabs,
         });
     }
 

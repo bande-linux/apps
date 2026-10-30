@@ -430,7 +430,6 @@ fn the_tab_strip_shares_the_header_after_the_window_controls_and_keeps_room_for_
 
     let alone = TabBarLayout::new(1, 700.0, HEADER_LEADING);
     assert!(alone.tabs.is_empty());
-    assert_eq!(alone.items(), [alone.new_tab]);
 }
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
@@ -552,7 +551,8 @@ fn the_window_with_tabs_in_its_header_matches_its_goldens() {
             Some(Default::default()),
             Some(Header {
                 title_x: width,
-                items: layout.items(),
+                items: vec![layout.new_tab],
+                tabs: layout.tabs.clone(),
             }),
             &Palette::for_scheme(scheme),
         );
