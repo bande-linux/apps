@@ -863,7 +863,7 @@ fn windows_left_behind_are_restored_once_and_running_ones_are_left_alone() {
 
 #[test]
 fn a_command_that_finishes_is_reported_with_its_name() {
-    let script = "set -m; read line; sleep 1; read line";
+    let script = "set -m; read line; sleep 0.2; read line";
     let mut session = Session::spawn(
         terminal(40, 5),
         Some(Shell::new(

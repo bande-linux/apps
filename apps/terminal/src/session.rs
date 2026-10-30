@@ -194,17 +194,23 @@ impl Session {
 
     pub fn refresh_foreground(&mut self) -> bool {
         let group = process::foreground_group(self.shell).unwrap_or(self.shell);
-        if self
+        let name = process::name(group);
+        let same_group = self
             .foreground
             .as_ref()
-            .is_some_and(|(pid, _)| *pid == group)
+            .is_some_and(|(pid, _)| *pid == group);
+        if same_group
+            && self
+                .foreground
+                .as_ref()
+                .is_some_and(|(_, known)| Some(known) == name.as_ref())
         {
             return false;
         }
-        self.foreground = process::name(group).map(|name| (group, name));
+        self.foreground = name.map(|name| (group, name));
         match self.running_program().map(str::to_owned) {
             Some(name) => match &mut self.command {
-                Some((_, command)) if command.is_empty() => *command = name,
+                Some((_, command)) if command.is_empty() || same_group => *command = name,
                 Some(_) => {}
                 None => self.command = Some((Instant::now(), name)),
             },
