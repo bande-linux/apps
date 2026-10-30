@@ -139,9 +139,9 @@ impl ActivityMonitor {
                 }
                 Request::ShowInFiles(path) => show_in_files(window, &path),
                 Request::Copy(text) => window.copy(&text),
-                Request::Paste => {
-                    if let Err(error) = window.paste() {
-                        tracing::warn!("cannot paste: {error}");
+                Request::Clipboard(request) => {
+                    if let Err(error) = window.serve_clipboard(request) {
+                        tracing::warn!("cannot use the clipboard: {error}");
                     }
                 }
                 Request::EmojiPicker => {

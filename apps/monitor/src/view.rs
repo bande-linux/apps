@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use unbound_toolkit::ui::{
-    Alert, Button, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton,
+    Alert, Button, ClipboardRequest, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton,
 };
 use unbound_toolkit::{
     Color, Header, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle,
@@ -29,7 +29,7 @@ pub enum Request {
     Resample,
     ShowInFiles(PathBuf),
     Copy(String),
-    Paste,
+    Clipboard(ClipboardRequest),
     EmojiPicker,
     Menu(Menu, Point),
     Inspect(u32),

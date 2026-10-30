@@ -2,9 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, TreeId, TreeUpdate};
-use unbound_toolkit::ui::{
-    ClipboardRequest, Context, Cursor, Event, FreeLayout, Sort, Table, Ui, Widget, WidgetId,
-};
+use unbound_toolkit::ui::{Context, Cursor, Event, FreeLayout, Sort, Table, Ui, Widget, WidgetId};
 use unbound_toolkit::{Item, Palette, Rect, TextSystem};
 
 use crate::apps::GroupKey;
@@ -188,10 +186,8 @@ impl List {
         if let Some((menu, at)) = self.ui.take_menu_request() {
             requests.push(Request::Menu(menu, at));
         }
-        match self.ui.take_clipboard_request() {
-            Some(ClipboardRequest::Copy(text)) => requests.push(Request::Copy(text)),
-            Some(ClipboardRequest::Paste) => requests.push(Request::Paste),
-            None => {}
+        if let Some(request) = self.ui.take_clipboard_request() {
+            requests.push(Request::Clipboard(request));
         }
         if self.ui.take_emoji_picker_request() {
             requests.push(Request::EmojiPicker);
