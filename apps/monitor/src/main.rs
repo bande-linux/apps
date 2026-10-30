@@ -25,6 +25,7 @@ const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
 const ICON_PIXELS: u32 = 32;
 const FILES: &str = "unbound-files";
+const FILES_APP_ID: &str = "org.unbound.Files";
 const PROC_ROOT: &str = "/";
 
 struct ActivityMonitor {
@@ -206,7 +207,7 @@ fn show_in_files(window: &mut Window, path: &Path) {
         .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
         .ok();
     let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
-    if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+    if let Err(error) = spawn_detached(FILES_APP_ID, &command, None, token.as_deref()) {
         tracing::warn!("cannot show {} in Files: {error}", path.display());
     }
 }

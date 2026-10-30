@@ -5,10 +5,6 @@ use unbound_xdg::DesktopEntry;
 
 use crate::sampler::Process;
 
-const LAUNCHERS: &[&str] = &[
-    "bash", "dash", "env", "fish", "flatpak", "java", "node", "perl", "pkexec", "python",
-    "python3", "ruby", "sh", "sudo", "zsh",
-];
 const INIT: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,12 +99,8 @@ impl Catalog {
                 path: entry.path.clone(),
             });
             catalog.by_id.insert(entry.app_id().to_owned(), index);
-            let command = entry.command().unwrap_or_default();
-            if let Some(program) = command.first().and_then(|first| file_name(first))
-                && !entry.terminal
-                && !LAUNCHERS.contains(&program)
-            {
-                programs.entry(program.to_owned()).or_default().push(index);
+            if let Some(program) = entry.program() {
+                programs.entry(program).or_default().push(index);
             }
         }
         catalog.by_program = programs
