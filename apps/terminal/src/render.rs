@@ -245,22 +245,22 @@ impl Painter {
         let palette = self.theme.palette;
         let line = hairline(1.0, self.metrics.scale);
         let layout = TabBarLayout::new(bar.titles.len(), width);
-        let hover_paint = palette.label_primary.with_alpha(HOVER_ALPHA);
+        let hover_paint = palette.ink.with_alpha(HOVER_ALPHA);
         let label_color = |active: bool| {
             if active && bar.focused {
-                palette.label_primary
+                palette.ink
             } else {
-                palette.label_muted
+                palette.ink2
             }
         };
         let mut items = vec![
             Item::Fill {
                 shape: Shape::rect(Rect::new(0.0, 0.0, width, TAB_BAR_HEIGHT)),
-                paint: palette.surface_background.into(),
+                paint: palette.sheet.into(),
             },
             Item::Fill {
                 shape: Shape::rect(Rect::new(0.0, TAB_BAR_HEIGHT - line, width, line)),
-                paint: palette.separator_color.into(),
+                paint: palette.hairline.into(),
             },
         ];
         for (index, (tab, title)) in layout.tabs.iter().zip(bar.titles).enumerate() {
@@ -288,7 +288,7 @@ impl Painter {
                         line,
                         TAB_BAR_HEIGHT,
                     )),
-                    paint: palette.separator_color.into(),
+                    paint: palette.hairline.into(),
                 });
             }
             let label_area = Rect::new(
@@ -303,10 +303,10 @@ impl Painter {
                 if bar.hover == Some(TabTarget::Close(index)) {
                     items.push(Item::Fill {
                         shape: Shape::rounded(close, close.width / 2.0),
-                        paint: palette.label_primary.with_alpha(2 * HOVER_ALPHA).into(),
+                        paint: palette.ink.with_alpha(2 * HOVER_ALPHA).into(),
                     });
                 }
-                items.push(self.centred(CLOSE_SYMBOL, SYMBOL_SIZE, palette.label_muted, close));
+                items.push(self.centred(CLOSE_SYMBOL, SYMBOL_SIZE, palette.ink2, close));
             }
         }
         if bar.hover == Some(TabTarget::NewTab) {
@@ -320,12 +320,7 @@ impl Painter {
                 paint: hover_paint.into(),
             });
         }
-        items.push(self.centred(
-            NEW_TAB_SYMBOL,
-            SYMBOL_SIZE,
-            palette.label_muted,
-            layout.new_tab,
-        ));
+        items.push(self.centred(NEW_TAB_SYMBOL, SYMBOL_SIZE, palette.ink2, layout.new_tab));
         items
     }
 

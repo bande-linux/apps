@@ -99,8 +99,8 @@ impl Widget for BannerView {
         }
         self.sizes = sizes;
         let (size, color) = match model.kind {
-            Kind::Find => (STATUS_SIZE, cx.palette.label_muted),
-            Kind::Confirm => (MESSAGE_SIZE, cx.palette.label_primary),
+            Kind::Find => (STATUS_SIZE, cx.palette.ink2),
+            Kind::Confirm => (MESSAGE_SIZE, cx.palette.ink),
         };
         self.status = model.status.as_ref().map(|status| {
             cx.text
@@ -142,11 +142,11 @@ impl Widget for BannerView {
         let bar = self.bar();
         items.push(Item::Fill {
             shape: Shape::rect(bar),
-            paint: cx.palette.surface_background.into(),
+            paint: cx.palette.sheet.into(),
         });
         items.push(Item::Fill {
             shape: Shape::rect(Rect::new(bar.x, bar.y + bar.height - 1.0, bar.width, 1.0)),
-            paint: cx.palette.separator_color.into(),
+            paint: cx.palette.hairline.into(),
         });
         if let Some(status) = &self.status {
             items.push(Item::Text {

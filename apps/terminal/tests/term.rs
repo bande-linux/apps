@@ -207,8 +207,7 @@ fn painter(scheme: Scheme) -> Painter {
     Painter::new(
         Appearance {
             scheme,
-            accent: None,
-            reduce_motion: false,
+            ..Appearance::default()
         },
         DEFAULT_FONT_SIZE,
         1.0,
@@ -561,7 +560,7 @@ fn the_close_confirmation_answers_enter_and_escape_and_matches_its_goldens() {
         let scene = unbound_toolkit::Scene {
             width: size.0,
             height: size.1,
-            background: palette.surface_background,
+            background: palette.sheet,
             items: banner.items(size.0, size.1),
         };
         let frame = CpuRenderer::new().render(&scene).expect("frame");
