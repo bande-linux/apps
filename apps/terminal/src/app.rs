@@ -31,6 +31,7 @@ use crate::bus::{Bus, Outgoing};
 
 pub const APP_ID: &str = "org.unbound.Terminal";
 const FILES: &str = "unbound-files";
+const FILES_APP_ID: &str = "org.unbound.Files";
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
 const TERMINAL_NODE: NodeId = NodeId(u64::MAX - 1);
 const TAB_LIST_NODE: NodeId = NodeId(u64::MAX - 2);
@@ -925,7 +926,9 @@ impl TerminalApp {
             .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
             .ok();
         let command = [FILES.to_owned(), directory.to_string_lossy().into_owned()];
-        if let Err(error) = unbound_xdg::spawn_detached(&command, None, token.as_deref()) {
+        if let Err(error) =
+            unbound_xdg::spawn_detached(FILES_APP_ID, &command, None, token.as_deref())
+        {
             tracing::warn!("cannot show {} in Files: {error}", directory.display());
         }
     }
@@ -1234,7 +1237,7 @@ impl TerminalApp {
             .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
             .ok();
         let command = ["xdg-open".to_owned(), uri.to_owned()];
-        if let Err(error) = unbound_xdg::spawn_detached(&command, None, token.as_deref()) {
+        if let Err(error) = unbound_xdg::spawn_detached("", &command, None, token.as_deref()) {
             tracing::warn!("cannot open {uri}: {error}");
         }
     }
@@ -1883,7 +1886,7 @@ pub fn spawn_self(window: &mut Window, arguments: Vec<String>) {
         .ok();
     let mut command = vec![program];
     command.extend(arguments);
-    if let Err(error) = unbound_xdg::spawn_detached(&command, None, token.as_deref()) {
+    if let Err(error) = unbound_xdg::spawn_detached(APP_ID, &command, None, token.as_deref()) {
         tracing::warn!("cannot open a window: {error}");
     }
 }
