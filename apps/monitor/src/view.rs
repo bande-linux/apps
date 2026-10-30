@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
-use unbound_toolkit::ui::{Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton};
+use unbound_toolkit::ui::{Alert, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{
-    Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
+    Color, Header, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle,
     TextSystem,
 };
 
@@ -13,35 +14,20 @@ use crate::model::{StopTarget, stop_target};
 use crate::sampler::Snapshot;
 use crate::signal::{SignalError, Stop};
 
-const TEXT_SIZE: f32 = 12.0;
-const DIALOG_WIDTH: f32 = 400.0;
-const DIALOG_HEIGHT: f32 = 150.0;
-const BUTTON_HEIGHT: f32 = 26.0;
-const BUTTON_GAP: f32 = 8.0;
-const DIALOG_PADDING: f32 = 20.0;
-const WHITE: Color = Color::hex(0xFFFFFF);
-pub(crate) const NOT_RESPONDING: Color = Color::hex(0xE5484D);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DialogButton {
-    Cancel,
-    ForceQuit,
-    Quit,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Dialog {
-    Confirm(StopTarget),
-    ConfirmForce(StopTarget),
-    Denied(String),
-}
+pub(crate) const QUIT: &str = "quit";
+pub(crate) const FORCE_QUIT: &str = "force-quit";
+const CANCEL: &str = "cancel";
+pub(crate) const ALERT_ICON: &str = "org.unbound.ActivityMonitor";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
     Resample,
     ShowInFiles(PathBuf),
     Copy(String),
+    Paste,
+    EmojiPicker,
     Menu(Menu, Point),
+    Inspect(u32),
 }
 
 type FindIcon = Box<dyn Fn(&str) -> Option<Image>>;
@@ -69,39 +55,6 @@ impl Icons {
     }
 }
 
-pub fn button_frames(panel: Rect, buttons: &[DialogButton]) -> Vec<(DialogButton, Rect)> {
-    let mut right = panel.x + panel.width - DIALOG_PADDING;
-    let mut frames = Vec::new();
-    for button in buttons.iter().rev() {
-        let width = match button {
-            DialogButton::ForceQuit => 96.0,
-            _ => 76.0,
-        };
-        right -= width;
-        frames.push((
-            *button,
-            Rect::new(
-                right,
-                panel.y + panel.height - DIALOG_PADDING - BUTTON_HEIGHT,
-                width,
-                BUTTON_HEIGHT,
-            ),
-        ));
-        right -= BUTTON_GAP;
-    }
-    frames.reverse();
-    frames
-}
-
-pub fn dialog_frame(size: (f32, f32)) -> Rect {
-    Rect::new(
-        ((size.0 - DIALOG_WIDTH) / 2.0).round(),
-        ((size.1 - DIALOG_HEIGHT) / 3.0).round().max(0.0),
-        DIALOG_WIDTH,
-        DIALOG_HEIGHT,
-    )
-}
-
 pub(crate) fn contains(rect: Rect, at: Point) -> bool {
     at.x >= rect.x && at.x < rect.x + rect.width && at.y >= rect.y && at.y < rect.y + rect.height
 }
@@ -117,23 +70,12 @@ pub fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
 
 pub struct Painter<'a> {
     pub text: &'a mut TextSystem,
-    pub palette: Palette,
     pub items: Vec<Item>,
 }
 
 impl Painter<'_> {
-    pub fn paragraph(
-        &mut self,
-        text: &str,
-        style: TextStyle,
-        width: Option<f32>,
-        align: TextAlign,
-    ) -> Paragraph {
-        self.text.paragraph(text, style, width, align)
-    }
-
     pub fn text_in(&mut self, text: &str, style: TextStyle, frame: Rect, align: TextAlign) {
-        let paragraph = self.paragraph(text, style, Some(frame.width), align);
+        let paragraph = self.text.paragraph(text, style, Some(frame.width), align);
         let y = frame.y + ((frame.height - paragraph.height()) / 2.0).round();
         self.items.push(Item::Clip {
             shape: Shape::rect(frame),
@@ -150,133 +92,67 @@ impl Painter<'_> {
             paint: color.into(),
         });
     }
+}
 
-    pub fn button(&mut self, frame: Rect, label: &str, default: bool) {
-        let shape = Shape::rounded(frame, 6.0);
-        let (fill, color) = if default {
-            (self.palette.accent, WHITE)
-        } else {
-            (self.palette.sheet, self.palette.ink)
-        };
-        self.items.push(Item::Shadow {
-            shape,
-            offset: Point::new(0.0, 0.5),
-            blur_radius: 1.5,
-            color: Color::hex(0x000000).with_alpha(50),
-        });
-        self.fill(shape, fill);
-        self.text_in(
-            label,
-            TextStyle::new(TEXT_SIZE + 1.0, color).weight(TextStyle::MEDIUM),
-            frame,
-            TextAlign::Center,
-        );
-    }
-
-    pub fn dialog(&mut self, size: (f32, f32), dialog: &Dialog, alternate: bool) {
-        let panel = dialog_frame(size);
-        self.fill(
-            Shape::rect(Rect::new(0.0, 0.0, size.0, size.1)),
-            Color::hex(0x000000).with_alpha(40),
-        );
-        let shape = Shape::rounded(panel, 12.0);
-        self.items.push(Item::Shadow {
-            shape,
-            offset: Point::new(0.0, 8.0),
-            blur_radius: 24.0,
-            color: Color::hex(0x000000).with_alpha(90),
-        });
-        self.fill(shape, self.palette.overlay);
-        let (title, message, buttons) = dialog_content(dialog);
-        let inner = panel.width - 2.0 * DIALOG_PADDING;
-        let title = self.paragraph(
-            &title,
-            TextStyle::new(TEXT_SIZE + 2.0, self.palette.ink).weight(TextStyle::SEMIBOLD),
-            Some(inner),
-            TextAlign::Start,
-        );
-        let title_height = title.height();
-        self.items.push(Item::Text {
-            origin: Point::new(panel.x + DIALOG_PADDING, panel.y + DIALOG_PADDING),
-            paragraph: title,
-        });
-        let message = self.paragraph(
-            &message,
-            TextStyle::new(TEXT_SIZE, self.palette.ink2),
-            Some(inner),
-            TextAlign::Start,
-        );
-        self.items.push(Item::Text {
-            origin: Point::new(
-                panel.x + DIALOG_PADDING,
-                panel.y + DIALOG_PADDING + title_height + 6.0,
-            ),
-            paragraph: message,
-        });
-        let default = default_button(dialog, alternate);
-        for (button, frame) in button_frames(panel, buttons) {
-            self.button(frame, &button_label(button, dialog), button == default);
-        }
+fn with_icon(alert: Alert, icon: Option<Image>) -> Alert {
+    match icon {
+        Some(icon) => alert.icon(icon),
+        None => alert,
     }
 }
 
-fn button_label(button: DialogButton, dialog: &Dialog) -> String {
-    match (button, dialog) {
-        (DialogButton::Cancel, Dialog::Denied(_)) => L10N.tr("button-ok"),
-        (DialogButton::Cancel, _) => L10N.tr("button-cancel"),
-        (DialogButton::ForceQuit, _) => L10N.tr("button-force-quit"),
-        (DialogButton::Quit, _) => L10N.tr("button-quit"),
-    }
+pub(crate) fn stop_alert(
+    target: &StopTarget,
+    force: bool,
+    icon: Option<Image>,
+    choose: impl FnMut(&str) + 'static,
+) -> Alert {
+    let names = || {
+        [
+            ("name", target.name.clone().into()),
+            ("count", target.count.into()),
+        ]
+    };
+    let alert = match force {
+        true => Alert::new(
+            &L10N.tr_args("force-quit-confirm", names()),
+            &L10N.tr("force-quit-confirm-message"),
+            choose,
+        )
+        .destructive(&L10N.tr("button-force-quit"), FORCE_QUIT),
+        false => Alert::new(
+            &L10N.tr_args("quit-title", names()),
+            &L10N.tr("quit-message"),
+            choose,
+        )
+        .other(&L10N.tr("button-force-quit"), FORCE_QUIT)
+        .primary(&L10N.tr("button-quit"), QUIT),
+    };
+    with_icon(alert.cancel(&L10N.tr("button-cancel"), CANCEL), icon)
 }
 
-pub fn dialog_buttons(dialog: &Dialog) -> &'static [DialogButton] {
-    match dialog {
-        Dialog::Confirm(_) => &[
-            DialogButton::Cancel,
-            DialogButton::ForceQuit,
-            DialogButton::Quit,
-        ],
-        Dialog::ConfirmForce(_) => &[DialogButton::Cancel, DialogButton::ForceQuit],
-        Dialog::Denied(_) => &[DialogButton::Cancel],
-    }
-}
-
-fn dialog_content(dialog: &Dialog) -> (String, String, &'static [DialogButton]) {
-    match dialog {
-        Dialog::Confirm(target) => (
-            L10N.tr_args(
-                "quit-title",
-                [
-                    ("name", target.name.clone().into()),
-                    ("count", target.count.into()),
-                ],
-            ),
-            L10N.tr("quit-message"),
-            dialog_buttons(dialog),
-        ),
-        Dialog::ConfirmForce(target) => (
-            L10N.tr_args(
-                "force-quit-confirm",
-                [
-                    ("name", target.name.clone().into()),
-                    ("count", target.count.into()),
-                ],
-            ),
-            L10N.tr("force-quit-confirm-message"),
-            dialog_buttons(dialog),
-        ),
-        Dialog::Denied(name) => (
-            L10N.tr_args("quit-denied", [("name", name.clone().into())]),
-            L10N.tr("quit-denied-message"),
-            dialog_buttons(dialog),
-        ),
-    }
-}
-
-pub fn finish_stop(target: &StopTarget, how: Stop) -> Option<Dialog> {
+pub(crate) fn answer_stop(
+    target: &StopTarget,
+    choice: &str,
+    icon: Option<Image>,
+    choose: impl FnMut(&str) + 'static,
+) -> Option<Alert> {
+    let how = match choice {
+        QUIT => Stop::Quit,
+        FORCE_QUIT => Stop::ForceQuit,
+        _ => return None,
+    };
     match stop_target(target, how) {
         Ok(()) => None,
-        Err(SignalError::PermissionDenied) => Some(Dialog::Denied(target.name.clone())),
+        Err(SignalError::PermissionDenied) => Some(with_icon(
+            Alert::new(
+                &L10N.tr_args("quit-denied", [("name", target.name.clone().into())]),
+                &L10N.tr("quit-denied-message"),
+                choose,
+            )
+            .primary(&L10N.tr("button-ok"), CANCEL),
+            icon,
+        )),
         Err(error) => {
             tracing::warn!("cannot stop {}: {error:?}", target.name);
             None
@@ -293,47 +169,19 @@ pub trait Screen {
     fn measures_proportional_memory(&self) -> bool;
     fn take_requests(&mut self) -> Vec<Request>;
     fn menu_action(&mut self, action: &str) -> bool;
+    fn menu_closed(&mut self) -> bool;
+    fn pasted(&mut self, text: &str) -> bool;
     fn finished(&self) -> bool;
-
     fn set_responding(&mut self, pid: u32, app_id: &str, responding: bool) -> bool;
     fn accessibility(&self) -> Option<TreeUpdate>;
     fn perform(&mut self, request: &ActionRequest) -> bool;
     fn cursor(&self) -> Cursor;
     fn animating(&self) -> bool;
-}
+    fn deadline(&self) -> Option<Instant>;
 
-pub fn press_dialog_button(dialog: Dialog, button: DialogButton) -> Option<Dialog> {
-    let how = match button {
-        DialogButton::Cancel => return None,
-        DialogButton::Quit => Stop::Quit,
-        DialogButton::ForceQuit => Stop::ForceQuit,
-    };
-    match dialog {
-        Dialog::Confirm(target) | Dialog::ConfirmForce(target) => finish_stop(&target, how),
-        Dialog::Denied(_) => None,
+    fn header(&self) -> Option<Header> {
+        None
     }
-}
 
-pub fn default_button(dialog: &Dialog, alternate: bool) -> DialogButton {
-    match dialog {
-        Dialog::Denied(_) => DialogButton::Cancel,
-        Dialog::ConfirmForce(_) => DialogButton::ForceQuit,
-        Dialog::Confirm(_) if alternate => DialogButton::ForceQuit,
-        Dialog::Confirm(_) => DialogButton::Quit,
-    }
-}
-
-pub fn dialog_key(dialog: &Dialog, key: Key, modifiers: Modifiers) -> Option<DialogButton> {
-    match key {
-        Key::Escape => Some(DialogButton::Cancel),
-        Key::Enter => Some(default_button(dialog, modifiers.alt)),
-        _ => None,
-    }
-}
-
-pub fn dialog_click(dialog: &Dialog, size: (f32, f32), at: Point) -> Option<DialogButton> {
-    button_frames(dialog_frame(size), dialog_buttons(dialog))
-        .into_iter()
-        .find(|(_, frame)| contains(*frame, at))
-        .map(|(button, _)| button)
+    fn set_full_screen(&mut self, _full_screen: bool) {}
 }

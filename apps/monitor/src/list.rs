@@ -8,6 +8,7 @@ use unbound_toolkit::ui::{
 use unbound_toolkit::{Item, Palette, Rect, TextSystem};
 
 use crate::apps::GroupKey;
+use crate::view::Request;
 
 pub(crate) fn group_id(key: &GroupKey) -> String {
     match key {
@@ -22,27 +23,34 @@ pub(crate) enum Signal {
     Selection(Vec<String>),
     Activate,
     Sort(Sort),
+    Tab(usize),
+    Search(String),
+    Stop,
+    Choice(String),
+}
+
+pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
+
+pub(crate) fn sender(signals: &Signals) -> impl Fn(Signal) + 'static {
+    let signals = signals.clone();
+    move |signal| signals.borrow_mut().push(signal)
 }
 
 pub(crate) struct List {
     ui: Ui,
     host: WidgetId,
     table: WidgetId,
-    signals: Rc<RefCell<Vec<Signal>>>,
+    signals: Signals,
 }
 
 impl List {
     pub(crate) fn new(table: Table, palette: Palette, text: TextSystem) -> Self {
-        let signals = Rc::new(RefCell::new(Vec::new()));
-        let (selection, activate, sort) = (signals.clone(), signals.clone(), signals.clone());
+        let signals: Signals = Rc::new(RefCell::new(Vec::new()));
+        let (selection, activate, sort) = (sender(&signals), sender(&signals), sender(&signals));
         let table = table
-            .on_selection(move |keys| {
-                selection
-                    .borrow_mut()
-                    .push(Signal::Selection(keys.to_vec()))
-            })
-            .on_activate(move |_| activate.borrow_mut().push(Signal::Activate))
-            .on_sort(move |order| sort.borrow_mut().push(Signal::Sort(order)));
+            .on_selection(move |keys| selection(Signal::Selection(keys.to_vec())))
+            .on_activate(move |_| activate(Signal::Activate))
+            .on_sort(move |order| sort(Signal::Sort(order)));
         let table_id = Widget::id(&table);
         let mut host = FreeLayout::new();
         host.insert(table, Rect::default());
@@ -57,6 +65,10 @@ impl List {
         list
     }
 
+    pub(crate) fn signals(&self) -> &Signals {
+        &self.signals
+    }
+
     pub(crate) fn table(&mut self) -> Option<&mut Table> {
         self.ui.widget_as::<Table>(self.table)
     }
@@ -65,31 +77,82 @@ impl List {
         self.ui.widget_ref::<Table>(self.table)
     }
 
-    pub(crate) fn frame(&self) -> Rect {
+    pub(crate) fn widget_as<T: Widget + 'static>(&mut self, id: WidgetId) -> Option<&mut T> {
+        self.ui.widget_as::<T>(id)
+    }
+
+    pub(crate) fn insert(&mut self, widget: impl Widget + 'static) -> WidgetId {
+        self.ui
+            .widget_as::<FreeLayout>(self.host)
+            .map_or_else(WidgetId::next, |host| host.insert(widget, Rect::default()))
+    }
+
+    pub(crate) fn replace(&mut self, old: WidgetId, widget: impl Widget + 'static) -> WidgetId {
+        let frame = self.frame_of(old);
+        let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) else {
+            return old;
+        };
+        host.remove(old);
+        host.insert(widget, frame)
+    }
+
+    pub(crate) fn frame_of(&self, id: WidgetId) -> Rect {
         self.ui
             .widget_ref::<FreeLayout>(self.host)
-            .and_then(|host| host.frame_of(self.table))
+            .and_then(|host| host.frame_of(id))
             .unwrap_or_default()
     }
 
-    pub(crate) fn set_frame(&mut self, frame: Rect) {
-        let table = self.table;
+    pub(crate) fn place(&mut self, id: WidgetId, frame: Rect) {
         if let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) {
-            host.set_frame(table, frame);
+            host.set_frame(id, frame);
         }
     }
 
-    pub(crate) fn focus(&mut self) {
+    pub(crate) fn frame(&self) -> Rect {
+        self.frame_of(self.table)
+    }
+
+    pub(crate) fn set_frame(&mut self, frame: Rect) {
+        self.place(self.table, frame);
+    }
+
+    pub(crate) fn focus_widget(&mut self, id: WidgetId) {
         self.ui.perform(&ActionRequest {
             action: Action::Focus,
             target_tree: TreeId::ROOT,
-            target_node: self.table.into(),
+            target_node: id.into(),
             data: None,
         });
     }
 
+    pub(crate) fn click_part(&mut self, id: WidgetId, part: usize) {
+        self.ui.perform(&ActionRequest {
+            action: Action::Click,
+            target_tree: TreeId::ROOT,
+            target_node: id.part(part as u64),
+            data: None,
+        });
+    }
+
+    pub(crate) fn focus(&mut self) {
+        self.focus_widget(self.table);
+    }
+
+    pub(crate) fn focused(&self) -> Option<WidgetId> {
+        self.ui.focus()
+    }
+
     pub(crate) fn blur(&mut self) {
         self.ui.clear_focus();
+    }
+
+    pub(crate) fn present_dialog(&mut self, dialog: impl Widget + 'static) {
+        self.ui.present_dialog(dialog);
+    }
+
+    pub(crate) fn has_dialog(&self) -> bool {
+        self.ui.has_sheet()
     }
 
     pub(crate) fn set_palette(&mut self, palette: Palette) {
@@ -108,19 +171,40 @@ impl List {
         self.ui.perform(request)
     }
 
+    pub(crate) fn menu_action(&mut self, action: &str) -> bool {
+        self.ui.menu_action(action)
+    }
+
+    pub(crate) fn menu_closed(&mut self) -> bool {
+        self.ui.menu_closed()
+    }
+
+    pub(crate) fn pasted(&mut self, text: &str) -> bool {
+        self.ui.pasted(text)
+    }
+
     pub(crate) fn take_signals(&mut self) -> Vec<Signal> {
         std::mem::take(&mut *self.signals.borrow_mut())
     }
 
-    pub(crate) fn take_copy(&mut self) -> Option<String> {
-        match self.ui.take_clipboard_request() {
-            Some(ClipboardRequest::Copy(text)) => Some(text),
-            _ => None,
+    pub(crate) fn take_requests(&mut self) -> Vec<Request> {
+        let mut requests = Vec::new();
+        if let Some((menu, at)) = self.ui.take_menu_request() {
+            requests.push(Request::Menu(menu, at));
         }
+        match self.ui.take_clipboard_request() {
+            Some(ClipboardRequest::Copy(text)) => requests.push(Request::Copy(text)),
+            Some(ClipboardRequest::Paste) => requests.push(Request::Paste),
+            None => {}
+        }
+        if self.ui.take_emoji_picker_request() {
+            requests.push(Request::EmojiPicker);
+        }
+        requests
     }
 
-    pub(crate) fn paint(&mut self, width: u32, height: u32) -> Vec<Item> {
-        self.ui.paint_layers(width, height).0
+    pub(crate) fn paint(&mut self, width: u32, height: u32) -> (Vec<Item>, Vec<Item>) {
+        self.ui.paint_layers(width, height)
     }
 
     pub(crate) fn accessibility(&self) -> TreeUpdate {
@@ -133,5 +217,9 @@ impl List {
 
     pub(crate) fn animating(&self) -> bool {
         self.ui.is_animating()
+    }
+
+    pub(crate) fn deadline(&self) -> Option<std::time::Instant> {
+        self.ui.deadline()
     }
 }
