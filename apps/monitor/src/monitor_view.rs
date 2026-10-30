@@ -818,6 +818,10 @@ impl Screen for MonitorView {
         self.monitor.measures_gpu()
     }
 
+    fn measures_disk(&self) -> bool {
+        self.monitor.measures_disk()
+    }
+
     fn measures_proportional_memory(&self) -> bool {
         self.monitor.measures_proportional_memory()
     }
