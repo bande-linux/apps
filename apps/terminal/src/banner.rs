@@ -193,6 +193,7 @@ pub struct Banner {
 impl Banner {
     fn new(
         palette: Palette,
+        text: TextSystem,
         model: Shared,
         leading: usize,
         children: Vec<Box<dyn Widget>>,
@@ -208,7 +209,7 @@ impl Banner {
             frame: Rect::default(),
         };
         let mut banner = Self {
-            ui: Ui::new(Box::new(view), Context::new(TextSystem::new(), palette)),
+            ui: Ui::new(Box::new(view), Context::new(text, palette)),
             focus,
             model,
         };
@@ -216,7 +217,7 @@ impl Banner {
         banner
     }
 
-    pub fn find(palette: Palette, query: &str) -> Self {
+    pub fn find(palette: Palette, text: TextSystem, query: &str) -> Self {
         let model: Shared = Rc::new(RefCell::new(Model {
             kind: Kind::Find,
             query: query.to_owned(),
@@ -237,10 +238,10 @@ impl Banner {
             action_button(&model, &L10N.tr("find-next"), BannerAction::Newer),
             action_button(&model, &L10N.tr("find-done"), BannerAction::Dismiss),
         ];
-        Self::new(palette, model, 3, children, focus)
+        Self::new(palette, text, model, 3, children, focus)
     }
 
-    pub fn confirm(palette: Palette, message: &str, confirm: &str) -> Self {
+    pub fn confirm(palette: Palette, text: TextSystem, message: &str, confirm: &str) -> Self {
         let model: Shared = Rc::new(RefCell::new(Model {
             kind: Kind::Confirm,
             query: String::new(),
@@ -251,7 +252,7 @@ impl Banner {
         let cancel = action_button(&model, &L10N.tr("cancel"), BannerAction::Dismiss);
         let confirm = action_button(&model, confirm, BannerAction::Confirm);
         let focus = confirm.id();
-        Self::new(palette, model, 0, vec![cancel, confirm], focus)
+        Self::new(palette, text, model, 0, vec![cancel, confirm], focus)
     }
 
     pub fn take_focus(&mut self) {

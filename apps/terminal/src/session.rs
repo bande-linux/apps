@@ -11,6 +11,7 @@ use crate::process::{self, Report, Reports};
 use crate::terminal::{GridSize, Terminal};
 
 const READ_BUFFER: usize = 65536;
+const READS_PER_WAKE: usize = 16;
 const TITLE_SEPARATOR: &str = " — ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,7 +115,7 @@ impl Session {
 
     pub fn read(&mut self) -> Vec<Notice> {
         let mut buffer = [0u8; READ_BUFFER];
-        loop {
+        for _ in 0..READS_PER_WAKE {
             let mut master = self.pty.file();
             match master.read(&mut buffer) {
                 Ok(0) => {
