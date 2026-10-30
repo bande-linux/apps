@@ -106,7 +106,7 @@ fn cells(view: &InspectorView) -> Vec<String> {
     tree.nodes
         .iter()
         .filter(|(_, node)| node.role() == Role::Cell)
-        .filter_map(|(_, node)| node.value().map(str::to_owned))
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
         .collect()
 }
 
