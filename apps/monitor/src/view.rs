@@ -1170,6 +1170,14 @@ impl Screen for MonitorView {
                 );
                 false
             }
+            Some(MenuCommand::Find) => {
+                self.searching = true;
+                true
+            }
+            Some(MenuCommand::Show(tab)) => {
+                self.set_tab(tab);
+                true
+            }
             None => false,
         }
     }

@@ -1,6 +1,8 @@
+use unbound_app_menu::{Entry, app_submenu, close_window, window_submenu};
 use unbound_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
+use crate::model::Tab;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuCommand {
@@ -9,14 +11,21 @@ pub enum MenuCommand {
     ShowInFiles,
     CopyName,
     CopyPid,
+    Find,
+    Show(Tab),
 }
 
-const ACTIONS: [(MenuCommand, &str); 5] = [
+const ACTIONS: [(MenuCommand, &str); 10] = [
     (MenuCommand::Quit, "quit"),
     (MenuCommand::ForceQuit, "force-quit"),
     (MenuCommand::ShowInFiles, "show-in-files"),
     (MenuCommand::CopyName, "copy-name"),
     (MenuCommand::CopyPid, "copy-pid"),
+    (MenuCommand::Find, "find"),
+    (MenuCommand::Show(Tab::Cpu), "show-cpu"),
+    (MenuCommand::Show(Tab::Memory), "show-memory"),
+    (MenuCommand::Show(Tab::Disk), "show-disk"),
+    (MenuCommand::Show(Tab::Network), "show-network"),
 ];
 
 impl MenuCommand {
@@ -69,4 +78,40 @@ pub fn force_quit_menu(located: bool) -> Menu {
         MenuItem::separator(),
         item("menu-show-in-files", MenuCommand::ShowInFiles).enabled(located),
     ])
+}
+
+fn entry(message: &str, command: MenuCommand) -> Entry {
+    Entry::item(&L10N.tr(message), command.action())
+}
+
+pub fn app_menus() -> Vec<Entry> {
+    let mut view = Tab::ALL
+        .iter()
+        .zip(1..)
+        .map(|(tab, digit)| {
+            Entry::item(&tab.title(), MenuCommand::Show(*tab).action())
+                .shortcut(&format!("Super+{digit}"))
+        })
+        .collect::<Vec<_>>();
+    view.extend([
+        Entry::separator(),
+        entry("menu-quit-process", MenuCommand::Quit).shortcut("Alt+Super+Q"),
+        entry("menu-force-quit-process", MenuCommand::ForceQuit),
+        Entry::separator(),
+        entry("menu-show-in-files", MenuCommand::ShowInFiles).shortcut("Shift+Super+R"),
+    ]);
+    vec![
+        app_submenu(&L10N.tr("window-title"), Vec::new()),
+        Entry::submenu(
+            &L10N.tr("menu-edit"),
+            vec![
+                entry("menu-copy-name", MenuCommand::CopyName),
+                entry("menu-copy-pid", MenuCommand::CopyPid),
+                Entry::separator(),
+                entry("menu-find", MenuCommand::Find).shortcut("Super+F"),
+            ],
+        ),
+        Entry::submenu(&L10N.tr("menu-view"), view),
+        window_submenu(vec![close_window()]),
+    ]
 }

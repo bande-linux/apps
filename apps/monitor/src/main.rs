@@ -1,9 +1,12 @@
+use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use unbound_app_menu::{AppMenu, Standard};
 use unbound_monitor::{
     AppList, Catalog, ForceQuitView, Icons, L10N, Monitor, MonitorView, Request, Sampler, Screen,
+    app_menus,
 };
 use unbound_toolkit::{
     App, Image, MenuPlacement, Role, Scene, TextSystem, Window, WindowError, WindowEvent,
@@ -22,6 +25,7 @@ struct ActivityMonitor<S> {
     screen: S,
     sampler: Sampler,
     next_sample: Instant,
+    app_menu: Option<AppMenu>,
 }
 
 impl<S: Screen> ActivityMonitor<S> {
@@ -32,6 +36,27 @@ impl<S: Screen> ActivityMonitor<S> {
             Ok(snapshot) => self.screen.update(snapshot),
             Err(error) => tracing::warn!("cannot sample: {error}"),
         }
+    }
+
+    fn menu_action(&mut self, window: &mut Window, action: &str) {
+        let result = match Standard::parse(action) {
+            Some(Standard::Hide | Standard::Minimize) => window.minimize(),
+            Some(Standard::Zoom) => window.toggle_zoom(),
+            Some(Standard::Quit | Standard::CloseWindow) => {
+                window.close();
+                Ok(())
+            }
+            None => {
+                if self.screen.menu_action(action) {
+                    window.request_redraw();
+                }
+                Ok(())
+            }
+        };
+        if let Err(error) = result {
+            tracing::warn!("cannot {action}: {error}");
+        }
+        self.serve(window);
     }
 
     fn serve(&mut self, window: &mut Window) {
@@ -78,6 +103,9 @@ impl<S: Screen> App for ActivityMonitor<S> {
             }
             WindowEvent::Focus(focused) => {
                 self.screen.set_focused(focused);
+                if focused && let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
+                    tracing::warn!("{error}");
+                }
                 window.request_redraw();
             }
             WindowEvent::Input(input) => {
@@ -86,12 +114,7 @@ impl<S: Screen> App for ActivityMonitor<S> {
                 }
                 self.serve(window);
             }
-            WindowEvent::MenuAction(action) => {
-                if self.screen.menu_action(&action) {
-                    window.request_redraw();
-                }
-                self.serve(window);
-            }
+            WindowEvent::MenuAction(action) => self.menu_action(window, &action),
             WindowEvent::AppResponding {
                 pid,
                 app_id,
@@ -104,6 +127,21 @@ impl<S: Screen> App for ActivityMonitor<S> {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        self.app_menu.iter().map(AppMenu::fd).collect()
+    }
+
+    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+        let actions = self
+            .app_menu
+            .as_mut()
+            .map(AppMenu::take_actions)
+            .unwrap_or_default();
+        for action in actions {
+            self.menu_action(window, &action);
         }
     }
 
@@ -129,13 +167,19 @@ fn icons() -> Icons {
     })
 }
 
-fn open(mut screen: impl Screen, title: &str, size: (u32, u32)) -> Result<(), WindowError> {
+fn open(
+    mut screen: impl Screen,
+    title: &str,
+    size: (u32, u32),
+    app_menu: Option<AppMenu>,
+) -> Result<(), WindowError> {
     let mut window = Window::open(Role::toplevel(title, APP_ID), size)?;
     screen.set_palette(window.appearance().palette());
     let mut app = ActivityMonitor {
         screen,
         sampler: Sampler::live(),
         next_sample: Instant::now() + FIRST_INTERVAL,
+        app_menu,
     };
     app.sample();
     unbound_toolkit::run(&mut window, &mut app)
@@ -151,10 +195,13 @@ fn run() -> Result<(), WindowError> {
     if std::env::args().any(|argument| argument == "--force-quit") {
         let apps = AppList::new(catalog, rustix::process::getuid().as_raw());
         let screen = ForceQuitView::new(apps, palette, TextSystem::new(), icons());
-        open(screen, &L10N.tr("force-quit-title"), FORCE_QUIT_SIZE)
+        open(screen, &L10N.tr("force-quit-title"), FORCE_QUIT_SIZE, None)
     } else {
         let screen = MonitorView::new(Monitor::new(catalog), palette, TextSystem::new(), icons());
-        open(screen, &L10N.tr("window-title"), WINDOW_SIZE)
+        let app_menu = AppMenu::export(APP_ID, app_menus())
+            .inspect_err(|error| tracing::warn!("{error}"))
+            .ok();
+        open(screen, &L10N.tr("window-title"), WINDOW_SIZE, app_menu)
     }
 }
 

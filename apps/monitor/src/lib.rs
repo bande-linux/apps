@@ -18,7 +18,7 @@ pub use apps::{AppInfo, Catalog, Group, GroupKey};
 pub use cpu::{CpuShare, read_cpu_ticks};
 pub use force_quit::ForceQuitView;
 pub use format::{format_bytes, format_cpu_time, format_rate};
-pub use menu::{MenuCommand, Selected, force_quit_menu, process_menu};
+pub use menu::{MenuCommand, Selected, app_menus, force_quit_menu, process_menu};
 pub use model::{
     AppList, AppRow, Column, Disclosure, Graph, Monitor, Row, RowKey, StopTarget, Tab,
 };
