@@ -1,5 +1,5 @@
 use std::os::fd::BorrowedFd;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
@@ -148,6 +148,7 @@ impl ActivityMonitor {
                     }
                 }
                 Request::Inspect(pid) => self.inspect(pid),
+                Request::SaveColumns(text) => save_columns(&text),
                 Request::Menu(menu, at) => {
                     if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
                         tracing::warn!("cannot show the menu: {error}");
@@ -170,6 +171,30 @@ impl ActivityMonitor {
             screen.set_palette(appearance.palette());
             window.request_redraw();
         }
+    }
+}
+
+fn columns_file() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    let state = std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| home.join(".local/state"));
+    Some(state.join("unbound/monitor-columns"))
+}
+
+fn save_columns(text: &str) {
+    let Some(file) = columns_file() else {
+        return;
+    };
+    let staging = file.with_extension("new");
+    let written = file
+        .parent()
+        .map_or(Ok(()), std::fs::create_dir_all)
+        .and_then(|()| std::fs::write(&staging, text))
+        .and_then(|()| std::fs::rename(&staging, &file));
+    if let Err(error) = written {
+        tracing::warn!("cannot remember the columns: {error}");
     }
 }
 
@@ -357,7 +382,11 @@ fn run() -> Result<(), WindowError> {
         let screen = ForceQuitView::new(apps, palette, TextSystem::new(), icons());
         open(screen, &L10N.tr("force-quit-title"), FORCE_QUIT_SIZE, None)
     } else {
-        let screen = MonitorView::new(Monitor::new(catalog), palette, TextSystem::new(), icons());
+        let mut monitor = Monitor::new(catalog);
+        if let Some(text) = columns_file().and_then(|file| std::fs::read_to_string(file).ok()) {
+            monitor.choose_columns(&text);
+        }
+        let screen = MonitorView::new(monitor, palette, TextSystem::new(), icons());
         let app_menu = AppMenu::export(APP_ID, app_menus())
             .inspect_err(|error| tracing::warn!("{error}"))
             .ok();

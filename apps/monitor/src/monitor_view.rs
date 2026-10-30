@@ -14,7 +14,7 @@ use unbound_toolkit::{
 
 use crate::L10N;
 use crate::list::{List, Signal, group_id, sender};
-use crate::menu::{MenuCommand, Selected, process_menu};
+use crate::menu::{COLUMN_ACTION, MenuCommand, Selected, columns_menu, process_menu};
 use crate::model::{Column, Graph, HISTORY, Monitor, Row, RowKey, StopTarget, Tab};
 use crate::sampler::Snapshot;
 use crate::view::{
@@ -49,8 +49,8 @@ fn column_width(column: Column) -> f32 {
     }
 }
 
-fn table_columns(tab: Tab) -> Vec<TableColumn> {
-    tab.columns()
+fn table_columns(tab: Tab, columns: &[Column]) -> Vec<TableColumn> {
+    columns
         .iter()
         .map(|column| {
             let shown = TableColumn::new(&column.title(tab), column_width(*column));
@@ -63,8 +63,8 @@ fn table_columns(tab: Tab) -> Vec<TableColumn> {
         .collect()
 }
 
-fn table_sort(tab: Tab, (column, descending): (Column, bool)) -> Option<Sort> {
-    let index = tab.columns().iter().position(|shown| *shown == column)?;
+fn table_sort(columns: &[Column], (column, descending): (Column, bool)) -> Option<Sort> {
+    let index = columns.iter().position(|shown| *shown == column)?;
     Some(Sort {
         column: index,
         ascending: !descending,
@@ -136,8 +136,8 @@ fn tab_titles() -> Vec<String> {
 impl MonitorView {
     pub fn new(monitor: Monitor, palette: Palette, text: TextSystem, mut icons: Icons) -> Self {
         let tab = monitor.tab();
-        let mut table = Table::new(table_columns(tab));
-        table.set_sort(table_sort(tab, monitor.sort()));
+        let mut table = Table::new(table_columns(tab, monitor.columns()));
+        table.set_sort(table_sort(monitor.columns(), monitor.sort()));
         let mut list = List::new(table, palette, text);
         let send = sender(list.signals());
         let stop = list.insert(stop_button(move || send(Signal::Stop)));
@@ -269,7 +269,7 @@ impl MonitorView {
                 self.inspect();
             }
             Signal::Sort(sort) => {
-                if let Some(column) = self.monitor.tab().columns().get(sort.column) {
+                if let Some(column) = self.monitor.columns().get(sort.column) {
                     self.monitor.set_sort(*column, !sort.ascending);
                     self.sync();
                 }
@@ -414,12 +414,31 @@ impl MonitorView {
         if self.monitor.measures_proportional_memory() != measured {
             self.requests.push(Request::Resample);
         }
-        let sort = table_sort(tab, self.monitor.sort());
+        self.show_columns();
+    }
+
+    fn show_columns(&mut self) {
+        let tab = self.monitor.tab();
+        let columns = table_columns(tab, self.monitor.columns());
+        let sort = table_sort(self.monitor.columns(), self.monitor.sort());
         if let Some(table) = self.list.table() {
-            table.set_columns(table_columns(tab));
+            table.set_columns(columns);
             table.set_sort(sort);
         }
         self.sync();
+    }
+
+    fn toggle_column(&mut self, id: &str) -> bool {
+        let Some(column) = Column::parse(id) else {
+            return false;
+        };
+        if !self.monitor.toggle_column(column) {
+            return false;
+        }
+        self.show_columns();
+        self.requests
+            .push(Request::SaveColumns(self.monitor.chosen_columns()));
+        true
     }
 
     fn open_stop_dialog(&mut self, force: bool) -> bool {
@@ -563,6 +582,11 @@ impl MonitorView {
             return handled;
         }
         let header = at.y < self.list.frame().y + HEADER_HEIGHT;
+        if is_secondary(pointer) && header && self.monitor.tab().has_column_choice() {
+            let menu = columns_menu(self.monitor.tab(), self.monitor.columns());
+            self.requests.push(Request::Menu(menu, at));
+            return true;
+        }
         if is_secondary(pointer) && !header && !self.monitor.selection().is_empty() {
             self.request_menu(at);
             return true;
@@ -685,6 +709,9 @@ impl Screen for MonitorView {
         if self.list.menu_action(action) {
             self.drain();
             return true;
+        }
+        if let Some(id) = action.strip_prefix(COLUMN_ACTION) {
+            return self.toggle_column(id);
         }
         match MenuCommand::parse(action) {
             Some(MenuCommand::Quit) => self.open_stop_dialog(false),

@@ -33,6 +33,7 @@ pub enum Request {
     EmojiPicker,
     Menu(Menu, Point),
     Inspect(u32),
+    SaveColumns(String),
 }
 
 type FindIcon = Box<dyn Fn(&str) -> Option<Image>>;

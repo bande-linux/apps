@@ -577,3 +577,37 @@ fn force_quit_lists_apps_for_assistive_technology_and_force_quits_the_selected_o
     view.handle(&key(Key::Escape));
     assert!(view.finished());
 }
+
+fn column_headers(view: &MonitorView) -> Vec<String> {
+    let tree = view.accessibility().expect("an accessibility tree");
+    tree.nodes
+        .iter()
+        .filter(|(_, node)| node.role() == Role::ColumnHeader)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect()
+}
+
+#[test]
+fn a_right_click_on_the_header_chooses_columns_and_the_choice_is_remembered() {
+    let mut view = monitor_view();
+    assert!(view.handle(&right_click(Point::new(300.0, 48.0 + HEADER_HEIGHT / 2.0))));
+    let shown = menu_actions(view.take_requests());
+    assert_eq!(shown[0], ("column:name".to_owned(), false));
+    assert!(shown.contains(&("column:resident".to_owned(), true)));
+    assert!(view.menu_action("column:user"));
+    assert!(view.menu_action("column:resident"));
+    assert!(view.menu_action("column:cpu"));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(
+        column_headers(&view),
+        ["Name", "CPU Time", "Threads", "PID", "Resident"]
+    );
+    assert_eq!(view.monitor.sort(), (unbound_monitor::Column::Name, false));
+    let remembered = match view.take_requests().last() {
+        Some(Request::SaveColumns(text)) => text.clone(),
+        other => panic!("expected the columns to be saved, got {other:?}"),
+    };
+    let mut again = Monitor::new(catalog());
+    again.choose_columns(&remembered);
+    assert_eq!(again.columns(), view.monitor.columns());
+}

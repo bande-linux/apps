@@ -193,6 +193,23 @@ impl Tab {
         }
     }
 
+    fn index(self) -> usize {
+        Tab::ALL.iter().position(|tab| *tab == self).unwrap_or(0)
+    }
+
+    fn id(self) -> &'static str {
+        match self {
+            Tab::Cpu => "cpu",
+            Tab::Memory => "memory",
+            Tab::Disk => "disk",
+            Tab::Network => "network",
+        }
+    }
+
+    pub fn has_column_choice(self) -> bool {
+        self != Tab::Network
+    }
+
     fn default_sort(self) -> Column {
         match self {
             Tab::Cpu => Column::Cpu,
@@ -204,6 +221,48 @@ impl Tab {
 }
 
 impl Column {
+    pub const CHOOSABLE: [Column; 11] = [
+        Column::Cpu,
+        Column::CpuTime,
+        Column::Threads,
+        Column::Pid,
+        Column::User,
+        Column::Memory,
+        Column::Resident,
+        Column::Read,
+        Column::Written,
+        Column::ReadTotal,
+        Column::WrittenTotal,
+    ];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Column::Name => "name",
+            Column::Cpu => "cpu",
+            Column::CpuTime => "cpu-time",
+            Column::Threads => "threads",
+            Column::Pid => "pid",
+            Column::User => "user",
+            Column::Memory => "memory",
+            Column::Resident => "resident",
+            Column::Read => "read",
+            Column::Written => "written",
+            Column::ReadTotal => "read-total",
+            Column::WrittenTotal => "written-total",
+            Column::Received => "received",
+            Column::Sent => "sent",
+            Column::ReceivedTotal => "received-total",
+            Column::SentTotal => "sent-total",
+        }
+    }
+
+    pub fn parse(id: &str) -> Option<Column> {
+        Column::CHOOSABLE
+            .into_iter()
+            .chain([Column::Name])
+            .find(|column| column.id() == id)
+    }
+
     pub fn title(self, tab: Tab) -> String {
         match self {
             Column::Name if tab == Tab::Network => L10N.tr("column-interface"),
@@ -455,6 +514,7 @@ pub struct Monitor {
     search: String,
     rows: Vec<Row>,
     unresponsive: Unresponsive,
+    chosen: [Vec<Column>; 4],
     cpu: VecDeque<(f32, f32)>,
     memory: VecDeque<f32>,
     disk: VecDeque<(f64, f64)>,
@@ -481,6 +541,7 @@ impl Monitor {
             search: String::new(),
             rows: Vec::new(),
             unresponsive: Unresponsive::default(),
+            chosen: Tab::ALL.map(|tab| tab.columns().to_vec()),
             cpu: VecDeque::new(),
             memory: VecDeque::new(),
             disk: VecDeque::new(),
@@ -532,10 +593,87 @@ impl Monitor {
     pub fn set_tab(&mut self, tab: Tab) {
         if self.tab != tab {
             self.tab = tab;
-            self.sort = tab.default_sort();
-            self.descending = true;
+            let sort = tab.default_sort();
+            (self.sort, self.descending) = match self.chosen[tab.index()].contains(&sort) {
+                true => (sort, true),
+                false => (Column::Name, false),
+            };
             self.rebuild();
         }
+    }
+
+    pub fn columns(&self) -> &[Column] {
+        &self.chosen[self.tab.index()]
+    }
+
+    pub fn toggle_column(&mut self, column: Column) -> bool {
+        if column == Column::Name || !self.tab.has_column_choice() {
+            return false;
+        }
+        let tab = self.tab;
+        let chosen = &mut self.chosen[tab.index()];
+        match chosen.iter().position(|shown| *shown == column) {
+            Some(index) => {
+                chosen.remove(index);
+            }
+            None => {
+                chosen.push(column);
+                chosen.sort_by_key(|shown| {
+                    std::iter::once(Column::Name)
+                        .chain(Column::CHOOSABLE)
+                        .position(|known| known == *shown)
+                });
+            }
+        }
+        if !self.chosen[tab.index()].contains(&self.sort) {
+            let fallback = tab.default_sort();
+            self.sort = match self.chosen[tab.index()].contains(&fallback) {
+                true => fallback,
+                false => Column::Name,
+            };
+            self.descending = self.sort != Column::Name;
+        }
+        self.rebuild();
+        true
+    }
+
+    pub fn chosen_columns(&self) -> String {
+        Tab::ALL
+            .iter()
+            .filter(|tab| tab.has_column_choice())
+            .map(|tab| {
+                let ids = self.chosen[tab.index()]
+                    .iter()
+                    .map(|column| column.id())
+                    .collect::<Vec<_>>();
+                format!("{} {}\n", tab.id(), ids.join(" "))
+            })
+            .collect()
+    }
+
+    pub fn choose_columns(&mut self, text: &str) {
+        for line in text.lines() {
+            let mut words = line.split_whitespace();
+            let Some(tab) = words
+                .next()
+                .and_then(|id| Tab::ALL.into_iter().find(|tab| tab.id() == id))
+                .filter(|tab| tab.has_column_choice())
+            else {
+                continue;
+            };
+            let mut columns = vec![Column::Name];
+            columns.extend(
+                words
+                    .filter_map(Column::parse)
+                    .filter(|column| *column != Column::Name),
+            );
+            self.chosen[tab.index()] = columns;
+        }
+        if !self.columns().contains(&self.sort) {
+            self.sort = Column::Name;
+            self.descending = false;
+        }
+        self.rebuild();
     }
 
     pub fn sort(&self) -> (Column, bool) {
@@ -676,7 +814,8 @@ impl Monitor {
     }
 
     fn rebuild(&mut self) {
-        let columns = self.tab.columns();
+        let columns = self.chosen[self.tab.index()].clone();
+        let columns = columns.as_slice();
         let sort = self.sort;
         let descending = self.descending;
         let query = self.search.trim().to_lowercase();

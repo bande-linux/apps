@@ -2,7 +2,9 @@ use unbound_app_menu::{Entry, app_submenu, close_window, window_submenu};
 use unbound_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
-use crate::model::Tab;
+use crate::model::{Column, Tab};
+
+pub const COLUMN_ACTION: &str = "column:";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuCommand {
@@ -76,6 +78,22 @@ pub fn process_menu(selected: Selected) -> Menu {
         item("menu-copy-name", MenuCommand::CopyName),
         item("menu-copy-pid", MenuCommand::CopyPid).enabled(selected.has_pid),
     ])
+}
+
+pub fn columns_menu(tab: Tab, shown: &[Column]) -> Menu {
+    Menu::new(
+        std::iter::once(Column::Name)
+            .chain(Column::CHOOSABLE)
+            .map(|column| {
+                MenuItem::new(
+                    &column.title(tab),
+                    &format!("{COLUMN_ACTION}{}", column.id()),
+                )
+                .checked(shown.contains(&column))
+                .enabled(column != Column::Name)
+            })
+            .collect(),
+    )
 }
 
 pub fn force_quit_menu(located: bool) -> Menu {
