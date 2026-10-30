@@ -154,9 +154,9 @@ impl Painter<'_> {
     pub fn button(&mut self, frame: Rect, label: &str, default: bool) {
         let shape = Shape::rounded(frame, 6.0);
         let (fill, color) = if default {
-            (self.palette.accent_color, WHITE)
+            (self.palette.accent, WHITE)
         } else {
-            (self.palette.surface_background, self.palette.label_primary)
+            (self.palette.sheet, self.palette.ink)
         };
         self.items.push(Item::Shadow {
             shape,
@@ -186,12 +186,12 @@ impl Painter<'_> {
             blur_radius: 24.0,
             color: Color::hex(0x000000).with_alpha(90),
         });
-        self.fill(shape, self.palette.surface_elevated);
+        self.fill(shape, self.palette.overlay);
         let (title, message, buttons) = dialog_content(dialog);
         let inner = panel.width - 2.0 * DIALOG_PADDING;
         let title = self.paragraph(
             &title,
-            TextStyle::new(TEXT_SIZE + 2.0, self.palette.label_primary).weight(TextStyle::SEMIBOLD),
+            TextStyle::new(TEXT_SIZE + 2.0, self.palette.ink).weight(TextStyle::SEMIBOLD),
             Some(inner),
             TextAlign::Start,
         );
@@ -202,7 +202,7 @@ impl Painter<'_> {
         });
         let message = self.paragraph(
             &message,
-            TextStyle::new(TEXT_SIZE, self.palette.label_muted),
+            TextStyle::new(TEXT_SIZE, self.palette.ink2),
             Some(inner),
             TextAlign::Start,
         );

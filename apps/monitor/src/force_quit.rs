@@ -238,21 +238,21 @@ impl Screen for ForceQuitView {
         };
         painter.text_in(
             &L10N.tr("force-quit-hint"),
-            TextStyle::new(TEXT_SIZE - 1.0, palette.label_muted),
+            TextStyle::new(TEXT_SIZE - 1.0, palette.ink2),
             Rect::new(PADDING, 0.0, width as f32 - 2.0 * PADDING, HINT_HEIGHT),
             TextAlign::Start,
         );
         let shape = Shape::rounded(frame, 8.0);
-        painter.fill(shape, palette.surface_elevated);
+        painter.fill(shape, palette.overlay);
         painter.items.push(Item::Stroke {
             shape,
             width: 1.0,
-            paint: palette.separator_color.into(),
+            paint: palette.hairline.into(),
         });
         if empty {
             painter.text_in(
                 &L10N.tr("force-quit-empty"),
-                TextStyle::new(TEXT_SIZE, palette.label_muted),
+                TextStyle::new(TEXT_SIZE, palette.ink2),
                 frame,
                 TextAlign::Center,
             );
@@ -265,7 +265,7 @@ impl Screen for ForceQuitView {
         Scene {
             width,
             height,
-            background: palette.surface_background,
+            background: palette.sheet,
             items: painter.items,
         }
     }

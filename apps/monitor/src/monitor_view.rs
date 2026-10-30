@@ -504,9 +504,9 @@ impl Chrome<'_> {
         let stop = stop_frame();
         let enabled = self.monitor.stop_target().is_some();
         let color = if enabled {
-            palette.label_primary
+            palette.ink
         } else {
-            palette.label_muted.with_alpha(110)
+            palette.ink2.with_alpha(110)
         };
         painter.items.push(Item::Stroke {
             shape: Shape::rounded(stop.inset(4.0), (STOP_SIZE - 8.0) / 2.0),
@@ -527,10 +527,7 @@ impl Chrome<'_> {
                 last.x + last.width - first.x,
                 first.height,
             );
-            painter.fill(
-                Shape::rounded(track, 7.0),
-                palette.label_muted.with_alpha(36),
-            );
+            painter.fill(Shape::rounded(track, 7.0), palette.ink2.with_alpha(36));
         }
         for (tab, frame) in frames {
             let selected = tab == self.monitor.tab();
@@ -542,7 +539,7 @@ impl Chrome<'_> {
                     blur_radius: 2.0,
                     color: Color::hex(0x000000).with_alpha(60),
                 });
-                painter.fill(shape, palette.surface_elevated);
+                painter.fill(shape, palette.overlay);
             }
             let weight = if selected {
                 TextStyle::SEMIBOLD
@@ -551,7 +548,7 @@ impl Chrome<'_> {
             };
             painter.text_in(
                 &tab.title(),
-                TextStyle::new(TEXT_SIZE, palette.label_primary).weight(weight),
+                TextStyle::new(TEXT_SIZE, palette.ink).weight(weight),
                 frame,
                 TextAlign::Center,
             );
@@ -559,7 +556,7 @@ impl Chrome<'_> {
         self.paint_search(painter);
         painter.fill(
             Shape::rect(Rect::new(0.0, TOOLBAR_HEIGHT - 1.0, self.size.0, 1.0)),
-            palette.separator_color,
+            palette.hairline,
         );
     }
 
@@ -567,12 +564,12 @@ impl Chrome<'_> {
         let palette = self.palette;
         let search = search_frame(self.size.0);
         let shape = Shape::rounded(search, 7.0);
-        painter.fill(shape, palette.label_muted.with_alpha(36));
+        painter.fill(shape, palette.ink2.with_alpha(36));
         if self.searching {
             painter.items.push(Item::Stroke {
                 shape: Shape::rounded(search.inset(-1.5), 8.5),
                 width: 3.0,
-                paint: palette.accent_color.with_alpha(120).into(),
+                paint: palette.accent.with_alpha(120).into(),
             });
         }
         let text_frame = Rect::new(
@@ -583,7 +580,7 @@ impl Chrome<'_> {
         );
         painter.text_in(
             "\u{2315}",
-            TextStyle::new(TEXT_SIZE + 2.0, palette.label_muted),
+            TextStyle::new(TEXT_SIZE + 2.0, palette.ink2),
             Rect::new(search.x + 6.0, search.y, 18.0, search.height),
             TextAlign::Center,
         );
@@ -591,7 +588,7 @@ impl Chrome<'_> {
         if query.is_empty() && !self.searching {
             painter.text_in(
                 &L10N.tr("search-placeholder"),
-                TextStyle::new(TEXT_SIZE, palette.label_muted),
+                TextStyle::new(TEXT_SIZE, palette.ink2),
                 text_frame,
                 TextAlign::Start,
             );
@@ -599,7 +596,7 @@ impl Chrome<'_> {
         }
         let paragraph = painter.paragraph(
             query,
-            TextStyle::new(TEXT_SIZE, palette.label_primary),
+            TextStyle::new(TEXT_SIZE, palette.ink),
             None,
             TextAlign::Start,
         );
@@ -620,14 +617,14 @@ impl Chrome<'_> {
                     1.5,
                     text_frame.height - 12.0,
                 )),
-                palette.accent_color,
+                palette.accent,
             );
         }
     }
 
     fn paint_graph(&self, painter: &mut Painter, frame: Rect) {
         let palette = self.palette;
-        painter.fill(Shape::rounded(frame, 6.0), palette.surface_elevated);
+        painter.fill(Shape::rounded(frame, 6.0), palette.overlay);
         let inner = frame.inset(6.0);
         let bar = inner.width / HISTORY as f32;
         let bars =
@@ -662,7 +659,7 @@ impl Chrome<'_> {
                 bars(painter, &down, SYSTEM_COLOR, middle, -inner.height / 2.0);
                 painter.fill(
                     Shape::rect(Rect::new(inner.x, middle, inner.width, 1.0)),
-                    palette.separator_color,
+                    palette.hairline,
                 );
             }
         }
@@ -673,11 +670,11 @@ impl Chrome<'_> {
         let top = self.size.1 - FOOTER_HEIGHT;
         painter.fill(
             Shape::rect(Rect::new(0.0, top, self.size.0, FOOTER_HEIGHT)),
-            palette.label_muted.with_alpha(16),
+            palette.ink2.with_alpha(16),
         );
         painter.fill(
             Shape::rect(Rect::new(0.0, top, self.size.0, 1.0)),
-            palette.separator_color,
+            palette.hairline,
         );
         let rows_per_column = 3;
         let column_width = 210.0;
@@ -686,13 +683,13 @@ impl Chrome<'_> {
             let y = top + 16.0 + (index % rows_per_column) as f32 * 22.0;
             painter.text_in(
                 label,
-                TextStyle::new(TEXT_SIZE, palette.label_muted),
+                TextStyle::new(TEXT_SIZE, palette.ink2),
                 Rect::new(x, y, column_width, 20.0),
                 TextAlign::Start,
             );
             painter.text_in(
                 value,
-                TextStyle::new(TEXT_SIZE, palette.label_primary)
+                TextStyle::new(TEXT_SIZE, palette.ink)
                     .weight(TextStyle::MEDIUM)
                     .tabular(),
                 Rect::new(x, y, column_width, 20.0),
@@ -796,7 +793,7 @@ impl Screen for MonitorView {
         Scene {
             width,
             height,
-            background: self.palette.surface_background,
+            background: self.palette.sheet,
             items: painter.items,
         }
     }
