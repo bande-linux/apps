@@ -199,6 +199,11 @@ impl List {
         self.ui.paint_layers(width, height)
     }
 
+    pub(crate) fn motion(&mut self) -> (std::time::Instant, bool) {
+        let cx = self.ui.context();
+        (cx.now(), cx.reduce_motion)
+    }
+
     pub(crate) fn accessibility(&self) -> TreeUpdate {
         self.ui.accessibility()
     }

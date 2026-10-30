@@ -2,6 +2,7 @@ window-title = Activity Monitor
 
 tab-cpu = CPU
 tab-memory = Memory
+tab-energy = Energy
 tab-disk = Disk
 tab-network = Network
 tab-gpu = GPU
@@ -26,6 +27,11 @@ column-sent-total = Bytes Sent
 column-gpu = % GPU
 column-gpu-time = GPU Time
 column-gpu-memory = GPU Memory
+column-energy-impact = Energy Impact
+column-wakeups = Wake-ups/s
+column-preventing-sleep = Preventing Sleep
+preventing-sleep-yes = Yes
+preventing-sleep-no = No
 
 group-kernel = Kernel
 
@@ -39,7 +45,8 @@ summary-used = Memory Used
 summary-cached = Cached Files
 summary-swap = Swap Used
 summary-compressed = Compressed
-summary-pressure = Memory Pressure
+summary-app = App Memory
+summary-kernel = Kernel
 summary-read-rate = Data Read/s
 summary-written-rate = Data Written/s
 summary-read = Data Read
@@ -51,6 +58,23 @@ summary-sent = Data Sent
 summary-gpu = GPU Usage
 summary-gpu-memory = GPU Memory
 summary-gpu-processes = Processes Using the GPU
+summary-energy-impact = Energy Impact
+summary-wakeups = Wake-ups/s
+
+graph-span = 2 min
+graph-cpu = CPU { $total } %, user { $user } %, system { $system } %
+graph-memory = Memory pressure { $level }, { $used } % used
+graph-pressure = Memory Pressure
+pressure-normal = normal
+pressure-elevated = elevated
+pressure-critical = critical
+graph-disk = Disk read { $read }, written { $written }
+graph-network = Network received { $received }, sent { $sent }
+graph-gpu = GPU { $used } %
+graph-energy = Energy impact { $impact }
+cores-performance = Performance
+cores-efficiency = Efficiency
+core-label = Core { $number }
 
 size-bytes = { $count ->
     [one] { $count } byte
@@ -99,6 +123,10 @@ menu-find = Find
 menu-inspect = Inspect
 menu-edit = Edit
 menu-view = View
+menu-show-cores = Show CPU Cores
+filter-all = All Processes
+filter-mine = My Processes
+filter-apps = Apps
 
 inspector-process = { $name } ({ $pid })
 inspector-info = Info
@@ -106,6 +134,12 @@ inspector-threads = Threads
 inspector-files = Open Files
 inspector-memory = Memory Map
 inspector-value = Value
+inspector-section-process = Process
+inspector-section-family = Parent and Children
+inspector-section-command = Command
+inspector-section-resources = Resources
+inspector-unit = Unit
+inspector-preventing-sleep = Preventing Sleep
 inspector-parent = Parent
 inspector-children = Children
 inspector-command = Command

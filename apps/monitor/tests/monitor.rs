@@ -5,7 +5,9 @@ mod fixture;
 use std::path::Path;
 
 use fixture::{Fixture, PAGE_SIZE, Task};
-use unbound_monitor::{Snapshot, read_cpu_ticks};
+use unbound_monitor::{
+    Catalog, CoreKind, Monitor, Pressure, PressureLevel, Snapshot, Tab, read_cpu_ticks,
+};
 
 fn process(snapshot: &Snapshot, pid: u32) -> &unbound_monitor::Process {
     snapshot
@@ -203,7 +205,15 @@ fn system_totals_cover_memory_physical_disks_and_interfaces_without_loopback() {
     assert_eq!(memory.cached, 3_500_000 * 1024);
     assert_eq!(memory.swap_used, 1_000_000 * 1024);
     assert_eq!(memory.compressed, 1_000_000);
-    assert_eq!(memory.pressure, 1.25);
+    assert_eq!(memory.app, 4_200_000 * 1024);
+    assert_eq!(memory.kernel, 400_000 * 1024);
+    assert_eq!(
+        memory.pressure,
+        Pressure {
+            some: 1.25,
+            full: 0.0
+        }
+    );
     assert_eq!(
         (
             snapshot.disk.read_per_second,
@@ -262,4 +272,146 @@ fn a_system_without_gpu_statistics_reports_none() {
     fixture.spawn(&Task::default());
     let snapshot = fixture.sampler().sample().expect("sample");
     assert!(!snapshot.gpu);
+}
+
+#[test]
+fn memory_pressure_turns_amber_when_tasks_wait_and_red_when_all_of_them_stall() {
+    let fixture = Fixture::new();
+    let level = |some: f32, full: f32| {
+        fixture.write(
+            "proc/pressure/memory",
+            &format!(
+                "some avg10={some:.2} avg60=0.00 avg300=0.00 total=1\nfull avg10={full:.2} avg60=0.00 avg300=0.00 total=1\n"
+            ),
+        );
+        let snapshot = fixture.sampler().sample().expect("sample");
+        snapshot.memory.pressure.level()
+    };
+    assert_eq!(level(4.0, 0.0), PressureLevel::Normal);
+    assert_eq!(level(12.0, 0.0), PressureLevel::Elevated);
+    assert_eq!(level(12.0, 6.0), PressureLevel::Critical);
+}
+
+fn core_stat(cores: [(u64, u64); 4]) -> String {
+    let (busy, idle) = cores
+        .iter()
+        .fold((0, 0), |(busy, idle), core| (busy + core.0, idle + core.1));
+    let mut stat = format!("cpu  {busy} 0 0 {idle} 0 0 0 0 0 0\n");
+    for (core, (busy, idle)) in cores.iter().enumerate() {
+        stat.push_str(&format!("cpu{core} {busy} 0 0 {idle} 0 0 0 0 0 0\n"));
+    }
+    stat
+}
+
+#[test]
+fn cores_of_two_capacities_group_into_performance_and_efficiency_with_their_own_shares() {
+    let fixture = Fixture::new();
+    for (core, capacity) in [1024, 1024, 512, 512].into_iter().enumerate() {
+        fixture.write(
+            &format!("sys/devices/system/cpu/cpu{core}/cpu_capacity"),
+            &format!("{capacity}\n"),
+        );
+    }
+    fixture.write("proc/stat", &core_stat([(0, 1000); 4]));
+    let mut sampler = fixture.sampler();
+    let mut monitor = Monitor::new(Catalog::new(&[]), 1000);
+    monitor.update(sampler.sample().expect("first sample"));
+    fixture.write(
+        "proc/stat",
+        &core_stat([(200, 1000), (100, 1100), (0, 1200), (50, 1150)]),
+    );
+    let snapshot = sampler.sample().expect("second sample");
+    assert_eq!(snapshot.capacities, [1024, 1024, 512, 512]);
+    monitor.update(snapshot);
+
+    let shown = monitor
+        .core_groups()
+        .into_iter()
+        .map(|group| (group.kind, group.cores))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        shown,
+        [
+            (
+                Some(CoreKind::Performance),
+                vec![(0, vec![1.0]), (1, vec![0.5])]
+            ),
+            (
+                Some(CoreKind::Efficiency),
+                vec![(2, vec![0.0]), (3, vec![0.25])]
+            ),
+        ]
+    );
+}
+
+fn set_switches(fixture: &Fixture, pid: u32, switches: u64) {
+    fixture.write(
+        &format!("proc/{pid}/task/{pid}/status"),
+        &format!(
+            "Name:\ttask\nvoluntary_ctxt_switches:\t{switches}\nnonvoluntary_ctxt_switches:\t3\n"
+        ),
+    );
+}
+
+#[test]
+fn an_app_that_wakes_often_uses_more_energy_than_an_idle_one_and_only_on_a_laptop() {
+    let fixture = Fixture::new();
+    for (pid, comm) in [(100, "chatty"), (101, "quiet")] {
+        fixture.spawn(&Task {
+            pid,
+            comm,
+            start_ticks: u64::from(pid),
+            ..Task::default()
+        });
+        set_switches(&fixture, pid, 1000);
+    }
+    let mut desktop = fixture.sampler();
+    desktop.sample().expect("first sample");
+    fixture.set_cpu(2, 0);
+    set_switches(&fixture, 100, 2200);
+    let cheap = desktop.sample().expect("second sample");
+    assert!(
+        cheap
+            .processes
+            .iter()
+            .all(|process| process.wakeups.is_none())
+    );
+    let mut monitor = Monitor::new(Catalog::new(&[]), 1000);
+    monitor.update(cheap);
+    assert!(!monitor.tabs().contains(&Tab::Energy));
+
+    fixture.write("sys/class/power_supply/BAT0/type", "Battery\n");
+    fixture.set_cpu(0, 0);
+    set_switches(&fixture, 100, 1000);
+    let mut laptop = fixture.sampler();
+    laptop.measure_wakeups(true);
+    laptop.sample().expect("first sample");
+    fixture.set_cpu(2, 0);
+    set_switches(&fixture, 100, 2200);
+    let measured = laptop.sample().expect("second sample");
+    assert_eq!(
+        measured
+            .processes
+            .iter()
+            .map(|process| (process.pid, process.wakeups))
+            .collect::<Vec<_>>(),
+        [(100, Some(600.0)), (101, Some(0.0))]
+    );
+    let mut monitor = Monitor::new(Catalog::new(&[]), 1000);
+    monitor.update(measured);
+    assert!(monitor.tabs().contains(&Tab::Energy));
+    monitor.set_tab(Tab::Energy);
+    assert!(monitor.measures_wakeups());
+    let rows = monitor
+        .rows()
+        .iter()
+        .map(|row| (row.name.clone(), row.cells[1].clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rows,
+        [
+            ("chatty".to_owned(), "60.0".to_owned()),
+            ("quiet".to_owned(), "0.0".to_owned())
+        ]
+    );
 }

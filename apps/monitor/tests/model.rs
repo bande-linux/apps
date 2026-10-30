@@ -59,7 +59,7 @@ fn cargo() -> RowKey {
 
 #[test]
 fn apps_sort_by_their_summed_cpu_and_selection_follows_a_row_that_moves() {
-    let mut monitor = Monitor::new(catalog());
+    let mut monitor = Monitor::new(catalog(), 1000);
     monitor.update(desk(1.0, 2.0, 10.0));
     assert_eq!(names(&monitor), ["Files", "Terminal", "sshd"]);
     assert_eq!(monitor.rows()[1].cells[1], "3.5");
@@ -78,7 +78,7 @@ fn apps_sort_by_their_summed_cpu_and_selection_follows_a_row_that_moves() {
 
 #[test]
 fn an_apps_processes_sort_under_it_and_a_selected_one_stays_selected() {
-    let mut monitor = Monitor::new(catalog());
+    let mut monitor = Monitor::new(catalog(), 1000);
     monitor.update(desk(1.0, 2.0, 10.0));
     assert_eq!(
         child_names(&monitor.rows()[1]),
@@ -95,7 +95,7 @@ fn an_apps_processes_sort_under_it_and_a_selected_one_stays_selected() {
 
 #[test]
 fn a_selected_process_that_exits_leaves_nothing_selected() {
-    let mut monitor = Monitor::new(catalog());
+    let mut monitor = Monitor::new(catalog(), 1000);
     monitor.update(desk(1.0, 2.0, 10.0));
     monitor.set_selection(vec![RowKey::Group(GroupKey::App(
         "org.unbound.Files".to_owned(),
@@ -108,7 +108,7 @@ fn a_selected_process_that_exits_leaves_nothing_selected() {
 
 #[test]
 fn search_by_process_name_or_pid_opens_the_app_on_the_matching_processes() {
-    let mut monitor = Monitor::new(catalog());
+    let mut monitor = Monitor::new(catalog(), 1000);
     monitor.update(desk(1.0, 2.0, 10.0));
     monitor.set_search("CARGO");
     assert_eq!(names(&monitor), ["Terminal"]);
@@ -124,7 +124,7 @@ fn search_by_process_name_or_pid_opens_the_app_on_the_matching_processes() {
 
 #[test]
 fn quitting_an_app_signals_its_roots_and_force_quitting_signals_every_process() {
-    let mut monitor = Monitor::new(catalog());
+    let mut monitor = Monitor::new(catalog(), 1000);
     monitor.update(desk(1.0, 2.0, 10.0));
     monitor.set_selection(vec![terminal()]);
     let target = monitor.stop_target().expect("the terminal");
@@ -148,7 +148,7 @@ fn disk_cells_show_a_dash_where_a_process_cannot_be_read() {
         read_total: 0,
         written_total: 7_000_000_000,
     });
-    let mut monitor = Monitor::new(catalog());
+    let mut monitor = Monitor::new(catalog(), 1000);
     monitor.update(snapshot(vec![readable, process(801, 1, "/usr/sbin/cron")]));
     monitor.set_tab(Tab::Disk);
     let cells = monitor
@@ -172,7 +172,7 @@ fn the_network_tab_lists_interfaces_by_traffic() {
         received_total: 0,
         sent_total: 0,
     };
-    let mut monitor = Monitor::new(catalog());
+    let mut monitor = Monitor::new(catalog(), 1000);
     monitor.update(Snapshot {
         interfaces: vec![interface("eth0", 10.0), interface("wlan0", 2_000.0)],
         ..desk(1.0, 2.0, 10.0)

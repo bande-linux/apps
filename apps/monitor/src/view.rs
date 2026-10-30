@@ -33,7 +33,7 @@ pub enum Request {
     EmojiPicker,
     Menu(Menu, Point),
     Inspect(u32),
-    SaveColumns(String),
+    SaveState(String),
 }
 
 type FindIcon = Box<dyn Fn(&str) -> Option<Image>>;
@@ -211,6 +211,14 @@ pub trait Screen {
     fn set_full_screen(&mut self, _full_screen: bool) {}
 
     fn measures_gpu(&self) -> bool {
+        false
+    }
+
+    fn measures_wakeups(&self) -> bool {
+        false
+    }
+
+    fn measures_sleep_blockers(&self) -> bool {
         false
     }
 

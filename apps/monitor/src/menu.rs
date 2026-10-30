@@ -2,7 +2,7 @@ use unbound_app_menu::{Entry, app_submenu, close_window, window_submenu};
 use unbound_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
-use crate::model::{Column, Tab};
+use crate::model::{Column, Filter, Tab};
 
 pub const COLUMN_ACTION: &str = "column:";
 
@@ -16,9 +16,11 @@ pub enum MenuCommand {
     CopyPid,
     Find,
     Show(Tab),
+    ShowCores,
+    Filter(Filter),
 }
 
-const ACTIONS: [(MenuCommand, &str); 12] = [
+const ACTIONS: [(MenuCommand, &str); 17] = [
     (MenuCommand::Quit, "quit"),
     (MenuCommand::ForceQuit, "force-quit"),
     (MenuCommand::ShowInFiles, "show-in-files"),
@@ -28,9 +30,14 @@ const ACTIONS: [(MenuCommand, &str); 12] = [
     (MenuCommand::Find, "find"),
     (MenuCommand::Show(Tab::Cpu), "show-cpu"),
     (MenuCommand::Show(Tab::Memory), "show-memory"),
+    (MenuCommand::Show(Tab::Energy), "show-energy"),
     (MenuCommand::Show(Tab::Disk), "show-disk"),
     (MenuCommand::Show(Tab::Network), "show-network"),
     (MenuCommand::Show(Tab::Gpu), "show-gpu"),
+    (MenuCommand::ShowCores, "show-cores"),
+    (MenuCommand::Filter(Filter::All), "filter-all"),
+    (MenuCommand::Filter(Filter::Mine), "filter-mine"),
+    (MenuCommand::Filter(Filter::Apps), "filter-apps"),
 ];
 
 impl MenuCommand {
@@ -118,7 +125,14 @@ pub fn app_menus(tabs: &[Tab]) -> Vec<Entry> {
                 .shortcut(&format!("Super+{digit}"))
         })
         .collect::<Vec<_>>();
+    view.push(Entry::separator());
+    view.extend(
+        Filter::ALL
+            .map(|filter| Entry::item(&filter.title(), MenuCommand::Filter(filter).action())),
+    );
     view.extend([
+        Entry::separator(),
+        entry("menu-show-cores", MenuCommand::ShowCores),
         Entry::separator(),
         entry("menu-quit-process", MenuCommand::Quit).shortcut("Alt+Super+Q"),
         entry("menu-force-quit-process", MenuCommand::ForceQuit),

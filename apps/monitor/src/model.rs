@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 
 use crate::L10N;
@@ -7,14 +7,18 @@ use crate::apps::{Catalog, Group, GroupKey};
 use crate::format::{format_bytes, format_cpu_time, format_percent, format_rate};
 use crate::sampler::{Process, Snapshot};
 use crate::signal::{SignalError, Stop, stop};
+use crate::system::PressureLevel;
 
 pub const HISTORY: usize = 60;
+const ENERGY_SAMPLES: usize = 15;
+const WAKEUPS_PER_IMPACT: f64 = 10.0;
 const MISSING: &str = "\u{2013}";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Cpu,
     Memory,
+    Energy,
     Disk,
     Network,
     Gpu,
@@ -41,6 +45,9 @@ pub enum Column {
     Gpu,
     GpuTime,
     GpuMemory,
+    EnergyImpact,
+    Wakeups,
+    PreventingSleep,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -63,9 +70,12 @@ pub struct Row {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Graph {
-    Stacked { lower: Vec<f32>, upper: Vec<f32> },
-    Filled(Vec<f32>),
-    Mirrored { up: Vec<f32>, down: Vec<f32> },
+    Lines {
+        primary: Vec<f32>,
+        secondary: Option<Vec<f32>>,
+        scale: String,
+    },
+    Pressure(Vec<(f32, PressureLevel)>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -150,12 +160,20 @@ impl Measure {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 5] = [Tab::Cpu, Tab::Memory, Tab::Disk, Tab::Network, Tab::Gpu];
+    pub const ALL: [Tab; 6] = [
+        Tab::Cpu,
+        Tab::Memory,
+        Tab::Energy,
+        Tab::Disk,
+        Tab::Network,
+        Tab::Gpu,
+    ];
 
     pub fn title(self) -> String {
         match self {
             Tab::Cpu => L10N.tr("tab-cpu"),
             Tab::Memory => L10N.tr("tab-memory"),
+            Tab::Energy => L10N.tr("tab-energy"),
             Tab::Disk => L10N.tr("tab-disk"),
             Tab::Network => L10N.tr("tab-network"),
             Tab::Gpu => L10N.tr("tab-gpu"),
@@ -178,6 +196,15 @@ impl Tab {
                 Column::Resident,
                 Column::Threads,
                 Column::Pid,
+                Column::User,
+            ],
+            Tab::Energy => &[
+                Column::Name,
+                Column::EnergyImpact,
+                Column::Wakeups,
+                Column::Cpu,
+                Column::Gpu,
+                Column::PreventingSleep,
                 Column::User,
             ],
             Tab::Disk => &[
@@ -214,6 +241,7 @@ impl Tab {
         match self {
             Tab::Cpu => "cpu",
             Tab::Memory => "memory",
+            Tab::Energy => "energy",
             Tab::Disk => "disk",
             Tab::Network => "network",
             Tab::Gpu => "gpu",
@@ -228,6 +256,7 @@ impl Tab {
         match self {
             Tab::Cpu => Column::Cpu,
             Tab::Memory => Column::Memory,
+            Tab::Energy => Column::EnergyImpact,
             Tab::Disk => Column::Written,
             Tab::Network => Column::Received,
             Tab::Gpu => Column::Gpu,
@@ -236,9 +265,12 @@ impl Tab {
 }
 
 impl Column {
-    pub const CHOOSABLE: [Column; 14] = [
+    pub const CHOOSABLE: [Column; 17] = [
+        Column::EnergyImpact,
         Column::Cpu,
         Column::CpuTime,
+        Column::Wakeups,
+        Column::PreventingSleep,
         Column::Threads,
         Column::Pid,
         Column::User,
@@ -254,7 +286,14 @@ impl Column {
     ];
 
     fn uses_gpu(self) -> bool {
-        matches!(self, Column::Gpu | Column::GpuTime | Column::GpuMemory)
+        matches!(
+            self,
+            Column::Gpu | Column::GpuTime | Column::GpuMemory | Column::EnergyImpact
+        )
+    }
+
+    fn uses_wakeups(self) -> bool {
+        matches!(self, Column::Wakeups | Column::EnergyImpact)
     }
 
     pub fn id(self) -> &'static str {
@@ -278,6 +317,9 @@ impl Column {
             Column::Gpu => "gpu",
             Column::GpuTime => "gpu-time",
             Column::GpuMemory => "gpu-memory",
+            Column::EnergyImpact => "energy-impact",
+            Column::Wakeups => "wakeups",
+            Column::PreventingSleep => "preventing-sleep",
         }
     }
 
@@ -310,11 +352,14 @@ impl Column {
             Column::Gpu => L10N.tr("column-gpu"),
             Column::GpuTime => L10N.tr("column-gpu-time"),
             Column::GpuMemory => L10N.tr("column-gpu-memory"),
+            Column::EnergyImpact => L10N.tr("column-energy-impact"),
+            Column::Wakeups => L10N.tr("column-wakeups"),
+            Column::PreventingSleep => L10N.tr("column-preventing-sleep"),
         }
     }
 
     pub fn numeric(self) -> bool {
-        !matches!(self, Column::Name | Column::User)
+        !matches!(self, Column::Name | Column::User | Column::PreventingSleep)
     }
 
     fn text(self, measure: &Measure) -> String {
@@ -325,7 +370,7 @@ impl Column {
             };
         };
         match self {
-            Column::Cpu | Column::Gpu => format_percent(*value),
+            Column::Cpu | Column::Gpu | Column::EnergyImpact => format_percent(*value),
             Column::CpuTime | Column::GpuTime => format_cpu_time(*value),
             Column::GpuMemory
             | Column::Memory
@@ -370,6 +415,26 @@ impl Column {
             Column::Gpu => gpu(|used| f64::from(used.percent)),
             Column::GpuTime => gpu(|used| used.seconds),
             Column::GpuMemory => gpu(|used| used.memory as f64),
+            Column::EnergyImpact => sum(|process| process.energy.unwrap_or(0.0)),
+            Column::PreventingSleep => Measure::Text(
+                match processes
+                    .iter()
+                    .any(|process| process.preventing_sleep.is_some())
+                {
+                    true => L10N.tr("preventing-sleep-yes"),
+                    false => L10N.tr("preventing-sleep-no"),
+                },
+            ),
+            Column::Wakeups => {
+                let known = processes
+                    .iter()
+                    .filter_map(|process| process.wakeups)
+                    .collect::<Vec<_>>();
+                match known.is_empty() {
+                    true => Measure::Missing,
+                    false => Measure::Number(known.into_iter().sum()),
+                }
+            }
             Column::Cpu => sum(|process| f64::from(process.cpu_percent)),
             Column::CpuTime => sum(|process| process.cpu_seconds),
             Column::Threads => sum(|process| f64::from(process.threads)),
@@ -559,10 +624,58 @@ pub struct Monitor {
     unresponsive: Unresponsive,
     chosen: [Vec<Column>; Tab::ALL.len()],
     cpu: VecDeque<(f32, f32)>,
-    memory: VecDeque<f32>,
+    memory: VecDeque<(f32, PressureLevel)>,
     disk: VecDeque<(f64, f64)>,
     network: VecDeque<(f64, f64)>,
     gpu: VecDeque<f32>,
+    cores: VecDeque<Vec<f32>>,
+    cores_shown: bool,
+    uid: u32,
+    filter: Filter,
+    impacts: HashMap<(u32, u64), VecDeque<f64>>,
+    energy: VecDeque<(f64, f64)>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoreKind {
+    Performance,
+    Efficiency,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoreGroup {
+    pub kind: Option<CoreKind>,
+    pub cores: Vec<(usize, Vec<f32>)>,
+}
+
+const CORES_STATE: &str = "cores";
+const FILTER_STATE: &str = "filter";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Filter {
+    All,
+    Mine,
+    Apps,
+}
+
+impl Filter {
+    pub const ALL: [Filter; 3] = [Filter::All, Filter::Mine, Filter::Apps];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Filter::All => "all",
+            Filter::Mine => "mine",
+            Filter::Apps => "apps",
+        }
+    }
+
+    pub fn title(self) -> String {
+        match self {
+            Filter::All => L10N.tr("filter-all"),
+            Filter::Mine => L10N.tr("filter-mine"),
+            Filter::Apps => L10N.tr("filter-apps"),
+        }
+    }
 }
 
 fn find_row<'a>(rows: &'a [Row], key: &RowKey) -> Option<&'a Row> {
@@ -573,7 +686,7 @@ fn find_row<'a>(rows: &'a [Row], key: &RowKey) -> Option<&'a Row> {
 }
 
 impl Monitor {
-    pub fn new(catalog: Catalog) -> Self {
+    pub fn new(catalog: Catalog, uid: u32) -> Self {
         Self {
             catalog,
             snapshot: Snapshot::default(),
@@ -591,21 +704,53 @@ impl Monitor {
             disk: VecDeque::new(),
             network: VecDeque::new(),
             gpu: VecDeque::new(),
+            cores: VecDeque::new(),
+            cores_shown: false,
+            uid,
+            filter: Filter::All,
+            impacts: HashMap::new(),
+            energy: VecDeque::new(),
         }
     }
 
-    pub fn update(&mut self, snapshot: Snapshot) {
+    fn rate_energy(&mut self, snapshot: &mut Snapshot) {
+        if snapshot.seconds <= 0.0 {
+            return;
+        }
+        let mut earlier = std::mem::take(&mut self.impacts);
+        let mut total = 0.0;
+        for process in &mut snapshot.processes {
+            let now = f64::from(process.cpu_percent)
+                + process.gpu.map_or(0.0, |used| f64::from(used.percent))
+                + process.wakeups.unwrap_or(0.0) / WAKEUPS_PER_IMPACT;
+            let id = (process.pid, process.start_ticks);
+            let mut history = earlier.remove(&id).unwrap_or_default();
+            if history.len() == ENERGY_SAMPLES {
+                history.pop_front();
+            }
+            history.push_back(now);
+            let average = history.iter().sum::<f64>() / history.len() as f64;
+            process.energy = Some(average);
+            total += average;
+            self.impacts.insert(id, history);
+        }
+        let wakeups = snapshot
+            .processes
+            .iter()
+            .filter_map(|process| process.wakeups)
+            .sum();
+        push_limited(&mut self.energy, (total, wakeups));
+    }
+
+    pub fn update(&mut self, mut snapshot: Snapshot) {
+        self.rate_energy(&mut snapshot);
         self.groups = self.catalog.group(&snapshot.processes);
         if snapshot.seconds > 0.0 {
             push_limited(&mut self.cpu, (snapshot.cpu.system, snapshot.cpu.user));
             let memory = &snapshot.memory;
             push_limited(
                 &mut self.memory,
-                if memory.total > 0 {
-                    memory.used as f32 / memory.total as f32
-                } else {
-                    0.0
-                },
+                (share(memory.used, memory.total), memory.pressure.level()),
             );
             push_limited(
                 &mut self.gpu,
@@ -618,17 +763,14 @@ impl Monitor {
                     snapshot.disk.written_per_second,
                 ),
             );
+            push_limited(&mut self.network, network_rates(&snapshot));
             push_limited(
-                &mut self.network,
+                &mut self.cores,
                 snapshot
-                    .interfaces
+                    .cores
                     .iter()
-                    .fold((0.0, 0.0), |(received, sent), interface| {
-                        (
-                            received + interface.received_per_second,
-                            sent + interface.sent_per_second,
-                        )
-                    }),
+                    .map(|core| core.user + core.system)
+                    .collect(),
             );
         }
         self.snapshot = snapshot;
@@ -686,8 +828,8 @@ impl Monitor {
         true
     }
 
-    pub fn chosen_columns(&self) -> String {
-        Tab::ALL
+    pub fn state(&self) -> String {
+        let mut state = Tab::ALL
             .iter()
             .filter(|tab| tab.has_column_choice())
             .map(|tab| {
@@ -697,10 +839,28 @@ impl Monitor {
                     .collect::<Vec<_>>();
                 format!("{} {}\n", tab.id(), ids.join(" "))
             })
-            .collect()
+            .collect::<String>();
+        if self.cores_shown {
+            state.push_str(CORES_STATE);
+            state.push('\n');
+        }
+        if self.filter != Filter::All {
+            state.push_str(&format!("{FILTER_STATE} {}\n", self.filter.id()));
+        }
+        state
     }
 
-    pub fn choose_columns(&mut self, text: &str) {
+    pub fn restore(&mut self, text: &str) {
+        self.cores_shown = text.lines().any(|line| line.trim() == CORES_STATE);
+        self.filter = text
+            .lines()
+            .find_map(|line| line.strip_prefix(FILTER_STATE)?.strip_prefix(' '))
+            .and_then(|id| {
+                Filter::ALL
+                    .into_iter()
+                    .find(|filter| filter.id() == id.trim())
+            })
+            .unwrap_or(Filter::All);
         for line in text.lines() {
             let mut words = line.split_whitespace();
             let Some(tab) = words
@@ -773,10 +933,22 @@ impl Monitor {
         self.tab == Tab::Gpu || self.columns().iter().any(|column| column.uses_gpu())
     }
 
+    pub fn measures_wakeups(&self) -> bool {
+        self.columns().iter().any(|column| column.uses_wakeups())
+    }
+
+    pub fn measures_sleep_blockers(&self) -> bool {
+        self.columns().contains(&Column::PreventingSleep)
+    }
+
     pub fn tabs(&self) -> Vec<Tab> {
         Tab::ALL
             .into_iter()
-            .filter(|tab| *tab != Tab::Gpu || self.snapshot.gpu)
+            .filter(|tab| match tab {
+                Tab::Gpu => self.snapshot.gpu,
+                Tab::Energy => self.snapshot.battery,
+                _ => true,
+            })
             .collect()
     }
 
@@ -895,6 +1067,7 @@ impl Monitor {
                 let shown = members
                     .iter()
                     .copied()
+                    .filter(|process| self.passes_filter(group, process))
                     .filter(|process| group_matches || self.matches(process, &query))
                     .collect::<Vec<_>>();
                 if shown.is_empty() {
@@ -998,19 +1171,176 @@ impl Monitor {
     }
 
     pub fn graph(&self) -> Graph {
+        let full = || "100 %".to_owned();
         match self.tab {
-            Tab::Cpu => Graph::Stacked {
-                lower: self.cpu.iter().map(|(system, _)| *system).collect(),
-                upper: self
+            Tab::Cpu => Graph::Lines {
+                primary: self
                     .cpu
                     .iter()
                     .map(|(system, user)| system + user)
                     .collect(),
+                secondary: Some(self.cpu.iter().map(|(system, _)| *system).collect()),
+                scale: full(),
             },
-            Tab::Memory => Graph::Filled(self.memory.iter().copied().collect()),
-            Tab::Disk => mirrored(&self.disk),
-            Tab::Network => mirrored(&self.network),
-            Tab::Gpu => Graph::Filled(self.gpu.iter().copied().collect()),
+            Tab::Memory => Graph::Pressure(self.memory.iter().copied().collect()),
+            Tab::Energy => {
+                let peak = self
+                    .energy
+                    .iter()
+                    .fold(0.0, |peak: f64, (impact, _)| peak.max(*impact));
+                Graph::Lines {
+                    primary: self
+                        .energy
+                        .iter()
+                        .map(|(impact, _)| match peak > 0.0 {
+                            true => (impact / peak) as f32,
+                            false => 0.0,
+                        })
+                        .collect(),
+                    secondary: None,
+                    scale: format_percent(peak),
+                }
+            }
+            Tab::Disk => rates_graph(&self.disk),
+            Tab::Network => rates_graph(&self.network),
+            Tab::Gpu => Graph::Lines {
+                primary: self.gpu.iter().copied().collect(),
+                secondary: None,
+                scale: full(),
+            },
+        }
+    }
+
+    pub fn filter(&self) -> Filter {
+        self.filter
+    }
+
+    pub fn set_filter(&mut self, filter: Filter) {
+        self.filter = filter;
+        self.rebuild();
+    }
+
+    fn passes_filter(&self, group: &Group, process: &Process) -> bool {
+        match self.filter {
+            Filter::All => true,
+            Filter::Mine => process.identity.uid == self.uid,
+            Filter::Apps => group.app.is_some(),
+        }
+    }
+
+    pub fn cores_shown(&self) -> bool {
+        self.cores_shown && self.tab == Tab::Cpu
+    }
+
+    pub fn set_cores_shown(&mut self, shown: bool) {
+        self.cores_shown = shown;
+    }
+
+    pub fn core_groups(&self) -> Vec<CoreGroup> {
+        let count = self.cores.back().map_or(0, Vec::len);
+        let capacities = &self.snapshot.capacities;
+        let fastest = capacities.iter().copied().max().unwrap_or(0);
+        let mixed = capacities.iter().any(|capacity| *capacity != fastest);
+        let history = |core: usize| {
+            self.cores
+                .iter()
+                .map(|shares| shares.get(core).copied().unwrap_or(0.0))
+                .collect::<Vec<_>>()
+        };
+        let group = |kind: Option<CoreKind>| CoreGroup {
+            kind,
+            cores: (0..count)
+                .filter(|core| {
+                    let capacity = capacities.get(*core).copied().unwrap_or(fastest);
+                    match kind {
+                        None => true,
+                        Some(CoreKind::Performance) => capacity == fastest,
+                        Some(CoreKind::Efficiency) => capacity != fastest,
+                    }
+                })
+                .map(|core| (core, history(core)))
+                .collect(),
+        };
+        match mixed {
+            true => vec![
+                group(Some(CoreKind::Performance)),
+                group(Some(CoreKind::Efficiency)),
+            ],
+            false => vec![group(None)],
+        }
+    }
+
+    pub fn memory_bar(&self) -> Option<Vec<(usize, f32)>> {
+        let memory = &self.snapshot.memory;
+        (self.tab == Tab::Memory).then(|| {
+            [
+                (2, memory.app),
+                (3, memory.kernel),
+                (4, memory.compressed),
+                (5, memory.cached),
+            ]
+            .into_iter()
+            .map(|(readout, bytes)| (readout, share(bytes, memory.total)))
+            .collect()
+        })
+    }
+
+    pub fn graph_description(&self) -> String {
+        let snapshot = &self.snapshot;
+        let percent = |share: f32| format_percent(f64::from(share) * 100.0).into();
+        let (received, sent) = network_rates(snapshot);
+        match self.tab {
+            Tab::Cpu => L10N.tr_args(
+                "graph-cpu",
+                [
+                    ("total", percent(snapshot.cpu.user + snapshot.cpu.system)),
+                    ("user", percent(snapshot.cpu.user)),
+                    ("system", percent(snapshot.cpu.system)),
+                ],
+            ),
+            Tab::Memory => {
+                let memory = &snapshot.memory;
+                let level = match memory.pressure.level() {
+                    PressureLevel::Normal => L10N.tr("pressure-normal"),
+                    PressureLevel::Elevated => L10N.tr("pressure-elevated"),
+                    PressureLevel::Critical => L10N.tr("pressure-critical"),
+                };
+                L10N.tr_args(
+                    "graph-memory",
+                    [
+                        ("level", level.into()),
+                        ("used", percent(share(memory.used, memory.total))),
+                    ],
+                )
+            }
+            Tab::Energy => L10N.tr_args(
+                "graph-energy",
+                [(
+                    "impact",
+                    format_percent(self.energy.back().map_or(0.0, |(impact, _)| *impact)).into(),
+                )],
+            ),
+            Tab::Disk => L10N.tr_args(
+                "graph-disk",
+                [
+                    ("read", format_rate(snapshot.disk.read_per_second).into()),
+                    (
+                        "written",
+                        format_rate(snapshot.disk.written_per_second).into(),
+                    ),
+                ],
+            ),
+            Tab::Network => L10N.tr_args(
+                "graph-network",
+                [
+                    ("received", format_rate(received).into()),
+                    ("sent", format_rate(sent).into()),
+                ],
+            ),
+            Tab::Gpu => L10N.tr_args(
+                "graph-gpu",
+                [("used", format_percent(gpu_percent(snapshot)).into())],
+            ),
         }
     }
 
@@ -1041,16 +1371,21 @@ impl Monitor {
                 vec![
                     (L10N.tr("summary-physical"), format_bytes(memory.total)),
                     (L10N.tr("summary-used"), format_bytes(memory.used)),
-                    (L10N.tr("summary-cached"), format_bytes(memory.cached)),
-                    (L10N.tr("summary-swap"), format_bytes(memory.swap_used)),
+                    (L10N.tr("summary-app"), format_bytes(memory.app)),
+                    (L10N.tr("summary-kernel"), format_bytes(memory.kernel)),
                     (
                         L10N.tr("summary-compressed"),
                         format_bytes(memory.compressed),
                     ),
-                    (
-                        L10N.tr("summary-pressure"),
-                        format!("{} %", format_percent(f64::from(memory.pressure))),
-                    ),
+                    (L10N.tr("summary-cached"), format_bytes(memory.cached)),
+                    (L10N.tr("summary-swap"), format_bytes(memory.swap_used)),
+                ]
+            }
+            Tab::Energy => {
+                let (impact, wakeups) = self.energy.back().copied().unwrap_or((0.0, 0.0));
+                vec![
+                    (L10N.tr("summary-energy-impact"), format_percent(impact)),
+                    (L10N.tr("summary-wakeups"), format!("{wakeups:.0}")),
                 ]
             }
             Tab::Disk => vec![
@@ -1118,6 +1453,13 @@ impl Monitor {
     }
 }
 
+fn share(part: u64, total: u64) -> f32 {
+    match total {
+        0 => 0.0,
+        total => part as f32 / total as f32,
+    }
+}
+
 fn gpu_percent(snapshot: &Snapshot) -> f64 {
     snapshot
         .processes
@@ -1127,19 +1469,37 @@ fn gpu_percent(snapshot: &Snapshot) -> f64 {
         .sum()
 }
 
-fn mirrored(history: &VecDeque<(f64, f64)>) -> Graph {
-    let peak = history
+fn network_rates(snapshot: &Snapshot) -> (f64, f64) {
+    snapshot
+        .interfaces
         .iter()
-        .fold(0.0, |peak: f64, (up, down)| peak.max(*up).max(*down));
-    let scaled = |value: f64| {
-        if peak > 0.0 {
-            (value / peak) as f32
-        } else {
-            0.0
-        }
+        .fold((0.0, 0.0), |(received, sent), interface| {
+            (
+                received + interface.received_per_second,
+                sent + interface.sent_per_second,
+            )
+        })
+}
+
+fn rates_graph(history: &VecDeque<(f64, f64)>) -> Graph {
+    let peak = history.iter().fold(0.0, |peak: f64, (primary, secondary)| {
+        peak.max(*primary).max(*secondary)
+    });
+    let scaled = |value: f64| match peak > 0.0 {
+        true => (value / peak) as f32,
+        false => 0.0,
     };
-    Graph::Mirrored {
-        up: history.iter().map(|(up, _)| scaled(*up)).collect(),
-        down: history.iter().map(|(_, down)| scaled(*down)).collect(),
+    Graph::Lines {
+        primary: history
+            .iter()
+            .map(|(primary, _)| scaled(*primary))
+            .collect(),
+        secondary: Some(
+            history
+                .iter()
+                .map(|(_, secondary)| scaled(*secondary))
+                .collect(),
+        ),
+        scale: format_rate(peak),
     }
 }

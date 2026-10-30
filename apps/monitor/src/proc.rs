@@ -101,6 +101,10 @@ pub(crate) fn parse_uid(status: &str) -> Option<u32> {
         .ok()
 }
 
+pub(crate) fn parse_switches(status: &str) -> Option<u64> {
+    field(status, "voluntary_ctxt_switches")?.parse().ok()
+}
+
 pub(crate) fn parse_io(text: &str) -> Option<IoBytes> {
     Some(IoBytes {
         read: field(text, "read_bytes")?.parse().ok()?,

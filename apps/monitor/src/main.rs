@@ -7,8 +7,8 @@ use accesskit::TreeUpdate;
 
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_monitor::{
-    AppList, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, InspectorView, L10N, Monitor,
-    MonitorView, Request, Sampler, Screen, Snapshot, TOOLBAR_HEIGHT, app_menus,
+    AppList, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, Inhibitors, InspectorView, L10N,
+    Monitor, MonitorView, Request, Sampler, Screen, Snapshot, TOOLBAR_HEIGHT, app_menus,
 };
 use unbound_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Role, Scene, Surfaces, TextSystem, Window,
@@ -35,6 +35,7 @@ struct ActivityMonitor {
     next_sample: Instant,
     app_menu: Option<AppMenu>,
     focused: usize,
+    inhibitors: Option<Option<Inhibitors>>,
 }
 
 impl ActivityMonitor {
@@ -46,8 +47,19 @@ impl ActivityMonitor {
         self.sampler.measure_proportional_memory(proportional);
         let gpu = self.screens.iter().any(|screen| screen.measures_gpu());
         self.sampler.measure_gpu(gpu);
+        let wakeups = self.screens.iter().any(|screen| screen.measures_wakeups());
+        self.sampler.measure_wakeups(wakeups);
+        let blockers = self
+            .screens
+            .iter()
+            .any(|screen| screen.measures_sleep_blockers());
         match self.sampler.sample() {
-            Ok(snapshot) => {
+            Ok(mut snapshot) => {
+                if blockers
+                    && let Some(inhibitors) = self.inhibitors.get_or_insert_with(start_inhibitors)
+                {
+                    snapshot.mark_sleep_blockers(&inhibitors.latest());
+                }
                 for screen in &mut self.screens {
                     screen.update(snapshot.clone());
                 }
@@ -150,7 +162,7 @@ impl ActivityMonitor {
                     }
                 }
                 Request::Inspect(pid) => self.inspect(pid),
-                Request::SaveColumns(text) => save_columns(&text),
+                Request::SaveState(text) => save_state(&text),
                 Request::Menu(menu, at) => {
                     if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
                         tracing::warn!("cannot show the menu: {error}");
@@ -176,17 +188,17 @@ impl ActivityMonitor {
     }
 }
 
-fn columns_file() -> Option<PathBuf> {
+fn state_file() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").map(PathBuf::from)?;
     let state = std::env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
         .unwrap_or_else(|| home.join(".local/state"));
-    Some(state.join("unbound/monitor-columns"))
+    Some(state.join("unbound/monitor"))
 }
 
-fn save_columns(text: &str) {
-    let Some(file) = columns_file() else {
+fn save_state(text: &str) {
+    let Some(file) = state_file() else {
         return;
     };
     let staging = file.with_extension("new");
@@ -196,7 +208,7 @@ fn save_columns(text: &str) {
         .and_then(|()| std::fs::write(&staging, text))
         .and_then(|()| std::fs::rename(&staging, &file));
     if let Err(error) = written {
-        tracing::warn!("cannot remember the columns: {error}");
+        tracing::warn!("cannot remember the view: {error}");
     }
 }
 
@@ -343,6 +355,13 @@ impl Surfaces for ActivityMonitor {
     }
 }
 
+fn start_inhibitors() -> Option<Inhibitors> {
+    zbus::blocking::Connection::system()
+        .inspect_err(|error| tracing::warn!("cannot reach the system bus: {error}"))
+        .ok()
+        .map(Inhibitors::start)
+}
+
 fn icons() -> Icons {
     let dirs = data_dirs();
     Icons::new(move |name| {
@@ -383,6 +402,7 @@ fn open(
         next_sample: Instant::now() + FIRST_INTERVAL,
         app_menu,
         focused: 0,
+        inhibitors: None,
     };
     unbound_toolkit::run_surfaces(&mut app)
 }
@@ -402,9 +422,9 @@ fn run() -> Result<(), WindowError> {
         let title = L10N.tr("force-quit-title");
         open(screen, sampler, snapshot, &title, FORCE_QUIT_SIZE, None)
     } else {
-        let mut monitor = Monitor::new(catalog);
-        if let Some(text) = columns_file().and_then(|file| std::fs::read_to_string(file).ok()) {
-            monitor.choose_columns(&text);
+        let mut monitor = Monitor::new(catalog, rustix::process::getuid().as_raw());
+        if let Some(text) = state_file().and_then(|file| std::fs::read_to_string(file).ok()) {
+            monitor.restore(&text);
         }
         let mut screen = MonitorView::new(monitor, palette, TextSystem::new(), icons());
         let snapshot = first_sample(&mut sampler, &mut screen);

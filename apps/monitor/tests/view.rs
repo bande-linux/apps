@@ -8,13 +8,15 @@ use std::time::{Duration, Instant};
 use accesskit::Role;
 use fixture::{check_golden, entry, process};
 use unbound_monitor::{
-    AppList, AppRow, Catalog, CpuShare, ForceQuitView, Icons, Memory, Monitor, MonitorView,
-    Process, Request, RowKey, Screen, Snapshot, Tab,
+    AppList, AppRow, Catalog, CpuShare, ForceQuitView, Graph, Icons, Interface, Memory, Monitor,
+    MonitorView, Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab,
 };
 use unbound_toolkit::ui::{
-    Event, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll,
+    Event, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll, Widget,
 };
-use unbound_toolkit::{FrameRegions, Image, Palette, Point, Scheme, TextSystem, framed_scene};
+use unbound_toolkit::{
+    FrameRegions, Image, Item, Paint, Palette, Point, Scheme, Shape, TextSystem, framed_scene,
+};
 
 const MONITOR_SIZE: (u32, u32) = (860, 420);
 const FORCE_QUIT_SIZE: (u32, u32) = (380, 340);
@@ -68,6 +70,17 @@ fn snapshot(step: usize) -> Snapshot {
             system: 0.05 + 0.05 * wave,
             idle: 0.85 - 0.35 * wave,
         },
+        cores: (0..4)
+            .map(|core| {
+                let busy = ((step + core * 3) as f32 * 0.5).sin().abs() * (1.0 - core as f32 * 0.2);
+                CpuShare {
+                    user: busy * 0.8,
+                    system: busy * 0.2,
+                    idle: 1.0 - busy,
+                }
+            })
+            .collect(),
+        capacities: vec![1024, 1024, 640, 640],
         processes: vec![
             measured(process(500, 1, "/usr/bin/unbound-term"), 4.2, 84, 6),
             measured(process(501, 500, "/bin/bash"), 0.0, 5, 1),
@@ -88,9 +101,27 @@ fn snapshot(step: usize) -> Snapshot {
             cached: 3_100_000_000,
             swap_total: 8_000_000_000,
             swap_used: 120_000_000,
+            app: 4_100_000_000,
+            kernel: 900_000_000,
             compressed: 450_000_000,
-            pressure: 0.0,
+            pressure: Pressure {
+                some: 12.0,
+                full: 0.0,
+            },
         },
+        disk: Rates {
+            read_per_second: 4_000_000.0 * f64::from(wave),
+            written_per_second: 1_500_000.0 * f64::from((step as f32 * 0.3).cos().abs()),
+            read_total: 12_000_000_000,
+            written_total: 3_400_000_000,
+        },
+        interfaces: vec![Interface {
+            name: "wlan0".to_owned(),
+            received_per_second: 2_400_000.0 * f64::from((step as f32 * 0.45).sin().abs()),
+            sent_per_second: 300_000.0 * f64::from(wave),
+            received_total: 8_200_000_000,
+            sent_total: 610_000_000,
+        }],
         ..Snapshot::default()
     }
 }
@@ -113,6 +144,24 @@ fn shifted(key: Key) -> Event {
 }
 
 fn render(screen: &mut impl Screen, title: &str, name: &str, size: (u32, u32)) {
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        let palette = Palette::for_scheme(scheme);
+        screen.set_palette(palette);
+        let name = match scheme {
+            Scheme::Light => name.to_owned(),
+            Scheme::Dark => format!("{name}-dark"),
+        };
+        render_in(screen, title, &name, size, &palette);
+    }
+}
+
+fn render_in(
+    screen: &mut impl Screen,
+    title: &str,
+    name: &str,
+    size: (u32, u32),
+    palette: &Palette,
+) {
     let deadline = Instant::now() + Duration::from_secs(2);
     let mut scene = screen.scene(size.0, size.1);
     while screen.animating() {
@@ -122,22 +171,13 @@ fn render(screen: &mut impl Screen, title: &str, name: &str, size: (u32, u32)) {
     }
     let header = screen.header();
     let regions = header.as_ref().map(|_| FrameRegions::default());
-    check_golden(
-        name,
-        &framed_scene(
-            &scene,
-            title,
-            regions,
-            header,
-            &Palette::for_scheme(Scheme::Light),
-        ),
-    );
+    check_golden(name, &framed_scene(&scene, title, regions, header, palette));
 }
 
 #[test]
 fn activity_monitor_matches_its_goldens() {
     let mut view = MonitorView::new(
-        Monitor::new(catalog()),
+        Monitor::new(catalog(), 1000),
         Palette::for_scheme(Scheme::Light),
         TextSystem::new(),
         icons(),
@@ -150,6 +190,16 @@ fn activity_monitor_matches_its_goldens() {
     view.handle(&key(Key::Down));
     assert!(view.set_responding(710, "", false));
     render(&mut view, TITLE, "monitor-cpu", MONITOR_SIZE);
+    view.handle(&command('2'));
+    render(&mut view, TITLE, "monitor-memory", MONITOR_SIZE);
+    view.handle(&command('3'));
+    render(&mut view, TITLE, "monitor-disk", MONITOR_SIZE);
+    view.handle(&command('4'));
+    render(&mut view, TITLE, "monitor-network", MONITOR_SIZE);
+    view.handle(&command('1'));
+    view.menu_action("show-cores");
+    render(&mut view, TITLE, "monitor-cores", (MONITOR_SIZE.0, 600));
+    view.menu_action("show-cores");
     view.handle(&Event::Key {
         key: Key::Character('q'),
         modifiers: Modifiers {
@@ -188,7 +238,7 @@ fn command(character: char) -> Event {
 
 fn monitor_view() -> MonitorView {
     let mut view = MonitorView::new(
-        Monitor::new(catalog()),
+        Monitor::new(catalog(), 1000),
         Palette::for_scheme(Scheme::Light),
         TextSystem::new(),
         icons(),
@@ -555,11 +605,11 @@ fn a_right_click_on_the_header_chooses_columns_and_the_choice_is_remembered() {
     );
     assert_eq!(view.monitor.sort(), (unbound_monitor::Column::Name, false));
     let remembered = match view.take_requests().last() {
-        Some(Request::SaveColumns(text)) => text.clone(),
+        Some(Request::SaveState(text)) => text.clone(),
         other => panic!("expected the columns to be saved, got {other:?}"),
     };
-    let mut again = Monitor::new(catalog());
-    again.choose_columns(&remembered);
+    let mut again = Monitor::new(catalog(), 1000);
+    again.restore(&remembered);
     assert_eq!(again.columns(), view.monitor.columns());
 }
 
@@ -585,4 +635,228 @@ fn the_gpu_tab_appears_once_the_system_reports_gpu_use() {
         column_headers(&view),
         ["Name", "% GPU", "GPU Time", "GPU Memory", "PID", "User"]
     );
+}
+
+fn flattened(items: &[Item], clip: Option<Shape>, out: &mut Vec<(Item, Option<Shape>)>) {
+    for item in items {
+        match item {
+            Item::Clip { shape, items } => flattened(items, Some(*shape), out),
+            Item::Translate { items, .. }
+            | Item::Opacity { items, .. }
+            | Item::Scale { items, .. } => flattened(items, clip, out),
+            other => out.push((other.clone(), clip)),
+        }
+    }
+}
+
+fn painted(view: &mut MonitorView, width: u32) -> Vec<(Item, Option<Shape>)> {
+    let scene = view.scene(width, MONITOR_SIZE.1);
+    let mut items = Vec::new();
+    flattened(&scene.items, None, &mut items);
+    items
+}
+
+fn paints_area(items: &[(Item, Option<Shape>)], color: unbound_toolkit::Color) -> bool {
+    items
+        .iter()
+        .any(|(item, _)| matches!(item, Item::FillPath { paint: Paint::Solid(paint), .. } if *paint == color))
+}
+
+#[test]
+fn a_narrow_window_keeps_the_graph_and_shows_every_readout_whole() {
+    let mut view = monitor_view();
+    for step in 1..10 {
+        view.update(snapshot(step));
+    }
+    let palette = Palette::for_scheme(Scheme::Light);
+    for tab in ['1', '2'] {
+        view.handle(&command(tab));
+        let items = painted(&mut view, 600);
+        let pressure = items.iter().any(|(item, _)| {
+            matches!(item, Item::Fill { paint: Paint::Solid(paint), .. } if *paint == palette.warning)
+        });
+        assert!(paints_area(&items, palette.accent_soft) || pressure);
+        for (item, clip) in &items {
+            if let (Item::Text { paragraph, .. }, Some(clip)) = (item, clip)
+                && clip.rect.y >= LIST_TOP
+            {
+                assert!(paragraph.width() <= clip.rect.width + 0.5);
+            }
+        }
+    }
+}
+
+#[test]
+fn the_disk_scale_follows_the_peak_of_the_shown_history() {
+    let mut monitor = Monitor::new(catalog(), 1000);
+    let mut busy = snapshot(0);
+    busy.disk.read_per_second = 8_000_000.0;
+    busy.disk.written_per_second = 1_000_000.0;
+    monitor.update(busy);
+    let mut calm = snapshot(1);
+    calm.disk.read_per_second = 2_000_000.0;
+    calm.disk.written_per_second = 0.0;
+    monitor.update(calm);
+    monitor.set_tab(Tab::Disk);
+    assert_eq!(
+        monitor.graph(),
+        Graph::Lines {
+            primary: vec![1.0, 0.25],
+            secondary: Some(vec![0.125, 0.0]),
+            scale: "8 MB/s".to_owned(),
+        }
+    );
+}
+
+#[test]
+fn no_series_is_drawn_in_the_alarm_colour() {
+    let mut view = monitor_view();
+    for step in 1..20 {
+        view.update(snapshot(step));
+    }
+    let palette = Palette::for_scheme(Scheme::Light);
+    for tab in ['1', '3', '4'] {
+        view.handle(&command(tab));
+        let items = painted(&mut view, MONITOR_SIZE.0);
+        assert!(paints_area(&items, palette.accent_soft));
+        assert!(!items.iter().any(|(item, _)| matches!(
+            item,
+            Item::FillPath { paint: Paint::Solid(paint), .. }
+                | Item::StrokePath { paint: Paint::Solid(paint), .. }
+                if *paint == palette.danger
+        )));
+    }
+}
+
+#[test]
+fn the_graph_and_the_readouts_are_in_the_accessibility_tree() {
+    let view = monitor_view();
+    let tree = view.accessibility().expect("an accessibility tree");
+    let graph = tree
+        .nodes
+        .iter()
+        .find(|(_, node)| node.role() == Role::Image)
+        .and_then(|(_, node)| node.label())
+        .map(str::to_owned);
+    let cpu = snapshot(0).cpu;
+    assert_eq!(
+        graph,
+        Some(format!(
+            "CPU {:.1} %, user {:.1} %, system {:.1} %",
+            (cpu.user + cpu.system) * 100.0,
+            cpu.user * 100.0,
+            cpu.system * 100.0
+        ))
+    );
+    let idle = tree
+        .nodes
+        .iter()
+        .find(|(_, node)| node.label() == Some("Idle"))
+        .and_then(|(_, node)| node.value())
+        .map(str::to_owned);
+    assert_eq!(idle, Some(format!("{:.1} %", cpu.idle * 100.0)));
+}
+
+#[test]
+fn the_memory_footer_names_what_holds_memory_and_graphs_the_pressure() {
+    let mut monitor = Monitor::new(catalog(), 1000);
+    monitor.update(snapshot(0));
+    monitor.set_tab(Tab::Memory);
+    assert_eq!(
+        monitor.summary(),
+        [
+            ("Physical Memory", "16 GB"),
+            ("Memory Used", "6.4 GB"),
+            ("App Memory", "4.1 GB"),
+            ("Kernel", "900 MB"),
+            ("Compressed", "450 MB"),
+            ("Cached Files", "3.1 GB"),
+            ("Swap Used", "120 MB"),
+        ]
+        .map(|(label, value)| (label.to_owned(), value.to_owned()))
+    );
+    assert_eq!(
+        monitor.graph(),
+        Graph::Pressure(vec![(0.4, unbound_monitor::PressureLevel::Elevated)])
+    );
+    assert_eq!(
+        monitor.graph_description(),
+        "Memory pressure elevated, 40.0 % used"
+    );
+}
+
+#[test]
+fn clicking_the_cpu_graph_shows_every_core_until_escape_and_the_choice_is_remembered() {
+    let mut view = monitor_view();
+    for step in 1..5 {
+        view.update(snapshot(step));
+    }
+    let list_height = |view: &mut MonitorView| {
+        view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+        view.table().expect("table").frame().height
+    };
+    let collapsed = list_height(&mut view);
+    let graph = Point::new(700.0, MONITOR_SIZE.1 as f32 - 50.0);
+    click(&mut view, graph, Modifiers::default(), 1);
+    assert!(view.monitor.cores_shown());
+    let remembered = match view.take_requests().as_slice() {
+        [Request::SaveState(state)] => state.clone(),
+        other => panic!("expected the view to be saved, got {other:?}"),
+    };
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut height = list_height(&mut view);
+    while view.animating() {
+        assert!(Instant::now() < deadline, "the cores did not settle");
+        std::thread::sleep(Duration::from_millis(10));
+        height = list_height(&mut view);
+    }
+    assert!(height < collapsed - 100.0);
+    let mut again = Monitor::new(catalog(), 1000);
+    again.restore(&remembered);
+    assert!(again.cores_shown());
+    assert!(view.handle(&key(Key::Escape)));
+    assert!(!view.monitor.cores_shown());
+}
+
+fn with_root_daemon(step: usize) -> Snapshot {
+    let mut shown = snapshot(step);
+    let mut daemon = process(800, 1, "/usr/sbin/sshd");
+    let mut identity = (*daemon.identity).clone();
+    identity.uid = 0;
+    identity.user = "root".to_owned();
+    daemon.identity = std::rc::Rc::new(identity);
+    shown.processes.push(daemon);
+    shown
+}
+
+#[test]
+fn the_view_filter_keeps_my_processes_or_apps_and_is_remembered() {
+    let mut view = monitor_view();
+    view.update(with_root_daemon(1));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert!(shown_rows(&view).contains(&"sshd".to_owned()));
+
+    assert!(view.menu_action("filter-mine"));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    let mine = shown_rows(&view);
+    assert!(!mine.contains(&"sshd".to_owned()));
+    assert!(mine.contains(&"pipewire".to_owned()));
+
+    assert!(view.menu_action("filter-apps"));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view), ["Terminal", "Files", "Settings"]);
+    view.handle(&command('f'));
+    for character in "fi".chars() {
+        view.handle(&key(Key::Character(character)));
+    }
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view), ["Files"]);
+
+    let remembered = match view.take_requests().last() {
+        Some(Request::SaveState(state)) => state.clone(),
+        other => panic!("expected the view to be saved, got {other:?}"),
+    };
+    let mut again = Monitor::new(catalog(), 1000);
+    again.restore(&remembered);
+    assert_eq!(again.filter(), unbound_monitor::Filter::Apps);
 }

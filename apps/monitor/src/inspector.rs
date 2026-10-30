@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -29,6 +30,15 @@ const LABEL_WIDTH: f32 = 150.0;
 const PARENT: &str = "parent:";
 const CHILD: &str = "child:";
 const FILE: &str = "file:";
+const SECTION: &str = "section:";
+const EXECUTABLE: &str = "executable";
+
+fn find_row<'a>(rows: &'a [Row], key: &str) -> Option<&'a Row> {
+    rows.iter().find_map(|row| match row.key == key {
+        true => Some(row),
+        false => find_row(&row.children, key),
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Section {
@@ -107,6 +117,7 @@ pub struct InspectorView {
     stopping: Option<StopTarget>,
     requests: Vec<Request>,
     finished: bool,
+    expanded: HashSet<String>,
 }
 
 fn named(pid: u32, name: &str) -> String {
@@ -160,6 +171,7 @@ impl InspectorView {
             stopping: None,
             requests: Vec::new(),
             finished: false,
+            expanded: HashSet::new(),
         };
         view.refresh();
         view
@@ -188,25 +200,42 @@ impl InspectorView {
             .update::<Button>(self.stop, |button, _| button.set_enabled(!ended));
         let rows = self.rows();
         if let Some(table) = self.list.table() {
-            table.set_rows(rows);
+            table.set_rows(rows.clone());
         }
+        self.expand_sections(&rows);
         self.list.take_signals();
     }
 
     fn info_rows(&self) -> Vec<Row> {
-        let row = |key: String, label: &str, value: String| {
+        let row = |key: &str, label: &str, value: String| {
             Row::new(
                 key,
                 vec![Cell::new(L10N.tr(label)).muted(), Cell::new(value)],
             )
         };
-        let mut rows = vec![
-            row("name".to_owned(), "column-name", self.name.clone()),
-            row("pid".to_owned(), "column-pid", self.pid.to_string()),
+        let section = |key: &str, title: &str, children: Vec<Row>| {
+            Row::new(
+                format!("{SECTION}{key}"),
+                vec![
+                    Cell::new(L10N.tr(title).to_uppercase()).muted(),
+                    Cell::new(""),
+                ],
+            )
+            .children(children)
+        };
+        let state = match &self.process {
+            Some(_) => state_name(self.details.state),
+            None => L10N.tr("state-ended"),
+        };
+        let mut process_rows = vec![
+            row("name", "column-name", self.name.clone()),
+            row("pid", "column-pid", self.pid.to_string()),
+            row("state", "inspector-state", state),
         ];
+        let mut family = Vec::new();
         if let Some((pid, name)) = &self.family.parent {
-            rows.push(row(
-                format!("{PARENT}{pid}"),
+            family.push(row(
+                &format!("{PARENT}{pid}"),
                 "inspector-parent",
                 named(*pid, name),
             ));
@@ -216,89 +245,129 @@ impl InspectorView {
                 0 => L10N.tr("inspector-children"),
                 _ => String::new(),
             };
-            rows.push(Row::new(
+            family.push(Row::new(
                 format!("{CHILD}{pid}"),
                 vec![Cell::new(label).muted(), Cell::new(named(*pid, name))],
             ));
         }
-        let state = match &self.process {
-            Some(_) => state_name(self.details.state),
-            None => L10N.tr("state-ended"),
-        };
-        rows.push(row("state".to_owned(), "inspector-state", state));
         let Some(process) = &self.process else {
-            return rows;
+            return vec![section(
+                "process",
+                "inspector-section-process",
+                process_rows,
+            )];
         };
         let identity = &process.identity;
-        rows.push(row("user".to_owned(), "column-user", identity.user.clone()));
-        rows.push(row(
-            "command".to_owned(),
+        process_rows.push(row("user", "column-user", identity.user.clone()));
+        if let Some(unit) = &identity.unit {
+            process_rows.push(row("unit", "inspector-unit", unit.clone()));
+        }
+        if let Some(reason) = &process.preventing_sleep {
+            process_rows.push(row("sleep", "inspector-preventing-sleep", reason.clone()));
+        }
+        let mut command = vec![row(
+            "command",
             "inspector-command",
             identity.command.join(" "),
-        ));
+        )];
         if let Some(executable) = &identity.executable {
-            rows.push(row(
-                "executable".to_owned(),
+            command.push(row(
+                EXECUTABLE,
                 "inspector-executable",
                 executable.display().to_string(),
             ));
         }
-        if let Some(seconds) = self.details.running_seconds {
-            rows.push(row(
-                "running".to_owned(),
-                "inspector-running",
-                format_cpu_time(seconds),
-            ));
-        }
-        rows.extend([
+        let mut resources = vec![
             row(
-                "cpu".to_owned(),
+                "cpu",
                 "column-cpu",
                 format_percent(f64::from(process.cpu_percent)),
             ),
             row(
-                "cpu-time".to_owned(),
+                "cpu-time",
                 "column-cpu-time",
                 format_cpu_time(process.cpu_seconds),
             ),
+            row("threads", "column-threads", process.threads.to_string()),
             row(
-                "threads".to_owned(),
-                "column-threads",
-                process.threads.to_string(),
-            ),
-            row(
-                "resident".to_owned(),
+                "resident",
                 "column-resident",
                 format_bytes(process.resident),
             ),
-        ]);
+        ];
         if let Some(proportional) = process.proportional {
-            rows.push(row(
-                "memory".to_owned(),
-                "column-memory",
-                format_bytes(proportional),
-            ));
+            resources.push(row("memory", "column-memory", format_bytes(proportional)));
         }
         if let Some(size) = self.details.virtual_size {
-            rows.push(row(
-                "virtual".to_owned(),
-                "inspector-virtual",
-                format_bytes(size),
+            resources.push(row("virtual", "inspector-virtual", format_bytes(size)));
+        }
+        if let Some(seconds) = self.details.running_seconds {
+            resources.push(row(
+                "running",
+                "inspector-running",
+                format_cpu_time(seconds),
             ));
         }
         if let Some(disk) = &process.disk {
-            rows.push(row(
-                "read".to_owned(),
+            resources.push(row(
+                "read",
                 "column-read-total",
                 format_bytes(disk.read_total),
             ));
-            rows.push(row(
-                "written".to_owned(),
+            resources.push(row(
+                "written",
                 "column-written-total",
                 format_bytes(disk.written_total),
             ));
         }
-        rows
+        let mut sections = vec![section(
+            "process",
+            "inspector-section-process",
+            process_rows,
+        )];
+        if !family.is_empty() {
+            sections.push(section("family", "inspector-section-family", family));
+        }
+        sections.push(section("command", "inspector-section-command", command));
+        sections.push(section(
+            "resources",
+            "inspector-section-resources",
+            resources,
+        ));
+        sections
+    }
+
+    fn expand_sections(&mut self, rows: &[Row]) {
+        let Some(table) = self.list.table() else {
+            return;
+        };
+        for row in rows {
+            if !row.children.is_empty() && self.expanded.insert(row.key.clone()) {
+                table.set_row_expanded(&row.key, true);
+            }
+        }
+    }
+
+    fn copy_selection(&mut self) -> bool {
+        let Some(selection) = self.list.shown_table().map(Table::selection) else {
+            return false;
+        };
+        let rows = self.rows();
+        let values = selection
+            .iter()
+            .filter_map(|key| find_row(&rows, key))
+            .filter_map(|row| match self.section {
+                Section::Info => row.cells.get(1),
+                _ => row.cells.iter().find(|cell| !cell.text.is_empty()),
+            })
+            .map(|cell| cell.text.clone())
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>();
+        if values.is_empty() {
+            return false;
+        }
+        self.requests.push(Request::Copy(values.join("\n")));
+        true
     }
 
     fn rows(&self) -> Vec<Row> {
@@ -379,12 +448,22 @@ impl InspectorView {
         let rows = self.rows();
         if let Some(table) = self.list.table() {
             table.set_columns(section.columns());
-            table.set_rows(rows);
+            table.set_rows(rows.clone());
         }
+        self.expanded.clear();
+        self.expand_sections(&rows);
     }
 
     fn activate(&mut self, keys: &[String]) {
         for key in keys {
+            if key == EXECUTABLE
+                && let Some(executable) = self
+                    .process
+                    .as_ref()
+                    .and_then(|process| process.identity.executable.clone())
+            {
+                self.requests.push(Request::ShowInFiles(executable));
+            }
             if let Some(pid) = key
                 .strip_prefix(PARENT)
                 .or_else(|| key.strip_prefix(CHILD))
@@ -554,6 +633,7 @@ impl Screen for InspectorView {
                     self.finished = true;
                     true
                 }
+                Key::Character('c') if modifiers.logo => self.copy_selection(),
                 Key::Character(digit @ '1'..='4') if modifiers.logo => {
                     let index = *digit as usize - '1' as usize;
                     if let Some(section) = Section::ALL.get(index) {
@@ -595,6 +675,10 @@ impl Screen for InspectorView {
 
     fn measures_proportional_memory(&self) -> bool {
         false
+    }
+
+    fn measures_sleep_blockers(&self) -> bool {
+        true
     }
 
     fn take_requests(&mut self) -> Vec<Request> {

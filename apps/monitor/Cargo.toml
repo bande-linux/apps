@@ -14,10 +14,12 @@ unbound-l10n.workspace = true
 unbound-log.workspace = true
 unbound-toolkit.workspace = true
 unbound-xdg.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
 unbound-golden.workspace = true
+unbound-test-bus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"

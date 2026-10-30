@@ -158,31 +158,43 @@ fn details_list_threads_open_files_and_mappings_in_order() {
     assert_eq!(details.running_seconds, Some(56.0));
 }
 
+fn click_row(view: &mut InspectorView, label: &str, count: u8) {
+    let index = rows(view)
+        .iter()
+        .position(|row| row == label)
+        .expect("a row with that label");
+    let row = view.table().expect("table").row_bounds(index).expect("row");
+    let pointer =
+        Pointer::at(Point::new(row.x + 200.0, row.y + row.height / 2.0)).with_count(count);
+    view.handle(&Event::PointerDown(pointer));
+    view.handle(&Event::PointerUp(pointer));
+    view.scene(SIZE.0, SIZE.1);
+}
+
 #[test]
 fn the_inspector_links_the_family_and_shows_each_section() {
     let fixture = Fixture::new();
     let snapshot = family(&fixture);
     let mut view = inspector(&fixture, &snapshot);
     let shown = cells(&view);
-    for value in ["unbound-shell (300)", "vim (500)", "/bin/bash --login"] {
+    for value in [
+        "unbound-shell (300)",
+        "vim (500)",
+        "/bin/bash --login",
+        "session-1.scope",
+    ] {
         assert!(
             shown.iter().any(|cell| cell == value),
             "{value} in {shown:?}"
         );
     }
-    let parent = rows(&view)
-        .iter()
-        .position(|row| row == "Parent")
-        .expect("parent row");
-    let row = view
-        .table()
-        .expect("table")
-        .row_bounds(parent)
-        .expect("row");
-    let pointer = Pointer::at(Point::new(row.x + 200.0, row.y + row.height / 2.0)).with_count(2);
-    view.handle(&Event::PointerDown(pointer));
-    view.handle(&Event::PointerUp(pointer));
+    click_row(&mut view, "Parent", 2);
     assert_eq!(view.take_requests(), [Request::Inspect(300)]);
+    click_row(&mut view, "Children", 2);
+    assert_eq!(view.take_requests(), [Request::Inspect(500)]);
+    click_row(&mut view, "PID", 1);
+    assert!(view.handle(&command('c')));
+    assert_eq!(view.take_requests(), [Request::Copy("400".to_owned())]);
 
     view.handle(&command('2'));
     view.scene(SIZE.0, SIZE.1);
@@ -205,13 +217,20 @@ fn the_inspector_matches_its_golden() {
     let fixture = Fixture::new();
     let snapshot = family(&fixture);
     let mut view = inspector(&fixture, &snapshot);
-    let scene = view.scene(SIZE.0, SIZE.1);
-    let scene = framed_scene(
-        &scene,
-        &view.title(),
-        Some(FrameRegions::default()),
-        view.header(),
-        &Palette::for_scheme(Scheme::Light),
-    );
-    check_golden("inspector", &scene);
+    for (scheme, name) in [
+        (Scheme::Light, "inspector"),
+        (Scheme::Dark, "inspector-dark"),
+    ] {
+        let palette = Palette::for_scheme(scheme);
+        view.set_palette(palette);
+        let scene = view.scene(SIZE.0, SIZE.1);
+        let scene = framed_scene(
+            &scene,
+            &view.title(),
+            Some(FrameRegions::default()),
+            view.header(),
+            &palette,
+        );
+        check_golden(name, &scene);
+    }
 }

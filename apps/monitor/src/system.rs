@@ -9,11 +9,41 @@ const SECTOR: u64 = 512;
 pub struct Memory {
     pub total: u64,
     pub used: u64,
+    pub app: u64,
+    pub kernel: u64,
     pub cached: u64,
     pub swap_total: u64,
     pub swap_used: u64,
     pub compressed: u64,
-    pub pressure: f32,
+    pub pressure: Pressure,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Pressure {
+    pub some: f32,
+    pub full: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PressureLevel {
+    Normal,
+    Elevated,
+    Critical,
+}
+
+impl Pressure {
+    const ELEVATED_SOME: f32 = 10.0;
+    const CRITICAL_FULL: f32 = 5.0;
+
+    pub fn level(self) -> PressureLevel {
+        if self.full >= Self::CRITICAL_FULL {
+            PressureLevel::Critical
+        } else if self.some >= Self::ELEVATED_SOME {
+            PressureLevel::Elevated
+        } else {
+            PressureLevel::Normal
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -30,11 +60,13 @@ pub(crate) fn read_memory(root: &Path) -> Option<Memory> {
     Some(Memory {
         total,
         used: total.saturating_sub(value("MemAvailable")),
+        app: value("AnonPages") + value("Shmem"),
+        kernel: value("SUnreclaim") + value("KernelStack") + value("PageTables"),
         cached: value("Buffers") + value("Cached") + value("SReclaimable"),
         swap_total,
         swap_used: swap_total.saturating_sub(value("SwapFree")),
         compressed: read_compressed(root),
-        pressure: read_pressure(root).unwrap_or(0.0),
+        pressure: read_pressure(root).unwrap_or_default(),
     })
 }
 
@@ -50,15 +82,21 @@ fn read_compressed(root: &Path) -> u64 {
         .sum()
 }
 
-fn read_pressure(root: &Path) -> Option<f32> {
+fn read_pressure(root: &Path) -> Option<Pressure> {
     let pressure = fs::read_to_string(root.join("proc/pressure/memory")).ok()?;
-    pressure
-        .lines()
-        .find_map(|line| line.strip_prefix("some "))?
-        .split_whitespace()
-        .find_map(|pair| pair.strip_prefix("avg10="))?
-        .parse()
-        .ok()
+    let average = |kind: &str| {
+        pressure
+            .lines()
+            .find_map(|line| line.strip_prefix(kind)?.strip_prefix(' '))?
+            .split_whitespace()
+            .find_map(|pair| pair.strip_prefix("avg10="))?
+            .parse()
+            .ok()
+    };
+    Some(Pressure {
+        some: average("some")?,
+        full: average("full").unwrap_or(0.0),
+    })
 }
 
 pub(crate) fn read_disks(root: &Path) -> Transferred {

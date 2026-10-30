@@ -55,7 +55,7 @@ impl Fixture {
         );
         fixture.write(
             "proc/meminfo",
-            "MemTotal:       16000000 kB\nMemFree:         2000000 kB\nMemAvailable:   10000000 kB\nBuffers:          100000 kB\nCached:          3000000 kB\nSwapCached:            0 kB\nSReclaimable:     400000 kB\nSwapTotal:       8000000 kB\nSwapFree:        7000000 kB\n",
+            "MemTotal:       16000000 kB\nMemFree:         2000000 kB\nMemAvailable:   10000000 kB\nBuffers:          100000 kB\nCached:          3000000 kB\nSwapCached:            0 kB\nSReclaimable:     400000 kB\nAnonPages:       4000000 kB\nShmem:            200000 kB\nSUnreclaim:       300000 kB\nKernelStack:       20000 kB\nPageTables:        80000 kB\nSwapTotal:       8000000 kB\nSwapFree:        7000000 kB\n",
         );
         fixture.write(
             "proc/pressure/memory",
@@ -220,6 +220,9 @@ pub fn process(pid: u32, ppid: u32, command: &str) -> Process {
         resident: 0,
         disk: None,
         gpu: None,
+        wakeups: None,
+        energy: None,
+        preventing_sleep: None,
     }
 }
 
