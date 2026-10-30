@@ -7,7 +7,7 @@ use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
     Axis, BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, CursorStyle, DEFAULT_FONT_SIZE,
-    GridSize, HEADER_LEADING, Layout, MenuCommand, MouseButton, MouseKind, Notice, Painter,
+    GridSize, HEADER_LEADING, Layout, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane,
     Profile, Report, Reports, SETTINGS_SIZE, STRIP_HEIGHT, SavedWindow, SearchDirection,
     SelectionKind, Session, Settings, Side, TabBar, TabBarLayout, TabTarget, Terminal,
     TerminalContext, bracketed, claim, encode_key, is_openable, left_behind, mouse_report,
@@ -904,5 +904,42 @@ fn the_settings_window_matches_its_goldens() {
         content.background = palette.sheet;
         let framed = framed_scene(&content, "Terminal Settings", None, None, &palette);
         shoot(&format!("term-settings-{suffix}"), &framed);
+    }
+}
+
+#[test]
+fn split_panes_match_their_goldens() {
+    for (scheme, suffix) in SCHEMES {
+        let mut painter = painter(scheme);
+        let mut left = terminal(40, 8);
+        left.feed(SESSION);
+        left.set_focus(true);
+        let mut right = terminal(40, 8);
+        right.feed(b"top - 14:32:07 up 3 days\r\n\x1b[7m  PID USER  %CPU\x1b[0m\r\n  812 mikael 12.5\r\n$ ");
+        let (width, height) = painter.metrics.content_size(left.size());
+        let area = Rect::new(0.0, 0.0, (2.0 * width + 1.0).ceil(), height.ceil());
+        let mut layout = Layout::Pane(1);
+        layout.split(1, Axis::SideBySide, 2);
+        let frames = layout.frames(area);
+        let panes = [
+            Pane {
+                frame: frames[0].1,
+                terminal: &left,
+                focused: true,
+            },
+            Pane {
+                frame: frames[1].1,
+                terminal: &right,
+                focused: false,
+            },
+        ];
+        let items = painter.panes(&panes, &layout.dividers(area), &Default::default());
+        let scene = Scene {
+            width: area.width as u32,
+            height: area.height as u32,
+            background: painter.theme.background,
+            items,
+        };
+        shoot(&format!("term-split-{suffix}"), &scene);
     }
 }

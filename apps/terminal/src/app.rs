@@ -11,8 +11,8 @@ use alacritty_terminal::tty::Shell;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_term::{
     Axis, BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, Divider, FULL_SCREEN_LEADING,
-    GridSize, HEADER_LEADING, Highlights, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind,
-    Notice, Painter, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings,
+    GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, Notice,
+    Painter, Pane, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings,
     TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed, encode_key, is_openable,
     is_settings_file, mouse_report, next_font_size, reports_mouse, settings_folder, shortcut,
     tab_menu, terminal_menu, wants_scroll_as_arrows,
@@ -43,7 +43,6 @@ const MIN_MOMENTUM: f32 = 30.0;
 const LONG_COMMAND: Duration = Duration::from_secs(10);
 const FLASH: Duration = Duration::from_millis(220);
 const FLASH_OPACITY: f32 = 0.14;
-const RESTING_PANE_OPACITY: f32 = 0.3;
 const MIN_PANE: f32 = 64.0;
 
 struct Momentum {
@@ -1438,49 +1437,24 @@ impl TerminalApp {
     }
 
     fn sheet_items(&mut self) -> Vec<Item> {
-        let frames = self.frames();
-        let focused = self.tab().focused;
-        let split = frames.len() > 1;
-        let mut items = Vec::new();
-        let mut focused_highlights = self.session().terminal.highlights();
-        focused_highlights.link = self.link.as_ref().map(|link| link.range.clone());
-        let resting = Highlights::default();
+        let mut highlights = self.session().terminal.highlights();
+        highlights.link = self.link.as_ref().map(|link| link.range.clone());
+        let area = self.pane_area();
         let tab = &self.tabs[self.active];
-        for (id, frame) in &frames {
-            let Some(session) = tab.session(*id) else {
-                continue;
-            };
-            let highlights = if *id == focused {
-                &focused_highlights
-            } else {
-                &resting
-            };
-            let mut pane =
-                self.painter
-                    .terminal(&session.terminal, Point::new(frame.x, frame.y), highlights);
-            if split && *id != focused {
-                pane.push(Item::Fill {
-                    shape: Shape::rect(*frame),
-                    paint: self
-                        .painter
-                        .theme
-                        .background
-                        .with_opacity(RESTING_PANE_OPACITY)
-                        .into(),
-                });
-            }
-            items.push(Item::Clip {
-                shape: Shape::rect(*frame),
-                items: pane,
-            });
-        }
-        for divider in tab.layout.dividers(self.pane_area()) {
-            items.push(Item::Fill {
-                shape: Shape::rect(divider.line),
-                paint: self.painter.theme.palette.edge.into(),
-            });
-        }
-        items
+        let panes: Vec<Pane<'_>> = tab
+            .layout
+            .frames(area)
+            .into_iter()
+            .filter_map(|(id, frame)| {
+                tab.session(id).map(|session| Pane {
+                    frame,
+                    terminal: &session.terminal,
+                    focused: id == tab.focused,
+                })
+            })
+            .collect();
+        let dividers = tab.layout.dividers(area);
+        self.painter.panes(&panes, &dividers, &highlights)
     }
 }
 

@@ -24,7 +24,7 @@ pub use keys::{
 pub use menu::{MenuCommand, TerminalContext, app_menus, tab_menu, terminal_menu};
 pub use panes::{Axis, DIVIDER, Divider, Layout, Side};
 pub use process::{Report, Reports};
-pub use render::{DEFAULT_FONT_SIZE, Metrics, PADDING, Painter, TabBar};
+pub use render::{DEFAULT_FONT_SIZE, Metrics, PADDING, Painter, Pane, TabBar};
 pub use restore::{SavedWindow, claim, left_behind, window_file, windows_folder};
 pub use session::{Notice, Session, display_directory};
 pub use settings::{CursorStyle, FONT_SIZES, Settings, is_settings_file, settings_folder};

@@ -9,6 +9,7 @@ use unbound_toolkit::{
     TextRole, TextStyle, TextSystem,
 };
 
+use crate::panes::Divider;
 use crate::tabs::{TabBarLayout, TabTarget};
 use crate::terminal::{CellPoint, GridSize, Highlights, Terminal};
 use crate::theme::{Profile, Theme, dimmed};
@@ -27,6 +28,7 @@ const BELL_MARK: f32 = 6.0;
 const GLYPH_STROKE: f32 = 1.5;
 const CROSS_ARM: f32 = 3.5;
 const PLUS_ARM: f32 = 5.5;
+const RESTING_PANE_OPACITY: f32 = 0.3;
 
 fn snap(value: f32, scale: f64) -> f32 {
     let scale = scale as f32;
@@ -103,6 +105,12 @@ impl Metrics {
 
 type RunKey = (String, Color, bool);
 type LabelKey = (String, Color, u32, u32);
+
+pub struct Pane<'a> {
+    pub frame: Rect,
+    pub terminal: &'a Terminal,
+    pub focused: bool,
+}
 
 pub struct TabBar<'a> {
     pub titles: &'a [String],
@@ -369,6 +377,41 @@ impl Painter {
         }
         let glyph = if hovered { palette.ink } else { palette.ink2 };
         items.extend(plus(new_tab, glyph));
+        items
+    }
+
+    pub fn panes(
+        &mut self,
+        panes: &[Pane<'_>],
+        dividers: &[Divider],
+        highlights: &Highlights,
+    ) -> Vec<Item> {
+        let resting = Highlights::default();
+        let split = panes.len() > 1;
+        let mut items = Vec::new();
+        for pane in panes {
+            let shown = if pane.focused { highlights } else { &resting };
+            let origin = Point::new(pane.frame.x, pane.frame.y);
+            let mut drawn = self.terminal(pane.terminal, origin, shown);
+            if split && !pane.focused {
+                drawn.push(Item::Fill {
+                    shape: Shape::rect(pane.frame),
+                    paint: self
+                        .theme
+                        .background
+                        .with_opacity(RESTING_PANE_OPACITY)
+                        .into(),
+                });
+            }
+            items.push(Item::Clip {
+                shape: Shape::rect(pane.frame),
+                items: drawn,
+            });
+        }
+        items.extend(dividers.iter().map(|divider| Item::Fill {
+            shape: Shape::rect(divider.line),
+            paint: self.theme.palette.edge.into(),
+        }));
         items
     }
 
