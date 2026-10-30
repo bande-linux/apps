@@ -60,7 +60,10 @@ button-ok = OK
 button-cancel = Cancel
 button-quit = Quit
 button-force-quit = Force Quit
-quit-title = Do you want to quit “{ $name }”?
+quit-title = { $count ->
+    [one] Do you want to quit “{ $name }”?
+   *[other] Do you want to quit the { $count } selected items?
+}
 quit-message = Quit asks it to close. Force Quit ends it at once, and any unsaved changes are lost.
 quit-denied = “{ $name }” belongs to another user.
 quit-denied-message = Only its owner or an administrator can quit it.
@@ -68,9 +71,12 @@ quit-denied-message = Only its owner or an administrator can quit it.
 force-quit-title = Force Quit Apps
 force-quit-hint = If an app does not respond, select it and click Force Quit.
 force-quit-empty = No apps are open.
-force-quit-confirm = Do you want to force quit “{ $name }”?
+force-quit-confirm = { $count ->
+    [one] Do you want to force quit “{ $name }”?
+   *[other] Do you want to force quit the { $count } selected items?
+}
 force-quit-confirm-message = Any unsaved changes are lost.
-force-quit-not-responding = (not responding)
+not-responding = { $name } (Not Responding)
 
 menu-quit = Quit…
 menu-force-quit = Force Quit…

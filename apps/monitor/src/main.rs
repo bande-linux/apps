@@ -3,6 +3,8 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use accesskit::TreeUpdate;
+
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_monitor::{
     AppList, Catalog, ForceQuitView, Icons, L10N, Monitor, MonitorView, Request, Sampler, Screen,
@@ -20,6 +22,7 @@ const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
 const ICON_PIXELS: u32 = 32;
 const FILES: &str = "unbound-files";
+const ICON_THEMES: [&str; 1] = ["Adwaita"];
 
 struct ActivityMonitor<S> {
     screen: S,
@@ -112,6 +115,13 @@ impl<S: Screen> App for ActivityMonitor<S> {
                 if self.screen.handle(&input) {
                     window.request_redraw();
                 }
+                window.set_cursor(self.screen.cursor());
+                self.serve(window);
+            }
+            WindowEvent::Accessibility(request) => {
+                if self.screen.perform(&request) {
+                    window.request_redraw();
+                }
                 self.serve(window);
             }
             WindowEvent::MenuAction(action) => self.menu_action(window, &action),
@@ -158,12 +168,21 @@ impl<S: Screen> App for ActivityMonitor<S> {
     fn finished(&self) -> bool {
         self.screen.finished()
     }
+
+    fn animating(&self) -> bool {
+        self.screen.animating()
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        self.screen.accessibility()
+    }
 }
 
 fn icons() -> Icons {
     let dirs = data_dirs();
     Icons::new(move |name| {
-        find_icon(name, ICON_PIXELS, &[], &dirs).and_then(|path| Image::load(&path, ICON_PIXELS))
+        find_icon(name, ICON_PIXELS, &ICON_THEMES, &dirs)
+            .and_then(|path| Image::load(&path, ICON_PIXELS))
     })
 }
 

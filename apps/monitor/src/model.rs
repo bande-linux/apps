@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::path::PathBuf;
 
 use crate::L10N;
@@ -46,21 +46,15 @@ pub enum RowKey {
     Interface(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Disclosure {
-    None,
-    Collapsed,
-    Expanded,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Row {
     pub key: RowKey,
-    pub depth: u8,
-    pub disclosure: Disclosure,
     pub name: String,
     pub icon: Option<String>,
     pub cells: Vec<String>,
+    pub responding: bool,
+    pub revealed: bool,
+    pub children: Vec<Row>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -73,8 +67,61 @@ pub enum Graph {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StopTarget {
     pub name: String,
+    pub count: usize,
     pub roots: Vec<(u32, u64)>,
     pub processes: Vec<(u32, u64)>,
+}
+
+fn merged(targets: impl IntoIterator<Item = StopTarget>) -> Option<StopTarget> {
+    targets.into_iter().reduce(|mut all, target| {
+        all.count += target.count;
+        for root in target.roots {
+            if !all.roots.contains(&root) {
+                all.roots.push(root);
+            }
+        }
+        for process in target.processes {
+            if !all.processes.contains(&process) {
+                all.processes.push(process);
+            }
+        }
+        all
+    })
+}
+
+#[derive(Debug, Default)]
+struct Unresponsive(Vec<(u32, String)>);
+
+impl Unresponsive {
+    fn set(&mut self, pid: u32, app_id: &str, responding: bool) -> bool {
+        let known = self.0.iter().position(|(known, _)| *known == pid);
+        match (known, responding) {
+            (Some(index), true) => {
+                self.0.remove(index);
+                true
+            }
+            (None, false) => {
+                self.0.push((pid, app_id.to_owned()));
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn process_responds(&self, pid: u32) -> bool {
+        !self.0.iter().any(|(known, _)| *known == pid)
+    }
+
+    fn group_responds(&self, group: &Group, processes: &[Process]) -> bool {
+        group
+            .members
+            .iter()
+            .all(|member| self.process_responds(processes[*member].pid))
+            && !self
+                .0
+                .iter()
+                .any(|(_, app_id)| matches!(&group.key, GroupKey::App(id) if id == app_id))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -276,6 +323,7 @@ fn group_target(group: &Group, processes: &[Process], name: String) -> StopTarge
         .collect::<Vec<_>>();
     StopTarget {
         name,
+        count: 1,
         roots: members
             .iter()
             .filter(|process| !members.iter().any(|parent| parent.pid == process.ppid))
@@ -309,8 +357,8 @@ pub struct AppList {
     uid: u32,
     processes: Vec<Process>,
     apps: Vec<Group>,
-    selection: Option<GroupKey>,
-    unresponsive: Vec<(u32, String)>,
+    selection: Vec<GroupKey>,
+    unresponsive: Unresponsive,
 }
 
 impl AppList {
@@ -320,37 +368,13 @@ impl AppList {
             uid,
             processes: Vec::new(),
             apps: Vec::new(),
-            selection: None,
-            unresponsive: Vec::new(),
+            selection: Vec::new(),
+            unresponsive: Unresponsive::default(),
         }
     }
 
     pub fn set_responding(&mut self, pid: u32, app_id: &str, responding: bool) -> bool {
-        let known = self
-            .unresponsive
-            .iter()
-            .position(|(known, _)| *known == pid);
-        match (known, responding) {
-            (Some(index), true) => {
-                self.unresponsive.remove(index);
-                true
-            }
-            (None, false) => {
-                self.unresponsive.push((pid, app_id.to_owned()));
-                true
-            }
-            _ => false,
-        }
-    }
-
-    fn responds(&self, group: &Group) -> bool {
-        !self.unresponsive.iter().any(|(pid, app_id)| {
-            group
-                .members
-                .iter()
-                .any(|member| self.processes[*member].pid == *pid)
-                || matches!(&group.key, GroupKey::App(id) if id == app_id)
-        })
+        self.unresponsive.set(pid, app_id, responding)
     }
 
     pub fn update(&mut self, snapshot: Snapshot) {
@@ -365,68 +389,61 @@ impl AppList {
         apps.sort_by_cached_key(|group| group.name.to_lowercase());
         self.processes = processes;
         self.apps = apps;
-        if let Some(selection) = &self.selection
-            && !self.apps.iter().any(|group| &group.key == selection)
-        {
-            self.selection = None;
-        }
+        let selection = std::mem::take(&mut self.selection);
+        self.set_selection(selection);
     }
 
     pub fn rows(&self) -> impl Iterator<Item = AppRow<'_>> {
         self.apps.iter().map(|group| AppRow {
+            key: &group.key,
             name: group.name.as_str(),
             icon: group.app.as_ref().and_then(|app| app.icon.as_deref()),
-            responding: self.responds(group),
+            responding: self.unresponsive.group_responds(group, &self.processes),
         })
-    }
-
-    pub fn selected_entry(&self) -> Option<PathBuf> {
-        let group = self.apps.get(self.selected_index()?)?;
-        group.app.as_ref().map(|app| app.path.clone())
-    }
-
-    pub fn len(&self) -> usize {
-        self.apps.len()
     }
 
     pub fn is_empty(&self) -> bool {
         self.apps.is_empty()
     }
 
-    pub fn selected_index(&self) -> Option<usize> {
-        let selection = self.selection.as_ref()?;
-        self.apps.iter().position(|group| &group.key == selection)
+    pub fn selection(&self) -> &[GroupKey] {
+        &self.selection
     }
 
-    pub fn select(&mut self, index: usize) {
-        self.selection = self.apps.get(index).map(|group| group.key.clone());
+    pub fn set_selection(&mut self, mut selection: Vec<GroupKey>) {
+        selection.retain(|key| self.apps.iter().any(|group| &group.key == key));
+        self.selection = selection;
     }
 
-    pub fn move_selection(&mut self, delta: isize) {
-        let Some(last) = self.apps.len().checked_sub(1) else {
-            return;
+    fn selected(&self) -> impl Iterator<Item = &Group> {
+        self.apps
+            .iter()
+            .filter(|group| self.selection.contains(&group.key))
+    }
+
+    pub fn selected_entry(&self) -> Option<PathBuf> {
+        let [key] = self.selection.as_slice() else {
+            return None;
         };
-        let index = match self.selected_index() {
-            Some(index) => index.saturating_add_signed(delta).min(last),
-            None if delta < 0 => last,
-            None => 0,
-        };
-        self.select(index);
+        let group = self.apps.iter().find(|group| &group.key == key)?;
+        group.app.as_ref().map(|app| app.path.clone())
     }
 
     pub fn stop_target(&self) -> Option<StopTarget> {
-        let group = self.apps.get(self.selected_index()?)?;
-        Some(group_target(group, &self.processes, group.name.clone()))
+        merged(
+            self.selected()
+                .map(|group| group_target(group, &self.processes, group.name.clone())),
+        )
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AppRow<'a> {
+    pub key: &'a GroupKey,
     pub name: &'a str,
     pub icon: Option<&'a str>,
     pub responding: bool,
 }
-
 pub struct Monitor {
     catalog: Catalog,
     snapshot: Snapshot,
@@ -434,14 +451,21 @@ pub struct Monitor {
     tab: Tab,
     sort: Column,
     descending: bool,
-    expanded: HashSet<GroupKey>,
-    selection: Option<RowKey>,
+    selection: Vec<RowKey>,
     search: String,
     rows: Vec<Row>,
+    unresponsive: Unresponsive,
     cpu: VecDeque<(f32, f32)>,
     memory: VecDeque<f32>,
     disk: VecDeque<(f64, f64)>,
     network: VecDeque<(f64, f64)>,
+}
+
+fn find_row<'a>(rows: &'a [Row], key: &RowKey) -> Option<&'a Row> {
+    rows.iter().find_map(|row| match &row.key == key {
+        true => Some(row),
+        false => find_row(&row.children, key),
+    })
 }
 
 impl Monitor {
@@ -453,10 +477,10 @@ impl Monitor {
             tab: Tab::Cpu,
             sort: Tab::Cpu.default_sort(),
             descending: true,
-            expanded: HashSet::new(),
-            selection: None,
+            selection: Vec::new(),
             search: String::new(),
             rows: Vec::new(),
+            unresponsive: Unresponsive::default(),
             cpu: VecDeque::new(),
             memory: VecDeque::new(),
             disk: VecDeque::new(),
@@ -518,13 +542,9 @@ impl Monitor {
         (self.sort, self.descending)
     }
 
-    pub fn sort_by(&mut self, column: Column) {
-        if self.sort == column {
-            self.descending = !self.descending;
-        } else {
-            self.sort = column;
-            self.descending = column.numeric();
-        }
+    pub fn set_sort(&mut self, column: Column, descending: bool) {
+        self.sort = column;
+        self.descending = descending;
         self.rebuild();
     }
 
@@ -541,103 +561,42 @@ impl Monitor {
         &self.rows
     }
 
-    pub fn selection(&self) -> Option<&RowKey> {
-        self.selection.as_ref()
+    pub fn selection(&self) -> &[RowKey] {
+        &self.selection
     }
 
-    pub fn selected_index(&self) -> Option<usize> {
-        let selection = self.selection.as_ref()?;
-        self.rows.iter().position(|row| &row.key == selection)
+    pub fn set_selection(&mut self, selection: Vec<RowKey>) {
+        self.selection = selection;
+        self.keep_shown_selection();
     }
 
-    pub fn select(&mut self, index: usize) {
-        self.selection = self.rows.get(index).map(|row| row.key.clone());
-    }
-
-    pub fn move_selection(&mut self, delta: isize) {
-        let Some(last) = self.rows.len().checked_sub(1) else {
-            return;
-        };
-        let index = match self.selected_index() {
-            Some(index) => index.saturating_add_signed(delta).min(last),
-            None if delta < 0 => last,
-            None => 0,
-        };
-        self.select(index);
-    }
-
-    pub fn expand(&mut self) -> bool {
-        let Some(RowKey::Group(key)) = self.selection.clone() else {
-            return false;
-        };
-        let expandable = self
-            .rows
-            .iter()
-            .any(|row| row.key == RowKey::Group(key.clone()) && row.disclosure != Disclosure::None);
-        if !expandable || !self.expanded.insert(key) {
-            return false;
+    pub fn set_responding(&mut self, pid: u32, app_id: &str, responding: bool) -> bool {
+        let changed = self.unresponsive.set(pid, app_id, responding);
+        if changed {
+            self.rebuild();
         }
-        self.rebuild();
-        true
-    }
-
-    pub fn collapse(&mut self) -> bool {
-        match self.selection.clone() {
-            Some(RowKey::Group(key)) => {
-                if !self.expanded.remove(&key) {
-                    return false;
-                }
-            }
-            Some(RowKey::Process { pid, start_ticks }) => {
-                let Some(group) = self.group_of(pid, start_ticks) else {
-                    return false;
-                };
-                let key = group.key.clone();
-                self.expanded.remove(&key);
-                self.selection = Some(RowKey::Group(key));
-            }
-            _ => return false,
-        }
-        self.rebuild();
-        true
-    }
-
-    pub fn toggle(&mut self, index: usize) {
-        let Some(RowKey::Group(key)) = self.rows.get(index).map(|row| row.key.clone()) else {
-            return;
-        };
-        if self.expanded.remove(&key) {
-            if let Some(RowKey::Process { pid, start_ticks }) = self.selection.clone()
-                && self
-                    .group_of(pid, start_ticks)
-                    .is_some_and(|group| group.key == key)
-            {
-                self.selection = Some(RowKey::Group(key));
-            }
-        } else {
-            self.expanded.insert(key);
-        }
-        self.rebuild();
+        changed
     }
 
     pub fn measures_proportional_memory(&self) -> bool {
         self.tab == Tab::Memory
     }
 
-    fn group_of(&self, pid: u32, start_ticks: u64) -> Option<&Group> {
-        self.groups.iter().find(|group| {
-            group.members.iter().any(|member| {
-                let process = &self.snapshot.processes[*member];
-                process.pid == pid && process.start_ticks == start_ticks
-            })
-        })
+    fn process(&self, pid: u32, start_ticks: u64) -> Option<&Process> {
+        self.snapshot
+            .processes
+            .iter()
+            .find(|process| process.pid == pid && process.start_ticks == start_ticks)
     }
 
-    pub fn stop_target(&self) -> Option<StopTarget> {
-        let id = |process: &Process| (process.pid, process.start_ticks);
-        match self.selection.as_ref()? {
+    fn group(&self, key: &GroupKey) -> Option<&Group> {
+        self.groups.iter().find(|group| &group.key == key)
+    }
+
+    fn target(&self, key: &RowKey) -> Option<StopTarget> {
+        match key {
             RowKey::Group(key) => {
-                let group = self.groups.iter().find(|group| &group.key == key)?;
+                let group = self.group(key)?;
                 Some(group_target(
                     group,
                     &self.snapshot.processes,
@@ -645,57 +604,59 @@ impl Monitor {
                 ))
             }
             RowKey::Process { pid, start_ticks } => {
-                let process =
-                    self.snapshot.processes.iter().find(|process| {
-                        process.pid == *pid && process.start_ticks == *start_ticks
-                    })?;
+                let process = self.process(*pid, *start_ticks)?;
+                let id = (process.pid, process.start_ticks);
                 Some(StopTarget {
                     name: process.identity.name.clone(),
-                    roots: vec![id(process)],
-                    processes: vec![id(process)],
+                    count: 1,
+                    roots: vec![id],
+                    processes: vec![id],
                 })
             }
             RowKey::Interface(_) => None,
         }
     }
 
-    fn selected_process(&self) -> Option<&Process> {
-        let (pid, start_ticks) = match self.selection.as_ref()? {
-            RowKey::Group(key) => {
-                let group = self.groups.iter().find(|group| &group.key == key)?;
-                let leader = &self.snapshot.processes[group.leader];
-                (leader.pid, leader.start_ticks)
-            }
-            RowKey::Process { pid, start_ticks } => (*pid, *start_ticks),
-            RowKey::Interface(_) => return None,
-        };
-        self.snapshot
-            .processes
+    pub fn stop_target(&self) -> Option<StopTarget> {
+        merged(self.selection.iter().filter_map(|key| self.target(key)))
+    }
+
+    fn process_of(&self, key: &RowKey) -> Option<&Process> {
+        match key {
+            RowKey::Group(key) => self
+                .group(key)
+                .map(|group| &self.snapshot.processes[group.leader]),
+            RowKey::Process { pid, start_ticks } => self.process(*pid, *start_ticks),
+            RowKey::Interface(_) => None,
+        }
+    }
+
+    pub fn selected_pids(&self) -> Vec<u32> {
+        self.selection
             .iter()
-            .find(|process| process.pid == pid && process.start_ticks == start_ticks)
+            .filter_map(|key| self.process_of(key))
+            .map(|process| process.pid)
+            .collect()
     }
 
-    pub fn selected_pid(&self) -> Option<u32> {
-        self.selected_process().map(|process| process.pid)
-    }
-
-    pub fn selected_name(&self) -> Option<String> {
-        self.rows
-            .get(self.selected_index()?)
+    pub fn selected_names(&self) -> Vec<String> {
+        self.selection
+            .iter()
+            .filter_map(|key| find_row(&self.rows, key))
             .map(|row| row.name.clone())
+            .collect()
     }
 
     pub fn location(&self) -> Option<PathBuf> {
-        if let Some(RowKey::Group(key)) = &self.selection
-            && let Some(app) = self
-                .groups
-                .iter()
-                .find(|group| &group.key == key)
-                .and_then(|group| group.app.as_ref())
+        let [key] = self.selection.as_slice() else {
+            return None;
+        };
+        if let RowKey::Group(key) = key
+            && let Some(app) = self.group(key).and_then(|group| group.app.as_ref())
         {
             return Some(app.path.clone());
         }
-        self.selected_process()?.identity.executable.clone()
+        self.process_of(key)?.identity.executable.clone()
     }
 
     fn group_name(&self, group: &Group) -> String {
@@ -709,11 +670,17 @@ impl Monitor {
         process.identity.name.to_lowercase().contains(query) || process.pid.to_string() == query
     }
 
+    fn keep_shown_selection(&mut self) {
+        let rows = &self.rows;
+        self.selection.retain(|key| find_row(rows, key).is_some());
+    }
+
     fn rebuild(&mut self) {
         let columns = self.tab.columns();
         let sort = self.sort;
         let descending = self.descending;
         let query = self.search.trim().to_lowercase();
+        let processes = &self.snapshot.processes;
         self.rows = if self.tab == Tab::Network {
             self.interface_rows(&query)
         } else {
@@ -723,7 +690,7 @@ impl Monitor {
                 let members = group
                     .members
                     .iter()
-                    .map(|member| &self.snapshot.processes[*member])
+                    .map(|member| &processes[*member])
                     .collect::<Vec<_>>();
                 let group_matches = query.is_empty() || name.to_lowercase().contains(&query);
                 let shown = members
@@ -734,28 +701,9 @@ impl Monitor {
                 if shown.is_empty() {
                     continue;
                 }
-                let leader = &self.snapshot.processes[group.leader];
-                let key = RowKey::Group(group.key.clone());
-                let disclosure = if members.len() == 1 {
-                    Disclosure::None
-                } else if !group_matches || self.expanded.contains(&group.key) {
-                    Disclosure::Expanded
-                } else {
-                    Disclosure::Collapsed
-                };
-                let row = Row {
-                    key,
-                    depth: 0,
-                    disclosure,
-                    name: name.clone(),
-                    icon: group.app.as_ref().and_then(|app| app.icon.clone()),
-                    cells: columns
-                        .iter()
-                        .map(|column| column.text(&column.measure(&shown, &name, leader)))
-                        .collect(),
-                };
+                let leader = &processes[group.leader];
                 let mut children = Vec::new();
-                if disclosure == Disclosure::Expanded {
+                if members.len() > 1 {
                     for process in &shown {
                         let name = &process.identity.name;
                         children.push(Candidate {
@@ -764,8 +712,6 @@ impl Monitor {
                                     pid: process.pid,
                                     start_ticks: process.start_ticks,
                                 },
-                                depth: 1,
-                                disclosure: Disclosure::None,
                                 name: name.clone(),
                                 icon: None,
                                 cells: columns
@@ -774,6 +720,9 @@ impl Monitor {
                                         column.text(&column.measure(&[process], name, process))
                                     })
                                     .collect(),
+                                responding: self.unresponsive.process_responds(process.pid),
+                                revealed: false,
+                                children: Vec::new(),
                             },
                             measure: sort.measure(&[process], name, process),
                             name: name.clone(),
@@ -782,29 +731,29 @@ impl Monitor {
                     }
                     children.sort_by(|a, b| order(a, b, descending));
                 }
-                groups.push((
-                    Candidate {
-                        row,
-                        measure: sort.measure(&shown, &name, leader),
-                        name,
-                        pid: leader.pid,
-                    },
-                    children,
-                ));
+                let row = Row {
+                    key: RowKey::Group(group.key.clone()),
+                    name: name.clone(),
+                    icon: group.app.as_ref().and_then(|app| app.icon.clone()),
+                    cells: columns
+                        .iter()
+                        .map(|column| column.text(&column.measure(&shown, &name, leader)))
+                        .collect(),
+                    responding: self.unresponsive.group_responds(group, processes),
+                    revealed: !group_matches && !children.is_empty(),
+                    children: children.into_iter().map(|child| child.row).collect(),
+                };
+                groups.push(Candidate {
+                    row,
+                    measure: sort.measure(&shown, &name, leader),
+                    name,
+                    pid: leader.pid,
+                });
             }
-            groups.sort_by(|(a, _), (b, _)| order(a, b, descending));
-            groups
-                .into_iter()
-                .flat_map(|(group, children)| {
-                    std::iter::once(group.row).chain(children.into_iter().map(|child| child.row))
-                })
-                .collect()
+            groups.sort_by(|a, b| order(a, b, descending));
+            groups.into_iter().map(|group| group.row).collect()
         };
-        if let Some(selection) = &self.selection
-            && !self.rows.iter().any(|row| &row.key == selection)
-        {
-            self.selection = None;
-        }
+        self.keep_shown_selection();
     }
 
     fn interface_rows(&self, query: &str) -> Vec<Row> {
@@ -825,8 +774,6 @@ impl Monitor {
                 Candidate {
                     row: Row {
                         key: RowKey::Interface(interface.name.clone()),
-                        depth: 0,
-                        disclosure: Disclosure::None,
                         name: interface.name.clone(),
                         icon: None,
                         cells: Tab::Network
@@ -834,6 +781,9 @@ impl Monitor {
                             .iter()
                             .map(|column| column.text(&measure(*column)))
                             .collect(),
+                        responding: true,
+                        revealed: false,
+                        children: Vec::new(),
                     },
                     measure: measure(self.sort),
                     name: interface.name.clone(),

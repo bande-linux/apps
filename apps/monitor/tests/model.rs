@@ -4,8 +4,8 @@ mod fixture;
 
 use fixture::{entry, process};
 use unbound_monitor::{
-    Catalog, Column, Disclosure, GroupKey, Interface, Monitor, Process, Rates, RowKey, Snapshot,
-    Tab, format_bytes, format_cpu_time, format_rate,
+    Catalog, Column, GroupKey, Interface, Monitor, Process, Rates, Row, RowKey, Snapshot, Tab,
+    format_bytes, format_cpu_time, format_rate,
 };
 
 fn catalog() -> Catalog {
@@ -42,6 +42,10 @@ fn names(monitor: &Monitor) -> Vec<&str> {
     monitor.rows().iter().map(|row| row.name.as_str()).collect()
 }
 
+fn child_names(row: &Row) -> Vec<&str> {
+    row.children.iter().map(|row| row.name.as_str()).collect()
+}
+
 fn terminal() -> RowKey {
     RowKey::Group(GroupKey::App("org.unbound.Terminal".to_owned()))
 }
@@ -59,52 +63,47 @@ fn apps_sort_by_their_summed_cpu_and_selection_follows_a_row_that_moves() {
     monitor.update(desk(1.0, 2.0, 10.0));
     assert_eq!(names(&monitor), ["Files", "Terminal", "sshd"]);
     assert_eq!(monitor.rows()[1].cells[1], "3.5");
-    assert_eq!(monitor.rows()[1].disclosure, Disclosure::Collapsed);
+    assert_eq!(monitor.rows()[0].children, []);
 
-    monitor.move_selection(-1);
-    monitor.move_selection(-1);
-    assert_eq!(monitor.selection(), Some(&terminal()));
+    monitor.set_selection(vec![terminal()]);
     monitor.update(desk(1.0, 40.0, 10.0));
     assert_eq!(names(&monitor), ["Terminal", "Files", "sshd"]);
-    assert_eq!(monitor.selected_index(), Some(0));
+    assert_eq!(monitor.selection(), [terminal()]);
 
-    monitor.sort_by(Column::Name);
+    monitor.set_sort(Column::Name, false);
     assert_eq!(names(&monitor), ["Files", "sshd", "Terminal"]);
-    monitor.sort_by(Column::Name);
+    monitor.set_sort(Column::Name, true);
     assert_eq!(names(&monitor), ["Terminal", "sshd", "Files"]);
 }
 
 #[test]
-fn right_shows_an_apps_processes_and_left_from_one_returns_to_the_app() {
+fn an_apps_processes_sort_under_it_and_a_selected_one_stays_selected() {
     let mut monitor = Monitor::new(catalog());
     monitor.update(desk(1.0, 2.0, 10.0));
-    monitor.move_selection(1);
-    monitor.move_selection(1);
-    assert!(monitor.expand());
     assert_eq!(
-        names(&monitor),
-        ["Files", "Terminal", "cargo", "unbound-term", "bash", "sshd"]
+        child_names(&monitor.rows()[1]),
+        ["cargo", "unbound-term", "bash"]
     );
-    assert_eq!(monitor.rows()[2].depth, 1);
-
-    monitor.move_selection(1);
-    assert_eq!(monitor.selection(), Some(&cargo()));
+    monitor.set_selection(vec![cargo()]);
     monitor.update(desk(1.0, 0.0, 10.0));
-    assert_eq!(monitor.selection(), Some(&cargo()));
-    assert!(monitor.collapse());
-    assert_eq!(monitor.selection(), Some(&terminal()));
-    assert_eq!(names(&monitor), ["Files", "Terminal", "sshd"]);
+    assert_eq!(
+        child_names(&monitor.rows()[1]),
+        ["unbound-term", "bash", "cargo"]
+    );
+    assert_eq!(monitor.selection(), [cargo()]);
 }
 
 #[test]
 fn a_selected_process_that_exits_leaves_nothing_selected() {
     let mut monitor = Monitor::new(catalog());
     monitor.update(desk(1.0, 2.0, 10.0));
-    monitor.select(0);
+    monitor.set_selection(vec![RowKey::Group(GroupKey::App(
+        "org.unbound.Files".to_owned(),
+    ))]);
     let mut without_files = desk(1.0, 2.0, 10.0);
     without_files.processes.retain(|process| process.pid != 600);
     monitor.update(without_files);
-    assert_eq!(monitor.selection(), None);
+    assert_eq!(monitor.selection(), []);
 }
 
 #[test]
@@ -112,24 +111,32 @@ fn search_by_process_name_or_pid_opens_the_app_on_the_matching_processes() {
     let mut monitor = Monitor::new(catalog());
     monitor.update(desk(1.0, 2.0, 10.0));
     monitor.set_search("CARGO");
-    assert_eq!(names(&monitor), ["Terminal", "cargo"]);
-    assert_eq!(monitor.rows()[0].disclosure, Disclosure::Expanded);
+    assert_eq!(names(&monitor), ["Terminal"]);
+    assert_eq!(child_names(&monitor.rows()[0]), ["cargo"]);
+    assert!(monitor.rows()[0].revealed);
     monitor.set_search("600");
     assert_eq!(names(&monitor), ["Files"]);
     monitor.set_search("term");
     assert_eq!(names(&monitor), ["Terminal"]);
-    assert_eq!(monitor.rows()[0].disclosure, Disclosure::Collapsed);
+    assert_eq!(monitor.rows()[0].children.len(), 3);
+    assert!(!monitor.rows()[0].revealed);
 }
 
 #[test]
 fn quitting_an_app_signals_its_roots_and_force_quitting_signals_every_process() {
     let mut monitor = Monitor::new(catalog());
     monitor.update(desk(1.0, 2.0, 10.0));
-    monitor.select(1);
+    monitor.set_selection(vec![terminal()]);
     let target = monitor.stop_target().expect("the terminal");
     assert_eq!(target.name, "Terminal");
     assert_eq!(target.roots, [(500, 500)]);
     assert_eq!(target.processes, [(500, 500), (501, 501), (502, 502)]);
+
+    monitor.set_selection(vec![cargo(), terminal()]);
+    let target = monitor.stop_target().expect("cargo and the terminal");
+    assert_eq!((target.name.as_str(), target.count), ("cargo", 2));
+    assert_eq!(target.roots, [(502, 502), (500, 500)]);
+    assert_eq!(target.processes, [(502, 502), (500, 500), (501, 501)]);
 }
 
 #[test]

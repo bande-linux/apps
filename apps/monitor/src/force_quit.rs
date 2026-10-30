@@ -1,35 +1,36 @@
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use unbound_toolkit::{
-    Color, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem,
-};
+use std::collections::HashMap;
+
+use accesskit::{ActionRequest, TreeUpdate};
+use unbound_toolkit::ui::{Cell, Column, Cursor, Event, Key, Modifiers, Pointer, Row, Table};
+use unbound_toolkit::{Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle, TextSystem};
 
 use crate::L10N;
+use crate::apps::GroupKey;
+use crate::list::{List, Signal, group_id};
 use crate::menu::{MenuCommand, force_quit_menu};
 use crate::model::AppList;
 use crate::sampler::Snapshot;
 use crate::view::{
-    Dialog, DialogButton, Icons, Painter, Request, Screen, Scroller, contains, dialog_click,
+    Dialog, DialogButton, Icons, NOT_RESPONDING, Painter, Request, Screen, contains, dialog_click,
     dialog_key, is_secondary, opens_menu, press_dialog_button,
 };
 
 const PADDING: f32 = 16.0;
 const HINT_HEIGHT: f32 = 44.0;
-const ROW_HEIGHT: f32 = 32.0;
-const ICON_SIZE: f32 = 22.0;
+const LIST_INSET: f32 = 4.0;
 const BUTTON_WIDTH: f32 = 104.0;
 const BUTTON_HEIGHT: f32 = 26.0;
 const FOOTER_HEIGHT: f32 = 58.0;
 const TEXT_SIZE: f32 = 13.0;
-const UNRESPONSIVE: Color = Color::hex(0xE5484D);
 
 pub struct ForceQuitView {
     apps: AppList,
     palette: Palette,
-    text: TextSystem,
     icons: Icons,
+    list: List,
+    ids: HashMap<String, GroupKey>,
     size: (f32, f32),
-    scroller: Scroller,
-    focused: bool,
+
     dialog: Option<Dialog>,
     requests: Vec<Request>,
     finished: bool,
@@ -37,26 +38,31 @@ pub struct ForceQuitView {
 
 impl ForceQuitView {
     pub fn new(apps: AppList, palette: Palette, text: TextSystem, icons: Icons) -> Self {
+        let table = Table::new(vec![Column::new(&L10N.tr("column-name"), 120.0)]).without_header();
         Self {
             apps,
             palette,
-            text,
             icons,
+            list: List::new(table, palette, text),
+            ids: HashMap::new(),
             size: (0.0, 0.0),
-            scroller: Scroller::default(),
-            focused: true,
+
             dialog: None,
             requests: Vec::new(),
             finished: false,
         }
     }
 
-    fn list_frame(&self) -> Rect {
+    pub fn table(&self) -> Option<&Table> {
+        self.list.shown_table()
+    }
+
+    fn box_frame(&self) -> Rect {
         Rect::new(
             PADDING,
             HINT_HEIGHT,
             self.size.0 - 2.0 * PADDING,
-            self.size.1 - HINT_HEIGHT - FOOTER_HEIGHT,
+            (self.size.1 - HINT_HEIGHT - FOOTER_HEIGHT).max(0.0),
         )
     }
 
@@ -69,26 +75,53 @@ impl ForceQuitView {
         )
     }
 
-    fn visible_rows(&self) -> usize {
-        ((self.list_frame().height / ROW_HEIGHT).floor() as usize).max(1)
+    fn sync(&mut self) {
+        let mut ids = HashMap::new();
+        let rows = self
+            .apps
+            .rows()
+            .map(|row| {
+                let id = group_id(row.key);
+                ids.insert(id.clone(), row.key.clone());
+                let icon = row.icon.and_then(|icon| self.icons.get(icon));
+                let cell = match row.responding {
+                    true => Cell::new(row.name),
+                    false => Cell::new(
+                        L10N.tr_args("not-responding", [("name", row.name.to_owned().into())]),
+                    )
+                    .tinted(NOT_RESPONDING),
+                };
+                Row::new(id, vec![cell.icon(icon)])
+            })
+            .collect();
+        self.ids = ids;
+        if let Some(table) = self.list.table() {
+            table.set_rows(rows);
+            let selection = table.selection();
+            self.select_ids(&selection);
+        }
+        self.list.take_signals();
     }
 
-    fn reveal_selection(&mut self) {
-        let rows = self.apps.len();
-        let height = self.list_frame().height;
-        match self.apps.selected_index() {
-            Some(index) => self.scroller.reveal(index, rows, ROW_HEIGHT, height),
-            None => self.scroller.clamp(rows, ROW_HEIGHT, height),
-        }
+    fn select_ids(&mut self, ids: &[String]) {
+        let keys = ids
+            .iter()
+            .filter_map(|id| self.ids.get(id).cloned())
+            .collect();
+        self.apps.set_selection(keys);
     }
 
-    fn row_at(&self, at: Point) -> Option<usize> {
-        let list = self.list_frame();
-        if !contains(list, at) {
-            return None;
+    fn drain_signals(&mut self) {
+        for signal in self.list.take_signals() {
+            match signal {
+                Signal::Selection(ids) => self.select_ids(&ids),
+                Signal::Activate => {
+                    self.confirm();
+                }
+                Signal::Sort(_) => {}
+            }
         }
-        let index = self.scroller.index_at(at.y - list.y, ROW_HEIGHT);
-        (index < self.apps.len()).then_some(index)
+        self.list.take_copy();
     }
 
     fn request_menu(&mut self, at: Point) {
@@ -96,35 +129,18 @@ impl ForceQuitView {
         self.requests.push(Request::Menu(menu, at));
     }
 
-    fn pointer_down(&mut self, pointer: &Pointer) -> bool {
-        if is_secondary(pointer) {
-            return match self.row_at(pointer.position) {
-                Some(index) if self.dialog.is_none() => {
-                    self.apps.select(index);
-                    self.request_menu(pointer.position);
-                    true
-                }
-                _ => false,
-            };
+    fn menu_from_keyboard(&mut self) -> bool {
+        let bounds = self
+            .list
+            .shown_table()
+            .and_then(|table| table.row_bounds(table.cursor_row()?));
+        match bounds {
+            Some(row) if !self.apps.selection().is_empty() => {
+                self.request_menu(Point::new(row.x + 32.0, row.y + row.height));
+                true
+            }
+            _ => false,
         }
-        if !pointer.is_primary() {
-            return false;
-        }
-        if pointer.count == 2 && self.dialog.is_none() && self.row_at(pointer.position).is_some() {
-            return self.confirm();
-        }
-        self.click(pointer.position)
-    }
-
-    fn scroll(&mut self, position: Point, delta: f32) -> bool {
-        if self.dialog.is_some() || !contains(self.list_frame(), position) {
-            return false;
-        }
-        let before = self.scroller;
-        let rows = self.apps.len();
-        let height = self.list_frame().height;
-        self.scroller.scroll(delta, rows, ROW_HEIGHT, height);
-        self.scroller != before
     }
 
     fn confirm(&mut self) -> bool {
@@ -154,32 +170,25 @@ impl ForceQuitView {
             return true;
         }
         if opens_menu(key, modifiers) {
-            let Some(index) = self.apps.selected_index() else {
-                return false;
-            };
-            self.reveal_selection();
-            let list = self.list_frame();
-            let bottom = list.y + self.scroller.row_y(index + 1, ROW_HEIGHT);
-            self.request_menu(Point::new(list.x + 16.0 + ICON_SIZE, bottom));
-            return true;
+            return self.menu_from_keyboard();
         }
         match key {
             Key::Escape => self.finished = true,
             Key::Character('w') if modifiers.logo => self.finished = true,
             Key::Enter => return self.confirm(),
-            Key::Up => self.apps.move_selection(-1),
-            Key::Down => self.apps.move_selection(1),
-            Key::Home => self.apps.select(0),
-            Key::End => self.apps.select(self.apps.len().saturating_sub(1)),
-            _ => return false,
+            _ => {
+                let handled = self.list.handle(&Event::Key { key, modifiers });
+                self.drain_signals();
+                return handled;
+            }
         }
-        self.reveal_selection();
         true
     }
 
-    fn click(&mut self, at: Point) -> bool {
+    fn pointer_down(&mut self, event: &Event, pointer: &Pointer) -> bool {
+        let at = pointer.position;
         if let Some(dialog) = &self.dialog {
-            return match dialog_click(dialog, self.size, at) {
+            return match dialog_click(dialog, self.size, at).filter(|_| pointer.is_primary()) {
                 Some(button) => {
                     self.press(button);
                     true
@@ -187,183 +196,103 @@ impl ForceQuitView {
                 None => false,
             };
         }
-        if contains(self.button_frame(), at) {
+        if pointer.is_primary() && contains(self.button_frame(), at) {
             return self.confirm();
         }
-        match self.row_at(at) {
-            Some(index) => {
-                self.apps.select(index);
-                true
-            }
-            None => false,
+        if !contains(self.list.frame(), at) {
+            return false;
         }
+        let handled = self.list.handle(event);
+        self.drain_signals();
+        if is_secondary(pointer) && !self.apps.selection().is_empty() {
+            self.request_menu(at);
+            return true;
+        }
+        handled
+    }
+
+    fn pass(&mut self, event: &Event) -> bool {
+        if self.dialog.is_some() {
+            return false;
+        }
+        let handled = self.list.handle(event);
+        self.drain_signals();
+        handled
     }
 }
 
 impl Screen for ForceQuitView {
     fn scene(&mut self, width: u32, height: u32) -> Scene {
         self.size = (width as f32, height as f32);
-        self.reveal_selection();
+        let frame = self.box_frame();
+        self.list.set_frame(frame.inset(LIST_INSET));
+        let list = self.list.paint(width, height);
         let palette = self.palette;
-        let mut text = std::mem::take(&mut self.text);
+        let button = self.button_frame();
+        let selected = !self.apps.selection().is_empty();
+        let empty = self.apps.is_empty();
         let mut painter = Painter {
-            text: &mut text,
+            text: self.list.text(),
             palette,
             items: Vec::new(),
         };
         painter.text_in(
             &L10N.tr("force-quit-hint"),
             TextStyle::new(TEXT_SIZE - 1.0, palette.label_muted),
-            Rect::new(PADDING, 0.0, self.size.0 - 2.0 * PADDING, HINT_HEIGHT),
+            Rect::new(PADDING, 0.0, width as f32 - 2.0 * PADDING, HINT_HEIGHT),
             TextAlign::Start,
         );
-        let list = self.list_frame();
-        let shape = Shape::rounded(list, 8.0);
+        let shape = Shape::rounded(frame, 8.0);
         painter.fill(shape, palette.surface_elevated);
         painter.items.push(Item::Stroke {
             shape,
             width: 1.0,
             paint: palette.separator_color.into(),
         });
-        let selected = self.apps.selected_index();
-        let mut rows = Painter {
-            text: painter.text,
-            palette,
-            items: Vec::new(),
-        };
-        if self.apps.is_empty() {
-            rows.text_in(
+        if empty {
+            painter.text_in(
                 &L10N.tr("force-quit-empty"),
                 TextStyle::new(TEXT_SIZE, palette.label_muted),
-                list,
+                frame,
                 TextAlign::Center,
             );
         }
-        let shown = self
-            .apps
-            .rows()
-            .enumerate()
-            .skip(self.scroller.first(ROW_HEIGHT))
-            .take(self.visible_rows() + 2)
-            .map(|(index, row)| {
-                (
-                    index,
-                    row.name.to_owned(),
-                    row.icon.map(str::to_owned),
-                    row.responding,
-                )
-            })
-            .collect::<Vec<_>>();
-        for (index, name, icon, responding) in shown {
-            let y = list.y + self.scroller.row_y(index, ROW_HEIGHT);
-            let row = Rect::new(list.x + 4.0, y + 2.0, list.width - 8.0, ROW_HEIGHT - 4.0);
-            let is_selected = selected == Some(index);
-            if is_selected {
-                let color = if self.focused {
-                    palette.accent_color
-                } else {
-                    palette.label_muted.with_alpha(56)
-                };
-                rows.fill(Shape::rounded(row, 6.0), color);
-            }
-            if let Some(image) = icon.as_deref().and_then(|icon| self.icons.get(icon)) {
-                rows.items.push(Item::Image {
-                    rect: Rect::new(
-                        row.x + 8.0,
-                        y + ((ROW_HEIGHT - ICON_SIZE) / 2.0).round(),
-                        ICON_SIZE,
-                        ICON_SIZE,
-                    ),
-                    image,
-                });
-            }
-            let color = if is_selected && self.focused {
-                Color::hex(0xFFFFFF)
-            } else {
-                palette.label_primary
-            };
-            let text = Rect::new(
-                row.x + 16.0 + ICON_SIZE,
-                row.y,
-                row.width - 24.0 - ICON_SIZE,
-                row.height,
-            );
-            if responding {
-                rows.text_in(
-                    &name,
-                    TextStyle::new(TEXT_SIZE, color),
-                    text,
-                    TextAlign::Start,
-                );
-            } else {
-                let marker = if is_selected && self.focused {
-                    color
-                } else {
-                    UNRESPONSIVE
-                };
-                let style = TextStyle::new(TEXT_SIZE, color);
-                let name_width = rows
-                    .paragraph(&format!("{name} "), style, None, TextAlign::Start)
-                    .width()
-                    .min(text.width);
-                rows.text_in(
-                    &format!("{name} "),
-                    style,
-                    Rect::new(text.x, text.y, name_width, text.height),
-                    TextAlign::Start,
-                );
-                rows.text_in(
-                    &L10N.tr("force-quit-not-responding"),
-                    TextStyle::new(TEXT_SIZE, marker),
-                    Rect::new(
-                        text.x + name_width,
-                        text.y,
-                        (text.width - name_width).max(0.0),
-                        text.height,
-                    ),
-                    TextAlign::Start,
-                );
-            }
+        painter.items.extend(list);
+        painter.button(button, &L10N.tr("button-force-quit"), selected);
+        if let Some(dialog) = &self.dialog {
+            painter.dialog(self.size, dialog, false);
         }
-        let items = rows.items;
-        painter.items.push(Item::Clip { shape, items });
-        painter.button(
-            self.button_frame(),
-            &L10N.tr("button-force-quit"),
-            selected.is_some(),
-        );
-        if let Some(dialog) = self.dialog.clone() {
-            painter.dialog(self.size, &dialog, false);
-        }
-        let items = painter.items;
-        self.text = text;
         Scene {
             width,
             height,
             background: palette.surface_background,
-            items,
+            items: painter.items,
         }
     }
 
     fn set_palette(&mut self, palette: Palette) {
         self.palette = palette;
+        self.list.set_palette(palette);
     }
 
     fn set_focused(&mut self, focused: bool) {
-        self.focused = focused;
+        match focused {
+            true => self.list.focus(),
+            false => self.list.blur(),
+        }
     }
 
     fn handle(&mut self, event: &Event) -> bool {
         match event {
             Event::Key { key, modifiers } => self.key(*key, *modifiers),
-            Event::PointerDown(pointer) => self.pointer_down(pointer),
-            Event::Scroll(scroll) => self.scroll(scroll.position, scroll.delta.y),
-            _ => false,
+            Event::PointerDown(pointer) => self.pointer_down(event, pointer),
+            _ => self.pass(event),
         }
     }
 
     fn update(&mut self, snapshot: Snapshot) {
         self.apps.update(snapshot);
+        self.sync();
     }
 
     fn measures_proportional_memory(&self) -> bool {
@@ -387,10 +316,32 @@ impl Screen for ForceQuitView {
     }
 
     fn set_responding(&mut self, pid: u32, app_id: &str, responding: bool) -> bool {
-        self.apps.set_responding(pid, app_id, responding)
+        let changed = self.apps.set_responding(pid, app_id, responding);
+        if changed {
+            self.sync();
+        }
+        changed
     }
 
     fn finished(&self) -> bool {
         self.finished
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        Some(self.list.accessibility())
+    }
+
+    fn perform(&mut self, request: &ActionRequest) -> bool {
+        let performed = self.list.perform(request);
+        self.drain_signals();
+        performed
+    }
+
+    fn cursor(&self) -> Cursor {
+        self.list.cursor()
+    }
+
+    fn animating(&self) -> bool {
+        self.list.animating()
     }
 }

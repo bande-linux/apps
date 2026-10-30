@@ -3,18 +3,23 @@
 mod fixture;
 
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
+use accesskit::Role;
 use fixture::{entry, process};
 use unbound_monitor::{
-    AppList, AppRow, Catalog, CpuShare, Disclosure, ForceQuitView, Icons, Memory, Monitor,
-    MonitorView, Process, ROW_HEIGHT, Request, Screen, Snapshot, Tab,
+    AppList, AppRow, Catalog, CpuShare, ForceQuitView, Icons, Memory, Monitor, MonitorView,
+    Process, Request, RowKey, Screen, Snapshot, Tab,
 };
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, Scroll};
+use unbound_toolkit::ui::{
+    Event, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll,
+};
 use unbound_toolkit::{CpuRenderer, Image, Palette, Point, Scheme, TextSystem};
 
 const MIN_SSIM: f64 = 0.995;
 const MONITOR_SIZE: (u32, u32) = (860, 420);
 const FORCE_QUIT_SIZE: (u32, u32) = (380, 340);
+const LIST_TOP: f32 = 48.0 + HEADER_HEIGHT;
 
 fn catalog() -> Catalog {
     let mut terminal = entry("org.unbound.Terminal", "Terminal", "unbound-term", false);
@@ -36,7 +41,8 @@ fn icons() -> Icons {
         let app = match name {
             "org.unbound.Terminal" => "terminal",
             "org.unbound.Files" => "files",
-            _ => "settings",
+            "org.unbound.Settings" => "settings",
+            _ => return None,
         };
         let path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../{app}/data/{name}.svg"));
@@ -117,10 +123,29 @@ fn key(key: Key) -> Event {
     }
 }
 
+fn shifted(key: Key) -> Event {
+    Event::Key {
+        key,
+        modifiers: Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    }
+}
+
 fn render(screen: &mut impl Screen, name: &str, size: (u32, u32)) {
     let scene = screen.scene(size.0, size.1);
-    let frame = CpuRenderer::new().render(&scene).expect("frame");
-    check_golden(name, size, frame.rgba);
+    for (scale, suffix) in [(1.0, ""), (1.5, "@1.5x")] {
+        let pixels = (
+            (f64::from(size.0) * scale).round() as u32,
+            (f64::from(size.1) * scale).round() as u32,
+        );
+        let mut rgba = vec![0; pixels.0 as usize * pixels.1 as usize * 4];
+        CpuRenderer::new()
+            .render_into(&scene, scale, &mut rgba)
+            .expect("frame");
+        check_golden(&format!("{name}{suffix}"), pixels, rgba);
+    }
 }
 
 #[test]
@@ -136,8 +161,9 @@ fn activity_monitor_matches_its_goldens_in_light_and_dark() {
             view.update(snapshot(step));
         }
         view.handle(&key(Key::Down));
-        view.handle(&key(Key::Right));
+        view.handle(&key(Key::Enter));
         view.handle(&key(Key::Down));
+        assert!(view.set_responding(710, "", false));
         render(&mut view, &format!("monitor-cpu-{suffix}"), MONITOR_SIZE);
         view.handle(&Event::Key {
             key: Key::Character('q'),
@@ -186,7 +212,40 @@ fn monitor_view() -> MonitorView {
         icons(),
     );
     view.update(snapshot(0));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
     view
+}
+
+fn shown_rows(screen: &impl Screen) -> Vec<String> {
+    let tree = screen.accessibility().expect("an accessibility tree");
+    let mut rows = tree
+        .nodes
+        .iter()
+        .filter(|(_, node)| node.role() == Role::Row)
+        .filter_map(|(_, node)| Some((node.row_index()?, node.label()?.to_owned())))
+        .collect::<Vec<_>>();
+    rows.sort();
+    rows.into_iter().map(|(_, label)| label).collect()
+}
+
+fn row_point(index: usize) -> Point {
+    Point::new(
+        300.0,
+        LIST_TOP + index as f32 * ROW_HEIGHT + ROW_HEIGHT / 2.0,
+    )
+}
+
+fn click(view: &mut impl Screen, at: Point, modifiers: Modifiers, count: u8) {
+    let pointer = Pointer::at(at).with_modifiers(modifiers).with_count(count);
+    view.handle(&Event::PointerDown(pointer));
+    view.handle(&Event::PointerUp(pointer));
+}
+
+fn cargo() -> RowKey {
+    RowKey::Process {
+        pid: 502,
+        start_ticks: 502,
+    }
 }
 
 #[test]
@@ -203,27 +262,113 @@ fn the_memory_tab_resamples_at_once_to_show_proportional_memory() {
 #[test]
 fn super_f_searches_as_you_type_and_escape_clears_the_search() {
     let mut view = monitor_view();
-    assert!(!view.handle(&key(Key::Character('p'))));
     view.handle(&command('f'));
     for character in "pipe".chars() {
         view.handle(&key(Key::Character(character)));
     }
-    let names = |view: &MonitorView| {
-        view.monitor
-            .rows()
-            .iter()
-            .map(|row| row.name.clone())
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(names(&view), ["pipewire"]);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view), ["pipewire"]);
     view.handle(&key(Key::Enter));
-    assert_eq!(view.monitor.selected_index(), Some(0));
+    assert_eq!(view.table().expect("table").selection().len(), 1);
     view.handle(&key(Key::Escape));
-    assert_eq!(names(&view).len(), 5);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view).len(), 5);
 }
 
 #[test]
-fn the_wheel_scrolls_the_list_under_the_pointer_and_a_double_click_opens_an_app() {
+fn searching_for_a_process_opens_its_app_and_clearing_the_search_closes_it_again() {
+    let mut view = monitor_view();
+    view.handle(&command('f'));
+    for character in "cargo".chars() {
+        view.handle(&key(Key::Character(character)));
+    }
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view), ["Terminal", "cargo"]);
+    view.handle(&key(Key::Escape));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(
+        shown_rows(&view),
+        [
+            "Terminal",
+            "pipewire",
+            "Files",
+            "Settings",
+            "systemd-journald"
+        ]
+    );
+}
+
+#[test]
+fn the_selection_stays_on_its_process_while_the_numbers_reorder_the_list() {
+    let mut view = monitor_view();
+    click(&mut view, row_point(0), Modifiers::default(), 2);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(
+        shown_rows(&view)[..4],
+        ["Terminal", "cargo", "unbound-term", "bash"]
+    );
+    click(&mut view, row_point(1), Modifiers::default(), 1);
+    assert_eq!(view.monitor.selection(), [cargo()]);
+    let mut calmer = snapshot(1);
+    calmer.processes[2].cpu_percent = 0.1;
+    calmer.processes[3].cpu_percent = 50.0;
+    view.update(calmer);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view)[..2], ["Files", "Terminal"]);
+    assert_eq!(view.monitor.selection(), [cargo()]);
+    let table = view.table().expect("table");
+    assert_eq!(table.selection(), ["process:502:502"]);
+    let shown = table.cursor_row().expect("cursor");
+    assert_eq!(shown_rows(&view)[shown], "cargo");
+}
+
+#[test]
+fn header_clicks_sort_numbers_largest_first_and_names_from_a() {
+    let mut view = monitor_view();
+    let header = |x: f32| Point::new(x, 48.0 + HEADER_HEIGHT / 2.0);
+    click(&mut view, header(40.0), Modifiers::default(), 1);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(
+        shown_rows(&view),
+        [
+            "Files",
+            "pipewire",
+            "Settings",
+            "systemd-journald",
+            "Terminal"
+        ]
+    );
+    let threads = 860.0 - 96.0 - 64.0 - 34.0;
+
+    click(&mut view, header(threads), Modifiers::default(), 1);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view)[0], "Terminal");
+    assert_eq!(
+        view.monitor.sort(),
+        (unbound_monitor::Column::Threads, true)
+    );
+}
+
+#[test]
+fn several_selected_rows_quit_together() {
+    let mut view = monitor_view();
+    view.handle(&key(Key::Down));
+    view.handle(&shifted(Key::Down));
+    let target = view.monitor.stop_target().expect("two apps");
+    assert_eq!(target.count, 2);
+    assert_eq!(target.roots, [(500, 500), (710, 710)]);
+    assert!(view.handle(&Event::Key {
+        key: Key::Character('q'),
+        modifiers: Modifiers {
+            logo: true,
+            alt: true,
+            ..Modifiers::default()
+        },
+    }));
+}
+
+#[test]
+fn the_wheel_scrolls_the_list_under_the_pointer() {
     let mut view = monitor_view();
     let mut crowded = snapshot(0);
     crowded
@@ -231,29 +376,22 @@ fn the_wheel_scrolls_the_list_under_the_pointer_and_a_double_click_opens_an_app(
         .extend((0..30).map(|index| process(2000 + index, 1, &format!("/usr/bin/daemon{index}"))));
     view.update(crowded);
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
-    let list_top = 48.0 + 26.0;
-    let at = Point::new(300.0, list_top + 5.0);
     assert!(view.handle(&Event::Scroll(Scroll {
-        position: at,
-        delta: Point::new(0.0, 2.0 * ROW_HEIGHT),
+        position: row_point(0),
+        delta: Point::new(0.0, 4.0 * ROW_HEIGHT),
         ..Scroll::default()
     })));
-    view.handle(&Event::PointerDown(Pointer::at(at)));
-    assert_eq!(view.monitor.selected_index(), Some(2));
-
-    assert_eq!(view.monitor.rows()[0].name, "Terminal");
-    view.handle(&Event::Scroll(Scroll {
-        position: at,
-        delta: Point::new(0.0, -10.0 * ROW_HEIGHT),
-        ..Scroll::default()
-    }));
-    view.handle(&Event::PointerDown(Pointer::at(at).with_count(2)));
-    assert_eq!(view.monitor.rows()[0].disclosure, Disclosure::Expanded);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while view.table().expect("table").scroll_offset() < 4.0 * ROW_HEIGHT - 0.5 {
+        assert!(Instant::now() < deadline, "the list did not scroll");
+        std::thread::sleep(Duration::from_millis(10));
+        view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    }
 }
 
 fn right_click(at: Point) -> Event {
     let mut pointer = Pointer::at(at);
-    pointer.button = unbound_toolkit::ui::PointerButton::Secondary;
+    pointer.button = PointerButton::Secondary;
     Event::PointerDown(pointer)
 }
 
@@ -272,11 +410,9 @@ fn menu_actions(requests: Vec<Request>) -> Vec<(String, bool)> {
 #[test]
 fn a_right_click_selects_the_row_and_offers_quit_turning_into_force_quit_with_alt() {
     let mut view = monitor_view();
-    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
-    let row = Point::new(300.0, 48.0 + 26.0 + ROW_HEIGHT / 2.0);
-    assert!(view.handle(&right_click(row)));
-    assert_eq!(view.monitor.selected_index(), Some(0));
-    let name = view.monitor.rows()[0].name.clone();
+    assert!(view.handle(&right_click(row_point(0))));
+    assert_eq!(view.table().expect("table").selection().len(), 1);
+    let name = shown_rows(&view)[0].clone();
     assert_eq!(
         menu_actions(view.take_requests()),
         [
@@ -286,7 +422,7 @@ fn a_right_click_selects_the_row_and_offers_quit_turning_into_force_quit_with_al
             ("copy-pid".to_owned(), true),
         ]
     );
-    view.handle(&right_click(row));
+    view.handle(&right_click(row_point(0)));
     match view.take_requests().as_slice() {
         [Request::Menu(menu, _)] => assert_eq!(
             menu.items[0]
@@ -302,11 +438,19 @@ fn a_right_click_selects_the_row_and_offers_quit_turning_into_force_quit_with_al
     assert_eq!(view.take_requests(), [Request::Copy(name)]);
     assert!(view.menu_action("force-quit"));
     view.handle(&key(Key::Escape));
-    view.handle(&Event::Key {
-        key: Key::Menu,
-        modifiers: Modifiers::default(),
-    });
+    view.handle(&key(Key::Menu));
     assert_eq!(menu_actions(view.take_requests())[0].0, "quit");
+}
+
+#[test]
+fn an_app_that_stopped_responding_is_marked_in_the_list_until_it_answers_again() {
+    let mut view = monitor_view();
+    assert!(view.set_responding(600, "org.unbound.Files", false));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert!(shown_rows(&view).contains(&"Files (Not Responding)".to_owned()));
+    assert!(view.set_responding(600, "org.unbound.Files", true));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert!(shown_rows(&view).contains(&"Files".to_owned()));
 }
 
 #[test]
@@ -334,4 +478,25 @@ fn force_quit_marks_an_app_that_stopped_responding_until_it_answers_again() {
     );
     assert!(apps.set_responding(501, "", true));
     assert!(responding(&apps).iter().all(|(_, responding)| *responding));
+}
+
+#[test]
+fn force_quit_lists_apps_for_assistive_technology_and_force_quits_the_selected_ones() {
+    let mut view = ForceQuitView::new(
+        AppList::new(catalog(), 1000),
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+        icons(),
+    );
+    view.update(snapshot(0));
+    view.scene(FORCE_QUIT_SIZE.0, FORCE_QUIT_SIZE.1);
+    assert_eq!(shown_rows(&view), ["Files", "Settings", "Terminal"]);
+    view.handle(&key(Key::Down));
+    view.handle(&shifted(Key::Down));
+    assert_eq!(view.table().expect("table").selection().len(), 2);
+    assert!(view.handle(&key(Key::Enter)));
+    view.handle(&key(Key::Escape));
+    assert!(!view.finished());
+    view.handle(&key(Key::Escape));
+    assert!(view.finished());
 }

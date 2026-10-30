@@ -2,8 +2,10 @@ mod apps;
 mod cpu;
 mod force_quit;
 mod format;
+mod list;
 mod menu;
 mod model;
+mod monitor_view;
 mod proc;
 mod sampler;
 mod signal;
@@ -19,13 +21,12 @@ pub use cpu::{CpuShare, read_cpu_ticks};
 pub use force_quit::ForceQuitView;
 pub use format::{format_bytes, format_cpu_time, format_rate};
 pub use menu::{MenuCommand, Selected, app_menus, force_quit_menu, process_menu};
-pub use model::{
-    AppList, AppRow, Column, Disclosure, Graph, Monitor, Row, RowKey, StopTarget, Tab,
-};
+pub use model::{AppList, AppRow, Column, Graph, Monitor, Row, RowKey, StopTarget, Tab};
+pub use monitor_view::MonitorView;
 pub use sampler::{Identity, Interface, Process, Rates, Sampler, Snapshot};
 pub use signal::{SignalError, Stop, stop};
 pub use system::Memory;
-pub use view::{Icons, MonitorView, ROW_HEIGHT, Request, Screen};
+pub use view::{Icons, Request, Screen};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-monitor.ftl");
 
@@ -42,6 +43,7 @@ mod tests {
             include_str!("main.rs"),
             include_str!("menu.rs"),
             include_str!("model.rs"),
+            include_str!("monitor_view.rs"),
             include_str!("signal.rs"),
             include_str!("view.rs"),
         ];
