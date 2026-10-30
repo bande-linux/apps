@@ -1310,6 +1310,7 @@ impl TerminalApp {
                 if smooth {
                     self.forget_samples_before(scroll.time);
                     self.start_momentum(window.frame_time().on_screen());
+                    window.request_redraw();
                 }
                 return;
             }
