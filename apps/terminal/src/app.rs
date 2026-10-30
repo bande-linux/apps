@@ -328,17 +328,17 @@ impl TerminalApp {
         self.ask(window, &message, Pending::CloseOtherTabs(keep));
     }
 
-    fn quit(&mut self, window: &mut Window) {
+    fn may_quit(&mut self, window: &mut Window) -> bool {
         let busy = self
             .tabs
             .iter()
             .filter(|tab| tab.running_program().is_some())
             .count();
-        if busy == 0 {
-            return window.close();
+        if busy > 0 {
+            let message = L10N.tr_args("confirm-quit", [("count", busy.into())]);
+            self.ask(window, &message, Pending::Quit);
         }
-        let message = L10N.tr_args("confirm-quit", [("count", busy.into())]);
-        self.ask(window, &message, Pending::Quit);
+        busy == 0
     }
 
     fn remove_other_tabs(&mut self, window: &mut Window, keep: u32) {
@@ -473,7 +473,9 @@ impl TerminalApp {
             Some(Standard::Hide | Standard::Minimize) => window.minimize(),
             Some(Standard::Zoom) => window.toggle_zoom(),
             Some(Standard::Quit) => {
-                self.quit(window);
+                if self.may_quit(window) {
+                    window.close();
+                }
                 Ok(())
             }
             Some(Standard::CloseWindow) => {
@@ -1156,6 +1158,10 @@ impl App for TerminalApp {
         }
         self.request_close_tab(window, self.active);
         false
+    }
+
+    fn should_quit(&mut self, window: &mut Window) -> bool {
+        self.may_quit(window)
     }
 
     fn finished(&self) -> bool {
