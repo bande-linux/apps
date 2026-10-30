@@ -327,9 +327,14 @@ fn a_shell_runs_on_a_pty_and_reports_its_folder_and_running_program() {
     assert_eq!(session.running_program(), None);
 
     session.send(b"\r");
-    wait_until(&mut session, "sleep runs", |session| {
-        session.running_program() == Some("sleep")
-    });
+    wait_until(
+        &mut session,
+        "sleep runs in the reported folder",
+        |session| {
+            session.running_program() == Some("sleep")
+                && session.working_directory() == Some(PathBuf::from("/usr/share"))
+        },
+    );
     assert_eq!(
         session.working_directory(),
         Some(PathBuf::from("/usr/share"))
