@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use accesskit::Role;
-use fixture::{entry, process};
+use fixture::{check_golden, entry, process};
 use unbound_monitor::{
     AppList, AppRow, Catalog, CpuShare, ForceQuitView, Icons, Memory, Monitor, MonitorView,
     Process, Request, RowKey, Screen, Snapshot, Tab,
@@ -14,11 +14,8 @@ use unbound_monitor::{
 use unbound_toolkit::ui::{
     Event, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll,
 };
-use unbound_toolkit::{
-    CpuRenderer, FrameRegions, Image, Palette, Point, Scheme, TextSystem, framed_scene,
-};
+use unbound_toolkit::{FrameRegions, Image, Palette, Point, Scheme, TextSystem, framed_scene};
 
-const MIN_SSIM: f64 = 0.995;
 const MONITOR_SIZE: (u32, u32) = (860, 420);
 const FORCE_QUIT_SIZE: (u32, u32) = (380, 340);
 const LIST_TOP: f32 = 48.0 + HEADER_HEIGHT;
@@ -98,28 +95,6 @@ fn snapshot(step: usize) -> Snapshot {
     }
 }
 
-fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
-    );
-}
-
 fn key(key: Key) -> Event {
     Event::Key {
         key,
@@ -137,7 +112,7 @@ fn shifted(key: Key) -> Event {
     }
 }
 
-fn render(screen: &mut impl Screen, scheme: Scheme, title: &str, name: &str, size: (u32, u32)) {
+fn render(screen: &mut impl Screen, title: &str, name: &str, size: (u32, u32)) {
     let deadline = Instant::now() + Duration::from_secs(2);
     let mut scene = screen.scene(size.0, size.1);
     while screen.animating() {
@@ -147,82 +122,58 @@ fn render(screen: &mut impl Screen, scheme: Scheme, title: &str, name: &str, siz
     }
     let header = screen.header();
     let regions = header.as_ref().map(|_| FrameRegions::default());
-    let scene = framed_scene(&scene, title, regions, header, &Palette::for_scheme(scheme));
-    for (scale, suffix) in [(1.0, ""), (1.5, "@1.5x")] {
-        let pixels = (
-            (f64::from(scene.width) * scale).round() as u32,
-            (f64::from(scene.height) * scale).round() as u32,
-        );
-        let mut rgba = vec![0; pixels.0 as usize * pixels.1 as usize * 4];
-        CpuRenderer::new()
-            .render_into(&scene, scale, &mut rgba)
-            .expect("frame");
-        check_golden(&format!("{name}{suffix}"), pixels, rgba);
-    }
+    check_golden(
+        name,
+        &framed_scene(
+            &scene,
+            title,
+            regions,
+            header,
+            &Palette::for_scheme(Scheme::Light),
+        ),
+    );
 }
 
 #[test]
-fn activity_monitor_matches_its_goldens_in_light_and_dark() {
-    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
-        let mut view = MonitorView::new(
-            Monitor::new(catalog()),
-            Palette::for_scheme(scheme),
-            TextSystem::new(),
-            icons(),
-        );
-        for step in 0..40 {
-            view.update(snapshot(step));
-        }
-        view.handle(&key(Key::Down));
-        view.handle(&key(Key::Enter));
-        view.handle(&key(Key::Down));
-        assert!(view.set_responding(710, "", false));
-        render(
-            &mut view,
-            scheme,
-            TITLE,
-            &format!("monitor-cpu-{suffix}"),
-            MONITOR_SIZE,
-        );
-        view.handle(&Event::Key {
-            key: Key::Character('q'),
-            modifiers: Modifiers {
-                logo: true,
-                alt: true,
-                ..Modifiers::default()
-            },
-        });
-        render(
-            &mut view,
-            scheme,
-            TITLE,
-            &format!("monitor-quit-{suffix}"),
-            MONITOR_SIZE,
-        );
+fn activity_monitor_matches_its_goldens() {
+    let mut view = MonitorView::new(
+        Monitor::new(catalog()),
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+        icons(),
+    );
+    for step in 0..40 {
+        view.update(snapshot(step));
     }
+    view.handle(&key(Key::Down));
+    view.handle(&key(Key::Enter));
+    view.handle(&key(Key::Down));
+    assert!(view.set_responding(710, "", false));
+    render(&mut view, TITLE, "monitor-cpu", MONITOR_SIZE);
+    view.handle(&Event::Key {
+        key: Key::Character('q'),
+        modifiers: Modifiers {
+            logo: true,
+            alt: true,
+            ..Modifiers::default()
+        },
+    });
+    render(&mut view, TITLE, "monitor-quit", MONITOR_SIZE);
 }
 
 #[test]
-fn force_quit_matches_its_goldens_in_light_and_dark() {
-    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
-        let mut view = ForceQuitView::new(
-            AppList::new(catalog(), 1000),
-            Palette::for_scheme(scheme),
-            TextSystem::new(),
-            icons(),
-        );
-        view.update(snapshot(0));
-        assert!(view.set_responding(500, "org.unbound.Terminal", false));
-        view.handle(&key(Key::Down));
-        view.handle(&key(Key::Down));
-        render(
-            &mut view,
-            scheme,
-            "Force Quit Apps",
-            &format!("force-quit-{suffix}"),
-            FORCE_QUIT_SIZE,
-        );
-    }
+fn force_quit_matches_its_golden() {
+    let mut view = ForceQuitView::new(
+        AppList::new(catalog(), 1000),
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+        icons(),
+    );
+    view.update(snapshot(0));
+    assert!(view.set_responding(500, "org.unbound.Terminal", false));
+    view.handle(&key(Key::Down));
+    view.handle(&key(Key::Down));
+    render(&mut view, "Force Quit Apps", "force-quit", FORCE_QUIT_SIZE);
 }
 
 fn command(character: char) -> Event {

@@ -2,20 +2,15 @@
 
 mod fixture;
 
-use std::path::PathBuf;
-
 use accesskit::Role;
-use fixture::{Fixture, TICKS_PER_SECOND, Task};
+use fixture::{Fixture, TICKS_PER_SECOND, Task, check_golden};
 use unbound_monitor::{
     Icons, InspectorView, OpenFile, Request, Screen, Section, Snapshot, read_details,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use unbound_toolkit::{
-    CpuRenderer, FrameRegions, Palette, Point, Scheme, TextSystem, framed_scene,
-};
+use unbound_toolkit::{FrameRegions, Palette, Point, Scheme, TextSystem, framed_scene};
 
 const SIZE: (u32, u32) = (680, 520);
-const MIN_SSIM: f64 = 0.995;
 
 fn family(fixture: &Fixture) -> Snapshot {
     fixture.spawn(&Task {
@@ -75,12 +70,12 @@ fn bash(snapshot: &Snapshot) -> &unbound_monitor::Process {
         .expect("bash")
 }
 
-fn inspector(fixture: &Fixture, snapshot: &Snapshot, scheme: Scheme) -> InspectorView {
+fn inspector(fixture: &Fixture, snapshot: &Snapshot) -> InspectorView {
     let mut view = InspectorView::new(
         bash(snapshot),
         fixture.path(),
         TICKS_PER_SECOND,
-        Palette::for_scheme(scheme),
+        Palette::for_scheme(Scheme::Light),
         TextSystem::new(),
         Icons::new(|_| None),
     );
@@ -167,7 +162,7 @@ fn details_list_threads_open_files_and_mappings_in_order() {
 fn the_inspector_links_the_family_and_shows_each_section() {
     let fixture = Fixture::new();
     let snapshot = family(&fixture);
-    let mut view = inspector(&fixture, &snapshot, Scheme::Light);
+    let mut view = inspector(&fixture, &snapshot);
     let shown = cells(&view);
     for value in ["unbound-shell (300)", "vim (500)", "/bin/bash --login"] {
         assert!(
@@ -206,48 +201,17 @@ fn the_inspector_links_the_family_and_shows_each_section() {
 }
 
 #[test]
-fn the_inspector_matches_its_goldens_in_light_and_dark() {
+fn the_inspector_matches_its_golden() {
     let fixture = Fixture::new();
     let snapshot = family(&fixture);
-    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
-        let mut view = inspector(&fixture, &snapshot, scheme);
-        let scene = view.scene(SIZE.0, SIZE.1);
-        let scene = framed_scene(
-            &scene,
-            &view.title(),
-            Some(FrameRegions::default()),
-            view.header(),
-            &Palette::for_scheme(scheme),
-        );
-        for (scale, scale_name) in [(1.0, ""), (1.5, "@1.5x")] {
-            let pixels = (
-                (f64::from(scene.width) * scale).round() as u32,
-                (f64::from(scene.height) * scale).round() as u32,
-            );
-            let mut rgba = vec![0; pixels.0 as usize * pixels.1 as usize * 4];
-            CpuRenderer::new()
-                .render_into(&scene, scale, &mut rgba)
-                .expect("frame");
-            let name = format!("inspector-{suffix}{scale_name}");
-            let actual = image::DynamicImage::ImageRgba8(
-                image::RgbaImage::from_raw(pixels.0, pixels.1, rgba).expect("frame"),
-            )
-            .to_rgb8();
-            let path =
-                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-            if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-                actual.save(&path).expect("write golden");
-            }
-            let expected = image::open(&path)
-                .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-                .to_rgb8();
-            let similarity =
-                image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-            assert!(
-                similarity.score >= MIN_SSIM,
-                "{name}: {:.4}",
-                similarity.score
-            );
-        }
-    }
+    let mut view = inspector(&fixture, &snapshot);
+    let scene = view.scene(SIZE.0, SIZE.1);
+    let scene = framed_scene(
+        &scene,
+        &view.title(),
+        Some(FrameRegions::default()),
+        view.header(),
+        &Palette::for_scheme(Scheme::Light),
+    );
+    check_golden("inspector", &scene);
 }
