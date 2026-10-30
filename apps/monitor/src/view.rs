@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
+use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{
     Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Shape, TextAlign, TextStyle,
     TextSystem,
 };
 
 use crate::L10N;
+use crate::menu::{MenuCommand, Selected, process_menu};
 use crate::model::{Column, Disclosure, Graph, Monitor, Row, StopTarget, Tab, stop_target};
 use crate::sampler::Snapshot;
 use crate::signal::{SignalError, Stop};
@@ -55,6 +56,8 @@ pub enum Dialog {
 pub enum Request {
     Resample,
     ShowInFiles(PathBuf),
+    Copy(String),
+    Menu(Menu, Point),
 }
 
 type FindIcon = Box<dyn Fn(&str) -> Option<Image>>;
@@ -177,6 +180,10 @@ impl Scroller {
 pub fn is_secondary(pointer: &Pointer) -> bool {
     pointer.button == PointerButton::Secondary
         || (pointer.button == PointerButton::Primary && pointer.modifiers.control)
+}
+
+pub fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
+    key == Key::Menu || (key == Key::Function(10) && modifiers.shift && !modifiers.logo)
 }
 
 pub struct Painter<'a> {
@@ -344,7 +351,12 @@ pub trait Screen {
     fn update(&mut self, snapshot: Snapshot);
     fn measures_proportional_memory(&self) -> bool;
     fn take_requests(&mut self) -> Vec<Request>;
+    fn menu_action(&mut self, action: &str) -> bool;
     fn finished(&self) -> bool;
+
+    fn set_responding(&mut self, _pid: u32, _app_id: &str, _responding: bool) -> bool {
+        false
+    }
 }
 
 pub fn press_dialog_button(dialog: Dialog, button: DialogButton) -> Option<Dialog> {
@@ -466,6 +478,47 @@ impl MonitorView {
         }
     }
 
+    fn open_force_dialog(&mut self) -> bool {
+        match self.monitor.stop_target() {
+            Some(target) => {
+                self.dialog = Some(Dialog::ConfirmForce(target));
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn show_in_files(&mut self) -> bool {
+        match self.monitor.location() {
+            Some(path) => {
+                self.requests.push(Request::ShowInFiles(path));
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn request_menu(&mut self, at: Point, alternate: bool) {
+        let selected = Selected {
+            stoppable: self.monitor.stop_target().is_some(),
+            located: self.monitor.location().is_some(),
+            has_pid: self.monitor.selected_pid().is_some(),
+            alternate,
+        };
+        self.requests
+            .push(Request::Menu(process_menu(selected), at));
+    }
+
+    fn menu_from_keyboard(&mut self, alternate: bool) -> bool {
+        let Some(index) = self.monitor.selected_index() else {
+            return false;
+        };
+        self.reveal_selection();
+        let top = TOOLBAR_HEIGHT + HEADER_HEIGHT + self.scroller.row_y(index, ROW_HEIGHT);
+        self.request_menu(Point::new(SIDE + 40.0, top + ROW_HEIGHT), alternate);
+        true
+    }
+
     fn search_key(&mut self, key: Key, modifiers: Modifiers) -> Option<bool> {
         if !self.searching || modifiers.logo || modifiers.control {
             return None;
@@ -504,6 +557,9 @@ impl MonitorView {
         if let Some(handled) = self.search_key(key, modifiers) {
             return handled;
         }
+        if opens_menu(key, modifiers) {
+            return self.menu_from_keyboard(modifiers.alt);
+        }
         let page = self.visible_rows().saturating_sub(1).max(1) as isize;
         match key {
             Key::Character(digit @ '1'..='4') if modifiers.logo => {
@@ -519,13 +575,7 @@ impl MonitorView {
                 return self.open_stop_dialog();
             }
             Key::Character('r' | 'R') if modifiers.logo && modifiers.shift => {
-                return match self.monitor.executable() {
-                    Some(path) => {
-                        self.requests.push(Request::ShowInFiles(path));
-                        true
-                    }
-                    None => false,
-                };
+                return self.show_in_files();
             }
             Key::Escape if !self.monitor.search().is_empty() => {
                 self.monitor.set_search("");
@@ -634,7 +684,9 @@ impl MonitorView {
         if is_secondary(pointer) {
             return match self.row_at(pointer.position) {
                 Some(index) if self.dialog.is_none() => {
+                    self.searching = false;
                     self.monitor.select(index);
+                    self.request_menu(pointer.position, pointer.modifiers.alt);
                     true
                 }
                 _ => false,
@@ -1099,6 +1151,28 @@ impl Screen for MonitorView {
 
     fn take_requests(&mut self) -> Vec<Request> {
         std::mem::take(&mut self.requests)
+    }
+
+    fn menu_action(&mut self, action: &str) -> bool {
+        match MenuCommand::parse(action) {
+            Some(MenuCommand::Quit) => self.open_stop_dialog(),
+            Some(MenuCommand::ForceQuit) => self.open_force_dialog(),
+            Some(MenuCommand::ShowInFiles) => self.show_in_files(),
+            Some(MenuCommand::CopyName) => {
+                self.requests
+                    .extend(self.monitor.selected_name().map(Request::Copy));
+                false
+            }
+            Some(MenuCommand::CopyPid) => {
+                self.requests.extend(
+                    self.monitor
+                        .selected_pid()
+                        .map(|pid| Request::Copy(pid.to_string())),
+                );
+                false
+            }
+            None => false,
+        }
     }
 
     fn handle(&mut self, event: &Event) -> bool {

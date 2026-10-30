@@ -4,11 +4,12 @@ use unbound_toolkit::{
 };
 
 use crate::L10N;
+use crate::menu::{MenuCommand, force_quit_menu};
 use crate::model::AppList;
 use crate::sampler::Snapshot;
 use crate::view::{
     Dialog, DialogButton, Icons, Painter, Request, Screen, Scroller, contains, dialog_click,
-    dialog_key, press_dialog_button,
+    dialog_key, is_secondary, opens_menu, press_dialog_button,
 };
 
 const PADDING: f32 = 16.0;
@@ -19,6 +20,7 @@ const BUTTON_WIDTH: f32 = 104.0;
 const BUTTON_HEIGHT: f32 = 26.0;
 const FOOTER_HEIGHT: f32 = 58.0;
 const TEXT_SIZE: f32 = 13.0;
+const UNRESPONSIVE: Color = Color::hex(0xE5484D);
 
 pub struct ForceQuitView {
     apps: AppList,
@@ -89,7 +91,22 @@ impl ForceQuitView {
         (index < self.apps.len()).then_some(index)
     }
 
+    fn request_menu(&mut self, at: Point) {
+        let menu = force_quit_menu(self.apps.selected_entry().is_some());
+        self.requests.push(Request::Menu(menu, at));
+    }
+
     fn pointer_down(&mut self, pointer: &Pointer) -> bool {
+        if is_secondary(pointer) {
+            return match self.row_at(pointer.position) {
+                Some(index) if self.dialog.is_none() => {
+                    self.apps.select(index);
+                    self.request_menu(pointer.position);
+                    true
+                }
+                _ => false,
+            };
+        }
         if !pointer.is_primary() {
             return false;
         }
@@ -134,6 +151,16 @@ impl ForceQuitView {
             if let Some(button) = dialog_key(dialog, key, modifiers) {
                 self.press(button);
             }
+            return true;
+        }
+        if opens_menu(key, modifiers) {
+            let Some(index) = self.apps.selected_index() else {
+                return false;
+            };
+            self.reveal_selection();
+            let list = self.list_frame();
+            let bottom = list.y + self.scroller.row_y(index + 1, ROW_HEIGHT);
+            self.request_menu(Point::new(list.x + 16.0 + ICON_SIZE, bottom));
             return true;
         }
         match key {
@@ -218,9 +245,16 @@ impl Screen for ForceQuitView {
             .enumerate()
             .skip(self.scroller.first(ROW_HEIGHT))
             .take(self.visible_rows() + 2)
-            .map(|(index, (name, icon))| (index, name.to_owned(), icon.map(str::to_owned)))
+            .map(|(index, row)| {
+                (
+                    index,
+                    row.name.to_owned(),
+                    row.icon.map(str::to_owned),
+                    row.responding,
+                )
+            })
             .collect::<Vec<_>>();
-        for (index, name, icon) in shown {
+        for (index, name, icon, responding) in shown {
             let y = list.y + self.scroller.row_y(index, ROW_HEIGHT);
             let row = Rect::new(list.x + 4.0, y + 2.0, list.width - 8.0, ROW_HEIGHT - 4.0);
             let is_selected = selected == Some(index);
@@ -248,17 +282,48 @@ impl Screen for ForceQuitView {
             } else {
                 palette.label_primary
             };
-            rows.text_in(
-                &name,
-                TextStyle::new(TEXT_SIZE, color),
-                Rect::new(
-                    row.x + 16.0 + ICON_SIZE,
-                    row.y,
-                    row.width - 24.0 - ICON_SIZE,
-                    row.height,
-                ),
-                TextAlign::Start,
+            let text = Rect::new(
+                row.x + 16.0 + ICON_SIZE,
+                row.y,
+                row.width - 24.0 - ICON_SIZE,
+                row.height,
             );
+            if responding {
+                rows.text_in(
+                    &name,
+                    TextStyle::new(TEXT_SIZE, color),
+                    text,
+                    TextAlign::Start,
+                );
+            } else {
+                let marker = if is_selected && self.focused {
+                    color
+                } else {
+                    UNRESPONSIVE
+                };
+                let style = TextStyle::new(TEXT_SIZE, color);
+                let name_width = rows
+                    .paragraph(&format!("{name} "), style, None, TextAlign::Start)
+                    .width()
+                    .min(text.width);
+                rows.text_in(
+                    &format!("{name} "),
+                    style,
+                    Rect::new(text.x, text.y, name_width, text.height),
+                    TextAlign::Start,
+                );
+                rows.text_in(
+                    &L10N.tr("force-quit-not-responding"),
+                    TextStyle::new(TEXT_SIZE, marker),
+                    Rect::new(
+                        text.x + name_width,
+                        text.y,
+                        (text.width - name_width).max(0.0),
+                        text.height,
+                    ),
+                    TextAlign::Start,
+                );
+            }
         }
         let items = rows.items;
         painter.items.push(Item::Clip { shape, items });
@@ -307,6 +372,22 @@ impl Screen for ForceQuitView {
 
     fn take_requests(&mut self) -> Vec<Request> {
         std::mem::take(&mut self.requests)
+    }
+
+    fn menu_action(&mut self, action: &str) -> bool {
+        match MenuCommand::parse(action) {
+            Some(MenuCommand::ForceQuit) => self.confirm(),
+            Some(MenuCommand::ShowInFiles) => {
+                self.requests
+                    .extend(self.apps.selected_entry().map(Request::ShowInFiles));
+                false
+            }
+            _ => false,
+        }
+    }
+
+    fn set_responding(&mut self, pid: u32, app_id: &str, responding: bool) -> bool {
+        self.apps.set_responding(pid, app_id, responding)
     }
 
     fn finished(&self) -> bool {

@@ -5,7 +5,9 @@ use std::time::{Duration, Instant};
 use unbound_monitor::{
     AppList, Catalog, ForceQuitView, Icons, L10N, Monitor, MonitorView, Request, Sampler, Screen,
 };
-use unbound_toolkit::{App, Image, Role, Scene, TextSystem, Window, WindowError, WindowEvent};
+use unbound_toolkit::{
+    App, Image, MenuPlacement, Role, Scene, TextSystem, Window, WindowError, WindowEvent,
+};
 use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_icon, spawn_detached};
 
 const APP_ID: &str = "org.unbound.ActivityMonitor";
@@ -40,17 +42,26 @@ impl<S: Screen> ActivityMonitor<S> {
                     self.next_sample = Instant::now() + INTERVAL;
                     window.request_redraw();
                 }
-                Request::ShowInFiles(path) => show_in_files(&path),
+                Request::ShowInFiles(path) => show_in_files(window, &path),
+                Request::Copy(text) => window.copy(&text),
+                Request::Menu(menu, at) => {
+                    if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
+                        tracing::warn!("cannot show the menu: {error}");
+                    }
+                }
             }
         }
     }
 }
 
-fn show_in_files(path: &Path) {
-    let folder = path.parent().unwrap_or(path);
-    let command = [FILES.to_owned(), folder.to_string_lossy().into_owned()];
-    if let Err(error) = spawn_detached(&command, None, None) {
-        tracing::warn!("cannot open {}: {error}", folder.display());
+fn show_in_files(window: &mut Window, path: &Path) {
+    let token = window
+        .activation_token(APP_ID)
+        .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+        .ok();
+    let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
+    if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+        tracing::warn!("cannot show {} in Files: {error}", path.display());
     }
 }
 
@@ -74,6 +85,23 @@ impl<S: Screen> App for ActivityMonitor<S> {
                     window.request_redraw();
                 }
                 self.serve(window);
+            }
+            WindowEvent::MenuAction(action) => {
+                if self.screen.menu_action(&action) {
+                    window.request_redraw();
+                }
+                self.serve(window);
+            }
+            WindowEvent::AppResponding {
+                pid,
+                app_id,
+                responding,
+            } => {
+                let changed = u32::try_from(pid)
+                    .is_ok_and(|pid| self.screen.set_responding(pid, &app_id, responding));
+                if changed {
+                    window.request_redraw();
+                }
             }
             _ => {}
         }

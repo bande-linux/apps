@@ -6,8 +6,8 @@ use std::path::PathBuf;
 
 use fixture::{entry, process};
 use unbound_monitor::{
-    AppList, Catalog, CpuShare, Disclosure, ForceQuitView, Icons, Memory, Monitor, MonitorView,
-    Process, ROW_HEIGHT, Request, Screen, Snapshot, Tab,
+    AppList, AppRow, Catalog, CpuShare, Disclosure, ForceQuitView, Icons, Memory, Monitor,
+    MonitorView, Process, ROW_HEIGHT, Request, Screen, Snapshot, Tab,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, Scroll};
 use unbound_toolkit::{CpuRenderer, Image, Palette, Point, Scheme, TextSystem};
@@ -161,6 +161,7 @@ fn force_quit_matches_its_goldens_in_light_and_dark() {
             icons(),
         );
         view.update(snapshot(0));
+        assert!(view.set_responding(500, "org.unbound.Terminal", false));
         view.handle(&key(Key::Down));
         view.handle(&key(Key::Down));
         render(&mut view, &format!("force-quit-{suffix}"), FORCE_QUIT_SIZE);
@@ -248,4 +249,81 @@ fn the_wheel_scrolls_the_list_under_the_pointer_and_a_double_click_opens_an_app(
     }));
     view.handle(&Event::PointerDown(Pointer::at(at).with_count(2)));
     assert_eq!(view.monitor.rows()[0].disclosure, Disclosure::Expanded);
+}
+
+fn right_click(at: Point, alt: bool) -> Event {
+    let mut pointer = Pointer::at(at);
+    pointer.button = unbound_toolkit::ui::PointerButton::Secondary;
+    pointer.modifiers.alt = alt;
+    Event::PointerDown(pointer)
+}
+
+fn menu_actions(requests: Vec<Request>) -> Vec<(String, bool)> {
+    match requests.as_slice() {
+        [Request::Menu(menu, _)] => menu
+            .items
+            .iter()
+            .filter(|item| !item.separator)
+            .map(|item| (item.action.clone(), item.enabled))
+            .collect(),
+        other => panic!("expected one menu, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_right_click_selects_the_row_and_offers_quit_or_with_alt_force_quit() {
+    let mut view = monitor_view();
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    let row = Point::new(300.0, 48.0 + 26.0 + ROW_HEIGHT / 2.0);
+    assert!(view.handle(&right_click(row, false)));
+    assert_eq!(view.monitor.selected_index(), Some(0));
+    let name = view.monitor.rows()[0].name.clone();
+    assert_eq!(
+        menu_actions(view.take_requests()),
+        [
+            ("quit".to_owned(), true),
+            ("show-in-files".to_owned(), true),
+            ("copy-name".to_owned(), true),
+            ("copy-pid".to_owned(), true),
+        ]
+    );
+    view.handle(&right_click(row, true));
+    assert_eq!(menu_actions(view.take_requests())[0].0, "force-quit");
+
+    view.menu_action("copy-name");
+    assert_eq!(view.take_requests(), [Request::Copy(name)]);
+    assert!(view.menu_action("force-quit"));
+    view.handle(&key(Key::Escape));
+    view.handle(&Event::Key {
+        key: Key::Menu,
+        modifiers: Modifiers::default(),
+    });
+    assert_eq!(menu_actions(view.take_requests())[0].0, "quit");
+}
+
+#[test]
+fn force_quit_marks_an_app_that_stopped_responding_until_it_answers_again() {
+    let mut apps = AppList::new(catalog(), 1000);
+    apps.update(snapshot(0));
+    let responding = |apps: &AppList| {
+        apps.rows()
+            .map(
+                |AppRow {
+                     name, responding, ..
+                 }| (name.to_owned(), responding),
+            )
+            .collect::<Vec<_>>()
+    };
+    assert!(apps.set_responding(501, "", false));
+    assert!(!apps.set_responding(501, "", false));
+    assert_eq!(
+        responding(&apps),
+        [
+            ("Files".to_owned(), true),
+            ("Settings".to_owned(), true),
+            ("Terminal".to_owned(), false),
+        ]
+    );
+    assert!(apps.set_responding(501, "", true));
+    assert!(responding(&apps).iter().all(|(_, responding)| *responding));
 }

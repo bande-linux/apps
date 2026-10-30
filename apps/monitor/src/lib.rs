@@ -2,6 +2,7 @@ mod apps;
 mod cpu;
 mod force_quit;
 mod format;
+mod menu;
 mod model;
 mod proc;
 mod sampler;
@@ -17,7 +18,10 @@ pub use apps::{AppInfo, Catalog, Group, GroupKey};
 pub use cpu::{CpuShare, read_cpu_ticks};
 pub use force_quit::ForceQuitView;
 pub use format::{format_bytes, format_cpu_time, format_rate};
-pub use model::{AppList, Column, Disclosure, Graph, Monitor, Row, RowKey, StopTarget, Tab};
+pub use menu::{MenuCommand, Selected, force_quit_menu, process_menu};
+pub use model::{
+    AppList, AppRow, Column, Disclosure, Graph, Monitor, Row, RowKey, StopTarget, Tab,
+};
 pub use sampler::{Identity, Interface, Process, Rates, Sampler, Snapshot};
 pub use signal::{SignalError, Stop, stop};
 pub use system::Memory;
@@ -36,6 +40,7 @@ mod tests {
             include_str!("force_quit.rs"),
             include_str!("format.rs"),
             include_str!("main.rs"),
+            include_str!("menu.rs"),
             include_str!("model.rs"),
             include_str!("signal.rs"),
             include_str!("view.rs"),

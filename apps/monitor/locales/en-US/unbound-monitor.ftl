@@ -70,3 +70,10 @@ force-quit-hint = If an app does not respond, select it and click Force Quit.
 force-quit-empty = No apps are open.
 force-quit-confirm = Do you want to force quit “{ $name }”?
 force-quit-confirm-message = Any unsaved changes are lost.
+force-quit-not-responding = (not responding)
+
+menu-quit = Quit…
+menu-force-quit = Force Quit…
+menu-show-in-files = Show in Files
+menu-copy-name = Copy Name
+menu-copy-pid = Copy PID

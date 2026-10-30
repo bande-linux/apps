@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::{HashSet, VecDeque};
+use std::path::PathBuf;
 
 use crate::L10N;
 use crate::apps::{Catalog, Group, GroupKey};
@@ -309,6 +310,7 @@ pub struct AppList {
     processes: Vec<Process>,
     apps: Vec<Group>,
     selection: Option<GroupKey>,
+    unresponsive: Vec<(u32, String)>,
 }
 
 impl AppList {
@@ -319,7 +321,36 @@ impl AppList {
             processes: Vec::new(),
             apps: Vec::new(),
             selection: None,
+            unresponsive: Vec::new(),
         }
+    }
+
+    pub fn set_responding(&mut self, pid: u32, app_id: &str, responding: bool) -> bool {
+        let known = self
+            .unresponsive
+            .iter()
+            .position(|(known, _)| *known == pid);
+        match (known, responding) {
+            (Some(index), true) => {
+                self.unresponsive.remove(index);
+                true
+            }
+            (None, false) => {
+                self.unresponsive.push((pid, app_id.to_owned()));
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn responds(&self, group: &Group) -> bool {
+        !self.unresponsive.iter().any(|(pid, app_id)| {
+            group
+                .members
+                .iter()
+                .any(|member| self.processes[*member].pid == *pid)
+                || matches!(&group.key, GroupKey::App(id) if id == app_id)
+        })
     }
 
     pub fn update(&mut self, snapshot: Snapshot) {
@@ -341,13 +372,17 @@ impl AppList {
         }
     }
 
-    pub fn rows(&self) -> impl Iterator<Item = (&str, Option<&str>)> {
-        self.apps.iter().map(|group| {
-            (
-                group.name.as_str(),
-                group.app.as_ref().and_then(|app| app.icon.as_deref()),
-            )
+    pub fn rows(&self) -> impl Iterator<Item = AppRow<'_>> {
+        self.apps.iter().map(|group| AppRow {
+            name: group.name.as_str(),
+            icon: group.app.as_ref().and_then(|app| app.icon.as_deref()),
+            responding: self.responds(group),
         })
+    }
+
+    pub fn selected_entry(&self) -> Option<PathBuf> {
+        let group = self.apps.get(self.selected_index()?)?;
+        group.app.as_ref().map(|app| app.path.clone())
     }
 
     pub fn len(&self) -> usize {
@@ -383,6 +418,13 @@ impl AppList {
         let group = self.apps.get(self.selected_index()?)?;
         Some(group_target(group, &self.processes, group.name.clone()))
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AppRow<'a> {
+    pub name: &'a str,
+    pub icon: Option<&'a str>,
+    pub responding: bool,
 }
 
 pub struct Monitor {
@@ -617,7 +659,7 @@ impl Monitor {
         }
     }
 
-    pub fn executable(&self) -> Option<std::path::PathBuf> {
+    fn selected_process(&self) -> Option<&Process> {
         let (pid, start_ticks) = match self.selection.as_ref()? {
             RowKey::Group(key) => {
                 let group = self.groups.iter().find(|group| &group.key == key)?;
@@ -630,10 +672,30 @@ impl Monitor {
         self.snapshot
             .processes
             .iter()
-            .find(|process| process.pid == pid && process.start_ticks == start_ticks)?
-            .identity
-            .executable
-            .clone()
+            .find(|process| process.pid == pid && process.start_ticks == start_ticks)
+    }
+
+    pub fn selected_pid(&self) -> Option<u32> {
+        self.selected_process().map(|process| process.pid)
+    }
+
+    pub fn selected_name(&self) -> Option<String> {
+        self.rows
+            .get(self.selected_index()?)
+            .map(|row| row.name.clone())
+    }
+
+    pub fn location(&self) -> Option<PathBuf> {
+        if let Some(RowKey::Group(key)) = &self.selection
+            && let Some(app) = self
+                .groups
+                .iter()
+                .find(|group| &group.key == key)
+                .and_then(|group| group.app.as_ref())
+        {
+            return Some(app.path.clone());
+        }
+        self.selected_process()?.identity.executable.clone()
     }
 
     fn group_name(&self, group: &Group) -> String {
