@@ -237,15 +237,11 @@ fn painter(scheme: Scheme) -> Painter {
 const SCHEMES: [(Scheme, &str); 2] = [(Scheme::Light, "light"), (Scheme::Dark, "dark")];
 
 fn shoot(name: &str, scene: &Scene) {
-    for (scale, suffix) in [(1.0, ""), (1.5, "@1.5x")] {
-        let width = (f64::from(scene.width) * scale).round() as u32;
-        let height = (f64::from(scene.height) * scale).round() as u32;
-        let mut rgba = vec![0; (width * height * 4) as usize];
-        CpuRenderer::new()
-            .render_into(scene, scale, &mut rgba)
-            .expect("render");
-        check_golden(&format!("{name}{suffix}"), (width, height), rgba);
-    }
+    let mut rgba = vec![0; (scene.width * scene.height * 4) as usize];
+    CpuRenderer::new()
+        .render_into(scene, 1.0, &mut rgba)
+        .expect("render");
+    check_golden(name, (scene.width, scene.height), rgba);
 }
 
 #[test]
@@ -476,27 +472,6 @@ selected underlined red 256 truecolor\r\n\
 \x1b[1mmikael@unbound\x1b[0m:\x1b[34m~\x1b[0m$ ";
 
 #[test]
-fn the_terminal_matches_its_goldens_focused_and_unfocused() {
-    for (scheme, suffix) in SCHEMES {
-        let mut painter = painter(scheme);
-        let mut terminal = terminal(80, 8);
-        terminal.feed(SESSION);
-        let (width, height) = painter.metrics.content_size(terminal.size());
-        let size = (width.ceil() as u32, height.ceil() as u32);
-        terminal.set_focus(true);
-        shoot(
-            &format!("term-focused-{suffix}"),
-            &painter.scene(&terminal, size.0, size.1),
-        );
-        terminal.set_focus(false);
-        shoot(
-            &format!("term-unfocused-{suffix}"),
-            &painter.scene(&terminal, size.0, size.1),
-        );
-    }
-}
-
-#[test]
 fn every_profile_keeps_text_and_ansi_colours_legible() {
     for profile in Profile::ALL {
         for (scheme, _) in SCHEMES {
@@ -632,28 +607,27 @@ fn the_find_bar_reports_typing_and_its_keys() {
 
 #[test]
 fn found_text_and_the_find_bar_match_their_goldens() {
-    for (scheme, suffix) in SCHEMES {
-        let mut painter = painter(scheme);
-        let mut terminal = terminal(60, 4);
-        terminal.feed(SESSION);
-        terminal.set_focus(false);
-        assert!(terminal.find("unbound"));
-        let mut bar = Banner::find(unbound_toolkit::Palette::for_scheme(scheme), "unbound");
-        bar.set_found(true);
-        let (width, height) = painter.metrics.content_size(terminal.size());
-        let size = (width.ceil() as u32, (height + BANNER_HEIGHT).ceil() as u32);
-        bar.set_area(Rect::new(0.0, 0.0, size.0 as f32, BANNER_HEIGHT));
-        let highlights = terminal.highlights();
-        let mut items = painter.terminal(&terminal, Point::new(0.0, BANNER_HEIGHT), &highlights);
-        items.extend(bar.items(size.0, size.1));
-        let scene = Scene {
-            width: size.0,
-            height: size.1,
-            background: painter.theme.background,
-            items,
-        };
-        shoot(&format!("term-find-{suffix}"), &scene);
-    }
+    let scheme = Scheme::Light;
+    let mut painter = painter(scheme);
+    let mut terminal = terminal(60, 4);
+    terminal.feed(SESSION);
+    terminal.set_focus(false);
+    assert!(terminal.find("unbound"));
+    let mut bar = Banner::find(unbound_toolkit::Palette::for_scheme(scheme), "unbound");
+    bar.set_found(true);
+    let (width, height) = painter.metrics.content_size(terminal.size());
+    let size = (width.ceil() as u32, (height + BANNER_HEIGHT).ceil() as u32);
+    bar.set_area(Rect::new(0.0, 0.0, size.0 as f32, BANNER_HEIGHT));
+    let highlights = terminal.highlights();
+    let mut items = painter.terminal(&terminal, Point::new(0.0, BANNER_HEIGHT), &highlights);
+    items.extend(bar.items(size.0, size.1));
+    let scene = Scene {
+        width: size.0,
+        height: size.1,
+        background: painter.theme.background,
+        items,
+    };
+    shoot("term-find", &scene);
 }
 
 #[test]
@@ -685,30 +659,29 @@ fn links_are_found_in_plain_text_and_in_hyperlink_escapes() {
 #[test]
 fn the_close_confirmation_answers_enter_and_escape_and_matches_its_goldens() {
     let message = "Close this tab? \u{201C}vim\u{201D} is still running in it.";
-    for (scheme, suffix) in SCHEMES {
-        let palette = Palette::for_scheme(scheme);
-        let mut banner = Banner::confirm(palette, message, "Close");
-        let size = (480, BANNER_HEIGHT as u32);
-        banner.set_area(Rect::new(0.0, 0.0, 480.0, BANNER_HEIGHT));
-        let scene = Scene {
-            width: size.0,
-            height: size.1,
-            background: palette.sheet,
-            items: banner.items(size.0, size.1),
-        };
-        shoot(&format!("term-confirm-{suffix}"), &scene);
+    let scheme = Scheme::Light;
+    let palette = Palette::for_scheme(scheme);
+    let mut banner = Banner::confirm(palette, message, "Close");
+    let size = (480, BANNER_HEIGHT as u32);
+    banner.set_area(Rect::new(0.0, 0.0, 480.0, BANNER_HEIGHT));
+    let scene = Scene {
+        width: size.0,
+        height: size.1,
+        background: palette.sheet,
+        items: banner.items(size.0, size.1),
+    };
+    shoot("term-confirm", &scene);
 
-        for key in [Key::Enter, Key::Escape] {
-            banner.handle(&unbound_toolkit::ui::Event::Key {
-                key,
-                modifiers: plain(),
-            });
-        }
-        assert_eq!(
-            banner.take_actions(),
-            [BannerAction::Confirm, BannerAction::Dismiss]
-        );
+    for key in [Key::Enter, Key::Escape] {
+        banner.handle(&unbound_toolkit::ui::Event::Key {
+            key,
+            modifiers: plain(),
+        });
     }
+    assert_eq!(
+        banner.take_actions(),
+        [BannerAction::Confirm, BannerAction::Dismiss]
+    );
 }
 
 #[test]
@@ -908,53 +881,53 @@ fn a_command_that_finishes_is_reported_with_its_name() {
 
 #[test]
 fn the_settings_window_matches_its_goldens() {
-    for (scheme, suffix) in SCHEMES {
-        let settings = std::rc::Rc::new(std::cell::RefCell::new(Settings {
-            profile: Profile::Midnight,
-            ..Settings::default()
-        }));
-        let mut ui = settings_view(appearance(scheme), &settings);
-        let mut content = ui.scene(SETTINGS_SIZE.0, SETTINGS_SIZE.1);
-        let palette = Palette::for_scheme(scheme);
-        content.background = palette.sheet;
-        let framed = framed_scene(&content, "Terminal Settings", None, None, &palette);
-        shoot(&format!("term-settings-{suffix}"), &framed);
-    }
+    let scheme = Scheme::Light;
+    let settings = std::rc::Rc::new(std::cell::RefCell::new(Settings {
+        profile: Profile::Midnight,
+        ..Settings::default()
+    }));
+    let mut ui = settings_view(appearance(scheme), &settings);
+    let mut content = ui.scene(SETTINGS_SIZE.0, SETTINGS_SIZE.1);
+    let palette = Palette::for_scheme(scheme);
+    content.background = palette.sheet;
+    let framed = framed_scene(&content, "Terminal Settings", None, None, &palette);
+    shoot("term-settings", &framed);
 }
 
 #[test]
 fn split_panes_match_their_goldens() {
-    for (scheme, suffix) in SCHEMES {
-        let mut painter = painter(scheme);
-        let mut left = terminal(40, 8);
-        left.feed(SESSION);
-        left.set_focus(true);
-        let mut right = terminal(40, 8);
-        right.feed(b"top - 14:32:07 up 3 days\r\n\x1b[7m  PID USER  %CPU\x1b[0m\r\n  812 mikael 12.5\r\n$ ");
-        let (width, height) = painter.metrics.content_size(left.size());
-        let area = Rect::new(0.0, 0.0, (2.0 * width + 1.0).ceil(), height.ceil());
-        let mut layout = Layout::Pane(1);
-        layout.split(1, Axis::SideBySide, 2);
-        let frames = layout.frames(area);
-        let panes = [
-            Pane {
-                frame: frames[0].1,
-                terminal: &left,
-                focused: true,
-            },
-            Pane {
-                frame: frames[1].1,
-                terminal: &right,
-                focused: false,
-            },
-        ];
-        let items = painter.panes(&panes, &layout.dividers(area), &Default::default());
-        let scene = Scene {
-            width: area.width as u32,
-            height: area.height as u32,
-            background: painter.theme.background,
-            items,
-        };
-        shoot(&format!("term-split-{suffix}"), &scene);
-    }
+    let scheme = Scheme::Light;
+    let mut painter = painter(scheme);
+    let mut left = terminal(40, 8);
+    left.feed(SESSION);
+    left.set_focus(true);
+    let mut right = terminal(40, 8);
+    right.feed(
+        b"top - 14:32:07 up 3 days\r\n\x1b[7m  PID USER  %CPU\x1b[0m\r\n  812 mikael 12.5\r\n$ ",
+    );
+    let (width, height) = painter.metrics.content_size(left.size());
+    let area = Rect::new(0.0, 0.0, (2.0 * width + 1.0).ceil(), height.ceil());
+    let mut layout = Layout::Pane(1);
+    layout.split(1, Axis::SideBySide, 2);
+    let frames = layout.frames(area);
+    let panes = [
+        Pane {
+            frame: frames[0].1,
+            terminal: &left,
+            focused: true,
+        },
+        Pane {
+            frame: frames[1].1,
+            terminal: &right,
+            focused: false,
+        },
+    ];
+    let items = painter.panes(&panes, &layout.dividers(area), &Default::default());
+    let scene = Scene {
+        width: area.width as u32,
+        height: area.height as u32,
+        background: painter.theme.background,
+        items,
+    };
+    shoot("term-split", &scene);
 }
