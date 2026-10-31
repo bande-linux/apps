@@ -3,7 +3,7 @@ use std::hash::{BuildHasher, RandomState};
 use data_encoding::BASE64;
 use jiff::Zoned;
 
-use crate::message::{Address, Attachment, Content};
+use crate::message::{Address, Attachment, Content, parse_addresses};
 
 const LINE_LENGTH: usize = 76;
 const WORD_BYTES: usize = 45;
@@ -106,6 +106,38 @@ pub fn forward(original: &Content, me: &Address, heading: &str) -> Draft {
         attachments: original.attachments.clone(),
         ..Draft::default()
     }
+}
+
+fn decoded(text: &str) -> String {
+    unbound_xdg::percent_decode(&text.replace('+', "%2B"))
+        .to_string_lossy()
+        .into_owned()
+}
+
+pub fn from_mailto(url: &str) -> Option<Draft> {
+    let rest = url
+        .get(..7)
+        .filter(|scheme| scheme.eq_ignore_ascii_case("mailto:"))
+        .map(|_| &url[7..])?;
+    let (to, query) = rest.split_once('?').unwrap_or((rest, ""));
+    let mut draft = Draft {
+        to: parse_addresses(&decoded(to)),
+        ..Draft::default()
+    };
+    for pair in query.split('&') {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        let value = decoded(value);
+        match key.to_ascii_lowercase().as_str() {
+            "to" => draft.to.extend(parse_addresses(&value)),
+            "cc" => draft.cc.extend(parse_addresses(&value)),
+            "bcc" => draft.bcc.extend(parse_addresses(&value)),
+            "subject" => draft.subject = value.split_whitespace().collect::<Vec<_>>().join(" "),
+            "body" => draft.body = value.replace("\r\n", "\n"),
+            "in-reply-to" => draft.in_reply_to = Some(value),
+            _ => {}
+        }
+    }
+    Some(draft)
 }
 
 fn encoded_words(text: &str) -> String {
@@ -346,6 +378,26 @@ mod tests {
             draft.recipients(),
             ["ann@example.com", "cc@example.com", "hidden@example.com"]
         );
+    }
+
+    #[test]
+    fn mailto_links_fill_a_draft() {
+        let draft = from_mailto(
+            "mailto:ann@example.com,bob@example.com?subject=Hello%20there&cc=cat%40example.org&body=Line%201%0D%0ALine%202&attach=/etc/passwd",
+        );
+        let Some(draft) = draft else {
+            unreachable!("a mailto link")
+        };
+        assert_eq!(
+            draft.to,
+            [person("", "ann@example.com"), person("", "bob@example.com")]
+        );
+        assert_eq!(draft.cc, [person("", "cat@example.org")]);
+        assert_eq!(draft.subject, "Hello there");
+        assert_eq!(draft.body, "Line 1\nLine 2");
+        assert!(draft.attachments.is_empty());
+        assert_eq!(from_mailto("MAILTO:").map(|draft| draft.to.len()), Some(0));
+        assert_eq!(from_mailto("https://example.com"), None);
     }
 
     #[test]

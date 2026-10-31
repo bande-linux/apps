@@ -1,0 +1,421 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::Instant;
+
+use accesskit::{ActionRequest, TreeUpdate};
+use unbound_toolkit::ui::{
+    Alert, BUTTON_HEIGHT, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu,
+    PopUpButton, Size, TEXT_FIELD_HEIGHT, TextField, TextView, Ui, Widget, WidgetId,
+};
+use unbound_toolkit::{
+    Appearance, Header, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextRole,
+    TextStyle, TextSystem,
+};
+
+use crate::L10N;
+use crate::compose::Draft;
+use crate::message::{Address, parse_addresses};
+use crate::store::MessageId;
+use crate::ui::symbols::Symbol;
+use crate::ui::view::TOOLBAR_HEIGHT;
+
+pub const COMPOSE_SIZE: (u32, u32) = (720, 620);
+const MARGIN: f32 = 16.0;
+const LABEL_WIDTH: f32 = 64.0;
+const FIELD_ROW: f32 = 36.0;
+const FIELD_FONT: f32 = 13.0;
+const SYMBOL_PIXELS: u32 = 32;
+const TRAILING_INSET: f32 = 12.0;
+const TITLE_X: f32 = 120.0;
+const BODY_GAP: f32 = 10.0;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Signal {
+    Send,
+    From(usize),
+    Dismissed,
+}
+
+pub struct ComposeView {
+    ui: Ui,
+    host: WidgetId,
+    send: WidgetId,
+    to: WidgetId,
+    cc: WidgetId,
+    subject: WidgetId,
+    from: Option<WidgetId>,
+    body: WidgetId,
+    signals: Rc<RefCell<Vec<Signal>>>,
+    senders: Vec<Address>,
+    sender: usize,
+    draft: Draft,
+    answering: Option<MessageId>,
+    palette: Palette,
+    size: (f32, f32),
+    sent: Option<(Draft, Option<MessageId>)>,
+    requests: Vec<ComposeRequest>,
+    closed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ComposeRequest {
+    ShowMenu(Menu, Point),
+    Clipboard(ClipboardRequest),
+}
+
+fn joined(addresses: &[Address]) -> String {
+    addresses
+        .iter()
+        .map(Address::full)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn rows(from: bool) -> Vec<&'static str> {
+    let mut rows = vec!["compose-to", "compose-cc", "compose-subject"];
+    if from {
+        rows.push("compose-from");
+    }
+    rows
+}
+
+impl ComposeView {
+    pub fn new(
+        draft: Draft,
+        answering: Option<MessageId>,
+        senders: Vec<Address>,
+        palette: Palette,
+        text: TextSystem,
+    ) -> Self {
+        let signals = Rc::new(RefCell::new(Vec::new()));
+        let mut host = FreeLayout::new();
+        let host_id = Widget::id(&host);
+        let send_signal = Rc::clone(&signals);
+        let click = move || send_signal.borrow_mut().push(Signal::Send);
+        let send_button = match Image::from_svg(Symbol::Sent.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
+            Some(image) => Button::symbol(image, &L10N.tr("compose-send"), click),
+            None => Button::new(&L10N.tr("compose-send"), click),
+        };
+        let send = host.insert(send_button, Rect::default());
+        let field = |text: &str| TextField::new("", text, |_| {}).borderless(FIELD_FONT);
+        let to = host.insert(field(&joined(&draft.to)), Rect::default());
+        let cc = host.insert(field(&joined(&draft.cc)), Rect::default());
+        let subject = host.insert(field(&draft.subject), Rect::default());
+        let sender = senders
+            .iter()
+            .position(|address| address.email.eq_ignore_ascii_case(&draft.from.email))
+            .unwrap_or(0);
+        let from = (senders.len() > 1).then(|| {
+            let choices = senders.iter().map(Address::full).collect::<Vec<_>>();
+            let chosen = Rc::clone(&signals);
+            host.insert(
+                PopUpButton::new(&L10N.tr("compose-from"), &choices, sender, move |index| {
+                    chosen.borrow_mut().push(Signal::From(index));
+                }),
+                Rect::default(),
+            )
+        });
+        let body = host.insert(
+            TextView::new(&L10N.tr("compose-placeholder"), &draft.body, |_| {}),
+            Rect::default(),
+        );
+        let mut view = Self {
+            ui: Ui::new(Box::new(host), Context::new(text, palette)),
+            host: host_id,
+            send,
+            to,
+            cc,
+            subject,
+            from,
+            body,
+            signals,
+            senders,
+            sender,
+            draft,
+            answering,
+            palette,
+            size: (0.0, 0.0),
+            sent: None,
+            requests: Vec::new(),
+            closed: false,
+        };
+        let first = match view.draft.to.is_empty() {
+            true => view.to,
+            false => view.body,
+        };
+        view.ui.set_focus(first);
+        view.ui.set_sheet_top(TOOLBAR_HEIGHT);
+        view
+    }
+
+    pub fn title(&self) -> String {
+        let subject = self
+            .ui
+            .widget_ref::<TextField>(self.subject)
+            .map(TextField::text)
+            .unwrap_or_default();
+        match subject.trim() {
+            "" => L10N.tr("compose-title"),
+            subject => subject.to_owned(),
+        }
+    }
+
+    pub fn set_appearance(&mut self, appearance: Appearance) {
+        self.palette = appearance.palette();
+        self.ui.set_appearance(appearance);
+    }
+
+    pub fn set_palette(&mut self, palette: Palette) {
+        self.palette = palette;
+        self.ui.context().palette = palette;
+    }
+
+    fn frames(&self) -> Vec<(WidgetId, Rect)> {
+        let (width, height) = self.size;
+        let mut frames = vec![(
+            self.send,
+            Rect::new(
+                width - TRAILING_INSET - BUTTON_HEIGHT,
+                ((TOOLBAR_HEIGHT - BUTTON_HEIGHT) / 2.0).round(),
+                BUTTON_HEIGHT,
+                BUTTON_HEIGHT,
+            ),
+        )];
+        let field_x = MARGIN + LABEL_WIDTH;
+        let field_width = (width - field_x - MARGIN).max(40.0);
+        let mut y = TOOLBAR_HEIGHT;
+        let mut fields = vec![self.to, self.cc, self.subject];
+        fields.extend(self.from);
+        for id in fields {
+            frames.push((
+                id,
+                Rect::new(
+                    field_x,
+                    y + ((FIELD_ROW - TEXT_FIELD_HEIGHT) / 2.0).round(),
+                    field_width,
+                    TEXT_FIELD_HEIGHT,
+                ),
+            ));
+            y += FIELD_ROW;
+        }
+        frames.push((
+            self.body,
+            Rect::new(
+                MARGIN - 8.0,
+                y + BODY_GAP,
+                width - 2.0 * MARGIN + 16.0,
+                (height - y - BODY_GAP - MARGIN).max(40.0),
+            ),
+        ));
+        frames
+    }
+
+    pub fn header(&self) -> Header {
+        Header {
+            title_x: TITLE_X,
+            items: self
+                .frames()
+                .into_iter()
+                .take(1)
+                .map(|(_, frame)| frame)
+                .collect(),
+            tabs: Vec::new(),
+        }
+    }
+
+    pub fn scene(&mut self, width: u32, height: u32) -> Scene {
+        self.size = (width as f32, height as f32);
+        let frames = self.frames();
+        let host = self.host;
+        if let Some(host) = self.ui.widget_as::<FreeLayout>(host) {
+            for (id, frame) in frames {
+                host.set_frame(id, frame);
+            }
+        }
+        self.ui.layout(Size::new(self.size.0, self.size.1));
+        let (controls, sheet) = self.ui.paint_layers(width, height);
+        let palette = self.palette;
+        let mut items = Vec::new();
+        let mut y = TOOLBAR_HEIGHT;
+        for label in rows(self.from.is_some()) {
+            let paragraph = self.ui.context().text.paragraph(
+                &L10N.tr(label),
+                TextStyle::role(TextRole::Body, palette.ink3),
+                Some(LABEL_WIDTH - 8.0),
+                TextAlign::End,
+            );
+            items.push(Item::Text {
+                origin: Point::new(
+                    MARGIN - 8.0,
+                    y + ((FIELD_ROW - paragraph.height()) / 2.0).round(),
+                ),
+                paragraph,
+            });
+            items.push(Item::Fill {
+                shape: Shape::rect(Rect::new(
+                    MARGIN,
+                    y + FIELD_ROW - 1.0,
+                    self.size.0 - 2.0 * MARGIN,
+                    1.0,
+                )),
+                paint: palette.hairline.into(),
+            });
+            y += FIELD_ROW;
+        }
+        items.extend(controls);
+        items.extend(sheet);
+        Scene {
+            width,
+            height,
+            background: palette.sheet,
+            items,
+        }
+    }
+
+    fn field_text(&self, id: WidgetId) -> String {
+        self.ui
+            .widget_ref::<TextField>(id)
+            .map(TextField::text)
+            .unwrap_or_default()
+    }
+
+    fn compose_draft(&self) -> Draft {
+        Draft {
+            from: self
+                .senders
+                .get(self.sender)
+                .cloned()
+                .unwrap_or_else(|| self.draft.from.clone()),
+            to: parse_addresses(&self.field_text(self.to)),
+            cc: parse_addresses(&self.field_text(self.cc)),
+            subject: self.field_text(self.subject),
+            body: self
+                .ui
+                .widget_ref::<TextView>(self.body)
+                .map(TextView::text)
+                .unwrap_or_default(),
+            ..self.draft.clone()
+        }
+    }
+
+    fn try_send(&mut self) {
+        let draft = self.compose_draft();
+        let typed = self.field_text(self.to);
+        if draft.to.is_empty() && draft.cc.is_empty() {
+            let message = match typed.trim().is_empty() {
+                true => L10N.tr("compose-no-recipients"),
+                false => L10N.tr_args("compose-bad-recipients", [("text", typed.into())]),
+            };
+            let signals = Rc::clone(&self.signals);
+            self.ui.present_sheet(
+                Alert::new(&L10N.tr("compose-cannot-send"), &message, move |_| {
+                    signals.borrow_mut().push(Signal::Dismissed);
+                })
+                .primary(&L10N.tr("button-ok"), "ok"),
+            );
+            return;
+        }
+        self.sent = Some((draft, self.answering));
+        self.closed = true;
+    }
+
+    pub fn show_error(&mut self, error: &str) {
+        let signals = Rc::clone(&self.signals);
+        self.ui.present_sheet(
+            Alert::new(&L10N.tr("compose-not-sent"), error, move |_| {
+                signals.borrow_mut().push(Signal::Dismissed);
+            })
+            .primary(&L10N.tr("button-ok"), "ok"),
+        );
+    }
+
+    fn after_ui(&mut self) {
+        let signals = std::mem::take(&mut *self.signals.borrow_mut());
+        for signal in signals {
+            match signal {
+                Signal::Send => self.try_send(),
+                Signal::From(index) => self.sender = index,
+                Signal::Dismissed => {}
+            }
+        }
+        if let Some(request) = self.ui.take_clipboard_request() {
+            self.requests.push(ComposeRequest::Clipboard(request));
+        }
+        if let Some((menu, at)) = self.ui.take_menu_request() {
+            self.requests.push(ComposeRequest::ShowMenu(menu, at));
+        }
+    }
+
+    pub fn handle(&mut self, event: &Event) -> bool {
+        if let Event::Key { key, modifiers } = event
+            && (modifiers.logo || modifiers.control)
+            && modifiers.shift
+            && matches!(key, Key::Character('d' | 'D'))
+            && !self.ui.has_sheet()
+        {
+            self.try_send();
+            return true;
+        }
+        let handled = self.ui.handle(event);
+        self.after_ui();
+        handled
+    }
+
+    pub fn menu_action(&mut self, action: &str) -> bool {
+        if action == "send" {
+            self.try_send();
+            return true;
+        }
+        let handled = self.ui.menu_action(action);
+        self.after_ui();
+        handled
+    }
+
+    pub fn pasted(&mut self, text: &str) -> bool {
+        let handled = self.ui.pasted(text);
+        self.after_ui();
+        handled
+    }
+
+    pub fn perform(&mut self, request: &ActionRequest) -> bool {
+        let handled = self.ui.perform(request);
+        self.after_ui();
+        handled
+    }
+
+    pub fn menu_closed(&mut self) -> bool {
+        self.ui.menu_closed()
+    }
+
+    pub fn take_sent(&mut self) -> Option<(Draft, Option<MessageId>)> {
+        self.sent.take()
+    }
+
+    pub fn take_requests(&mut self) -> Vec<ComposeRequest> {
+        std::mem::take(&mut self.requests)
+    }
+
+    pub fn finished(&self) -> bool {
+        self.closed
+    }
+
+    pub fn cursor(&self) -> Cursor {
+        self.ui.cursor()
+    }
+
+    pub fn animating(&self) -> bool {
+        self.ui.is_animating()
+    }
+
+    pub fn deadline(&self) -> Option<Instant> {
+        self.ui.deadline()
+    }
+
+    pub fn accessibility(&self) -> TreeUpdate {
+        self.ui.accessibility()
+    }
+
+    pub fn text_input_area(&self) -> Option<Rect> {
+        self.ui.text_input_area()
+    }
+}

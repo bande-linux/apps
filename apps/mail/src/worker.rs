@@ -55,6 +55,7 @@ pub enum Event {
     Failed(AccountId, String),
     Sent(AccountId),
     NotSent(AccountId, String, Box<Draft>),
+    Setup(Box<crate::setup::Outcome>),
 }
 
 #[derive(Clone)]
@@ -64,7 +65,7 @@ pub struct Notifier {
 }
 
 impl Notifier {
-    fn send(&self, event: Event) {
+    pub fn send(&self, event: Event) {
         if self.events.send(event).is_ok() {
             let _ = (&*self.wake).write(&[1]);
         }

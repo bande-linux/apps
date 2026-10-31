@@ -15,8 +15,8 @@ mailparse = "0.18"
 native-tls = "0.2.18"
 roxmltree = "=0.21.2"
 rusqlite = "0.41"
-rustix = { version = "=1.1.6", features = ["event", "pipe"] }
 tracing = "=0.1.44"
+unbound-fs = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/fs" }
 unbound-app-menu = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/app-menu" }
 unbound-l10n = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/l10n" }
 unbound-log = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/log" }
@@ -24,8 +24,10 @@ unbound-notify = { path = "/home/mikael/unbound-linux/repos/desktop/crates/servi
 unbound-toolkit = { path = "/home/mikael/unbound-linux/repos/desktop/crates/toolkit/toolkit" }
 unbound-xdg = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/xdg" }
 zbus = "=5.19.0"
+zeroize = "=1.8.1"
 
 [dev-dependencies]
+rustix = { version = "=1.1.6", features = ["process"] }
 tempfile = "=3.27.0"
 unbound-golden = { path = "/home/mikael/unbound-linux/repos/desktop/crates/testing/golden" }
 unbound-test-bus = { path = "/home/mikael/unbound-linux/repos/desktop/crates/testing/test-bus" }

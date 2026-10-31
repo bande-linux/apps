@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Mail
+GenericName=Mail Client
+Comment=Read and send mail from all your accounts
+Icon=org.bande.Mail
+Exec=bande-mail %u
+Categories=Network;Email;
+Keywords=email;mail;imap;smtp;inbox;
+MimeType=x-scheme-handler/mailto;
+StartupNotify=true
+Actions=compose;
+
+[Desktop Action compose]
+Name=New Message
+Exec=bande-mail mailto:
