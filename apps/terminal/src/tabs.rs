@@ -24,13 +24,6 @@ pub struct TabBarLayout {
     pub new_tab: Rect,
 }
 
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
-}
-
 impl TabBarLayout {
     pub fn new(count: usize, width: f32, leading: f32) -> Self {
         let top = ((STRIP_HEIGHT - TAB_HEIGHT) / 2.0).round();
@@ -59,11 +52,11 @@ impl TabBarLayout {
     }
 
     pub fn hit(&self, point: Point) -> Option<TabTarget> {
-        if contains(self.new_tab, point) {
+        if self.new_tab.contains(point) {
             return Some(TabTarget::NewTab);
         }
-        let index = self.tabs.iter().position(|tab| contains(*tab, point))?;
-        if contains(Self::close_button(self.tabs[index]), point) {
+        let index = self.tabs.iter().position(|tab| tab.contains(point))?;
+        if Self::close_button(self.tabs[index]).contains(point) {
             Some(TabTarget::Close(index))
         } else {
             Some(TabTarget::Select(index))

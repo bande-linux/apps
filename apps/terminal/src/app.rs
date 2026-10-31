@@ -343,7 +343,7 @@ impl TerminalApp {
     fn pane_at(&self, at: Point) -> Option<u32> {
         self.frames()
             .into_iter()
-            .find(|(_, frame)| contains(*frame, at))
+            .find(|(_, frame)| frame.contains(at))
             .map(|(id, _)| id)
     }
 
@@ -352,7 +352,7 @@ impl TerminalApp {
             .layout
             .dividers(self.pane_area())
             .into_iter()
-            .find(|divider| contains(divider.reach(), at))
+            .find(|divider| divider.reach().contains(at))
     }
 
     fn layout(&mut self) {
@@ -1217,7 +1217,7 @@ impl TerminalApp {
     }
 
     fn in_content(&self, at: Point) -> bool {
-        contains(self.pane_area(), at)
+        self.pane_area().contains(at)
     }
 
     fn link_at(&mut self, at: Point) -> Option<Link> {
@@ -1881,13 +1881,6 @@ fn bounds(rect: Rect) -> accesskit::Rect {
         x1: f64::from(rect.x + rect.width),
         y1: f64::from(rect.y + rect.height),
     }
-}
-
-fn contains(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.y >= rect.y
-        && point.x < rect.x + rect.width
-        && point.y < rect.y + rect.height
 }
 
 pub fn spawn_self(window: &mut Window, arguments: Vec<String>) {
