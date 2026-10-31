@@ -1,0 +1,4 @@
+libssl-dev
+libsqlite3-dev
+libxkbcommon-dev
+libwayland-dev
