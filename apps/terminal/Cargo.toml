@@ -3,6 +3,7 @@ name = "unbound-term"
 description = "Unbound terminal: a PTY terminal on the Unbound toolkit"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
