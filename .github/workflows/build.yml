@@ -2,11 +2,11 @@ name: build
 
 on:
   push:
-    branches: [main]
+    tags: ['*-v[0-9]+.[0-9]+.[0-9]+']
   workflow_dispatch:
     inputs:
       apps:
-        description: Apps to build, by directory name, space-separated, or "all"
+        description: Apps to test-build, by directory name, space-separated, or "all" (never published)
         default: all
 
 concurrency:
@@ -31,10 +31,9 @@ jobs:
       - name: Find the apps to build
         id: apps
         env:
-          BEFORE: ${{ github.event.before }}
           NAMES: ${{ inputs.apps }}
         run: |
-          apps=$(ci/changed-apps.sh "$BEFORE" "$GITHUB_SHA" "$NAMES")
+          apps=$(ci/changed-apps.sh "$GITHUB_REF_TYPE" "$GITHUB_REF_NAME" "$NAMES")
           echo "Building: $apps"
           echo "apps=$apps" >> "$GITHUB_OUTPUT"
 
