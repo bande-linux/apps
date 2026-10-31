@@ -2,11 +2,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role, TreeId, TreeUpdate};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Button, ClipboardRequest, Context, Cursor, Event, Key, Modifiers, Size, TextField, Ui, Widget,
     WidgetId,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem, grown_line,
 };
 

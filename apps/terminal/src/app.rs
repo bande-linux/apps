@@ -8,9 +8,9 @@ use std::time::{Duration, Instant};
 use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
-use unbound_app_menu::{AppMenu, Standard};
-use unbound_spring::{Decay, State as SpringState};
-use unbound_term::{
+use bande_app_menu::{AppMenu, Standard};
+use bande_spring::{Decay, State as SpringState};
+use bande_term::{
     Axis, Banner, BannerAction, CellPoint, Command, Divider, FULL_SCREEN_LEADING, GridSize,
     HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane,
     STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings, TabBar,
@@ -18,20 +18,20 @@ use unbound_term::{
     is_openable, is_settings_file, mouse_report, next_font_size, reports_mouse, settings_folder,
     shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     App, DragAction, DragEvent, FrameRegions, Header, Item, MenuPlacement, Point, Radius, Rect,
     SHEET_INSET, Scene, Shape, Window, WindowEvent,
 };
-use unbound_watch::{Changes, FolderWatch};
+use bande_watch::{Changes, FolderWatch};
 
 use crate::bus::{Bus, Outgoing};
 
-pub const APP_ID: &str = "org.unbound.Terminal";
-const FILES: &str = "unbound-files";
-const FILES_APP_ID: &str = "org.unbound.Files";
+pub const APP_ID: &str = "org.bande.Terminal";
+const FILES: &str = "bande-files";
+const FILES_APP_ID: &str = "org.bande.Files";
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
 const TERMINAL_NODE: NodeId = NodeId(u64::MAX - 1);
 const TAB_LIST_NODE: NodeId = NodeId(u64::MAX - 2);
@@ -935,7 +935,7 @@ impl TerminalApp {
             .ok();
         let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
         if let Err(error) =
-            unbound_xdg::spawn_detached(FILES_APP_ID, &command, None, token.as_deref())
+            bande_xdg::spawn_detached(FILES_APP_ID, &command, None, token.as_deref())
         {
             tracing::warn!("cannot show {} in Files: {error}", path.display());
         }
@@ -1253,7 +1253,7 @@ impl TerminalApp {
             .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
             .ok();
         let command = ["xdg-open".to_owned(), uri.to_owned()];
-        if let Err(error) = unbound_xdg::spawn_detached("", &command, None, token.as_deref()) {
+        if let Err(error) = bande_xdg::spawn_detached("", &command, None, token.as_deref()) {
             tracing::warn!("cannot open {uri}: {error}");
         }
     }
@@ -1894,7 +1894,7 @@ pub fn spawn_self(window: &mut Window, arguments: Vec<String>) {
         .ok();
     let mut command = vec![program];
     command.extend(arguments);
-    if let Err(error) = unbound_xdg::spawn_detached(APP_ID, &command, None, token.as_deref()) {
+    if let Err(error) = bande_xdg::spawn_detached(APP_ID, &command, None, token.as_deref()) {
         tracing::warn!("cannot open a window: {error}");
     }
 }

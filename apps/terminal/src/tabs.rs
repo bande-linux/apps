@@ -1,4 +1,4 @@
-use unbound_toolkit::{Point, Rect, WINDOW_HEADER_HEIGHT};
+use bande_toolkit::{Point, Rect, WINDOW_HEADER_HEIGHT};
 
 pub const STRIP_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 pub const TAB_HEIGHT: f32 = 28.0;

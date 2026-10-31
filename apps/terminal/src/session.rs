@@ -56,7 +56,7 @@ impl Session {
             env: HashMap::from([
                 ("TERM".to_owned(), "xterm-256color".to_owned()),
                 ("COLORTERM".to_owned(), "truecolor".to_owned()),
-                ("TERM_PROGRAM".to_owned(), "unbound-term".to_owned()),
+                ("TERM_PROGRAM".to_owned(), "bande-term".to_owned()),
             ]),
         };
         let pty = tty::new(&options, terminal.window_size(), 0)?;

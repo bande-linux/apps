@@ -1,6 +1,6 @@
 use alacritty_terminal::term::TermMode;
-use unbound_toolkit::ui::{Key, Modifiers};
-use unbound_xdg::path_from_file_uri;
+use bande_toolkit::ui::{Key, Modifiers};
+use bande_xdg::path_from_file_uri;
 
 fn modifier_parameter(modifiers: Modifiers) -> u8 {
     1 + u8::from(modifiers.shift) + 2 * u8::from(modifiers.alt) + 4 * u8::from(modifiers.control)

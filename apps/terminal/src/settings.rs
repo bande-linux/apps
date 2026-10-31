@@ -143,7 +143,7 @@ impl Settings {
 }
 
 pub fn settings_folder() -> Option<PathBuf> {
-    unbound_xdg::config_home().map(|config| config.join("unbound"))
+    bande_xdg::config_home().map(|config| config.join("bande"))
 }
 
 pub fn is_settings_file(path: &Path) -> bool {

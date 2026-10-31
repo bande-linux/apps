@@ -4,7 +4,7 @@ use alacritty_terminal::grid::{Dimensions, Indexed};
 use alacritty_terminal::index::{Column, Line, Point as GridPoint, Side};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::CursorShape;
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Color, Item, Paragraph, Path, Point, Radius, Rect, Scene, Shape, TextAlign,
     TextRole, TextStyle, TextSystem,
 };

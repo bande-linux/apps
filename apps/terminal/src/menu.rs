@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use unbound_app_menu::{Entry, Standard, app_submenu, window_submenu};
-use unbound_toolkit::ui::{Menu, MenuItem};
-use unbound_xdg::path_from_file_uri;
+use bande_app_menu::{Entry, Standard, app_submenu, window_submenu};
+use bande_toolkit::ui::{Menu, MenuItem};
+use bande_xdg::path_from_file_uri;
 
 use crate::L10N;
 use crate::keys::Command;

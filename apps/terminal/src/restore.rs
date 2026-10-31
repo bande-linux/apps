@@ -55,7 +55,7 @@ impl SavedWindow {
 }
 
 pub fn windows_folder() -> Option<PathBuf> {
-    unbound_xdg::state_home().map(|state| state.join("unbound/terminal-windows"))
+    bande_xdg::state_home().map(|state| state.join("bande/terminal-windows"))
 }
 
 pub fn window_file(folder: &Path, pid: u32) -> PathBuf {

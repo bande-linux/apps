@@ -1,4 +1,4 @@
-use unbound_toolkit::{Point, Rect};
+use bande_toolkit::{Point, Rect};
 
 pub const DIVIDER: f32 = 1.0;
 const DIVIDER_REACH: f32 = 3.0;

@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-use unbound_notify::Urgency;
-use unbound_notify::client::{Request, notify};
+use bande_notify::Urgency;
+use bande_notify::client::{Request, notify};
 use zbus::blocking::Connection;
 use zbus::zvariant::Value;
 
 const LAUNCHER_INTERFACE: &str = "com.canonical.Unity.LauncherEntry";
-const LAUNCHER_PATH: &str = "/org/unbound/Terminal";
+const LAUNCHER_PATH: &str = "/org/bande/Terminal";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outgoing {
@@ -70,7 +70,7 @@ fn serve(app_id: &str, receiver: &Receiver<Outgoing>) {
             Outgoing::Notify { summary, body } => notify(
                 &connection,
                 &Request {
-                    app_name: &unbound_term::L10N.tr("title"),
+                    app_name: &bande_term::L10N.tr("title"),
                     replaces_id: 0,
                     app_icon: app_id,
                     summary: &summary,

@@ -14,7 +14,7 @@ mod theme;
 
 use std::sync::LazyLock;
 
-use unbound_l10n::Localizer;
+use bande_l10n::Localizer;
 
 pub use banner::{Banner, BannerAction};
 pub use keys::{
@@ -38,7 +38,7 @@ pub use terminal::{
 };
 pub use theme::{Profile, Theme, ansi_colors};
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-term.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-term.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -63,7 +63,7 @@ mod tests {
             include_str!("settings_view.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

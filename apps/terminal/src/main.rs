@@ -5,16 +5,16 @@ mod preferences;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use unbound_app_menu::AppMenu;
-use unbound_term::{
+use bande_app_menu::AppMenu;
+use bande_term::{
     COLUMNS, GridSize, L10N, Painter, ROWS, SavedWindow, Session, Settings, Terminal, app_menus,
     claim, left_behind, settings_folder, window_file, windows_folder,
 };
-use unbound_toolkit::{Role, Window, WindowError};
+use bande_toolkit::{Role, Window, WindowError};
 
 use crate::app::{APP_ID, Arguments, RESTORE_OPTION, TerminalApp};
 
-const PROGRAM: &str = "unbound-term";
+const PROGRAM: &str = "bande-term";
 
 fn running(pid: u32) -> bool {
     std::fs::read_to_string(format!("/proc/{pid}/comm"))
@@ -36,7 +36,7 @@ fn restore(arguments: &Arguments, folder: &Path, mine: &Path) -> Option<SavedWin
             RESTORE_OPTION.to_owned(),
             file.to_string_lossy().into_owned(),
         ];
-        if let Err(error) = unbound_xdg::spawn_detached(APP_ID, &command, None, None) {
+        if let Err(error) = bande_xdg::spawn_detached(APP_ID, &command, None, None) {
             tracing::warn!("cannot restore a window: {error}");
         }
     }
@@ -106,11 +106,11 @@ fn run() -> Result<(), WindowError> {
         saved_file.map(|(_, mine)| mine),
         app_menu,
     );
-    unbound_toolkit::run(&mut window, &mut app)
+    bande_toolkit::run(&mut window, &mut app)
 }
 
 fn main() -> ExitCode {
-    unbound_log::init(PROGRAM);
+    bande_log::init(PROGRAM);
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

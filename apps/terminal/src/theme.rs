@@ -1,6 +1,6 @@
 use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::vte::ansi::{Color as AnsiColor, NamedColor, Rgb};
-use unbound_design::{Accent, Appearance, Color, Contrast, Palette, Scheme};
+use bande_design::{Accent, Appearance, Color, Contrast, Palette, Scheme};
 
 const BRIGHTER: f32 = 0.2;
 const BRIGHTER_ON_LIGHT: f32 = 0.12;

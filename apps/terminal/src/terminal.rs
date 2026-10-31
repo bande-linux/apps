@@ -10,7 +10,7 @@ use alacritty_terminal::term::cell::Hyperlink;
 use alacritty_terminal::term::search::{Match, RegexIter, RegexSearch};
 use alacritty_terminal::term::{self, Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{ClearMode, CursorShape, CursorStyle, Handler, Processor};
-use unbound_xdg::file_uri;
+use bande_xdg::file_uri;
 
 use crate::SCROLLBACK;
 
@@ -111,7 +111,7 @@ fn trimmed_url(text: &str) -> &str {
     }
 }
 
-const PROMPT_MARK: &str = "unbound-prompt";
+const PROMPT_MARK: &str = "bande-prompt";
 
 const PATH_DELIMITERS: &[char] = &[
     ' ', '\t', '\0', '"', '\'', '`', '(', ')', '[', ']', '{', '}', '<', '>', '|', ',', ';', '=',

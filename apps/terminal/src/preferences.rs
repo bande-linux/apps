@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use accesskit::TreeUpdate;
-use unbound_term::{L10N, SETTINGS_SIZE, Settings, SharedSettings, settings_folder, settings_view};
-use unbound_toolkit::ui::Ui;
-use unbound_toolkit::{App, Appearance, Rect, Role, Scene, Window, WindowError, WindowEvent};
+use bande_term::{L10N, SETTINGS_SIZE, Settings, SharedSettings, settings_folder, settings_view};
+use bande_toolkit::ui::Ui;
+use bande_toolkit::{App, Appearance, Rect, Role, Scene, Window, WindowError, WindowEvent};
 
 use crate::app::APP_ID;
 
@@ -85,5 +85,5 @@ pub fn run() -> Result<(), WindowError> {
         SETTINGS_SIZE,
     )?;
     let mut preferences = Preferences::new(window.appearance(), settings, folder);
-    unbound_toolkit::run(&mut window, &mut preferences)
+    bande_toolkit::run(&mut window, &mut preferences)
 }

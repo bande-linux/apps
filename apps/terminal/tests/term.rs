@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
-use unbound_term::{
+use bande_term::{
     Axis, Banner, BannerAction, CellPoint, Command, CursorStyle, DEFAULT_FONT_SIZE, GridSize,
     HEADER_LEADING, Layout, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane, Profile,
     Report, Reports, SETTINGS_SIZE, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind,
@@ -13,8 +13,8 @@ use unbound_term::{
     claim, dropped_text, encode_key, is_openable, left_behind, mouse_report, next_font_size,
     settings_view, shortcut, tab_menu, terminal_menu, window_file, written_path,
 };
-use unbound_toolkit::ui::{Key, Modifiers};
-use unbound_toolkit::{
+use bande_toolkit::ui::{Key, Modifiers};
+use bande_toolkit::{
     Appearance, CpuRenderer, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene,
     Scheme, Shape, TextSize, framed_scene,
 };
@@ -246,7 +246,7 @@ fn shoot(name: &str, scene: &Scene) {
     CpuRenderer::new()
         .render_into(scene, 1.0, &mut rgba)
         .expect("render");
-    unbound_golden::assert_golden_rgba!(name, (scene.width, scene.height), rgba);
+    bande_golden::assert_golden_rgba!(name, (scene.width, scene.height), rgba);
 }
 
 #[test]
@@ -272,8 +272,8 @@ fn a_drag_selects_text_for_copying() {
     let metrics = painter(Scheme::Light).metrics;
     let at = |column: f32| {
         metrics.cell_at(Point::new(
-            unbound_term::PADDING + column * metrics.cell_width + 1.0,
-            unbound_term::PADDING + metrics.cell_height / 2.0,
+            bande_term::PADDING + column * metrics.cell_width + 1.0,
+            bande_term::PADDING + metrics.cell_height / 2.0,
         ))
     };
 
@@ -385,10 +385,10 @@ fn directory(reports: Vec<Report>) -> Option<PathBuf> {
 
 #[test]
 fn folder_reports_are_found_across_reads_and_only_for_this_machine() {
-    let mut reports = Reports::new(Some("unbound".to_owned()));
-    assert_eq!(directory(reports.scan(b"ls\r\n\x1b]7;file://unb")), None);
+    let mut reports = Reports::new(Some("bande".to_owned()));
+    assert_eq!(directory(reports.scan(b"ls\r\n\x1b]7;file://ban")), None);
     assert_eq!(
-        directory(reports.scan(b"ound/home/me/My%20Files\x1b\\$ ")),
+        directory(reports.scan(b"de/home/me/My%20Files\x1b\\$ ")),
         Some(PathBuf::from("/home/me/My Files"))
     );
     assert_eq!(
@@ -448,22 +448,22 @@ fn the_tab_strip_shares_the_header_after_the_window_controls_and_keeps_room_for_
     assert!(alone.tabs.is_empty());
 }
 
-const SESSION: &[u8] = b"\x1b[1mmikael@unbound\x1b[0m:\x1b[34m~\x1b[0m$ ls --color\r\n\
+const SESSION: &[u8] = b"\x1b[1mmikael@bande\x1b[0m:\x1b[34m~\x1b[0m$ ls --color\r\n\
 \x1b[01;34mDesktop\x1b[0m  \x1b[01;34mDocuments\x1b[0m  notes.txt  \x1b[01;32mbuild.sh\x1b[0m\r\n\
-\x1b[1mmikael@unbound\x1b[0m:\x1b[34m~\x1b[0m$ echo \x1b[7mselected\x1b[0m \x1b[4munderlined\x1b[0m \x1b[31mred\x1b[0m \x1b[38;5;208m256\x1b[0m \x1b[38;2;0;128;128mtruecolor\x1b[0m\r\n\
+\x1b[1mmikael@bande\x1b[0m:\x1b[34m~\x1b[0m$ echo \x1b[7mselected\x1b[0m \x1b[4munderlined\x1b[0m \x1b[31mred\x1b[0m \x1b[38;5;208m256\x1b[0m \x1b[38;2;0;128;128mtruecolor\x1b[0m\r\n\
 selected underlined red 256 truecolor\r\n\
-\x1b[1mmikael@unbound\x1b[0m:\x1b[34m~\x1b[0m$ ";
+\x1b[1mmikael@bande\x1b[0m:\x1b[34m~\x1b[0m$ ";
 
 #[test]
 fn every_profile_keeps_text_and_ansi_colours_legible() {
     for profile in Profile::ALL {
         for (scheme, _) in SCHEMES {
-            let theme = unbound_term::Theme::new(appearance(scheme), profile);
-            let contrast = unbound_design::wcag(theme.foreground, theme.background);
+            let theme = bande_term::Theme::new(appearance(scheme), profile);
+            let contrast = bande_design::wcag(theme.foreground, theme.background);
             assert!(contrast >= 7.0, "{profile:?} {scheme:?}: {contrast}");
             for index in 1..7 {
-                let color = unbound_term::ansi_colors(&theme.palette)[index];
-                let contrast = unbound_design::wcag(color, theme.background);
+                let color = bande_term::ansi_colors(&theme.palette)[index];
+                let contrast = bande_design::wcag(color, theme.background);
                 assert!(
                     contrast >= 3.0,
                     "{profile:?} {scheme:?} {index}: {contrast}"
@@ -509,7 +509,7 @@ fn window_scene(painter: &mut Painter, titles: &[String], bells: &[bool], width:
 fn the_window_with_tabs_in_its_header_matches_its_goldens() {
     let titles = [
         "~ — bash".to_owned(),
-        "unbound — cargo build --release --workspace --all-targets".to_owned(),
+        "bande — cargo build --release --workspace --all-targets".to_owned(),
         "src — vim".to_owned(),
     ];
     let bells = [true, false, false];
@@ -561,23 +561,23 @@ fn find_starts_at_the_newest_match_and_steps_through_the_scrollback() {
 fn the_find_bar_reports_typing_and_its_keys() {
     let mut bar = Banner::find(
         appearance(Scheme::Light),
-        unbound_toolkit::TextSystem::new(),
+        bande_toolkit::TextSystem::new(),
         "old",
     );
-    bar.handle(&unbound_toolkit::ui::Event::Key {
+    bar.handle(&bande_toolkit::ui::Event::Key {
         key: Key::Character('n'),
         modifiers: plain(),
     });
     assert_eq!(bar.query(), "n");
-    bar.handle(&unbound_toolkit::ui::Event::Key {
+    bar.handle(&bande_toolkit::ui::Event::Key {
         key: Key::Enter,
         modifiers: plain(),
     });
-    bar.handle(&unbound_toolkit::ui::Event::Key {
+    bar.handle(&bande_toolkit::ui::Event::Key {
         key: Key::Enter,
         modifiers: shift(),
     });
-    bar.handle(&unbound_toolkit::ui::Event::Key {
+    bar.handle(&bande_toolkit::ui::Event::Key {
         key: Key::Escape,
         modifiers: plain(),
     });
@@ -597,8 +597,8 @@ fn find_scene(appearance: Appearance) -> Scene {
     let mut terminal = terminal(60, 4);
     terminal.feed(SESSION);
     terminal.set_focus(false);
-    assert!(terminal.find("unbound"));
-    let mut bar = Banner::find(appearance, unbound_toolkit::TextSystem::new(), "unbound");
+    assert!(terminal.find("bande"));
+    let mut bar = Banner::find(appearance, bande_toolkit::TextSystem::new(), "bande");
     bar.set_found(true);
     let (width, height) = painter.metrics.content_size(terminal.size());
     let banner = bar.height();
@@ -623,7 +623,7 @@ fn found_text_and_the_find_bar_match_their_goldens() {
 
 #[test]
 fn the_find_bar_grows_with_the_text_size_while_the_grid_keeps_its_font() {
-    let text = || unbound_toolkit::TextSystem::new();
+    let text = || bande_toolkit::TextSystem::new();
     let regular = Banner::find(appearance(Scheme::Light), text(), "");
     let mut bar = Banner::find(larger(Scheme::Light), text(), "");
     assert!(bar.height() > regular.height());
@@ -647,7 +647,7 @@ fn the_find_bar_grows_with_the_text_size_while_the_grid_keeps_its_font() {
 fn links_are_found_in_plain_text_and_in_hyperlink_escapes() {
     let mut terminal = terminal(20, 4);
     terminal.feed(b"see (https://example.org/a_(b)). ok\r\n");
-    terminal.feed(b"\x1b]8;;https://unbound.dev/docs\x1b\\the docs\x1b]8;;\x1b\\ here");
+    terminal.feed(b"\x1b]8;;https://bande.dev/docs\x1b\\the docs\x1b]8;;\x1b\\ here");
     let uri = |terminal: &mut Terminal, column, line| {
         terminal.link_at(cell(column, line)).map(|link| link.uri)
     };
@@ -659,7 +659,7 @@ fn links_are_found_in_plain_text_and_in_hyperlink_escapes() {
     assert_eq!(uri(&mut terminal, 1, 0), None);
 
     let link = terminal.link_at(cell(4, 2)).unwrap();
-    assert_eq!(link.uri, "https://unbound.dev/docs");
+    assert_eq!(link.uri, "https://bande.dev/docs");
     assert_eq!(link.range.start().column.0, 0);
     assert_eq!(link.range.end().column.0, 7);
     assert_eq!(uri(&mut terminal, 9, 2), None);
@@ -676,7 +676,7 @@ fn the_close_confirmation_answers_enter_and_escape_and_matches_its_goldens() {
     let palette = Palette::for_scheme(scheme);
     let mut banner = Banner::confirm(
         appearance(scheme),
-        unbound_toolkit::TextSystem::new(),
+        bande_toolkit::TextSystem::new(),
         message,
         "Close",
     );
@@ -691,7 +691,7 @@ fn the_close_confirmation_answers_enter_and_escape_and_matches_its_goldens() {
     shoot("term-confirm", &scene);
 
     for key in [Key::Enter, Key::Escape] {
-        banner.handle(&unbound_toolkit::ui::Event::Key {
+        banner.handle(&bande_toolkit::ui::Event::Key {
             key,
             modifiers: plain(),
         });
@@ -823,7 +823,7 @@ fn paths_in_the_output_are_links_to_files_that_exist() {
 
 #[test]
 fn closing_other_tabs_is_offered_only_when_there_are_others() {
-    let enabled = |menu: unbound_toolkit::ui::Menu| {
+    let enabled = |menu: bande_toolkit::ui::Menu| {
         menu.items
             .iter()
             .find(|item| item.action == "close-other-tabs:2")
