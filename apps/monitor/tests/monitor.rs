@@ -6,7 +6,8 @@ use std::path::Path;
 
 use fixture::{Fixture, PAGE_SIZE, Task};
 use unbound_monitor::{
-    Catalog, CoreKind, Monitor, Pressure, PressureLevel, Snapshot, Tab, read_cpu_ticks,
+    Catalog, CoreKind, InterfaceKind, Monitor, Pressure, PressureLevel, Snapshot, Tab,
+    read_cpu_ticks,
 };
 
 fn process(snapshot: &Snapshot, pid: u32) -> &unbound_monitor::Process {
@@ -35,6 +36,45 @@ fn cpu_shares_split_user_system_and_idle_time_between_samples() {
     let share = after.share_since(before);
     assert_eq!((share.user, share.system, share.idle), (0.4, 0.2, 0.4));
     assert_eq!(cores_after[1].share_since(cores[1]).idle, 1.0);
+}
+
+#[test]
+fn while_nobody_looks_only_the_system_is_sampled_and_processes_resume_without_a_spike() {
+    let fixture = Fixture::new();
+    let busy = Task {
+        pid: 100,
+        cpu_ticks: 500,
+        ..Task::default()
+    };
+    fixture.spawn(&busy);
+    let mut sampler = fixture.sampler();
+    sampler.sample().expect("first sample");
+
+    sampler.measure_processes(false);
+    fixture.set_cpu(2, 150);
+    fixture.spawn(&Task {
+        cpu_ticks: 800,
+        ..busy
+    });
+    let hidden = sampler.sample().expect("hidden sample");
+    sampler.measure_processes(true);
+    fixture.set_cpu(4, 300);
+    fixture.spawn(&Task {
+        cpu_ticks: 1100,
+        ..busy
+    });
+    let shown = sampler.sample().expect("shown sample");
+    fixture.set_cpu(6, 450);
+    fixture.spawn(&Task {
+        cpu_ticks: 1300,
+        ..busy
+    });
+    let next = sampler.sample().expect("next sample");
+
+    assert!(hidden.processes.is_empty());
+    assert_eq!(hidden.cpu.user, 0.75);
+    assert_eq!(process(&shown, 100).cpu_percent, 0.0);
+    assert_eq!(process(&next, 100).cpu_percent, 100.0);
 }
 
 #[test]
@@ -240,12 +280,26 @@ fn system_totals_cover_memory_physical_disks_and_interfaces_without_loopback() {
         ),
         (2_000_000.0, 4_000_000.0)
     );
+    assert_eq!(
+        (
+            snapshot.disk_operations.reads_per_second,
+            snapshot.disk_operations.writes_per_second
+        ),
+        (20.0, 10.0)
+    );
     let names = snapshot
         .interfaces
         .iter()
-        .map(|interface| interface.name.as_str())
+        .map(|interface| (interface.name.as_str(), interface.kind))
         .collect::<Vec<_>>();
-    assert_eq!(names, ["wlan0"]);
+    assert_eq!(
+        names,
+        [
+            ("wlan0", InterfaceKind::WiFi),
+            ("eth0", InterfaceKind::Ethernet),
+            ("wg0", InterfaceKind::Vpn)
+        ]
+    );
     assert_eq!(snapshot.interfaces[0].received_per_second, 4_000_000.0);
     assert_eq!(snapshot.interfaces[0].sent_per_second, 2_000_000.0);
 }

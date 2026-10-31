@@ -210,16 +210,16 @@ impl InspectorView {
         let row = |key: &str, label: &str, value: String| {
             Row::new(
                 key,
-                vec![Cell::new(L10N.tr(label)).muted(), Cell::new(value)],
+                vec![
+                    Cell::new(L10N.tr(label)).muted().label(),
+                    Cell::new(value).tabular(),
+                ],
             )
         };
         let section = |key: &str, title: &str, children: Vec<Row>| {
             Row::new(
                 format!("{SECTION}{key}"),
-                vec![
-                    Cell::new(L10N.tr(title).to_uppercase()).muted(),
-                    Cell::new(""),
-                ],
+                vec![Cell::new(L10N.tr(title)).muted().label(), Cell::new("")],
             )
             .children(children)
         };
@@ -247,7 +247,10 @@ impl InspectorView {
             };
             family.push(Row::new(
                 format!("{CHILD}{pid}"),
-                vec![Cell::new(label).muted(), Cell::new(named(*pid, name))],
+                vec![
+                    Cell::new(label).muted().label(),
+                    Cell::new(named(*pid, name)).tabular(),
+                ],
             ));
         }
         let Some(process) = &self.process else {
@@ -547,6 +550,7 @@ impl InspectorView {
                     Signal::Selection(_)
                     | Signal::Sort(_)
                     | Signal::Search(_)
+                    | Signal::ClearSearch
                     | Signal::Inspect => {}
                 }
             }

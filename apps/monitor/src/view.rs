@@ -11,6 +11,8 @@ use unbound_toolkit::{
     TextSystem,
 };
 
+use unbound_app_menu::Entry;
+
 use crate::L10N;
 use crate::model::{StopTarget, stop_target};
 use crate::sampler::Snapshot;
@@ -231,6 +233,10 @@ pub trait Screen {
 
     fn measures_sleep_blockers(&self) -> bool {
         false
+    }
+
+    fn app_menus(&self) -> Option<Vec<Entry>> {
+        None
     }
 
     fn measures_disk(&self) -> bool {

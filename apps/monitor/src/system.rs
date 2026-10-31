@@ -52,6 +52,15 @@ pub(crate) struct Transferred {
     pub(crate) sent: u64,
 }
 
+impl Transferred {
+    fn plus(self, other: Self) -> Self {
+        Self {
+            received: self.received + other.received,
+            sent: self.sent + other.sent,
+        }
+    }
+}
+
 pub(crate) fn read_memory(root: &Path) -> Option<Memory> {
     let meminfo = fs::read_to_string(root.join("proc/meminfo")).ok()?;
     let value = |key: &str| parse_kilobytes(&meminfo, key).unwrap_or(0);
@@ -99,9 +108,15 @@ fn read_pressure(root: &Path) -> Option<Pressure> {
     })
 }
 
-pub(crate) fn read_disks(root: &Path) -> Transferred {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct DiskCounters {
+    pub(crate) bytes: Transferred,
+    pub(crate) operations: Transferred,
+}
+
+pub(crate) fn read_disks(root: &Path) -> DiskCounters {
     let Ok(stats) = fs::read_to_string(root.join("proc/diskstats")) else {
-        return Transferred::default();
+        return DiskCounters::default();
     };
     stats
         .lines()
@@ -111,19 +126,47 @@ pub(crate) fn read_disks(root: &Path) -> Transferred {
             if !root.join("sys/block").join(name).join("device").exists() {
                 return None;
             }
-            let sectors = |index: usize| fields.get(index)?.parse::<u64>().ok();
-            Some(Transferred {
-                received: sectors(5)? * SECTOR,
-                sent: sectors(9)? * SECTOR,
+            let field = |index: usize| fields.get(index)?.parse::<u64>().ok();
+            Some(DiskCounters {
+                bytes: Transferred {
+                    received: field(5)? * SECTOR,
+                    sent: field(9)? * SECTOR,
+                },
+                operations: Transferred {
+                    received: field(3)?,
+                    sent: field(7)?,
+                },
             })
         })
-        .fold(Transferred::default(), |sum, disk| Transferred {
-            received: sum.received + disk.received,
-            sent: sum.sent + disk.sent,
+        .fold(DiskCounters::default(), |sum, disk| DiskCounters {
+            bytes: sum.bytes.plus(disk.bytes),
+            operations: sum.operations.plus(disk.operations),
         })
 }
 
-pub(crate) fn read_interfaces(root: &Path) -> Vec<(String, Transferred)> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InterfaceKind {
+    WiFi,
+    Ethernet,
+    Vpn,
+    #[default]
+    Other,
+}
+
+fn interface_kind(folder: &Path) -> InterfaceKind {
+    let read = |name: &str| fs::read_to_string(folder.join(name)).unwrap_or_default();
+    if folder.join("wireless").exists() || folder.join("phy80211").exists() {
+        InterfaceKind::WiFi
+    } else if folder.join("tun_flags").exists() || read("uevent").contains("DEVTYPE=wireguard") {
+        InterfaceKind::Vpn
+    } else if read("type").trim() == "1" && folder.join("device").exists() {
+        InterfaceKind::Ethernet
+    } else {
+        InterfaceKind::Other
+    }
+}
+
+pub(crate) fn read_interfaces(root: &Path) -> Vec<(String, InterfaceKind, Transferred)> {
     let Ok(dev) = fs::read_to_string(root.join("proc/net/dev")) else {
         return Vec::new();
     };
@@ -131,13 +174,17 @@ pub(crate) fn read_interfaces(root: &Path) -> Vec<(String, Transferred)> {
         .filter_map(|line| {
             let (name, counters) = line.split_once(':')?;
             let name = name.trim();
-            if name == "lo" {
+            let folder = root.join("sys/class/net").join(name);
+            let down = fs::read_to_string(folder.join("operstate"))
+                .is_ok_and(|state| state.trim() == "down");
+            if name == "lo" || down {
                 return None;
             }
             let counters = counters.split_whitespace().collect::<Vec<_>>();
             let counter = |index: usize| counters.get(index)?.parse::<u64>().ok();
             Some((
                 name.to_owned(),
+                interface_kind(&folder),
                 Transferred {
                     received: counter(0)?,
                     sent: counter(8)?,

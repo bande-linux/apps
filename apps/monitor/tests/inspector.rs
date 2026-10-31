@@ -234,3 +234,16 @@ fn the_inspector_matches_its_golden() {
         check_golden(name, &scene);
     }
 }
+
+#[test]
+fn escape_closes_the_inspector() {
+    let fixture = Fixture::new();
+    let snapshot = family(&fixture);
+    let mut view = inspector(&fixture, &snapshot);
+    assert!(!view.finished());
+    view.handle(&Event::Key {
+        key: Key::Escape,
+        modifiers: Modifiers::default(),
+    });
+    assert!(view.finished());
+}

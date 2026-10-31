@@ -23,6 +23,7 @@ pub(crate) enum Signal {
     Sort(Sort),
     Tab(usize),
     Search(String),
+    ClearSearch,
     Stop,
     Inspect,
     Choice(String),
