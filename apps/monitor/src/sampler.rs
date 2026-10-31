@@ -4,13 +4,16 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use crate::L10N;
 use crate::cpu::{CpuShare, CpuTicks, read_cpu_ticks};
 use crate::inhibitors::SleepBlocker;
 use crate::proc::{
     DrmUse, IoBytes, Stat, display_name, parse_cgroup_unit, parse_cmdline, parse_drm_fdinfo,
     parse_io, parse_kilobytes, parse_passwd, parse_stat, parse_switches, parse_uid,
 };
-use crate::system::{Memory, Transferred, read_disks, read_interfaces, read_memory};
+use crate::system::{
+    DiskCounters, InterfaceKind, Memory, Transferred, read_disks, read_interfaces, read_memory,
+};
 
 const KERNEL_THREAD_DAEMON: u32 = 2;
 
@@ -58,9 +61,16 @@ pub struct Rates {
     pub written_total: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Operations {
+    pub reads_per_second: f64,
+    pub writes_per_second: f64,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Interface {
     pub name: String,
+    pub kind: InterfaceKind,
     pub received_per_second: f64,
     pub sent_per_second: f64,
     pub received_total: u64,
@@ -76,9 +86,28 @@ pub struct Snapshot {
     pub processes: Vec<Process>,
     pub memory: Memory,
     pub disk: Rates,
+    pub disk_operations: Operations,
     pub interfaces: Vec<Interface>,
     pub gpu: bool,
     pub battery: bool,
+}
+
+impl Interface {
+    pub fn title(&self) -> String {
+        let kind = match self.kind {
+            InterfaceKind::WiFi => "interface-wifi",
+            InterfaceKind::Ethernet => "interface-ethernet",
+            InterfaceKind::Vpn => "interface-vpn",
+            InterfaceKind::Other => return self.name.clone(),
+        };
+        L10N.tr_args(
+            "interface-named",
+            [
+                ("kind", L10N.tr(kind).into()),
+                ("name", self.name.clone().into()),
+            ],
+        )
+    }
 }
 
 impl Snapshot {
@@ -109,7 +138,7 @@ struct Known {
 struct Previous {
     cpu: CpuTicks,
     cores: Vec<CpuTicks>,
-    disk: Transferred,
+    disk: DiskCounters,
     interfaces: HashMap<String, Transferred>,
 }
 
@@ -125,6 +154,8 @@ pub struct Sampler {
     gpu: bool,
     gpu_seen: bool,
     wakeups: bool,
+    processes: bool,
+    processes_stale: bool,
     battery: bool,
     capacities: Vec<u32>,
     buffer: Vec<u8>,
@@ -186,6 +217,8 @@ impl Sampler {
             gpu: false,
             gpu_seen: false,
             wakeups: false,
+            processes: true,
+            processes_stale: false,
             battery: has_battery(root),
             capacities: Vec::new(),
             buffer: Vec::new(),
@@ -214,6 +247,14 @@ impl Sampler {
 
     pub fn measure_wakeups(&mut self, measure: bool) {
         self.wakeups = measure;
+    }
+
+    pub fn measure_processes(&mut self, measure: bool) {
+        self.processes = measure;
+    }
+
+    pub fn measures_processes(&self) -> bool {
+        self.processes
     }
 
     fn switches(&mut self, folder: &Path) -> Option<u64> {
@@ -384,21 +425,32 @@ impl Sampler {
                 / cores.len().max(1) as f64
                 / self.ticks_per_second
         });
-        let mut pids = fs::read_dir(self.root.join("proc"))?
-            .filter_map(Result::ok)
-            .filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok())
-            .collect::<Vec<_>>();
-        pids.sort_unstable();
-        let processes = pids
-            .iter()
-            .filter_map(|pid| self.process(*pid, seconds, first))
-            .collect::<Vec<_>>();
-        self.known.retain(|pid, _| pids.binary_search(pid).is_ok());
+        let processes = if self.processes {
+            let baseline = first || std::mem::take(&mut self.processes_stale);
+            let mut pids = fs::read_dir(self.root.join("proc"))?
+                .filter_map(Result::ok)
+                .filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok())
+                .collect::<Vec<_>>();
+            pids.sort_unstable();
+            let processes = pids
+                .iter()
+                .filter_map(|pid| self.process(*pid, seconds, baseline))
+                .collect::<Vec<_>>();
+            self.known.retain(|pid, _| pids.binary_search(pid).is_ok());
+            processes
+        } else {
+            self.known.clear();
+            self.processes_stale = true;
+            Vec::new()
+        };
         let previous = previous.unwrap_or_else(|| Previous {
             cpu,
             cores: cores.clone(),
             disk,
-            interfaces: interfaces.iter().cloned().collect(),
+            interfaces: interfaces
+                .iter()
+                .map(|(name, _, now)| (name.clone(), *now))
+                .collect(),
         });
         let snapshot = Snapshot {
             seconds,
@@ -412,17 +464,30 @@ impl Sampler {
             processes,
             memory: read_memory(&self.root).unwrap_or_default(),
             disk: Rates {
-                read_per_second: rate(disk.received, previous.disk.received, seconds),
-                written_per_second: rate(disk.sent, previous.disk.sent, seconds),
-                read_total: disk.received,
-                written_total: disk.sent,
+                read_per_second: rate(disk.bytes.received, previous.disk.bytes.received, seconds),
+                written_per_second: rate(disk.bytes.sent, previous.disk.bytes.sent, seconds),
+                read_total: disk.bytes.received,
+                written_total: disk.bytes.sent,
+            },
+            disk_operations: Operations {
+                reads_per_second: rate(
+                    disk.operations.received,
+                    previous.disk.operations.received,
+                    seconds,
+                ),
+                writes_per_second: rate(
+                    disk.operations.sent,
+                    previous.disk.operations.sent,
+                    seconds,
+                ),
             },
             interfaces: interfaces
                 .iter()
-                .map(|(name, now)| {
+                .map(|(name, kind, now)| {
                     let then = previous.interfaces.get(name).copied().unwrap_or(*now);
                     Interface {
                         name: name.clone(),
+                        kind: *kind,
                         received_per_second: rate(now.received, then.received, seconds),
                         sent_per_second: rate(now.sent, then.sent, seconds),
                         received_total: now.received,
@@ -437,7 +502,10 @@ impl Sampler {
             cpu,
             cores,
             disk,
-            interfaces: interfaces.into_iter().collect(),
+            interfaces: interfaces
+                .into_iter()
+                .map(|(name, _, now)| (name, now))
+                .collect(),
         });
         Ok(snapshot)
     }

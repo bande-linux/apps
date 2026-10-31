@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::fs;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 
 use crate::L10N;
@@ -90,17 +92,92 @@ fn read_threads(folder: &Path, ticks_per_second: f64) -> Vec<Thread> {
     threads
 }
 
+const TCP_LISTEN: &str = "0A";
+
+fn parse_socket_address(text: &str) -> Option<SocketAddr> {
+    let (address, port) = text.split_once(':')?;
+    let port = u16::from_str_radix(port, 16).ok()?;
+    let words = (0..address.len() / 8)
+        .map(|index| u32::from_str_radix(address.get(index * 8..index * 8 + 8)?, 16).ok())
+        .collect::<Option<Vec<_>>>()?;
+    let ip = match words.as_slice() {
+        [word] => IpAddr::V4(Ipv4Addr::from(word.to_ne_bytes())),
+        [a, b, c, d] => {
+            let mut bytes = [0; 16];
+            for (chunk, word) in bytes.as_chunks_mut::<4>().0.iter_mut().zip([a, b, c, d]) {
+                *chunk = word.to_ne_bytes();
+            }
+            IpAddr::V6(Ipv6Addr::from(bytes))
+        }
+        _ => return None,
+    };
+    Some(SocketAddr::new(ip, port))
+}
+
+fn parse_sockets(text: &str, protocol: &str) -> Vec<(u64, String)> {
+    text.lines()
+        .skip(1)
+        .filter_map(|line| {
+            let fields = line.split_whitespace().collect::<Vec<_>>();
+            let local = parse_socket_address(fields.get(1)?)?;
+            let remote = parse_socket_address(fields.get(2)?)?;
+            let inode = fields.get(9)?.parse::<u64>().ok()?;
+            let description = if protocol == "TCP" && *fields.get(3)? == TCP_LISTEN {
+                L10N.tr_args(
+                    "port-listening",
+                    [
+                        ("protocol", protocol.into()),
+                        ("local", local.to_string().into()),
+                    ],
+                )
+            } else if remote.port() == 0 {
+                format!("{protocol} {local}")
+            } else {
+                format!("{protocol} {local} → {remote}")
+            };
+            Some((inode, description))
+        })
+        .collect()
+}
+
+fn read_sockets(folder: &Path) -> HashMap<String, String> {
+    [
+        ("tcp", "TCP"),
+        ("tcp6", "TCP"),
+        ("udp", "UDP"),
+        ("udp6", "UDP"),
+    ]
+    .into_iter()
+    .flat_map(|(file, protocol)| {
+        fs::read_to_string(folder.join("net").join(file))
+            .map(|text| parse_sockets(&text, protocol))
+            .unwrap_or_default()
+    })
+    .map(|(inode, description)| (format!("socket:[{inode}]"), description))
+    .collect()
+}
+
 fn read_files(folder: &Path) -> Option<Vec<OpenFile>> {
+    let mut sockets: Option<HashMap<String, String>> = None;
     let mut files = fs::read_dir(folder.join("fd"))
         .ok()?
         .filter_map(Result::ok)
         .filter_map(|entry| {
+            let target = fs::read_link(entry.path())
+                .ok()?
+                .to_string_lossy()
+                .into_owned();
+            let target = match target.starts_with("socket:[") {
+                true => sockets
+                    .get_or_insert_with(|| read_sockets(folder))
+                    .get(&target)
+                    .cloned()
+                    .unwrap_or(target),
+                false => target,
+            };
             Some(OpenFile {
                 fd: entry.file_name().to_str()?.parse().ok()?,
-                target: fs::read_link(entry.path())
-                    .ok()?
-                    .to_string_lossy()
-                    .into_owned(),
+                target,
             })
         })
         .collect::<Vec<_>>();
@@ -132,6 +209,45 @@ pub fn read_details(root: &Path, pid: u32, ticks_per_second: f64) -> Option<Deta
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|word| format!("{:08X}", u32::from_ne_bytes(*word)))
+            .collect()
+    }
+
+    #[test]
+    fn sockets_read_as_listening_or_connected_ports_with_short_ipv6() {
+        let loopback = hex(&[127, 0, 0, 1]);
+        let local = hex(&[10, 0, 0, 2]);
+        let remote = hex(&[93, 184, 216, 34]);
+        let header = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n";
+        let tcp = format!(
+            "{header}   0: {loopback}:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 111 1\n   1: {local}:C8FA {remote}:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 222 1\n"
+        );
+        let mut six = [0u8; 16];
+        six[15] = 1;
+        let udp6 = format!(
+            "{header}   0: {}:14E9 {}:0000 07 00000000:00000000 00:00000000 00000000  1000        0 333 1\n",
+            hex(&six),
+            hex(&[0; 16])
+        );
+
+        assert_eq!(
+            parse_sockets(&tcp, "TCP"),
+            [
+                (111, "TCP 127.0.0.1:8080 (listening)".to_owned()),
+                (222, "TCP 10.0.0.2:51450 → 93.184.216.34:443".to_owned()),
+            ]
+        );
+        assert_eq!(
+            parse_sockets(&udp6, "UDP"),
+            [(333, "UDP [::1]:5353".to_owned())]
+        );
+    }
 
     #[test]
     fn mappings_keep_paths_with_spaces_and_anonymous_regions() {

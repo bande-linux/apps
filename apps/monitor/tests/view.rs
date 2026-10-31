@@ -8,8 +8,9 @@ use std::time::{Duration, Instant};
 use accesskit::Role;
 use fixture::{check_golden, entry, process};
 use unbound_monitor::{
-    AppList, AppRow, Catalog, CpuShare, ForceQuitView, Graph, Icons, Interface, Memory, Monitor,
-    MonitorView, Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab, due_redraws,
+    AppList, AppRow, Catalog, CpuShare, ForceQuitView, Graph, Icons, Interface, InterfaceKind,
+    Memory, Monitor, MonitorView, Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab,
+    app_menus, due_redraws,
 };
 use unbound_toolkit::ui::{
     Event, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll, Widget,
@@ -117,6 +118,7 @@ fn snapshot(step: usize) -> Snapshot {
         },
         interfaces: vec![Interface {
             name: "wlan0".to_owned(),
+            kind: InterfaceKind::WiFi,
             received_per_second: 2_400_000.0 * f64::from((step as f32 * 0.45).sin().abs()),
             sent_per_second: 300_000.0 * f64::from(wave),
             received_total: 8_200_000_000,
@@ -212,6 +214,35 @@ fn activity_monitor_matches_its_goldens() {
         },
     });
     render(&mut view, TITLE, "monitor-quit", MONITOR_SIZE);
+}
+
+#[test]
+fn a_search_that_finds_nothing_says_so_and_clear_search_brings_the_rows_back() {
+    let mut view = monitor_view();
+    view.update(snapshot(0));
+    view.handle(&command('f'));
+    for character in "zebra".chars() {
+        view.handle(&key(Key::Character(character)));
+    }
+    render(&mut view, TITLE, "monitor-no-match", MONITOR_SIZE);
+    assert!(shown_rows(&view).is_empty());
+
+    let tree = view.accessibility().expect("an accessibility tree");
+    let clear = tree
+        .nodes
+        .iter()
+        .find(|(_, node)| node.role() == Role::Button && node.label() == Some("Clear Search"))
+        .expect("a Clear Search button")
+        .0;
+    assert!(view.perform(&accesskit::ActionRequest {
+        action: accesskit::Action::Click,
+        target_tree: accesskit::TreeId::ROOT,
+        target_node: clear,
+        data: None,
+    }));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+
+    assert!(shown_rows(&view).contains(&"Terminal".to_owned()));
 }
 
 #[test]
@@ -337,6 +368,21 @@ fn another_tab_shows_its_own_columns_sorted_by_its_measure_and_keeps_the_selecti
         view.take_requests().as_slice(),
         [Request::Resample, Request::ShowInFiles(_)]
     ));
+}
+
+#[test]
+fn the_keyboard_alone_finds_a_process_and_asks_to_inspect_it() {
+    let mut view = monitor_view();
+    view.handle(&command('f'));
+    for character in "pipe".chars() {
+        view.handle(&key(Key::Character(character)));
+    }
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    view.handle(&key(Key::Down));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    view.handle(&command('i'));
+
+    assert!(view.take_requests().contains(&Request::Inspect(710)));
 }
 
 #[test]
@@ -843,7 +889,18 @@ fn the_view_filter_keeps_my_processes_or_apps_and_is_remembered() {
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
     assert!(shown_rows(&view).contains(&"sshd".to_owned()));
 
+    let tabs = view.monitor.tabs();
+    let all_menus = view.app_menus();
     assert!(view.menu_action("filter-mine"));
+    assert_eq!(
+        all_menus,
+        Some(app_menus(&tabs, unbound_monitor::Filter::All))
+    );
+    assert_eq!(
+        view.app_menus(),
+        Some(app_menus(&tabs, unbound_monitor::Filter::Mine))
+    );
+    assert_ne!(view.app_menus(), all_menus);
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
     let mine = shown_rows(&view);
     assert!(!mine.contains(&"sshd".to_owned()));

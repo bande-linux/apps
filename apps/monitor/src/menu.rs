@@ -116,7 +116,7 @@ fn entry(message: &str, command: MenuCommand) -> Entry {
     Entry::item(&L10N.tr(message), command.action())
 }
 
-pub fn app_menus(tabs: &[Tab]) -> Vec<Entry> {
+pub fn app_menus(tabs: &[Tab], shown: Filter) -> Vec<Entry> {
     let mut view = tabs
         .iter()
         .zip(1..)
@@ -126,10 +126,9 @@ pub fn app_menus(tabs: &[Tab]) -> Vec<Entry> {
         })
         .collect::<Vec<_>>();
     view.push(Entry::separator());
-    view.extend(
-        Filter::ALL
-            .map(|filter| Entry::item(&filter.title(), MenuCommand::Filter(filter).action())),
-    );
+    view.extend(Filter::ALL.map(|filter| {
+        Entry::item(&filter.title(), MenuCommand::Filter(filter).action()).radio(filter == shown)
+    }));
     view.extend([
         Entry::separator(),
         entry("menu-show-cores", MenuCommand::ShowCores),

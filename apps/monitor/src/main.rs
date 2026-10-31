@@ -5,11 +5,11 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 
-use unbound_app_menu::{AppMenu, Standard};
+use unbound_app_menu::{AppMenu, Entry, Standard};
 use unbound_monitor::{
     AppList, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, Inhibitors, InspectorView, L10N,
-    Monitor, MonitorView, Request, Sampler, Screen, Snapshot, Stop, TOOLBAR_HEIGHT, app_menus,
-    due_redraws, stop_all,
+    Monitor, MonitorView, Request, Sampler, Screen, Snapshot, Stop, TOOLBAR_HEIGHT, due_redraws,
+    stop_all,
 };
 use unbound_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Role, Scene, Surfaces, TextSystem, Window,
@@ -36,6 +36,7 @@ struct ActivityMonitor {
     snapshot: Snapshot,
     next_sample: Instant,
     app_menu: Option<AppMenu>,
+    published_menus: Option<Vec<Entry>>,
     focused: usize,
     inhibitors: Option<Option<Inhibitors>>,
 }
@@ -57,8 +58,16 @@ impl ActivityMonitor {
             .screens
             .iter()
             .any(|screen| screen.measures_sleep_blockers());
+        let watched = self
+            .windows
+            .iter()
+            .any(|window| !window.toplevel_state().suspended);
+        self.sampler.measure_processes(watched);
         match self.sampler.sample() {
             Ok(mut snapshot) => {
+                if !watched {
+                    snapshot.processes = std::mem::take(&mut self.snapshot.processes);
+                }
                 if blockers
                     && let Some(inhibitors) = self.inhibitors.get_or_insert_with(start_inhibitors)
                 {
@@ -72,7 +81,9 @@ impl ActivityMonitor {
             Err(error) => tracing::warn!("cannot sample: {error}"),
         }
         for window in &mut self.windows {
-            window.request_redraw();
+            if !window.toplevel_state().suspended {
+                window.request_redraw();
+            }
         }
     }
 
@@ -100,6 +111,20 @@ impl ActivityMonitor {
             tracing::warn!("cannot {action}: {error}");
         }
         self.serve(index);
+        self.publish_menus();
+    }
+
+    fn publish_menus(&mut self) {
+        let menus = self.screens[0].app_menus();
+        if menus == self.published_menus {
+            return;
+        }
+        if let (Some(app_menu), Some(entries)) = (&self.app_menu, menus.clone())
+            && let Err(error) = app_menu.update(entries)
+        {
+            tracing::warn!("cannot update the menus: {error}");
+        }
+        self.published_menus = menus;
     }
 
     fn close(&mut self, index: usize) {
@@ -268,6 +293,12 @@ impl Surfaces for ActivityMonitor {
             WindowEvent::AppearanceChanged(appearance) => self.appearance(appearance),
             WindowEvent::CloseRequested => self.close(index),
             WindowEvent::QuitRequested => self.windows[0].close(),
+            WindowEvent::ToplevelChanged(state)
+                if !state.suspended && !self.sampler.measures_processes() =>
+            {
+                self.sample();
+                self.next_sample = Instant::now() + INTERVAL;
+            }
             WindowEvent::Focus(focused) => {
                 self.screens[index].set_focused(focused);
                 if focused {
@@ -409,14 +440,19 @@ fn open(
     size: (u32, u32),
     app_menu: Option<AppMenu>,
 ) -> Result<(), WindowError> {
-    let window = Window::open(Role::toplevel(title, APP_ID), size)?;
+    let mut window = Window::open(Role::toplevel(title, APP_ID), size)?;
+    if let Err(error) = window.watch_apps() {
+        tracing::debug!("cannot watch apps answer: {error}");
+    }
     screen.set_palette(window.appearance().palette());
+    let published_menus = screen.app_menus();
     let mut app = ActivityMonitor {
         windows: vec![window],
         screens: vec![Box::new(screen)],
         sampler,
         snapshot,
         next_sample: Instant::now() + FIRST_INTERVAL,
+        published_menus,
         app_menu,
         focused: 0,
         inhibitors: None,
@@ -445,9 +481,13 @@ fn run() -> Result<(), WindowError> {
         }
         let mut screen = MonitorView::new(monitor, palette, TextSystem::new(), icons());
         let snapshot = first_sample(&mut sampler, &mut screen);
-        let app_menu = AppMenu::export(APP_ID, app_menus(&screen.monitor.tabs()))
+        let app_menu = screen
+            .app_menus()
+            .map(|menus| AppMenu::export(APP_ID, menus))
+            .transpose()
             .inspect_err(|error| tracing::warn!("{error}"))
-            .ok();
+            .ok()
+            .flatten();
         let title = L10N.tr("window-title");
         open(screen, sampler, snapshot, &title, WINDOW_SIZE, app_menu)
     }

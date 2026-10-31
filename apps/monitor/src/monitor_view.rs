@@ -3,18 +3,20 @@ use std::time::Instant;
 
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use unbound_toolkit::ui::{
-    Animated, Button, Cell, Column as TableColumn, Cursor, Event, HEADER_HEIGHT, Key, Modifiers,
-    Pointer, Row as TableRow, SEGMENTED_HEIGHT, SearchField, SegmentedControl, Sort, Spring,
-    TEXT_FIELD_HEIGHT, Table, WidgetId,
+    Animated, BUTTON_HEIGHT, Button, Cell, Column as TableColumn, Cursor, Event, HEADER_HEIGHT,
+    Key, Modifiers, Pointer, Row as TableRow, SEGMENTED_HEIGHT, SearchField, SegmentedControl,
+    Sort, Spring, TEXT_FIELD_HEIGHT, Table, WidgetId,
 };
 use unbound_toolkit::{
     Color, Header, Item, Palette, Path, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
     TextRole, TextStyle, TextSystem,
 };
 
+use unbound_app_menu::Entry;
+
 use crate::L10N;
 use crate::list::{List, Signal, group_id, sender};
-use crate::menu::{COLUMN_ACTION, MenuCommand, Selected, columns_menu, process_menu};
+use crate::menu::{COLUMN_ACTION, MenuCommand, Selected, app_menus, columns_menu, process_menu};
 use crate::model::{
     Column, CoreGroup, CoreKind, Filter, Graph, HISTORY, Monitor, Row, RowKey, StopTarget, Tab,
 };
@@ -56,6 +58,8 @@ const SIDE: f32 = 12.0;
 const LEADING: f32 = 94.0;
 const BUTTON_SIZE: f32 = 28.0;
 const ITEM_GAP: f32 = 16.0;
+const CLEAR_WIDTH: f32 = 120.0;
+const EMPTY_MESSAGE_HEIGHT: f32 = 20.0;
 const BUTTON_GAP: f32 = 4.0;
 const SEGMENT_WIDTH: f32 = 80.0;
 const SEARCH_WIDTH: f32 = 200.0;
@@ -136,6 +140,7 @@ struct Toolbar {
     inspect: WidgetId,
     tabs: WidgetId,
     search: WidgetId,
+    clear: WidgetId,
 }
 
 pub struct MonitorView {
@@ -189,6 +194,11 @@ impl MonitorView {
         let shown_tabs = monitor.tabs();
         let tabs = list.insert(tabs_control(&list, &shown_tabs, tab));
         let search = list.insert(search_field(&list, monitor.filter(), ""));
+        let send = sender(list.signals());
+        let mut clear_button =
+            Button::new(&L10N.tr("clear-search"), move || send(Signal::ClearSearch)).quiet();
+        clear_button.set_enabled(false);
+        let clear = list.insert(clear_button);
         let mut view = Self {
             monitor,
             palette,
@@ -199,6 +209,7 @@ impl MonitorView {
                 inspect,
                 tabs,
                 search,
+                clear,
             },
             tabs: shown_tabs,
             ids: HashMap::new(),
@@ -321,6 +332,10 @@ impl MonitorView {
                 }
             }
             Signal::Search(text) => self.set_search(&text),
+            Signal::ClearSearch => {
+                self.clear_search();
+                self.list.focus();
+            }
             Signal::Stop => {
                 self.open_stop_dialog(false);
             }
@@ -520,6 +535,37 @@ impl MonitorView {
             self.list.place(id, frame);
         }
         self.list.set_frame(self.list_frame());
+        let nothing_found = self.nothing_found();
+        let message = self.empty_message_frame();
+        let clear = match nothing_found {
+            true => Rect::new(
+                (message.x + (message.width - CLEAR_WIDTH) / 2.0).round(),
+                message.y + message.height + ITEM_GAP / 2.0,
+                CLEAR_WIDTH,
+                BUTTON_HEIGHT,
+            ),
+            false => Rect::new(0.0, 0.0, 0.0, 0.0),
+        };
+        self.list.place(self.toolbar.clear, clear);
+        self.list.update::<Button>(self.toolbar.clear, |button, _| {
+            button.set_enabled(nothing_found)
+        });
+    }
+
+    fn nothing_found(&self) -> bool {
+        !self.monitor.search().is_empty() && self.monitor.rows().is_empty()
+    }
+
+    fn empty_message_frame(&self) -> Rect {
+        let list = self.list_frame();
+        let body_top = list.y + HEADER_HEIGHT;
+        let middle = body_top + ((list.y + list.height - body_top) / 2.0).round();
+        Rect::new(
+            list.x + SIDE,
+            middle - EMPTY_MESSAGE_HEIGHT - ITEM_GAP / 2.0,
+            (list.width - 2.0 * SIDE).max(0.0),
+            EMPTY_MESSAGE_HEIGHT,
+        )
     }
 
     fn set_tab(&mut self, tab: Tab) {
@@ -1167,6 +1213,10 @@ fn search_field(list: &List, filter: Filter, text: &str) -> SearchField {
 }
 
 impl Screen for MonitorView {
+    fn app_menus(&self) -> Option<Vec<Entry>> {
+        Some(app_menus(&self.monitor.tabs(), self.monitor.filter()))
+    }
+
     fn set_palette(&mut self, palette: Palette) {
         self.palette = palette;
         self.list.set_palette(palette);
@@ -1266,12 +1316,22 @@ impl Screen for MonitorView {
         let sheet = self.sheet();
         let radius = Radius::concentric(Radius::XL, self.inset());
         let footer = self.footer_layout();
+        let nothing_found = self.nothing_found();
+        let empty_message = self.empty_message_frame();
         let (monitor, palette) = (&self.monitor, self.palette);
         let mut painter = Painter {
             text: self.list.text(),
             items: Vec::new(),
         };
         paint_footer(monitor, palette, footer, &mut painter);
+        if nothing_found {
+            painter.text_in(
+                &L10N.tr_args("no-match", [("text", monitor.search().to_owned().into())]),
+                TextStyle::role(TextRole::Body, palette.ink3),
+                empty_message,
+                TextAlign::Center,
+            );
+        }
         painter.items = vec![Item::Clip {
             shape: Shape::rounded(sheet, radius),
             items: std::mem::take(&mut painter.items),

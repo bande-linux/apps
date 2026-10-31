@@ -4,8 +4,8 @@ mod fixture;
 
 use fixture::{entry, process};
 use unbound_monitor::{
-    Catalog, Column, GroupKey, Interface, Monitor, Process, Rates, Row, RowKey, Snapshot, Tab,
-    format_bytes, format_cpu_time, format_rate,
+    Catalog, Column, GroupKey, Interface, InterfaceKind, Monitor, Process, Rates, Row, RowKey,
+    Snapshot, Tab, format_bytes, format_cpu_time, format_rate,
 };
 
 fn catalog() -> Catalog {
@@ -170,8 +170,9 @@ fn disk_cells_show_a_dash_where_a_process_cannot_be_read() {
 
 #[test]
 fn the_network_tab_lists_interfaces_by_traffic() {
-    let interface = |name: &str, received: f64| Interface {
+    let interface = |name: &str, kind: InterfaceKind, received: f64| Interface {
         name: name.to_owned(),
+        kind,
         received_per_second: received,
         sent_per_second: 0.0,
         received_total: 0,
@@ -179,11 +180,18 @@ fn the_network_tab_lists_interfaces_by_traffic() {
     };
     let mut monitor = Monitor::new(catalog(), 1000);
     monitor.update(Snapshot {
-        interfaces: vec![interface("eth0", 10.0), interface("wlan0", 2_000.0)],
+        interfaces: vec![
+            interface("eth0", InterfaceKind::Ethernet, 10.0),
+            interface("wlan0", InterfaceKind::WiFi, 2_000.0),
+            interface("veth1", InterfaceKind::Other, 5.0),
+        ],
         ..desk(1.0, 2.0, 10.0)
     });
     monitor.set_tab(Tab::Network);
-    assert_eq!(names(&monitor), ["wlan0", "eth0"]);
+    assert_eq!(
+        names(&monitor),
+        ["Wi-Fi (wlan0)", "Ethernet (eth0)", "veth1"]
+    );
     assert_eq!(monitor.rows()[0].cells[1], "2 KB/s");
     assert_eq!(monitor.stop_target(), None);
 }

@@ -1160,10 +1160,11 @@ impl Monitor {
             .snapshot
             .interfaces
             .iter()
-            .filter(|interface| interface.name.to_lowercase().contains(query))
-            .map(|interface| {
+            .map(|interface| (interface, interface.title()))
+            .filter(|(_, title)| title.to_lowercase().contains(query))
+            .map(|(interface, title)| {
                 let measure = |column: Column| match column {
-                    Column::Name => Measure::Text(interface.name.clone()),
+                    Column::Name => Measure::Text(title.clone()),
                     Column::Received => Measure::Number(interface.received_per_second),
                     Column::Sent => Measure::Number(interface.sent_per_second),
                     Column::ReceivedTotal => Measure::Number(interface.received_total as f64),
@@ -1173,7 +1174,7 @@ impl Monitor {
                 Candidate {
                     row: Row {
                         key: RowKey::Interface(interface.name.clone()),
-                        name: interface.name.clone(),
+                        name: title.clone(),
                         icon: None,
                         cells: Tab::Network
                             .columns()
@@ -1185,7 +1186,7 @@ impl Monitor {
                         children: Vec::new(),
                     },
                     measure: measure(self.sort),
-                    name: interface.name.clone(),
+                    name: title.clone(),
                     pid: 0,
                 }
             })
@@ -1416,6 +1417,14 @@ impl Monitor {
                 ]
             }
             Tab::Disk => vec![
+                (
+                    L10N.tr("summary-reads"),
+                    format!("{:.0}", snapshot.disk_operations.reads_per_second),
+                ),
+                (
+                    L10N.tr("summary-writes"),
+                    format!("{:.0}", snapshot.disk_operations.writes_per_second),
+                ),
                 (
                     L10N.tr("summary-read-rate"),
                     format_rate(snapshot.disk.read_per_second),

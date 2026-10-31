@@ -138,7 +138,11 @@ impl ForceQuitView {
                         self.confirm();
                     }
                     Signal::Choice(choice) => self.chosen(&choice),
-                    Signal::Sort(_) | Signal::Tab(_) | Signal::Search(_) | Signal::Inspect => {}
+                    Signal::Sort(_)
+                    | Signal::Tab(_)
+                    | Signal::Search(_)
+                    | Signal::ClearSearch
+                    | Signal::Inspect => {}
                 }
             }
         }

@@ -67,6 +67,16 @@ impl Fixture {
         );
         fixture.write("sys/block/nvme0n1/device/model", "disk\n");
         fixture.write("sys/block/loop0/size", "0\n");
+        fixture.write("sys/class/net/wlan0/wireless/.present", "");
+        fixture.write("sys/class/net/eth0/type", "1\n");
+        fixture.write("sys/class/net/eth0/device/vendor", "0x8086\n");
+        fixture.write("sys/class/net/eth1/type", "1\n");
+        fixture.write("sys/class/net/eth1/operstate", "down\n");
+        fixture.write("sys/class/net/wg0/type", "65534\n");
+        fixture.write(
+            "sys/class/net/wg0/uevent",
+            "DEVTYPE=wireguard\nINTERFACE=wg0\n",
+        );
         fixture.set_cpu(0, 0);
         fixture.set_traffic(0);
         fixture
@@ -106,7 +116,7 @@ impl Fixture {
         self.write(
             "proc/net/dev",
             &format!(
-                "Inter-|   Receive |  Transmit\n face |bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed\n    lo: {bytes} 1 0 0 0 0 0 0 {bytes} 1 0 0 0 0 0 0\n  wlan0: {} 1 0 0 0 0 0 0 {} 1 0 0 0 0 0 0\n",
+                "Inter-|   Receive |  Transmit\n face |bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed\n    lo: {bytes} 1 0 0 0 0 0 0 {bytes} 1 0 0 0 0 0 0\n  wlan0: {} 1 0 0 0 0 0 0 {} 1 0 0 0 0 0 0\n   eth0: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n   eth1: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n    wg0: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n",
                 2 * bytes,
                 bytes
             ),
@@ -115,7 +125,9 @@ impl Fixture {
         self.write(
             "proc/diskstats",
             &format!(
-                " 259 0 nvme0n1 1 0 {sectors} 0 1 0 {} 0 0 0 0 0 0 0 0 0 0\n 259 1 nvme0n1p1 1 0 {sectors} 0 1 0 {sectors} 0 0 0 0 0 0 0 0 0 0\n 7 0 loop0 1 0 {sectors} 0 1 0 {sectors} 0 0 0 0 0 0 0 0 0 0\n",
+                " 259 0 nvme0n1 {} 0 {sectors} 0 {} 0 {} 0 0 0 0 0 0 0 0 0 0\n 259 1 nvme0n1p1 1 0 {sectors} 0 1 0 {sectors} 0 0 0 0 0 0 0 0 0 0\n 7 0 loop0 1 0 {sectors} 0 1 0 {sectors} 0 0 0 0 0 0 0 0 0 0\n",
+                10 * megabytes,
+                5 * megabytes,
                 2 * sectors
             ),
         );
