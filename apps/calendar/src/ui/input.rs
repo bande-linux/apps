@@ -28,6 +28,10 @@ pub const ACTION_DELETE: &str = "delete";
 pub const ACTION_MODE: &str = "mode-";
 const ACTION_COLOR: &str = "calendar-color:";
 const ACTION_REMOVE_ACCOUNT: &str = "remove-account:";
+const ACTION_RENAME: &str = "calendar-rename:";
+const ACTION_DELETE_CALENDAR: &str = "calendar-delete:";
+const ACTION_NEW_CALENDAR: &str = "new-calendar";
+const ACTION_NEW_CALENDAR_IN: &str = "new-calendar:";
 
 const COLORS: [(Accent, &str); 8] = [
     (Accent::Rose, "color-rose"),
@@ -54,6 +58,24 @@ fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
             .checked(current == Some(*accent))
         })
         .collect();
+    let subscription = calendar.info.read_only && calendar.info.url.is_none();
+    let locals = view
+        .library
+        .calendars
+        .iter()
+        .filter(|other| other.info.account == crate::store::LOCAL_ACCOUNT)
+        .count();
+    items.push(MenuItem::separator());
+    items.push(MenuItem::new(
+        &L10N.tr("rename-calendar"),
+        &format!("{ACTION_RENAME}{index}"),
+    ));
+    if !subscription && (calendar.info.account != crate::store::LOCAL_ACCOUNT || locals > 1) {
+        items.push(MenuItem::new(
+            &L10N.tr("delete-calendar"),
+            &format!("{ACTION_DELETE_CALENDAR}{index}"),
+        ));
+    }
     if calendar.info.account != crate::store::LOCAL_ACCOUNT {
         items.push(MenuItem::separator());
         items.push(MenuItem::new(
@@ -82,7 +104,14 @@ fn recolor(view: &mut CalendarView, action: &str) -> bool {
     };
     calendar.info.color = super::painter::color_text(accent.color(Scheme::Light));
     view.library.save(index);
-    view.requests.push(Request::SetColor(index));
+    let info = &view.library.calendars[index].info;
+    if let Some(url) = info.url.clone() {
+        view.requests.push(Request::Collection {
+            account: info.account.clone(),
+            url,
+            change: crate::worker::Change::Color(format!("{}FF", info.color)),
+        });
+    }
     true
 }
 
@@ -105,6 +134,21 @@ pub fn menu_command(view: &mut CalendarView, action: &str) -> bool {
         }
         other if other.starts_with(ACTION_COLOR) => {
             return recolor(view, &other[ACTION_COLOR.len()..]);
+        }
+        ACTION_NEW_CALENDAR => view.open_new_calendar(None),
+        other if other.starts_with(ACTION_NEW_CALENDAR_IN) => {
+            let account = other[ACTION_NEW_CALENDAR_IN.len()..].to_owned();
+            view.open_new_calendar(Some(&account));
+        }
+        other if other.starts_with(ACTION_RENAME) => match other[ACTION_RENAME.len()..].parse() {
+            Ok(index) => view.open_rename(index),
+            Err(_) => return false,
+        },
+        other if other.starts_with(ACTION_DELETE_CALENDAR) => {
+            match other[ACTION_DELETE_CALENDAR.len()..].parse() {
+                Ok(index) => view.ask_delete_calendar(index),
+                Err(_) => return false,
+            }
         }
         other if other.starts_with(ACTION_REMOVE_ACCOUNT) => {
             view.ask_remove_account(&other[ACTION_REMOVE_ACCOUNT.len()..])
@@ -235,6 +279,7 @@ fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Eve
     match key {
         Key::Character(character) if command => match character.to_ascii_lowercase() {
             't' => menu_command(view, ACTION_TODAY),
+            'n' if modifiers.alt => menu_command(view, ACTION_NEW_CALENDAR),
             'n' => menu_command(view, ACTION_NEW_EVENT),
             'f' => menu_command(view, ACTION_FIND),
             'r' => menu_command(view, ACTION_REFRESH),
@@ -318,8 +363,24 @@ fn pointer_down(view: &mut CalendarView, pointer: &Pointer) -> bool {
                 }
                 None => false,
             },
-            Some(Hit::Account(id)) if id != crate::store::LOCAL_ACCOUNT => {
-                view.ask_remove_account(&id);
+            Some(Hit::Account(id)) => {
+                let Some(account) = view.library.account(&id) else {
+                    return false;
+                };
+                let mut items = Vec::new();
+                if !matches!(account.kind, crate::store::AccountKind::Subscription { .. }) {
+                    items.push(MenuItem::new(
+                        &L10N.tr("new-calendar"),
+                        &format!("{ACTION_NEW_CALENDAR_IN}{id}"),
+                    ));
+                }
+                if id != crate::store::LOCAL_ACCOUNT {
+                    items.push(MenuItem::new(
+                        &L10N.tr("remove-account"),
+                        &format!("{ACTION_REMOVE_ACCOUNT}{id}"),
+                    ));
+                }
+                view.requests.push(Request::Menu(Menu::new(items), point));
                 true
             }
             Some(Hit::Event(index, _)) => match view.shown.get(index).cloned() {
@@ -663,6 +724,9 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
     if let Some(setup) = &mut view.setup {
         setup.apply(&signal);
     }
+    if let Some(naming) = &mut view.naming {
+        naming.apply(&signal);
+    }
     match signal {
         Signal::Today => {
             let today = view.now.date();
@@ -693,6 +757,8 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
         }
         Signal::Choice(action) => choose(view, &action),
         Signal::SetupSubmit => submit_setup(view),
+        Signal::NameSubmit => view.submit_naming(),
+        Signal::NameCancel => view.cancel_naming(),
         Signal::SetupCancel => {
             if let Some(setup) = view.setup.take() {
                 setup.dismiss();
@@ -763,5 +829,6 @@ fn choose(view: &mut CalendarView, action: &str) {
             view.requests.push(Request::Changed);
         }
         Confirm::Subscribe(url) => view.requests.push(Request::Subscribe(url)),
+        Confirm::DeleteCalendar(index) => view.delete_calendar(index),
     }
 }

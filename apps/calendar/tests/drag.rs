@@ -147,10 +147,10 @@ fn the_calendar_menu_recolours_a_calendar() {
     assert!(view.menu_action(&format!("calendar-color:{work}:6")));
     let color = view.library().calendars[work].info.color.clone();
     assert_ne!(color, "#3478F6");
-    assert!(
-        view.take_requests()
-            .contains(&bande_calendar::ui::Request::SetColor(work))
-    );
+    assert!(view.take_requests().iter().any(|request| matches!(
+        request,
+        bande_calendar::ui::Request::Collection { change: bande_calendar::worker::Change::Color(sent), .. } if *sent == format!("{color}FF")
+    )));
 }
 
 #[test]
@@ -176,4 +176,65 @@ fn dragging_in_the_month_view_moves_an_event_by_days_and_keeps_its_time() {
     view.handle(&Event::PointerMove(Pointer::at(to)));
     view.handle(&Event::PointerUp(Pointer::at(to)));
     assert_eq!(starts(&view, "Dentist"), ["Sat 16:00-17:30"]);
+}
+
+fn press(view: &mut CalendarView, key: unbound_toolkit::ui::Key) {
+    view.handle(&Event::Key {
+        key,
+        modifiers: unbound_toolkit::ui::Modifiers::default(),
+    });
+    view.scene(SIZE.0, SIZE.1);
+}
+
+fn type_text(view: &mut CalendarView, text: &str) {
+    for character in text.chars() {
+        press(view, unbound_toolkit::ui::Key::Character(character));
+    }
+}
+
+fn names(view: &CalendarView) -> Vec<String> {
+    view.library()
+        .calendars
+        .iter()
+        .map(|calendar| calendar.info.name.clone())
+        .collect()
+}
+
+#[test]
+fn calendars_are_created_renamed_and_deleted_from_the_menus() {
+    use unbound_toolkit::ui::Key;
+    let (_directory, mut view) = ready();
+    assert!(view.menu_action("new-calendar:local"));
+    view.scene(SIZE.0, SIZE.1);
+    type_text(&mut view, "Gym");
+    press(&mut view, Key::Enter);
+    assert!(!view.has_sheet());
+    assert!(names(&view).contains(&"Gym".to_owned()));
+    let gym = names(&view).iter().position(|name| name == "Gym").unwrap();
+
+    assert!(view.menu_action(&format!("calendar-rename:{gym}")));
+    view.scene(SIZE.0, SIZE.1);
+    for _ in 0..3 {
+        press(&mut view, Key::Backspace);
+    }
+    type_text(&mut view, "Sport");
+    press(&mut view, Key::Enter);
+    assert_eq!(view.library().calendars[gym].info.name, "Sport");
+
+    let work = view.library().calendar_index("work").unwrap();
+    assert!(view.menu_action(&format!("calendar-rename:{work}")));
+    view.scene(SIZE.0, SIZE.1);
+    type_text(&mut view, " 2");
+    press(&mut view, Key::Enter);
+    let requests = view.take_requests();
+    assert!(requests.iter().any(|request| matches!(
+        request,
+        bande_calendar::ui::Request::Collection { change: bande_calendar::worker::Change::Rename(name), .. } if name == "Work 2"
+    )));
+
+    assert!(view.menu_action(&format!("calendar-delete:{gym}")));
+    view.scene(SIZE.0, SIZE.1);
+    assert!(view.has_sheet());
+    press(&mut view, Key::Space);
+    assert!(!names(&view).contains(&"Sport".to_owned()));
 }

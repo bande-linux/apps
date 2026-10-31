@@ -93,6 +93,7 @@ fn app_menus(mode: Mode) -> Vec<Entry> {
             vec![
                 entry("new-event", "new-event").shortcut("Super+N"),
                 Entry::separator(),
+                entry("new-calendar", "new-calendar").shortcut("Alt+Super+N"),
                 entry("add-account", "add-account"),
                 entry("refresh", "refresh").shortcut("Super+R"),
                 Entry::separator(),
@@ -316,6 +317,28 @@ impl CalendarApp {
                         [("name", name.into()), ("error", error.into())],
                     ));
                 }
+                Reply::Made {
+                    account,
+                    url,
+                    name,
+                    color,
+                } => {
+                    self.view.library_mut().add_calendar(CalendarInfo {
+                        id: new_uid(),
+                        account,
+                        url: Some(url),
+                        name,
+                        color: color.get(..7).unwrap_or(&color).to_owned(),
+                        read_only: false,
+                        visible: true,
+                        ctag: None,
+                        sync_token: None,
+                    });
+                }
+                Reply::ChangeFailed(error) => {
+                    tracing::warn!("cannot change a calendar: {error}");
+                    self.view.set_status(Some(error));
+                }
                 Reply::Finished => {
                     self.syncing = false;
                     let now = Zoned::now().with_time_zone(self.zone.clone());
@@ -370,23 +393,26 @@ impl CalendarApp {
                     self.view.refresh_search();
                 }
                 Request::Refresh => self.sync(true),
-                Request::SetColor(index) => {
-                    let library = self.view.library();
-                    let job = library.calendars.get(index).and_then(|calendar| {
-                        let account = library.account(&calendar.info.account)?;
-                        match (&account.kind, &calendar.info.url) {
-                            (AccountKind::CalDav { user, .. }, Some(url)) => Some(Job::SetColor {
-                                account: account.id.clone(),
-                                user: user.clone(),
-                                url: url.clone(),
-                                color: format!("{}FF", calendar.info.color),
-                            }),
-                            _ => None,
-                        }
+                Request::Collection {
+                    account,
+                    url,
+                    change,
+                } => {
+                    let user = match self
+                        .view
+                        .library()
+                        .account(&account)
+                        .map(|known| &known.kind)
+                    {
+                        Some(AccountKind::CalDav { user, .. }) => user.clone(),
+                        _ => continue,
+                    };
+                    self.worker.send(Job::Collection {
+                        account,
+                        user,
+                        url,
+                        change,
                     });
-                    if let Some(job) = job {
-                        self.worker.send(job);
-                    }
                 }
             }
         }

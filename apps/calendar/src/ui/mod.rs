@@ -1,6 +1,7 @@
 pub mod geometry;
 mod input;
 mod inspector;
+mod naming;
 mod paint;
 pub mod painter;
 mod panel;
@@ -27,7 +28,8 @@ use unbound_toolkit::{
 
 use crate::edit::{Details, Scope};
 use crate::ical::{CalendarObject, InstanceKey};
-use crate::store::{Found, LOCAL_ACCOUNT, Library};
+use crate::store::{AccountKind, CalendarInfo, Found, LOCAL_ACCOUNT, Library, new_uid};
+use unbound_design::{Accent, Scheme};
 
 pub use toolbar::TOOLBAR_HEIGHT;
 
@@ -70,7 +72,11 @@ pub enum Request {
     },
     Subscribe(String),
     RemoveAccount(String),
-    SetColor(usize),
+    Collection {
+        account: String,
+        url: String,
+        change: crate::worker::Change,
+    },
     Changed,
     Refresh,
 }
@@ -103,6 +109,10 @@ pub(crate) enum Signal {
     SetupServer(String),
     SetupSubmit,
     SetupCancel,
+    NameText(String),
+    NameAccount(usize),
+    NameSubmit,
+    NameCancel,
 }
 
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -169,6 +179,7 @@ pub(crate) enum Confirm {
     RemoveAccount(String),
     Import(Vec<CalendarObject>, usize),
     Subscribe(String),
+    DeleteCalendar(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,6 +213,7 @@ pub struct CalendarView {
     selected: Option<Selection>,
     inspector: Option<inspector::Inspector>,
     setup: Option<setup::Setup>,
+    naming: Option<naming::Naming>,
     confirm: Option<Confirm>,
     search: String,
     results: Vec<Found>,
@@ -252,6 +264,7 @@ impl CalendarView {
             selected: None,
             inspector: None,
             setup: None,
+            naming: None,
             confirm: None,
             search: String::new(),
             results: Vec::new(),
@@ -413,6 +426,158 @@ impl CalendarView {
 
     pub fn text_input_area(&self) -> Option<Rect> {
         self.ui.text_input_area()
+    }
+
+    pub fn open_new_calendar(&mut self, account: Option<&str>) {
+        self.close_inspector(true);
+        let accounts: Vec<(String, String)> = self
+            .library
+            .accounts
+            .iter()
+            .filter_map(|known| match known.kind {
+                AccountKind::Local => Some((known.id.clone(), L10N.tr("on-my-computer"))),
+                AccountKind::CalDav { .. } => Some((known.id.clone(), known.name.clone())),
+                AccountKind::Subscription { .. } => None,
+            })
+            .collect();
+        let chosen = account
+            .and_then(|account| accounts.iter().position(|(id, _)| id == account))
+            .unwrap_or(0);
+        let labels: Vec<String> = accounts.iter().map(|(_, label)| label.clone()).collect();
+        let ids = accounts.into_iter().map(|(id, _)| id).collect();
+        let (panel, naming) =
+            naming::Naming::build(&self.signals, naming::Target::New(ids), "", &labels, chosen);
+        self.present_naming(panel, naming);
+    }
+
+    pub(crate) fn open_rename(&mut self, index: usize) {
+        let Some(calendar) = self.library.calendars.get(index) else {
+            return;
+        };
+        let name = calendar.info.name.clone();
+        let (panel, naming) =
+            naming::Naming::build(&self.signals, naming::Target::Rename(index), &name, &[], 0);
+        self.present_naming(panel, naming);
+    }
+
+    fn present_naming(&mut self, panel: panel::Panel, naming: naming::Naming) {
+        let field = naming.field;
+        self.naming = Some(naming);
+        self.ui.present_sheet(panel);
+        if let Some(field) = field {
+            self.ui.set_focus(field);
+        }
+    }
+
+    pub(crate) fn submit_naming(&mut self) {
+        let Some(naming) = self.naming.take() else {
+            return;
+        };
+        naming.close(&mut self.ui);
+        let name = match naming.name.trim() {
+            "" => L10N.tr("untitled"),
+            name => name.to_owned(),
+        };
+        match naming.target {
+            naming::Target::Rename(index) => {
+                self.library.rename_calendar(index, &name);
+                let info = &self.library.calendars[index].info;
+                if let Some(url) = info.url.clone() {
+                    self.requests.push(Request::Collection {
+                        account: info.account.clone(),
+                        url,
+                        change: crate::worker::Change::Rename(name),
+                    });
+                }
+            }
+            naming::Target::New(accounts) => {
+                let Some(account) = accounts
+                    .get(naming.account)
+                    .and_then(|id| self.library.account(id))
+                    .cloned()
+                else {
+                    return;
+                };
+                let taken: Vec<Accent> = self
+                    .library
+                    .calendars
+                    .iter()
+                    .filter_map(|calendar| painter::parse_color(&calendar.info.color))
+                    .map(Accent::nearest)
+                    .collect();
+                let accent = Accent::ALL
+                    .into_iter()
+                    .find(|accent| !taken.contains(accent))
+                    .unwrap_or(Accent::ALL[self.library.calendars.len() % Accent::ALL.len()]);
+                let color = painter::color_text(accent.color(Scheme::Light));
+                match account.kind {
+                    AccountKind::CalDav { home, .. } => self.requests.push(Request::Collection {
+                        account: account.id,
+                        url: format!("{}/{}/", home.trim_end_matches('/'), new_uid()),
+                        change: crate::worker::Change::Make {
+                            name,
+                            color: format!("{color}FF"),
+                        },
+                    }),
+                    _ => {
+                        self.library.add_calendar(CalendarInfo {
+                            id: new_uid(),
+                            account: account.id,
+                            url: None,
+                            name,
+                            color,
+                            read_only: false,
+                            visible: true,
+                            ctag: None,
+                            sync_token: None,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn cancel_naming(&mut self) {
+        if let Some(naming) = self.naming.take() {
+            naming.close(&mut self.ui);
+        }
+    }
+
+    pub(crate) fn ask_delete_calendar(&mut self, index: usize) {
+        let Some(calendar) = self.library.calendars.get(index) else {
+            return;
+        };
+        let title = L10N.tr_args(
+            "delete-calendar-title",
+            [("name", calendar.info.name.clone().into())],
+        );
+        self.confirm = Some(Confirm::DeleteCalendar(index));
+        let alert = Alert::new(&title, &L10N.tr("delete-calendar-message"), self.choice())
+            .cancel(&L10N.tr("cancel"), "cancel")
+            .destructive(&L10N.tr("delete"), "accept");
+        self.ui.present_dialog(alert);
+    }
+
+    pub(crate) fn delete_calendar(&mut self, index: usize) {
+        let Some(info) = self
+            .library
+            .calendars
+            .get(index)
+            .map(|calendar| calendar.info.clone())
+        else {
+            return;
+        };
+        if let Some(url) = info.url {
+            self.requests.push(Request::Collection {
+                account: info.account,
+                url,
+                change: crate::worker::Change::Delete,
+            });
+        }
+        self.library.remove_calendar(index);
+        self.selected = None;
+        self.shown.clear();
+        self.results.clear();
     }
 
     pub fn open_account_setup(&mut self) {

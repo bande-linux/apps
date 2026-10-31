@@ -197,10 +197,10 @@ pub fn calendar_query_events() -> String {
     )
 }
 
-pub fn set_color(color: &str) -> String {
+pub fn set_property(element: &str, value: &str) -> String {
     format!(
-        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<d:propertyupdate {NAMESPACES}><d:set><d:prop><a:calendar-color>{}</a:calendar-color></d:prop></d:set></d:propertyupdate>",
-        escape(color)
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<d:propertyupdate {NAMESPACES}><d:set><d:prop><{element}>{}</{element}></d:prop></d:set></d:propertyupdate>",
+        escape(value)
     )
 }
 

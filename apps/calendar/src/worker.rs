@@ -22,12 +22,20 @@ pub enum Job {
     },
     Sync(Vec<(AccountKind, String, Calendar)>),
     Forget(String),
-    SetColor {
+    Collection {
         account: String,
         user: String,
         url: String,
-        color: String,
+        change: Change,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Change {
+    Make { name: String, color: String },
+    Rename(String),
+    Color(String),
+    Delete,
 }
 
 #[derive(Debug)]
@@ -53,6 +61,13 @@ pub enum Reply {
         error: String,
     },
     Finished,
+    Made {
+        account: String,
+        url: String,
+        name: String,
+        color: String,
+    },
+    ChangeFailed(String),
 }
 
 pub struct Worker {
@@ -169,17 +184,31 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
             }
             reply(Reply::Finished);
         }
-        Job::SetColor {
+        Job::Collection {
             account,
             user,
             url,
-            color,
+            change,
         } => {
             let credentials = passwords
                 .get(&account)
                 .map(|password| Credentials { user, password });
-            if let Err(error) = Client::new(credentials.as_ref()).set_color(&url, &color) {
-                tracing::warn!("cannot change the colour of {url}: {error}");
+            let client = Client::new(credentials.as_ref());
+            let result = match &change {
+                Change::Make { name, color } => client.make_calendar(&url, name, color),
+                Change::Rename(name) => client.rename(&url, name),
+                Change::Color(color) => client.set_color(&url, color),
+                Change::Delete => client.delete(&url, None),
+            };
+            match (result, change) {
+                (Ok(()), Change::Make { name, color }) => reply(Reply::Made {
+                    account,
+                    url,
+                    name,
+                    color,
+                }),
+                (Ok(()), _) => {}
+                (Err(error), _) => reply(Reply::ChangeFailed(error.to_string())),
             }
         }
         Job::Forget(account) => {

@@ -296,3 +296,27 @@ fn a_new_colour_is_written_to_the_server() {
     let found = radicale.client().discover(&radicale.url, USER).unwrap();
     assert_eq!(found.calendars[0].color.as_deref(), Some("#AF52DEFF"));
 }
+
+#[test]
+fn calendars_are_created_renamed_and_deleted_on_the_server() {
+    let radicale = Radicale::start();
+    radicale.calendar("work", "Work");
+    let client = radicale.client();
+    let found = client.discover(&radicale.url, USER).unwrap();
+    let trips = format!("{}trips/", found.home);
+    client.make_calendar(&trips, "Trips", "#34C759FF").unwrap();
+    client.rename(&trips, "Travel").unwrap();
+    let names = |client: &Client| {
+        let mut names: Vec<String> = client
+            .calendars(&found.home)
+            .unwrap()
+            .into_iter()
+            .map(|calendar| calendar.name)
+            .collect();
+        names.sort();
+        names
+    };
+    assert_eq!(names(&client), ["Travel", "Work"]);
+    client.delete(&trips, None).unwrap();
+    assert_eq!(names(&client), ["Work"]);
+}

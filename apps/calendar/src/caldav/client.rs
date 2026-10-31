@@ -396,16 +396,32 @@ impl Client {
         }
     }
 
-    pub fn set_color(&self, url: &str, color: &str) -> Result<(), Error> {
-        let (url, status) = self.multistatus("PROPPATCH", url, "0", &xml::set_color(color))?;
+    fn set_property(
+        &self,
+        url: &str,
+        namespace: &str,
+        name: &str,
+        element: &str,
+        value: &str,
+    ) -> Result<(), Error> {
+        let (url, status) =
+            self.multistatus("PROPPATCH", url, "0", &xml::set_property(element, value))?;
         match status
             .entries
             .iter()
-            .any(|entry| entry.prop(APPLE, "calendar-color").is_some())
+            .any(|entry| entry.prop(namespace, name).is_some())
         {
             true => Ok(()),
             false => Err(Error::Status { status: 403, url }),
         }
+    }
+
+    pub fn set_color(&self, url: &str, color: &str) -> Result<(), Error> {
+        self.set_property(url, APPLE, "calendar-color", "a:calendar-color", color)
+    }
+
+    pub fn rename(&self, url: &str, name: &str) -> Result<(), Error> {
+        self.set_property(url, DAV, "displayname", "d:displayname", name)
     }
 
     pub fn make_calendar(&self, url: &str, name: &str, color: &str) -> Result<(), Error> {

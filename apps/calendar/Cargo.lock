@@ -3176,6 +3176,7 @@ dependencies = [
  "icu_locale_core",
  "jiff",
  "rustix",
+ "zbus",
 ]
 
 [[package]]

@@ -26,7 +26,10 @@ views. Packaged as `bande-calendar`.
   Windows names and prefixed Mozilla names), unknown ones through their `VTIMEZONE` (converted to
   a POSIX rule). Written events carry a `VTIMEZONE` generated from the tz database.
 - **Views.** Day, week, month and year, a mini month and the calendar list in the sidebar,
-  per-calendar colours (right-click a calendar) and visibility, Today and previous/next.
+  per-calendar colours and visibility, Today and previous/next.
+- **Calendars.** New, rename and delete, on this computer or on a CalDAV server (MKCALENDAR,
+  PROPPATCH of the name and colour, DELETE): File ▸ New Calendar…, or right-click a calendar or
+  an account heading.
 - **Editing.** Drag on empty time to create, drag an event to move it (also between days in the
   month view and into the all-day row), drag its bottom edge to change its length, and an
   inspector popover with title, location, all-day, start and end, repeat, alert, calendar and
@@ -39,6 +42,7 @@ views. Packaged as `bande-calendar`.
   schemes.
 
 Shortcuts: Super+1…4 for the views, Super+T today, Left/Right previous/next, Super+N new event,
+Alt+Super+N new calendar,
 Super+F search, Super+R refresh, Delete to delete, Enter to open the selected event.
 
 ## Layout
@@ -71,10 +75,11 @@ cargo test
   leap days, `BYSETPOS`, week numbers), time zones, overrides, edits, alerts.
 - `tests/caldav.rs` runs against a real Radicale started by the test (`apt install radicale`; it
   runs `python3 -m radicale`): discovery, two devices syncing creates, edits and deletes, 412
-  conflicts, invalid sync tokens, colours.
+  conflicts, invalid sync tokens, colours, creating, renaming and deleting calendars.
 - `tests/legacy.rs` runs against a small in-test server without sync tokens, for the ctag/etag
   path.
-- `tests/drag.rs` drives the view with pointer events: create, move, resize, month drag.
+- `tests/drag.rs` drives the view with pointer and key events: create, move, resize, month
+  drag, calendar colours, and new, rename and delete calendar through the menus and sheets.
 - `tests/golden.rs` renders each view with the desktop's golden harness (light and dark, the
   inspector, search). After a deliberate visual change, `UNBOUND_UPDATE_GOLDENS=1 cargo test
   --test golden` rewrites them.
@@ -84,6 +89,6 @@ cargo test
 - Invitations (attendees, `METHOD:REQUEST`/`REPLY`), free/busy, tasks (`VTODO`).
 - OAuth providers (Google, Microsoft); Basic authentication only, so iCloud and Fastmail work with
   an app password.
-- Creating, renaming and deleting calendars; editing the time zone of an event; custom repeat
-  rules (they are kept and shown as Custom, but not edited).
+- Editing the time zone of an event; custom repeat rules (they are kept and shown as Custom,
+  but not edited).
 - One window per launch: opening an `.ics` file while Calendar runs opens a second window.

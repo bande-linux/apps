@@ -305,6 +305,32 @@ impl Library {
         }
     }
 
+    pub fn add_calendar(&mut self, info: CalendarInfo) -> usize {
+        self.calendars.push(Calendar::new(info));
+        let index = self.calendars.len() - 1;
+        self.save(index);
+        index
+    }
+
+    pub fn rename_calendar(&mut self, index: usize, name: &str) {
+        if let Some(calendar) = self.calendars.get_mut(index) {
+            calendar.info.name = name.trim().to_owned();
+            self.save(index);
+        }
+    }
+
+    pub fn remove_calendar(&mut self, index: usize) {
+        if index >= self.calendars.len() {
+            return;
+        }
+        let calendar = self.calendars.remove(index);
+        if let Some(dir) = &self.dir
+            && let Err(error) = std::fs::remove_file(calendar_file(dir, &calendar.info.id))
+        {
+            tracing::warn!("cannot remove {}: {error}", calendar.info.name);
+        }
+    }
+
     pub fn remove_account(&mut self, id: &str) {
         if id == LOCAL_ACCOUNT {
             return;

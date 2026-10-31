@@ -33,36 +33,44 @@ impl Radicale {
         let users = storage.path().join("users");
         std::fs::write(&users, format!("{USER}:{PASSWORD}\nbob:builder\n"))
             .expect("an htpasswd file");
-        let port = free_port();
-        let child = Command::new("python3")
-            .args(["-m", "radicale", "--config", ""])
-            .arg("--server-hosts")
-            .arg(format!("127.0.0.1:{port}"))
-            .arg("--storage-filesystem-folder")
-            .arg(storage.path().join("collections"))
-            .args([
-                "--auth-type",
-                "htpasswd",
-                "--auth-htpasswd-encryption",
-                "plain",
-            ])
-            .arg("--auth-htpasswd-filename")
-            .arg(&users)
-            .args(["--rights-type", "owner_only", "--logging-level", "error"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("radicale (apt install radicale) to start");
-        let deadline = Instant::now() + Duration::from_secs(20);
-        while TcpStream::connect(("127.0.0.1", port)).is_err() {
-            assert!(Instant::now() < deadline, "radicale did not start");
-            std::thread::sleep(Duration::from_millis(50));
+        for _ in 0..10 {
+            let port = free_port();
+            let mut child = Command::new("python3")
+                .args(["-m", "radicale", "--config", ""])
+                .arg("--server-hosts")
+                .arg(format!("127.0.0.1:{port}"))
+                .arg("--storage-filesystem-folder")
+                .arg(storage.path().join("collections"))
+                .args([
+                    "--auth-type",
+                    "htpasswd",
+                    "--auth-htpasswd-encryption",
+                    "plain",
+                ])
+                .arg("--auth-htpasswd-filename")
+                .arg(&users)
+                .args(["--rights-type", "owner_only", "--logging-level", "error"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("radicale (apt install radicale) to start");
+            let deadline = Instant::now() + Duration::from_secs(20);
+            while TcpStream::connect(("127.0.0.1", port)).is_err()
+                && child.try_wait().ok().flatten().is_none()
+            {
+                assert!(Instant::now() < deadline, "radicale did not start");
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            std::thread::sleep(Duration::from_millis(300));
+            if child.try_wait().ok().flatten().is_none() {
+                return Self {
+                    child,
+                    url: format!("http://127.0.0.1:{port}/"),
+                    _storage: storage,
+                };
+            }
         }
-        Self {
-            child,
-            url: format!("http://127.0.0.1:{port}/"),
-            _storage: storage,
-        }
+        panic!("radicale did not start on a free port");
     }
 
     pub fn client(&self) -> Client {
