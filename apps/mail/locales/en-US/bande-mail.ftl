@@ -97,3 +97,6 @@ menu-toggle-flag = Flag or Unflag
 remove-title = Remove { $email }?
 remove-message = Mail forgets this account, its saved password and the copy of its mail on this computer. The mail on the server stays.
 button-remove = Remove
+compose-attach = Attach Files
+compose-attach-title = Attach Files
+compose-too-large = { $name } is larger than { $limit } and was not attached.

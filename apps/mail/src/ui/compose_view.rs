@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
@@ -8,16 +9,18 @@ use unbound_toolkit::ui::{
     PopUpButton, Size, TEXT_FIELD_HEIGHT, TextField, TextView, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
-    Appearance, Header, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextRole,
-    TextStyle, TextSystem,
+    Appearance, Header, Image, Item, Palette, Point, Radius, Rect, Scene, Shape, TextAlign,
+    TextRole, TextStyle, TextSystem,
 };
 
 use crate::L10N;
 use crate::compose::Draft;
-use crate::message::{Address, parse_addresses};
+use crate::message::{Address, Attachment, parse_addresses};
 use crate::store::MessageId;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::TOOLBAR_HEIGHT;
+
+static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
 
 pub const COMPOSE_SIZE: (u32, u32) = (720, 620);
 const MARGIN: f32 = 16.0;
@@ -28,10 +31,14 @@ const SYMBOL_PIXELS: u32 = 32;
 const TRAILING_INSET: f32 = 12.0;
 const TITLE_X: f32 = 120.0;
 const BODY_GAP: f32 = 10.0;
+const CHIP_HEIGHT: f32 = 26.0;
+const CHIP_PADDING: f32 = 10.0;
+const CHIP_GAP: f32 = 8.0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Signal {
     Send,
+    Attach,
     From(usize),
     Dismissed,
 }
@@ -40,6 +47,7 @@ pub struct ComposeView {
     ui: Ui,
     host: WidgetId,
     send: WidgetId,
+    attach: WidgetId,
     to: WidgetId,
     cc: WidgetId,
     subject: WidgetId,
@@ -54,11 +62,14 @@ pub struct ComposeView {
     size: (f32, f32),
     sent: Option<(Draft, Option<MessageId>)>,
     requests: Vec<ComposeRequest>,
+    chips: Vec<(Rect, usize)>,
+    token: u64,
     closed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ComposeRequest {
+    ChooseFiles,
     ShowMenu(Menu, Point),
     Clipboard(ClipboardRequest),
 }
@@ -97,6 +108,14 @@ impl ComposeView {
             None => Button::new(&L10N.tr("compose-send"), click),
         };
         let send = host.insert(send_button, Rect::default());
+        let attach_signal = Rc::clone(&signals);
+        let click = move || attach_signal.borrow_mut().push(Signal::Attach);
+        let attach_button =
+            match Image::from_svg(Symbol::Attachment.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
+                Some(image) => Button::symbol(image, &L10N.tr("compose-attach"), click),
+                None => Button::new(&L10N.tr("compose-attach"), click),
+            };
+        let attach = host.insert(attach_button, Rect::default());
         let field = |text: &str| TextField::new("", text, |_| {}).borderless(FIELD_FONT);
         let to = host.insert(field(&joined(&draft.to)), Rect::default());
         let cc = host.insert(field(&joined(&draft.cc)), Rect::default());
@@ -123,6 +142,7 @@ impl ComposeView {
             ui: Ui::new(Box::new(host), Context::new(text, palette)),
             host: host_id,
             send,
+            attach,
             to,
             cc,
             subject,
@@ -137,6 +157,8 @@ impl ComposeView {
             size: (0.0, 0.0),
             sent: None,
             requests: Vec::new(),
+            chips: Vec::new(),
+            token: NEXT_TOKEN.fetch_add(1, Ordering::Relaxed),
             closed: false,
         };
         let first = match view.draft.to.is_empty() {
@@ -172,15 +194,15 @@ impl ComposeView {
 
     fn frames(&self) -> Vec<(WidgetId, Rect)> {
         let (width, height) = self.size;
-        let mut frames = vec![(
-            self.send,
+        let button = |slot: f32| {
             Rect::new(
-                width - TRAILING_INSET - BUTTON_HEIGHT,
+                width - TRAILING_INSET - slot * BUTTON_HEIGHT,
                 ((TOOLBAR_HEIGHT - BUTTON_HEIGHT) / 2.0).round(),
                 BUTTON_HEIGHT,
                 BUTTON_HEIGHT,
-            ),
-        )];
+            )
+        };
+        let mut frames = vec![(self.send, button(1.0)), (self.attach, button(2.0))];
         let field_x = MARGIN + LABEL_WIDTH;
         let field_width = (width - field_x - MARGIN).max(40.0);
         let mut y = TOOLBAR_HEIGHT;
@@ -196,6 +218,9 @@ impl ComposeView {
                     TEXT_FIELD_HEIGHT,
                 ),
             ));
+            y += FIELD_ROW;
+        }
+        if !self.draft.attachments.is_empty() {
             y += FIELD_ROW;
         }
         frames.push((
@@ -216,7 +241,7 @@ impl ComposeView {
             items: self
                 .frames()
                 .into_iter()
-                .take(1)
+                .take(2)
                 .map(|(_, frame)| frame)
                 .collect(),
             tabs: Vec::new(),
@@ -262,6 +287,7 @@ impl ComposeView {
             });
             y += FIELD_ROW;
         }
+        self.paint_attachments(&mut items, y);
         items.extend(controls);
         items.extend(sheet);
         Scene {
@@ -270,6 +296,56 @@ impl ComposeView {
             background: palette.sheet,
             items,
         }
+    }
+
+    fn paint_attachments(&mut self, items: &mut Vec<Item>, y: f32) {
+        self.chips.clear();
+        let palette = self.palette;
+        let mut x = MARGIN + LABEL_WIDTH;
+        let chip_y = y + ((FIELD_ROW - CHIP_HEIGHT) / 2.0).round();
+        for (index, attachment) in self.draft.attachments.iter().enumerate() {
+            let label = format!(
+                "{}  {}  ×",
+                attachment.name,
+                unbound_fs::format_size(attachment.data.len() as u64)
+            );
+            let paragraph = self.ui.context().text.paragraph(
+                &label,
+                TextStyle::role(TextRole::Callout, palette.ink),
+                None,
+                TextAlign::Start,
+            );
+            let width = paragraph.width() + 2.0 * CHIP_PADDING;
+            if x + width > self.size.0 - MARGIN {
+                break;
+            }
+            let chip = Rect::new(x, chip_y, width, CHIP_HEIGHT);
+            items.push(Item::Fill {
+                shape: Shape::rounded(chip, Radius::S),
+                paint: palette.well.into(),
+            });
+            items.push(Item::Text {
+                origin: Point::new(
+                    chip.x + CHIP_PADDING,
+                    chip.y + ((CHIP_HEIGHT - paragraph.height()) / 2.0).round(),
+                ),
+                paragraph,
+            });
+            self.chips.push((chip, index));
+            x += width + CHIP_GAP;
+        }
+    }
+
+    pub fn token(&self) -> u64 {
+        self.token
+    }
+
+    pub fn add_attachments(&mut self, attachments: Vec<Attachment>) {
+        self.draft.attachments.extend(attachments);
+    }
+
+    pub fn attachments(&self) -> &[Attachment] {
+        &self.draft.attachments
     }
 
     fn field_text(&self, id: WidgetId) -> String {
@@ -334,6 +410,7 @@ impl ComposeView {
         for signal in signals {
             match signal {
                 Signal::Send => self.try_send(),
+                Signal::Attach => self.requests.push(ComposeRequest::ChooseFiles),
                 Signal::From(index) => self.sender = index,
                 Signal::Dismissed => {}
             }
@@ -354,6 +431,17 @@ impl ComposeView {
             && !self.ui.has_sheet()
         {
             self.try_send();
+            return true;
+        }
+        if let Event::PointerDown(pointer) = event
+            && !self.ui.has_sheet()
+            && let Some(index) = self
+                .chips
+                .iter()
+                .find(|(chip, _)| chip.contains(pointer.position))
+                .map(|(_, index)| *index)
+        {
+            self.draft.attachments.remove(index);
             return true;
         }
         let handled = self.ui.handle(event);

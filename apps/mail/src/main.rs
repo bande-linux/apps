@@ -1,5 +1,6 @@
 mod instance;
 mod menus;
+mod picker;
 
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
@@ -9,6 +10,7 @@ use std::time::Instant;
 use accesskit::TreeUpdate;
 use bande_mail::L10N;
 use bande_mail::compose::{Draft, from_mailto};
+use bande_mail::message::Attachment;
 use bande_mail::store::MessageId;
 use bande_mail::ui::{COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Request, SIDEBAR_WIDTH};
 use unbound_app_menu::{AppMenu, Standard};
@@ -21,6 +23,7 @@ use unbound_toolkit::{
 use unbound_xdg::{Apps, config_dirs, data_dirs, data_home};
 
 use crate::instance::Instance;
+use crate::picker::{MAX_ATTACHMENT, Picked, Picker};
 
 const APP_ID: &str = "org.bande.Mail";
 const WINDOW_SIZE: (u32, u32) = (1180, 720);
@@ -38,6 +41,7 @@ struct Mail {
     instance: Option<Instance>,
     focused: usize,
     apps: Option<Apps>,
+    picker: Picker,
 }
 
 fn store_path() -> PathBuf {
@@ -176,6 +180,48 @@ impl Mail {
         }
     }
 
+    fn attach(&mut self, token: u64, picked: Vec<Picked>) {
+        let mut attachments = Vec::new();
+        let mut refused = Vec::new();
+        for item in picked {
+            match item {
+                Picked::File(path, data) => {
+                    let mime = self.apps().mime_for(&path);
+                    let name = path
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "attachment".to_owned());
+                    attachments.push(Attachment { name, mime, data });
+                }
+                Picked::TooLarge(path) => refused.push(path),
+            }
+        }
+        let Some(index) = self
+            .screens
+            .iter()
+            .position(|screen| matches!(screen, Screen::Compose(view) if view.token() == token))
+        else {
+            return;
+        };
+        if let Screen::Compose(view) = &mut self.screens[index] {
+            view.add_attachments(attachments);
+            if let Some(path) = refused.first() {
+                let name = path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                view.show_error(&L10N.tr_args(
+                    "compose-too-large",
+                    [
+                        ("name", name.into()),
+                        ("limit", unbound_fs::format_size(MAX_ATTACHMENT).into()),
+                    ],
+                ));
+            }
+        }
+        self.refresh(index);
+    }
+
     fn serve_compose(&mut self, index: usize) {
         let Screen::Compose(view) = &mut self.screens[index] else {
             return;
@@ -183,9 +229,14 @@ impl Mail {
         let requests = view.take_requests();
         let sent = view.take_sent();
         let finished = view.finished();
+        let token = view.token();
         for request in requests {
             let window = &mut self.windows[index];
             let result = match request {
+                ComposeRequest::ChooseFiles => {
+                    self.picker.pick(token, L10N.tr("compose-attach-title"));
+                    Ok(())
+                }
                 ComposeRequest::ShowMenu(menu, at) => {
                     window.show_menu(menu, MenuPlacement::AtPoint(at))
                 }
@@ -419,6 +470,7 @@ impl Surfaces for Mail {
         }
         sources.extend(self.app_menu.as_ref().map(AppMenu::fd));
         sources.extend(self.instance.as_ref().map(Instance::fd));
+        sources.push(self.picker.fd());
         sources
     }
 
@@ -438,6 +490,10 @@ impl Surfaces for Mail {
             for action in actions {
                 let focused = self.focused.min(self.windows.len() - 1);
                 self.menu_action(focused, &action);
+            }
+        } else if index == menu + usize::from(self.instance.is_some()) {
+            for (token, picked) in self.picker.take() {
+                self.attach(token, picked);
             }
         } else {
             let opened = self
@@ -533,6 +589,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         instance,
         focused: 0,
         apps: None,
+        picker: Picker::new()?,
     };
     for argument in arguments {
         mail.open_argument(&argument);

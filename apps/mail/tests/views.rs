@@ -400,3 +400,54 @@ fn a_reply_opens_in_a_compose_window_with_the_quote() {
     assert_eq!(sent.to[0].email, "jorg@example.de");
     assert!(compose.finished());
 }
+
+#[test]
+fn attachments_added_to_a_message_can_be_removed_before_sending() {
+    use bande_mail::compose::Draft;
+    use bande_mail::message::{Address, Attachment};
+    use bande_mail::ui::{COMPOSE_SIZE, ComposeView};
+    let me = Address {
+        name: "Ann Lee".to_owned(),
+        email: "ann@example.com".to_owned(),
+    };
+    let draft = Draft {
+        from: me.clone(),
+        to: vec![Address {
+            name: String::new(),
+            email: "bob@example.com".to_owned(),
+        }],
+        subject: "Photos".to_owned(),
+        ..Draft::default()
+    };
+    let mut compose = ComposeView::new(
+        draft,
+        None,
+        vec![me],
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+    );
+    let file = |name: &str| Attachment {
+        name: name.to_owned(),
+        mime: "image/jpeg".to_owned(),
+        data: vec![0; 2048],
+    };
+    compose.add_attachments(vec![file("beach.jpg"), file("hills.jpg")]);
+    compose.scene(COMPOSE_SIZE.0, COMPOSE_SIZE.1);
+    let chip = Point::new(
+        90.0,
+        unbound_toolkit::WINDOW_HEADER_HEIGHT as f32 + 3.0 * 36.0 + 18.0,
+    );
+    compose.handle(&Event::PointerDown(Pointer::at(chip)));
+    assert_eq!(compose.attachments().len(), 1);
+    assert_eq!(compose.attachments()[0].name, "hills.jpg");
+    compose.handle(&Event::Key {
+        key: Key::Character('D'),
+        modifiers: Modifiers {
+            logo: true,
+            shift: true,
+            ..Modifiers::default()
+        },
+    });
+    let (sent, _) = compose.take_sent().unwrap();
+    assert_eq!(sent.attachments.len(), 1);
+}
