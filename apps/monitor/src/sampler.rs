@@ -100,6 +100,7 @@ pub struct Sampler {
     known: HashMap<u32, Known>,
     previous: Option<Previous>,
     proportional: bool,
+    disk: bool,
     gpu: bool,
     gpu_seen: bool,
     buffer: Vec<u8>,
@@ -146,6 +147,7 @@ impl Sampler {
             known: HashMap::new(),
             previous: None,
             proportional: false,
+            disk: false,
             gpu: false,
             gpu_seen: false,
             buffer: Vec::new(),
@@ -162,6 +164,10 @@ impl Sampler {
 
     pub fn measure_proportional_memory(&mut self, measure: bool) {
         self.proportional = measure;
+    }
+
+    pub fn measure_disk(&mut self, measure: bool) {
+        self.disk = measure;
     }
 
     pub fn measure_gpu(&mut self, measure: bool) {
@@ -236,7 +242,7 @@ impl Sampler {
             .then(|| read_gpu(&folder))
             .flatten();
         self.gpu_seen |= drm.is_some();
-        let io = reads_io
+        let io = (self.disk && reads_io)
             .then(|| self.read(&folder.join("io")).ok().and_then(parse_io))
             .flatten();
         let proportional = (self.proportional && reads_rollup)
@@ -270,7 +276,7 @@ impl Sampler {
         let cpu_percent = rate(stat.cpu_ticks, known.cpu_ticks, seconds) / ticks_per_second * 100.0;
         known.cpu_ticks = stat.cpu_ticks;
         known.io = io;
-        known.reads_io = io.is_some();
+        known.reads_io &= !self.disk || io.is_some();
         known.reads_rollup &= !self.proportional || proportional.is_some();
         Some(Process {
             pid,

@@ -168,6 +168,7 @@ fn disk_rates_count_bytes_since_the_last_sample() {
     fixture.spawn(&Task::default());
     fixture.set_io(100, 1_000_000, 0);
     let mut sampler = fixture.sampler();
+    sampler.measure_disk(true);
     let first = sampler.sample().expect("first sample");
     let rates = process(&first, 100).disk.expect("readable io");
     assert_eq!((rates.read_per_second, rates.read_total), (0.0, 1_000_000));
@@ -186,6 +187,24 @@ fn disk_rates_count_bytes_since_the_last_sample() {
         (2_000_000.0, 1_000_000.0)
     );
     assert_eq!(process(&second, 101).disk, None);
+}
+
+#[test]
+fn disk_counters_are_read_only_while_asked_for_and_rates_restart_from_zero() {
+    let fixture = Fixture::new();
+    fixture.spawn(&Task::default());
+    fixture.set_io(100, 1_000_000, 0);
+    let mut sampler = fixture.sampler();
+    let cheap = sampler.sample().expect("first sample");
+    assert_eq!(process(&cheap, 100).disk, None);
+
+    fixture.set_cpu(2, 0);
+    fixture.set_io(100, 5_000_000, 0);
+    sampler.measure_disk(true);
+    let measured = sampler.sample().expect("second sample");
+
+    let rates = process(&measured, 100).disk.expect("readable io");
+    assert_eq!((rates.read_per_second, rates.read_total), (0.0, 5_000_000));
 }
 
 #[test]

@@ -257,6 +257,13 @@ impl Column {
         matches!(self, Column::Gpu | Column::GpuTime | Column::GpuMemory)
     }
 
+    fn uses_disk(self) -> bool {
+        matches!(
+            self,
+            Column::Read | Column::Written | Column::ReadTotal | Column::WrittenTotal
+        )
+    }
+
     pub fn id(self) -> &'static str {
         match self {
             Column::Name => "name",
@@ -771,6 +778,10 @@ impl Monitor {
 
     pub fn measures_gpu(&self) -> bool {
         self.tab == Tab::Gpu || self.columns().iter().any(|column| column.uses_gpu())
+    }
+
+    pub fn measures_disk(&self) -> bool {
+        self.columns().iter().any(|column| column.uses_disk())
     }
 
     pub fn tabs(&self) -> Vec<Tab> {

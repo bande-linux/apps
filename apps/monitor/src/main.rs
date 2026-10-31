@@ -45,6 +45,8 @@ impl ActivityMonitor {
             .iter()
             .any(|screen| screen.measures_proportional_memory());
         self.sampler.measure_proportional_memory(proportional);
+        let disk = self.screens.iter().any(|screen| screen.measures_disk());
+        self.sampler.measure_disk(disk);
         let gpu = self.screens.iter().any(|screen| screen.measures_gpu());
         self.sampler.measure_gpu(gpu);
         match self.sampler.sample() {
@@ -354,6 +356,7 @@ fn icons() -> Icons {
 
 fn first_sample(sampler: &mut Sampler, screen: &mut impl Screen) -> Snapshot {
     sampler.measure_gpu(screen.measures_gpu());
+    sampler.measure_disk(screen.measures_disk());
     match sampler.sample() {
         Ok(snapshot) => {
             screen.update(snapshot.clone());
