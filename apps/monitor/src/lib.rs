@@ -1,4 +1,5 @@
 mod apps;
+mod asked;
 mod cpu;
 mod force_quit;
 mod format;
@@ -9,6 +10,7 @@ mod list;
 mod menu;
 mod model;
 mod monitor_view;
+mod power;
 mod proc;
 mod sampler;
 mod signal;
@@ -20,10 +22,11 @@ use std::sync::LazyLock;
 use unbound_l10n::Localizer;
 
 pub use apps::{AppInfo, Catalog, Group, GroupKey};
+pub use asked::Asked;
 pub use cpu::{CpuShare, read_cpu_ticks};
 pub use force_quit::ForceQuitView;
 pub use format::{format_bytes, format_cpu_time, format_rate};
-pub use inhibitors::{Inhibitor, Inhibitors, SleepBlocker, list_sleep_blockers, sleep_blockers};
+pub use inhibitors::{Inhibitor, SleepBlocker, list_sleep_blockers, sleep_blockers};
 pub use inspect::{Details, Mapping, OpenFile, Thread, read_details};
 pub use inspector::{INSPECTOR_SIZE, InspectorView, Section};
 pub use menu::{MenuCommand, Selected, app_menus, force_quit_menu, process_menu};
@@ -32,6 +35,7 @@ pub use model::{
     Tab, stop_all,
 };
 pub use monitor_view::{MonitorView, TOOLBAR_HEIGHT};
+pub use power::{BATTERY_HISTORY, BatteryReport, battery_reader};
 pub use sampler::{GpuUse, Identity, Interface, Operations, Process, Rates, Sampler, Snapshot};
 pub use signal::{SignalError, Stop, stop};
 pub use system::{InterfaceKind, Memory, Pressure, PressureLevel};
@@ -56,6 +60,7 @@ mod tests {
             include_str!("menu.rs"),
             include_str!("model.rs"),
             include_str!("monitor_view.rs"),
+            include_str!("power.rs"),
             include_str!("signal.rs"),
             include_str!("view.rs"),
         ];

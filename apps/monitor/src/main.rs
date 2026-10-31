@@ -7,9 +7,9 @@ use accesskit::TreeUpdate;
 
 use unbound_app_menu::{AppMenu, Entry, Standard};
 use unbound_monitor::{
-    AppList, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, Inhibitors, InspectorView, L10N,
-    Monitor, MonitorView, Request, Sampler, Screen, Snapshot, Stop, TOOLBAR_HEIGHT, Tab,
-    due_redraws, stop_all,
+    AppList, Asked, BatteryReport, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, InspectorView,
+    L10N, Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop,
+    TOOLBAR_HEIGHT, Tab, battery_reader, due_redraws, list_sleep_blockers, stop_all,
 };
 use unbound_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Role, Scene, Surfaces, TextSystem, Window,
@@ -38,7 +38,8 @@ struct ActivityMonitor {
     app_menu: Option<AppMenu>,
     published_menus: Option<Vec<Entry>>,
     focused: usize,
-    inhibitors: Option<Option<Inhibitors>>,
+    inhibitors: Option<Option<Asked<Vec<SleepBlocker>>>>,
+    battery: Option<Option<Asked<Option<BatteryReport>>>>,
 }
 
 impl ActivityMonitor {
@@ -58,6 +59,7 @@ impl ActivityMonitor {
             .screens
             .iter()
             .any(|screen| screen.measures_sleep_blockers());
+        let battery = self.screens.iter().any(|screen| screen.measures_battery());
         let watched = self
             .windows
             .iter()
@@ -72,6 +74,12 @@ impl ActivityMonitor {
                     && let Some(inhibitors) = self.inhibitors.get_or_insert_with(start_inhibitors)
                 {
                     snapshot.mark_sleep_blockers(&inhibitors.latest());
+                }
+                if battery
+                    && snapshot.battery
+                    && let Some(reader) = self.battery.get_or_insert_with(start_battery)
+                {
+                    snapshot.power = reader.latest();
                 }
                 for screen in &mut self.screens {
                     screen.update(snapshot.clone());
@@ -396,11 +404,24 @@ impl Surfaces for ActivityMonitor {
     }
 }
 
-fn start_inhibitors() -> Option<Inhibitors> {
+fn system_bus() -> Option<zbus::blocking::Connection> {
     zbus::blocking::Connection::system()
         .inspect_err(|error| tracing::warn!("cannot reach the system bus: {error}"))
         .ok()
-        .map(Inhibitors::start)
+}
+
+fn start_inhibitors() -> Option<Asked<Vec<SleepBlocker>>> {
+    system_bus().map(|bus| {
+        Asked::start(move || {
+            list_sleep_blockers(&bus)
+                .inspect_err(|error| tracing::debug!("cannot list inhibitors: {error}"))
+                .ok()
+        })
+    })
+}
+
+fn start_battery() -> Option<Asked<Option<BatteryReport>>> {
+    system_bus().map(|bus| Asked::start(battery_reader(bus)))
 }
 
 fn icons() -> Icons {
@@ -451,6 +472,7 @@ fn open(
         app_menu,
         focused: 0,
         inhibitors: None,
+        battery: None,
     };
     unbound_toolkit::run_surfaces(&mut app)
 }

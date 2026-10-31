@@ -235,6 +235,10 @@ pub trait Screen {
         false
     }
 
+    fn measures_battery(&self) -> bool {
+        false
+    }
+
     fn app_menus(&self) -> Option<Vec<Entry>> {
         None
     }

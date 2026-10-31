@@ -41,6 +41,7 @@ const GRAPH_MIN_WIDTH: f32 = 160.0;
 const GRAPH_SMALLEST_WIDTH: f32 = 96.0;
 const GRAPH_PAD: f32 = 6.0;
 const GRAPH_LABEL: f32 = 14.0;
+const CHARGING_BAND: f32 = 3.0;
 const SERIES_WIDTH: f32 = 1.5;
 const BAR_SLOT: usize = 2;
 const STRIP_HEIGHT: f32 = 28.0;
@@ -868,6 +869,53 @@ fn paint_series(
     });
 }
 
+fn paint_battery(
+    painter: &mut Painter,
+    charge: &[(f32, f32)],
+    charging: &[(f32, f32)],
+    plot: Rect,
+    palette: Palette,
+) {
+    let bottom = plot.y + plot.height;
+    let points: Vec<Point> = charge
+        .iter()
+        .map(|(along, level)| {
+            Point::new(
+                plot.x + along * plot.width,
+                bottom - level.clamp(0.0, 1.0) * plot.height,
+            )
+        })
+        .collect();
+    if let (Some(path), Some(first), Some(last)) =
+        (polyline(&points), points.first(), points.last())
+    {
+        painter.items.push(Item::FillPath {
+            path: path
+                .clone()
+                .line_to(Point::new(last.x, bottom))
+                .line_to(Point::new(first.x, bottom))
+                .close(),
+            paint: palette.accent_soft.into(),
+        });
+        painter.items.push(Item::StrokePath {
+            path,
+            width: SERIES_WIDTH,
+            paint: palette.accent.into(),
+        });
+    }
+    for (from, to) in charging {
+        painter.fill(
+            Shape::rect(Rect::new(
+                plot.x + from * plot.width,
+                bottom - CHARGING_BAND,
+                (to - from) * plot.width,
+                CHARGING_BAND,
+            )),
+            palette.success,
+        );
+    }
+}
+
 fn pressure_color(level: PressureLevel, palette: Palette) -> Color {
     match level {
         PressureLevel::Normal => palette.success,
@@ -914,6 +962,10 @@ fn paint_graph(monitor: &Monitor, palette: Palette, painter: &mut Painter, frame
     let plot = Rect::new(frame.x, frame.y + 1.0, frame.width, frame.height - 1.0);
     let graph_kind = monitor.graph();
     let is_scale = matches!(graph_kind, Graph::Lines { .. });
+    let span = match graph_kind {
+        Graph::Battery { .. } => L10N.tr("graph-battery-span"),
+        _ => L10N.tr("graph-span"),
+    };
     let title = match graph_kind {
         Graph::Lines {
             primary,
@@ -935,6 +987,10 @@ fn paint_graph(monitor: &Monitor, palette: Palette, painter: &mut Painter, frame
         Graph::Pressure(samples) => {
             paint_pressure(&mut graph, &samples, plot, palette);
             L10N.tr("graph-pressure")
+        }
+        Graph::Battery { charge, charging } => {
+            paint_battery(&mut graph, &charge, &charging, plot, palette);
+            L10N.tr("graph-battery")
         }
     };
     let label = readout_label(palette);
@@ -961,7 +1017,7 @@ fn paint_graph(monitor: &Monitor, palette: Palette, painter: &mut Painter, frame
         TextAlign::Start,
     );
     graph.text_in(
-        &L10N.tr("graph-span"),
+        &span,
         label,
         corner(frame.y + frame.height - GRAPH_PAD - GRAPH_LABEL),
         TextAlign::Start,
@@ -1377,6 +1433,10 @@ impl Screen for MonitorView {
 
     fn measures_sleep_blockers(&self) -> bool {
         self.monitor.measures_sleep_blockers()
+    }
+
+    fn measures_battery(&self) -> bool {
+        self.monitor.measures_battery()
     }
 
     fn finished(&self) -> bool {

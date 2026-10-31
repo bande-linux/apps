@@ -4,7 +4,11 @@ use std::path::PathBuf;
 
 use crate::L10N;
 use crate::apps::{Catalog, Group, GroupKey};
-use crate::format::{format_bytes, format_cpu_time, format_percent, format_rate};
+use unbound_status::history::{charging_spans, time_on_battery};
+use unbound_status::status::Power;
+
+use crate::format::{format_bytes, format_cpu_time, format_hours, format_percent, format_rate};
+use crate::power::{BATTERY_HISTORY, BatteryReport};
 use crate::sampler::{Process, Snapshot};
 use crate::signal::{SignalError, Stop, stop};
 use crate::system::PressureLevel;
@@ -76,6 +80,10 @@ pub enum Graph {
         scale: String,
     },
     Pressure(Vec<(f32, PressureLevel)>),
+    Battery {
+        charge: Vec<(f32, f32)>,
+        charging: Vec<(f32, f32)>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -656,6 +664,7 @@ pub struct Monitor {
     filter: Filter,
     impacts: HashMap<(u32, u64), VecDeque<f64>>,
     energy: VecDeque<(f64, f64)>,
+    power: Option<BatteryReport>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -732,6 +741,7 @@ impl Monitor {
             filter: Filter::All,
             impacts: HashMap::new(),
             energy: VecDeque::new(),
+            power: None,
         }
     }
 
@@ -760,7 +770,7 @@ impl Monitor {
             .processes
             .iter()
             .filter_map(|process| process.wakeups)
-            .sum();
+            .fold(0.0, |total, wakeups| total + wakeups);
         push_limited(&mut self.energy, (total, wakeups));
     }
 
@@ -794,6 +804,11 @@ impl Monitor {
                     .map(|core| core.user + core.system)
                     .collect(),
             );
+        }
+        match (snapshot.battery, &snapshot.power) {
+            (false, _) => self.power = None,
+            (true, Some(report)) => self.power = Some(report.clone()),
+            (true, None) => {}
         }
         self.snapshot = snapshot;
         self.rebuild();
@@ -961,6 +976,10 @@ impl Monitor {
 
     pub fn measures_sleep_blockers(&self) -> bool {
         self.columns().contains(&Column::PreventingSleep)
+    }
+
+    pub fn measures_battery(&self) -> bool {
+        self.tab == Tab::Energy
     }
 
     pub fn measures_disk(&self) -> bool {
@@ -1211,24 +1230,27 @@ impl Monitor {
                 scale: full(),
             },
             Tab::Memory => Graph::Pressure(self.memory.iter().copied().collect()),
-            Tab::Energy => {
-                let peak = self
-                    .energy
-                    .iter()
-                    .fold(0.0, |peak: f64, (impact, _)| peak.max(*impact));
-                Graph::Lines {
-                    primary: self
+            Tab::Energy => match self.battery_history() {
+                Some(report) => battery_graph(report),
+                None => {
+                    let peak = self
                         .energy
                         .iter()
-                        .map(|(impact, _)| match peak > 0.0 {
-                            true => (impact / peak) as f32,
-                            false => 0.0,
-                        })
-                        .collect(),
-                    secondary: None,
-                    scale: format_percent(peak),
+                        .fold(0.0, |peak: f64, (impact, _)| peak.max(*impact));
+                    Graph::Lines {
+                        primary: self
+                            .energy
+                            .iter()
+                            .map(|(impact, _)| match peak > 0.0 {
+                                true => (impact / peak) as f32,
+                                false => 0.0,
+                            })
+                            .collect(),
+                        secondary: None,
+                        scale: format_percent(peak),
+                    }
                 }
-            }
+            },
             Tab::Disk => rates_graph(&self.disk),
             Tab::Network => rates_graph(&self.network),
             Tab::Gpu => Graph::Lines {
@@ -1341,13 +1363,19 @@ impl Monitor {
                     ],
                 )
             }
-            Tab::Energy => L10N.tr_args(
-                "graph-energy",
-                [(
-                    "impact",
-                    format_percent(self.energy.back().map_or(0.0, |(impact, _)| *impact)).into(),
-                )],
-            ),
+            Tab::Energy => {
+                let impact = format_percent(self.energy.back().map_or(0.0, |(impact, _)| *impact));
+                match self.power.as_ref().and_then(|report| report.battery) {
+                    Some(battery) => L10N.tr_args(
+                        "graph-battery-charge",
+                        [
+                            ("charge", format!("{:.0}", battery.percent).into()),
+                            ("impact", impact.into()),
+                        ],
+                    ),
+                    None => L10N.tr_args("graph-energy", [("impact", impact.into())]),
+                }
+            }
             Tab::Disk => L10N.tr_args(
                 "graph-disk",
                 [
@@ -1411,10 +1439,12 @@ impl Monitor {
             }
             Tab::Energy => {
                 let (impact, wakeups) = self.energy.back().copied().unwrap_or((0.0, 0.0));
-                vec![
+                let mut readouts = vec![
                     (L10N.tr("summary-energy-impact"), format_percent(impact)),
                     (L10N.tr("summary-wakeups"), format!("{wakeups:.0}")),
-                ]
+                ];
+                readouts.extend(self.battery_readouts());
+                readouts
             }
             Tab::Disk => vec![
                 (
@@ -1515,6 +1545,73 @@ fn network_rates(snapshot: &Snapshot) -> (f64, f64) {
                 sent + interface.sent_per_second,
             )
         })
+}
+
+impl Monitor {
+    fn battery_history(&self) -> Option<&BatteryReport> {
+        self.power
+            .as_ref()
+            .filter(|report| !report.history.is_empty())
+    }
+
+    fn battery_readouts(&self) -> Vec<(String, String)> {
+        let Some(report) = &self.power else {
+            return Vec::new();
+        };
+        let Some(battery) = report.battery else {
+            return Vec::new();
+        };
+        let hours = |duration: Option<std::time::Duration>| {
+            duration.map_or(MISSING.to_owned(), |duration| {
+                format_hours(duration.as_secs())
+            })
+        };
+        let time = match battery.power {
+            Power::Battery { remaining } => (L10N.tr("summary-time-remaining"), hours(remaining)),
+            Power::Charging { until_full } => {
+                (L10N.tr("summary-time-until-full"), hours(until_full))
+            }
+            Power::Full => (L10N.tr("summary-time-until-full"), MISSING.to_owned()),
+        };
+        let on_battery = match battery.power {
+            Power::Battery { .. } => time_on_battery(&report.history, report.now)
+                .map_or(MISSING.to_owned(), |seconds| {
+                    format_hours(u64::from(seconds))
+                }),
+            _ => MISSING.to_owned(),
+        };
+        vec![
+            (
+                L10N.tr("summary-remaining-charge"),
+                format!("{:.0} %", battery.percent),
+            ),
+            time,
+            (L10N.tr("summary-time-on-battery"), on_battery),
+        ]
+    }
+}
+
+fn battery_graph(report: &BatteryReport) -> Graph {
+    let start = report.now.saturating_sub(BATTERY_HISTORY);
+    let along =
+        |at: u32| (at.saturating_sub(start) as f32 / BATTERY_HISTORY as f32).clamp(0.0, 1.0);
+    Graph::Battery {
+        charge: report
+            .history
+            .iter()
+            .map(|sample| {
+                (
+                    along(sample.at),
+                    (sample.percent / 100.0).clamp(0.0, 1.0) as f32,
+                )
+            })
+            .collect(),
+        charging: charging_spans(&report.history, report.now)
+            .into_iter()
+            .map(|(from, to)| (along(from), along(to)))
+            .filter(|(from, to)| to > from)
+            .collect(),
+    }
 }
 
 fn rates_graph(history: &VecDeque<(f64, f64)>) -> Graph {
