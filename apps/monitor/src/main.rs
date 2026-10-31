@@ -201,12 +201,7 @@ impl ActivityMonitor {
 }
 
 fn state_file() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").map(PathBuf::from)?;
-    let state = std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .unwrap_or_else(|| home.join(".local/state"));
-    Some(state.join("unbound/monitor"))
+    unbound_xdg::state_home().map(|state| state.join("unbound/monitor"))
 }
 
 fn save_state(text: &str) {
