@@ -8,18 +8,18 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
+use bande_app_menu::{AppMenu, Standard};
 use bande_mail::L10N;
 use bande_mail::compose::{Outgoing, from_mailto};
 use bande_mail::message::Attachment;
 use bande_mail::ui::{COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Request, SIDEBAR_WIDTH};
-use unbound_app_menu::{AppMenu, Standard};
-use unbound_notify::Urgency;
-use unbound_notify::client::{Request as Notification, notify};
-use unbound_toolkit::{
+use bande_notify::Urgency;
+use bande_notify::client::{Request as Notification, notify};
+use bande_toolkit::{
     Appearance, FrameRegions, MenuPlacement, Rect, Role, Scene, Surfaces, TextSystem, Window,
     WindowEvent,
 };
-use unbound_xdg::{Apps, config_dirs, data_dirs, data_home};
+use bande_xdg::{Apps, config_dirs, data_dirs, data_home};
 
 use crate::instance::Instance;
 use crate::picker::{MAX_ATTACHMENT, Picked, Picker};
@@ -149,7 +149,7 @@ impl Mail {
         match entry {
             Some(entry) => {
                 if let Err(error) =
-                    unbound_xdg::launch_with_arguments(&entry, &[url.to_owned()], token.as_deref())
+                    bande_xdg::launch_with_arguments(&entry, &[url.to_owned()], token.as_deref())
                 {
                     tracing::warn!("cannot open {url}: {error}");
                 }
@@ -164,7 +164,7 @@ impl Mail {
         match entry {
             Some(entry) => {
                 if let Err(error) =
-                    unbound_xdg::launch_with(&entry, &[path.to_path_buf()], token.as_deref())
+                    bande_xdg::launch_with(&entry, &[path.to_path_buf()], token.as_deref())
                 {
                     tracing::warn!("cannot open {}: {error}", path.display());
                 }
@@ -207,7 +207,7 @@ impl Mail {
                     "compose-too-large",
                     [
                         ("name", name.into()),
-                        ("limit", unbound_fs::format_size(MAX_ATTACHMENT).into()),
+                        ("limit", bande_fs::format_size(MAX_ATTACHMENT).into()),
                     ],
                 ));
             }
@@ -604,7 +604,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         mail.open_argument(&argument);
     }
     mail.serve(0);
-    let ran = unbound_toolkit::run_surfaces(&mut mail);
+    let ran = bande_toolkit::run_surfaces(&mut mail);
     if let Some(view) = mail.main_view() {
         view.finish();
     }
@@ -613,7 +613,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("bande-mail");
+    bande_log::init("bande-mail");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

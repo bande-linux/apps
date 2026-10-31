@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use unbound_toolkit::{Color, Image};
+use bande_toolkit::{Color, Image};
 
 use crate::imap::Role;
 

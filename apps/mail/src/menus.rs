@@ -1,6 +1,6 @@
+use bande_app_menu::{Entry, app_submenu, close_window, window_submenu};
 use bande_mail::L10N;
 use bande_mail::ui::MailView;
-use unbound_app_menu::{Entry, app_submenu, close_window, window_submenu};
 
 fn item(message: &str, action: &str, shortcut: &str) -> Entry {
     let entry = Entry::item(&L10N.tr(message), action);

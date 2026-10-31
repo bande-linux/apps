@@ -4,11 +4,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Alert, BUTTON_HEIGHT, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu,
     PopUpButton, Size, TEXT_FIELD_HEIGHT, TextField, TextView, Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Header, Image, Item, Palette, Point, Radius, Rect, Scene, Shape, TextAlign,
     TextRole, TextStyle, TextSystem,
 };
@@ -316,7 +316,7 @@ impl ComposeView {
             let label = format!(
                 "{}  {}  ×",
                 attachment.name,
-                unbound_fs::format_size(attachment.data.len() as u64)
+                bande_fs::format_size(attachment.data.len() as u64)
             );
             let paragraph = self.ui.context().text.paragraph(
                 &label,

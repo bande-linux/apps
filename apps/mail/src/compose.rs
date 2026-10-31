@@ -117,7 +117,7 @@ pub fn forward(original: &Content, me: &Address, heading: &str) -> Draft {
 }
 
 fn decoded(text: &str) -> String {
-    unbound_xdg::percent_decode(&text.replace('+', "%2B"))
+    bande_xdg::percent_decode(&text.replace('+', "%2B"))
         .to_string_lossy()
         .into_owned()
 }

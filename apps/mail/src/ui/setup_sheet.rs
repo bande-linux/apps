@@ -2,10 +2,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Node, Role};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Button, Context, SPINNER_SIZE, SecureField, Size, Spinner, TextField, Widget, WidgetId,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     ControlSize, Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle,
 };
 use zeroize::Zeroizing;

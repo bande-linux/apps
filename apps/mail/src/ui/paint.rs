@@ -1,8 +1,8 @@
-use jiff::Timestamp;
-use unbound_toolkit::ui::{Scroll, Size};
-use unbound_toolkit::{
+use bande_toolkit::ui::{Scroll, Size};
+use bande_toolkit::{
     Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
 };
+use jiff::Timestamp;
 
 use crate::L10N;
 use crate::store::Summary;
@@ -141,7 +141,7 @@ impl MailView {
         items: &mut Vec<Item>,
         symbol: Symbol,
         rect: Rect,
-        color: unbound_toolkit::Color,
+        color: bande_toolkit::Color,
     ) {
         if let Some(image) = self.symbols.get(symbol, ICON_PIXELS, color) {
             items.push(Item::Image { rect, image });

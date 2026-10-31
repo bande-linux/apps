@@ -19,7 +19,7 @@ pub mod worker;
 
 use std::sync::LazyLock;
 
-use unbound_l10n::Localizer;
+use bande_l10n::Localizer;
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-mail.ftl");
 
@@ -40,7 +40,7 @@ mod tests {
             include_str!("ui/view.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

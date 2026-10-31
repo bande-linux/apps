@@ -46,6 +46,6 @@ pub fn choose_files(title: &str) -> zbus::Result<Vec<PathBuf>> {
         .unwrap_or_default();
     Ok(uris
         .iter()
-        .filter_map(|uri| unbound_xdg::path_from_file_uri(uri))
+        .filter_map(|uri| bande_xdg::path_from_file_uri(uri))
         .collect())
 }

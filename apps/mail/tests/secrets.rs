@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use bande_mail::secrets::Keyring;
-use unbound_test_bus::SessionBus;
+use bande_test_bus::SessionBus;
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 

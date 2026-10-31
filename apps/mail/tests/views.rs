@@ -6,12 +6,10 @@ use bande_mail::imap::{Fetched, Flags, Folder, Role};
 use bande_mail::net::{Security, Server};
 use bande_mail::store::{Account, Store};
 use bande_mail::ui::{MailView, Mode, Place, Request, SIDEBAR_WIDTH};
+use bande_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
+use bande_toolkit::{CpuRenderer, FrameRegions, Palette, Point, Scheme, TextSystem, framed_scene};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
-use unbound_toolkit::{
-    CpuRenderer, FrameRegions, Palette, Point, Scheme, TextSystem, framed_scene,
-};
 
 const SIZE: (u32, u32) = (1180, 680);
 
@@ -186,7 +184,7 @@ fn shoot(name: &str, view: &mut MailView) {
             &palette,
         );
         let frame = CpuRenderer::new().render(&scene).expect("render");
-        unbound_golden::assert_golden_rgba!(&format!("{name}{suffix}"), SIZE, frame.rgba);
+        bande_golden::assert_golden_rgba!(&format!("{name}{suffix}"), SIZE, frame.rgba);
     }
 }
 
@@ -379,7 +377,7 @@ fn a_reply_opens_in_a_compose_window_with_the_quote() {
             &palette,
         );
         let frame = CpuRenderer::new().render(&scene).expect("render");
-        unbound_golden::assert_golden_rgba!(
+        bande_golden::assert_golden_rgba!(
             &format!("compose-reply{suffix}"),
             COMPOSE_SIZE,
             frame.rgba
@@ -435,7 +433,7 @@ fn attachments_added_to_a_message_can_be_removed_before_sending() {
     compose.scene(COMPOSE_SIZE.0, COMPOSE_SIZE.1);
     let chip = Point::new(
         90.0,
-        unbound_toolkit::WINDOW_HEADER_HEIGHT as f32 + 3.0 * 36.0 + 18.0,
+        bande_toolkit::WINDOW_HEADER_HEIGHT as f32 + 3.0 * 36.0 + 18.0,
     );
     compose.handle(&Event::PointerDown(Pointer::at(chip)));
     assert_eq!(compose.attachments().len(), 1);

@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, FreeLayout, SearchField, TEXT_FIELD_HEIGHT, WidgetId,
 };
-use unbound_toolkit::{Header, Image, Point, Rect};
+use bande_toolkit::{Header, Image, Point, Rect};
 
 use crate::L10N;
 use crate::imap::Role;

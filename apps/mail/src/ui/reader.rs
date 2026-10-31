@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use jiff::tz::TimeZone;
-use unbound_toolkit::{
+use bande_toolkit::{
     Image, Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle, TextSystem,
 };
+use jiff::tz::TimeZone;
 
 use crate::L10N;
 use crate::html::{BlockKind, Document};
@@ -232,7 +232,7 @@ fn banner(writer: &mut Writer<'_>, symbols: &mut Symbols, message: &str, action:
     let palette = *writer.palette;
     let frame = Rect::new(MARGIN, writer.y, writer.width - 2.0 * MARGIN, BANNER_HEIGHT);
     writer.layout.items.push(Item::Fill {
-        shape: Shape::rounded(frame, unbound_toolkit::Radius::S),
+        shape: Shape::rounded(frame, bande_toolkit::Radius::S),
         paint: palette.well.into(),
     });
     if let Some(image) = symbols.get(Symbol::Remote, SYMBOL_PIXELS, palette.ink2) {
@@ -389,7 +389,7 @@ fn attachments(writer: &mut Writer<'_>, symbols: &mut Symbols, reading: &Reading
         let label = format!(
             "{}  {}",
             attachment.name,
-            unbound_fs::format_size(attachment.data.len() as u64)
+            bande_fs::format_size(attachment.data.len() as u64)
         );
         let paragraph = writer.text.paragraph(
             &label,
@@ -404,7 +404,7 @@ fn attachments(writer: &mut Writer<'_>, symbols: &mut Symbols, reading: &Reading
         }
         let chip = Rect::new(x, writer.y, width, CHIP_HEIGHT);
         writer.layout.items.push(Item::Fill {
-            shape: Shape::rounded(chip, unbound_toolkit::Radius::S),
+            shape: Shape::rounded(chip, bande_toolkit::Radius::S),
             paint: palette.well.into(),
         });
         if let Some(image) = symbols.get(Symbol::Attachment, SYMBOL_PIXELS, palette.ink2) {

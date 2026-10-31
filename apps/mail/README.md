@@ -79,10 +79,10 @@ cargo test
   `/usr/sbin/dovecot` is not installed, so CI runs only the fake server.
 - `tests/secrets.rs` checks the keyring code against a fake Secret Service on a private bus.
 - `tests/views.rs` checks the window, the reader, the account sheet and their golden screenshots
-  in light and dark, with the desktop's golden harness (`UNBOUND_UPDATE_GOLDENS=1` rewrites
+  in light and dark, with the desktop's golden harness (`BANDE_UPDATE_GOLDENS=1` rewrites
   them).
 
-The toolkit comes from the desktop through a path dependency for now (`unbound-*` crates in
+The toolkit comes from the desktop through a path dependency for now (`bande-*` crates in
 `~/unbound-linux/repos/desktop`); it moves to a git dependency on `bande-linux/desktop` once
 that is published.
 

@@ -311,10 +311,119 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
+name = "bande-app-menu"
+version = "0.1.0"
+dependencies = [
+ "bande-inbox",
+ "bande-l10n",
+ "zbus",
+]
+
+[[package]]
+name = "bande-bus"
+version = "0.1.0"
+dependencies = [
+ "zbus",
+]
+
+[[package]]
+name = "bande-datetime"
+version = "0.1.0"
+dependencies = [
+ "icu_calendar",
+ "icu_datetime",
+ "icu_locale_core",
+ "jiff",
+ "rustix",
+ "zbus",
+]
+
+[[package]]
+name = "bande-design"
+version = "0.1.0"
+
+[[package]]
+name = "bande-fs"
+version = "0.1.0"
+dependencies = [
+ "bande-datetime",
+ "bande-l10n",
+ "bande-xdg",
+ "bzip2",
+ "flate2",
+ "jiff",
+ "lzma-rust2",
+ "rustix",
+ "ruzstd",
+ "tar",
+ "zip",
+]
+
+[[package]]
+name = "bande-golden"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "image-compare",
+]
+
+[[package]]
+name = "bande-graphics"
+version = "0.1.0"
+dependencies = [
+ "bande-design",
+ "fontique",
+ "image",
+ "parley",
+ "pollster",
+ "resvg",
+ "skrifa",
+ "tracing",
+ "vello_cpu",
+ "vello_gpu",
+ "wgpu",
+]
+
+[[package]]
+name = "bande-inbox"
+version = "0.1.0"
+dependencies = [
+ "rustix",
+]
+
+[[package]]
+name = "bande-l10n"
+version = "0.1.0"
+dependencies = [
+ "fluent-bundle",
+ "tracing",
+ "unic-langid",
+]
+
+[[package]]
+name = "bande-log"
+version = "0.1.0"
+dependencies = [
+ "rustix",
+ "tracing",
+ "tracing-journald",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "bande-mail"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-app-menu",
+ "bande-fs",
+ "bande-golden",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-test-bus",
+ "bande-toolkit",
+ "bande-xdg",
  "data-encoding",
  "html5ever",
  "image",
@@ -326,17 +435,106 @@ dependencies = [
  "rustix",
  "tempfile",
  "tracing",
- "unbound-app-menu",
- "unbound-fs",
- "unbound-golden",
- "unbound-l10n",
- "unbound-log",
- "unbound-notify",
- "unbound-test-bus",
- "unbound-toolkit",
- "unbound-xdg",
  "zbus",
  "zeroize",
+]
+
+[[package]]
+name = "bande-notify"
+version = "0.1.0"
+dependencies = [
+ "bande-bus",
+ "bande-log",
+ "bande-sound",
+ "rustix",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-protocols"
+version = "0.1.0"
+dependencies = [
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-scanner",
+]
+
+[[package]]
+name = "bande-sound"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-spring"
+version = "0.1.0"
+
+[[package]]
+name = "bande-test-bus"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "zbus",
+]
+
+[[package]]
+name = "bande-toolkit"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-graphics",
+ "bande-toolkit-platform",
+ "bande-widgets",
+]
+
+[[package]]
+name = "bande-toolkit-platform"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "accesskit_unix",
+ "bande-bus",
+ "bande-graphics",
+ "bande-l10n",
+ "bande-protocols",
+ "bande-widgets",
+ "raw-window-handle",
+ "rustix",
+ "tracing",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-wlr",
+ "wgpu",
+ "xkbcommon",
+ "zbus",
+]
+
+[[package]]
+name = "bande-widgets"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-graphics",
+ "bande-l10n",
+ "bande-spring",
+ "parley",
+ "zeroize",
+]
+
+[[package]]
+name = "bande-xdg"
+version = "0.1.0"
+dependencies = [
+ "bande-l10n",
+ "bande-notify",
+ "rustix",
+ "tracing",
+ "zbus",
 ]
 
 [[package]]
@@ -460,6 +658,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "calendrical_calculations"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5abbd6eeda6885048d357edc66748eea6e0268e3dd11f326fff5bd248d779c26"
+dependencies = [
+ "core_maths",
+ "displaydoc",
+]
+
+[[package]]
 name = "cc"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -560,6 +768,15 @@ name = "core_detect"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f8f80099a98041a3d1622845c271458a2d73e688351bf3cb999266764b81d48"
+
+[[package]]
+name = "core_maths"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77745e017f5edba1a9c1d854f6f3a52dac8a12dd5af5d2f54aecf61e43d80d30"
+dependencies = [
+ "libm",
+]
 
 [[package]]
 name = "cpufeatures"
@@ -921,6 +1138,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
+name = "fixed_decimal"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2214fb00f669ee96bee5bb29dfb1ddabe058b2bc426817efc79afa03c9bc55ae"
+dependencies = [
+ "displaydoc",
+ "smallvec",
+ "writeable",
+]
+
+[[package]]
 name = "fixedbitset"
 version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1249,6 +1477,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "icu_calendar"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a68ffb801cc7acb8dcae62da7c692c47934698d2dd4f479ddee1eb442763dea1"
+dependencies = [
+ "calendrical_calculations",
+ "displaydoc",
+ "icu_calendar_data",
+ "icu_locale_core",
+ "icu_locale_fallback",
+ "icu_provider",
+ "ixdtf",
+ "tinystr",
+ "zerovec",
+]
+
+[[package]]
+name = "icu_calendar_data"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "514da54e79efa36b5976232d5b3d1d8ee1b47b19ab658f1b1ebe39221696c2d8"
+
+[[package]]
 name = "icu_collections"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1261,6 +1512,58 @@ dependencies = [
  "zerofrom",
  "zerovec",
 ]
+
+[[package]]
+name = "icu_datetime"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c338aa7ebff734470e216a4196fa84b123a366cc786c445741b6f5647412c3c"
+dependencies = [
+ "displaydoc",
+ "fixed_decimal",
+ "icu_calendar",
+ "icu_datetime_data",
+ "icu_decimal",
+ "icu_locale_core",
+ "icu_locale_fallback",
+ "icu_pattern",
+ "icu_plurals",
+ "icu_provider",
+ "icu_time",
+ "potential_utf",
+ "tinystr",
+ "writeable",
+ "zerovec",
+]
+
+[[package]]
+name = "icu_datetime_data"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bddb757c2df1635453c4e8cb2d4ba7ad026e904893f29699315826c0951bbd9"
+
+[[package]]
+name = "icu_decimal"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1150ad5e272740670464934ee76facda43ef2e11f85c27b7ba76ccb33edf2d05"
+dependencies = [
+ "displaydoc",
+ "fixed_decimal",
+ "icu_decimal_data",
+ "icu_locale_core",
+ "icu_locale_fallback",
+ "icu_plurals",
+ "icu_provider",
+ "writeable",
+ "zerovec",
+]
+
+[[package]]
+name = "icu_decimal_data"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5595ab78370d48abd24a062f3db115d5108dd0b65634352036cae532aebb0df8"
 
 [[package]]
 name = "icu_locale_core"
@@ -1315,6 +1618,38 @@ name = "icu_normalizer_data"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20f0088bfb7441f7a37fa0c9e20cb1e9cba1cac6b9ce8cd2a6dc44294f8e8cbc"
+
+[[package]]
+name = "icu_pattern"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc43ce0e76ee8cb0482dc6e2dbb9b76278e8038f45daabf2a2877577e2ceb18f"
+dependencies = [
+ "displaydoc",
+ "either",
+ "serde",
+ "writeable",
+ "zerovec",
+]
+
+[[package]]
+name = "icu_plurals"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ef046647b445acf95ce0f8083fa292467d3df649959fa9a20f3f8abfd957c5d"
+dependencies = [
+ "fixed_decimal",
+ "icu_locale_fallback",
+ "icu_plurals_data",
+ "icu_provider",
+ "zerovec",
+]
+
+[[package]]
+name = "icu_plurals_data"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d43ff7df2c1a1d41588a6ddcba354d513d4a3e10eec22c06fe56d13c12a848ea"
 
 [[package]]
 name = "icu_properties"
@@ -1376,6 +1711,31 @@ name = "icu_segmenter_data"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "913a7d294ad056474749152107309fdee3ec17d2482d1ab70fdc61a81c64b9a3"
+
+[[package]]
+name = "icu_time"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17d45ee651f21433b1c6352311f2ad9b5253c26be0e25d9a0869cb8247b8cfde"
+dependencies = [
+ "calendrical_calculations",
+ "displaydoc",
+ "icu_calendar",
+ "icu_locale_core",
+ "icu_provider",
+ "icu_time_data",
+ "ixdtf",
+ "serde",
+ "writeable",
+ "zerotrie",
+ "zerovec",
+]
+
+[[package]]
+name = "icu_time_data"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6d7d711f44237fa9300406ab6e521148594056862343370b5df265a0d15c088"
 
 [[package]]
 name = "image"
@@ -1449,6 +1809,12 @@ checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
 dependencies = [
  "either",
 ]
+
+[[package]]
+name = "ixdtf"
+version = "0.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4754a1731458af0443709c9667302793d3f63cc90ec4ba4c8259f2b9515478e5"
 
 [[package]]
 name = "jiff"
@@ -3181,191 +3547,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-app-menu"
-version = "0.1.0"
-dependencies = [
- "unbound-inbox",
- "unbound-l10n",
- "zbus",
-]
-
-[[package]]
-name = "unbound-bus"
-version = "0.1.0"
-dependencies = [
- "zbus",
-]
-
-[[package]]
-name = "unbound-design"
-version = "0.1.0"
-
-[[package]]
-name = "unbound-fs"
-version = "0.1.0"
-dependencies = [
- "bzip2",
- "flate2",
- "jiff",
- "lzma-rust2",
- "rustix",
- "ruzstd",
- "tar",
- "unbound-l10n",
- "unbound-xdg",
- "zip",
-]
-
-[[package]]
-name = "unbound-golden"
-version = "0.1.0"
-dependencies = [
- "image",
- "image-compare",
-]
-
-[[package]]
-name = "unbound-graphics"
-version = "0.1.0"
-dependencies = [
- "fontique",
- "image",
- "parley",
- "pollster",
- "resvg",
- "skrifa",
- "tracing",
- "unbound-design",
- "vello_cpu",
- "vello_gpu",
- "wgpu",
-]
-
-[[package]]
-name = "unbound-inbox"
-version = "0.1.0"
-dependencies = [
- "rustix",
-]
-
-[[package]]
-name = "unbound-l10n"
-version = "0.1.0"
-dependencies = [
- "fluent-bundle",
- "tracing",
- "unic-langid",
-]
-
-[[package]]
-name = "unbound-log"
-version = "0.1.0"
-dependencies = [
- "rustix",
- "tracing",
- "tracing-journald",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "unbound-notify"
-version = "0.1.0"
-dependencies = [
- "rustix",
- "tracing",
- "unbound-bus",
- "unbound-log",
- "unbound-sound",
- "zbus",
-]
-
-[[package]]
-name = "unbound-protocols"
-version = "0.1.0"
-dependencies = [
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-scanner",
-]
-
-[[package]]
-name = "unbound-sound"
-version = "0.1.0"
-dependencies = [
- "tracing",
- "zbus",
-]
-
-[[package]]
-name = "unbound-spring"
-version = "0.1.0"
-
-[[package]]
-name = "unbound-test-bus"
-version = "0.1.0"
-dependencies = [
- "tempfile",
- "zbus",
-]
-
-[[package]]
-name = "unbound-toolkit"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "unbound-graphics",
- "unbound-toolkit-platform",
- "unbound-widgets",
-]
-
-[[package]]
-name = "unbound-toolkit-platform"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "accesskit_unix",
- "raw-window-handle",
- "rustix",
- "tracing",
- "unbound-bus",
- "unbound-graphics",
- "unbound-l10n",
- "unbound-protocols",
- "unbound-widgets",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-protocols-wlr",
- "wgpu",
- "xkbcommon",
- "zbus",
-]
-
-[[package]]
-name = "unbound-widgets"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "parley",
- "unbound-graphics",
- "unbound-l10n",
- "unbound-spring",
- "zeroize",
-]
-
-[[package]]
-name = "unbound-xdg"
-version = "0.1.0"
-dependencies = [
- "rustix",
- "tracing",
- "unbound-l10n",
- "unbound-notify",
- "zbus",
-]
-
-[[package]]
 name = "unic-langid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4027,6 +4208,9 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
+dependencies = [
+ "either",
+]
 
 [[package]]
 name = "xattr"
