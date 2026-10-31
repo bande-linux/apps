@@ -121,12 +121,11 @@ impl Collection {
             .ok_or_else(|| zbus::fdo::Error::InvalidArgs("no attributes".to_owned()))?;
         let item_path = {
             let mut shelf = self.0.0.lock().unwrap();
-            if replace {
-                if let Some(existing) = shelf.iter_mut().find(|item| item.attributes == attributes)
-                {
-                    existing.value = secret.2;
-                    return Ok((existing.path.clone(), path("/")));
-                }
+            if replace
+                && let Some(existing) = shelf.iter_mut().find(|item| item.attributes == attributes)
+            {
+                existing.value = secret.2;
+                return Ok((existing.path.clone(), path("/")));
             }
             let item_path = path(&format!("{COLLECTION}/{}", shelf.len() + 1));
             shelf.push(Stored {
