@@ -70,6 +70,7 @@ pub enum Request {
     },
     Subscribe(String),
     RemoveAccount(String),
+    SetColor(usize),
     Changed,
     Refresh,
 }

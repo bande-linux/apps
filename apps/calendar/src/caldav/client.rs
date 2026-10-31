@@ -396,6 +396,18 @@ impl Client {
         }
     }
 
+    pub fn set_color(&self, url: &str, color: &str) -> Result<(), Error> {
+        let (url, status) = self.multistatus("PROPPATCH", url, "0", &xml::set_color(color))?;
+        match status
+            .entries
+            .iter()
+            .any(|entry| entry.prop(APPLE, "calendar-color").is_some())
+        {
+            true => Ok(()),
+            false => Err(Error::Status { status: 403, url }),
+        }
+    }
+
     pub fn make_calendar(&self, url: &str, name: &str, color: &str) -> Result<(), Error> {
         let response =
             self.http

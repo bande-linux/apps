@@ -1,7 +1,10 @@
 use jiff::ToSpan;
 use jiff::civil::{DateTime, Time};
+use unbound_design::{Accent, Scheme};
 use unbound_toolkit::Point;
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton, ScrollSource};
+use unbound_toolkit::ui::{
+    Event, Key, Menu, MenuItem, Modifiers, Pointer, PointerButton, ScrollSource,
+};
 
 use super::geometry::{self, TimeGrid};
 use super::{
@@ -23,6 +26,65 @@ pub const ACTION_REFRESH: &str = "refresh";
 pub const ACTION_ADD_ACCOUNT: &str = "add-account";
 pub const ACTION_DELETE: &str = "delete";
 pub const ACTION_MODE: &str = "mode-";
+const ACTION_COLOR: &str = "calendar-color:";
+const ACTION_REMOVE_ACCOUNT: &str = "remove-account:";
+
+const COLORS: [(Accent, &str); 8] = [
+    (Accent::Rose, "color-rose"),
+    (Accent::Ember, "color-ember"),
+    (Accent::Amber, "color-amber"),
+    (Accent::Moss, "color-moss"),
+    (Accent::Teal, "color-teal"),
+    (Accent::Ultramarine, "color-ultramarine"),
+    (Accent::Plum, "color-plum"),
+    (Accent::Graphite, "color-graphite"),
+];
+
+fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
+    let calendar = view.library.calendars.get(index)?;
+    let current = super::painter::parse_color(&calendar.info.color).map(Accent::nearest);
+    let mut items: Vec<MenuItem> = COLORS
+        .iter()
+        .enumerate()
+        .map(|(position, (accent, label))| {
+            MenuItem::new(
+                &L10N.tr(label),
+                &format!("{ACTION_COLOR}{index}:{position}"),
+            )
+            .checked(current == Some(*accent))
+        })
+        .collect();
+    if calendar.info.account != crate::store::LOCAL_ACCOUNT {
+        items.push(MenuItem::separator());
+        items.push(MenuItem::new(
+            &L10N.tr("remove-account"),
+            &format!("{ACTION_REMOVE_ACCOUNT}{}", calendar.info.account),
+        ));
+    }
+    Some(Menu::new(items))
+}
+
+fn recolor(view: &mut CalendarView, action: &str) -> bool {
+    let Some((index, position)) = action.split_once(':') else {
+        return false;
+    };
+    let (Ok(index), Some((accent, _))) = (
+        index.parse::<usize>(),
+        position
+            .parse::<usize>()
+            .ok()
+            .and_then(|position| COLORS.get(position)),
+    ) else {
+        return false;
+    };
+    let Some(calendar) = view.library.calendars.get_mut(index) else {
+        return false;
+    };
+    calendar.info.color = super::painter::color_text(accent.color(Scheme::Light));
+    view.library.save(index);
+    view.requests.push(Request::SetColor(index));
+    true
+}
 
 pub fn menu_command(view: &mut CalendarView, action: &str) -> bool {
     match action {
@@ -40,6 +102,12 @@ pub fn menu_command(view: &mut CalendarView, action: &str) -> bool {
             if let Some(found) = view.selected_found() {
                 view.ask_delete(found);
             }
+        }
+        other if other.starts_with(ACTION_COLOR) => {
+            return recolor(view, &other[ACTION_COLOR.len()..]);
+        }
+        other if other.starts_with(ACTION_REMOVE_ACCOUNT) => {
+            view.ask_remove_account(&other[ACTION_REMOVE_ACCOUNT.len()..])
         }
         other => match other
             .strip_prefix(ACTION_MODE)
@@ -243,6 +311,13 @@ fn pointer_down(view: &mut CalendarView, pointer: &Pointer) -> bool {
     let hit = hit_at(view, point);
     if pointer.button == PointerButton::Secondary {
         return match hit {
+            Some(Hit::Calendar(index)) => match calendar_menu(view, index) {
+                Some(menu) => {
+                    view.requests.push(Request::Menu(menu, point));
+                    true
+                }
+                None => false,
+            },
             Some(Hit::Account(id)) if id != crate::store::LOCAL_ACCOUNT => {
                 view.ask_remove_account(&id);
                 true
@@ -296,7 +371,8 @@ fn pointer_down(view: &mut CalendarView, pointer: &Pointer) -> bool {
             }
             if writable(view, &found) {
                 let at = match view.mode {
-                    Mode::Month => day_at(view, point).map(|day| (day, true)),
+                    Mode::Month => day_at(view, point)
+                        .map(|day| (day.date().to_datetime(found.occurrence.start.time()), true)),
                     _ => time_at(view, point),
                 };
                 if let Some((grab, all_day)) = at {

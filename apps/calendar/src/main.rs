@@ -370,6 +370,24 @@ impl CalendarApp {
                     self.view.refresh_search();
                 }
                 Request::Refresh => self.sync(true),
+                Request::SetColor(index) => {
+                    let library = self.view.library();
+                    let job = library.calendars.get(index).and_then(|calendar| {
+                        let account = library.account(&calendar.info.account)?;
+                        match (&account.kind, &calendar.info.url) {
+                            (AccountKind::CalDav { user, .. }, Some(url)) => Some(Job::SetColor {
+                                account: account.id.clone(),
+                                user: user.clone(),
+                                url: url.clone(),
+                                color: format!("{}FF", calendar.info.color),
+                            }),
+                            _ => None,
+                        }
+                    });
+                    if let Some(job) = job {
+                        self.worker.send(job);
+                    }
+                }
             }
         }
         let title = self.view.title();

@@ -287,3 +287,12 @@ fn a_create_that_already_reached_the_server_is_sent_again_as_an_update() {
             .all(|stored| stored.pending.is_none())
     );
 }
+
+#[test]
+fn a_new_colour_is_written_to_the_server() {
+    let radicale = Radicale::start();
+    let work = radicale.calendar("work", "Work");
+    radicale.client().set_color(&work, "#AF52DEFF").unwrap();
+    let found = radicale.client().discover(&radicale.url, USER).unwrap();
+    assert_eq!(found.calendars[0].color.as_deref(), Some("#AF52DEFF"));
+}

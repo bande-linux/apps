@@ -197,6 +197,13 @@ pub fn calendar_query_events() -> String {
     )
 }
 
+pub fn set_color(color: &str) -> String {
+    format!(
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<d:propertyupdate {NAMESPACES}><d:set><d:prop><a:calendar-color>{}</a:calendar-color></d:prop></d:set></d:propertyupdate>",
+        escape(color)
+    )
+}
+
 pub fn mkcalendar(name: &str, color: &str) -> String {
     format!(
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<c:mkcalendar {NAMESPACES}><d:set><d:prop><d:displayname>{}</d:displayname><a:calendar-color>{}</a:calendar-color><c:supported-calendar-component-set><c:comp name=\"VEVENT\"/></c:supported-calendar-component-set></d:prop></d:set></c:mkcalendar>",

@@ -22,6 +22,12 @@ pub enum Job {
     },
     Sync(Vec<(AccountKind, String, Calendar)>),
     Forget(String),
+    SetColor {
+        account: String,
+        user: String,
+        url: String,
+        color: String,
+    },
 }
 
 #[derive(Debug)]
@@ -162,6 +168,19 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
                 }));
             }
             reply(Reply::Finished);
+        }
+        Job::SetColor {
+            account,
+            user,
+            url,
+            color,
+        } => {
+            let credentials = passwords
+                .get(&account)
+                .map(|password| Credentials { user, password });
+            if let Err(error) = Client::new(credentials.as_ref()).set_color(&url, &color) {
+                tracing::warn!("cannot change the colour of {url}: {error}");
+            }
         }
         Job::Forget(account) => {
             passwords.known.remove(&account);

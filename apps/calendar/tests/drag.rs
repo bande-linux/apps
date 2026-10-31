@@ -139,3 +139,41 @@ fn a_click_without_a_drag_changes_nothing() {
     view.handle(&Event::PointerUp(Pointer::at(at)));
     assert_eq!(starts(&view, "Design review"), ["Mon 11:00-12:30"]);
 }
+
+#[test]
+fn the_calendar_menu_recolours_a_calendar() {
+    let (_directory, mut view) = ready();
+    let work = view.library().calendar_index("work").unwrap();
+    assert!(view.menu_action(&format!("calendar-color:{work}:6")));
+    let color = view.library().calendars[work].info.color.clone();
+    assert_ne!(color, "#3478F6");
+    assert!(
+        view.take_requests()
+            .contains(&bande_calendar::ui::Request::SetColor(work))
+    );
+}
+
+#[test]
+fn dragging_in_the_month_view_moves_an_event_by_days_and_keeps_its_time() {
+    let (_directory, mut view) = ready();
+    view.set_mode(bande_calendar::ui::Mode::Month);
+    view.scene(SIZE.0, SIZE.1);
+    let inset = SHEET_INSET as f32;
+    let area = Rect::new(
+        SIDEBAR_WIDTH,
+        TOOLBAR_HEIGHT,
+        SIZE.0 as f32 - SIDEBAR_WIDTH - inset,
+        SIZE.1 as f32 - TOOLBAR_HEIGHT - inset,
+    );
+    let cell = |week: usize, day: usize| {
+        bande_calendar::ui::geometry::month_cell(area, 28.0, 6, week, day)
+    };
+    let dentist = cell(4, 3);
+    let from = Point::new(dentist.x + 30.0, dentist.y + 26.0 + 18.0 * 1.0 + 8.0);
+    let saturday = cell(4, 5);
+    let to = Point::new(saturday.x + 30.0, saturday.y + 60.0);
+    view.handle(&Event::PointerDown(Pointer::at(from)));
+    view.handle(&Event::PointerMove(Pointer::at(to)));
+    view.handle(&Event::PointerUp(Pointer::at(to)));
+    assert_eq!(starts(&view, "Dentist"), ["Sat 16:00-17:30"]);
+}
