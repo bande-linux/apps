@@ -1,0 +1,99 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: Apps to build, by directory name, space-separated, or "all"
+        default: all
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_DEB_VERSION: 3.8.0
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      apps: ${{ steps.apps.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Find the apps to build
+        id: apps
+        env:
+          BEFORE: ${{ github.event.before }}
+          NAMES: ${{ inputs.apps }}
+        run: |
+          apps=$(ci/changed-apps.sh "$BEFORE" "$GITHUB_SHA" "$NAMES")
+          echo "Building: $apps"
+          echo "apps=$apps" >> "$GITHUB_OUTPUT"
+
+  app:
+    needs: plan
+    if: needs.plan.outputs.apps != '[]'
+    name: ${{ matrix.app }} (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+        arch: [arm64, amd64]
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - arch: amd64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: debian:testing
+    timeout-minutes: 120
+    steps:
+      - name: Install git
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/${{ matrix.app }}
+          key: ${{ matrix.arch }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build, check, install and smoke-test
+        run: |
+          test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
+          ci/build-app.sh "${{ matrix.app }}" out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: app-${{ matrix.app }}-${{ matrix.arch }}
+          path: out/*.deb
+          if-no-files-found: error
+
+  debs:
+    needs: app
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [arm64, amd64]
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: app-*-${{ matrix.arch }}
+          path: debs
+          merge-multiple: true
+      - run: ls -l debs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bande-debs-${{ matrix.arch }}
+          path: debs/*.deb
+          if-no-files-found: error

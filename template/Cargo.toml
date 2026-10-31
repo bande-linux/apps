@@ -1,0 +1,18 @@
+[package]
+name = "bande-template"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "A template for a Bande app"
+publish = false
+
+[dependencies]
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+copyright = "2026 Mikael Hug"
+section = "utils"
+priority = "optional"
+depends = "$auto"
+extended-description = "A starting point for a Bande app. Copy this directory to apps/<name>/ and rename the package to bande-<name>."
+assets = [["target/release/bande-template", "usr/bin/", "755"]]
