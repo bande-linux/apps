@@ -8,13 +8,13 @@ publish = false
 
 [dependencies]
 accesskit = "=0.25.2"
-bande-app-menu = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/app-menu" }
-bande-fs = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/fs" }
-bande-l10n = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/l10n" }
-bande-log = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/log" }
-bande-notify = { path = "/home/mikael/unbound-linux/repos/desktop/crates/services/notify" }
-bande-toolkit = { path = "/home/mikael/unbound-linux/repos/desktop/crates/toolkit/toolkit" }
-bande-xdg = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/xdg" }
+bande-app-menu = { git = "https://github.com/bande-linux/desktop", rev = "3ff5f3e7f56ab4e98f60bb0d8e6fd097e879d125" }
+bande-fs = { git = "https://github.com/bande-linux/desktop", rev = "3ff5f3e7f56ab4e98f60bb0d8e6fd097e879d125" }
+bande-l10n = { git = "https://github.com/bande-linux/desktop", rev = "3ff5f3e7f56ab4e98f60bb0d8e6fd097e879d125" }
+bande-log = { git = "https://github.com/bande-linux/desktop", rev = "3ff5f3e7f56ab4e98f60bb0d8e6fd097e879d125" }
+bande-notify = { git = "https://github.com/bande-linux/desktop", rev = "3ff5f3e7f56ab4e98f60bb0d8e6fd097e879d125" }
+bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "3ff5f3e7f56ab4e98f60bb0d8e6fd097e879d125" }
+bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "3ff5f3e7f56ab4e98f60bb0d8e6fd097e879d125" }
 data-encoding = "2.11"
 html5ever = "0.40"
 image = { version = "=0.25.10", default-features = false, features = ["gif", "jpeg", "png"] }
@@ -30,8 +30,8 @@ zeroize = "=1.8.1"
 [dev-dependencies]
 rustix = { version = "=1.1.6", features = ["process"] }
 tempfile = "=3.27.0"
-bande-golden = { path = "/home/mikael/unbound-linux/repos/desktop/crates/testing/golden" }
-bande-test-bus = { path = "/home/mikael/unbound-linux/repos/desktop/crates/testing/test-bus" }
+bande-golden = { git = "https://github.com/bande-linux/desktop", rev = "3ff5f3e7f56ab4e98f60bb0d8e6fd097e879d125" }
+bande-test-bus = { git = "https://github.com/bande-linux/desktop", rev = "3ff5f3e7f56ab4e98f60bb0d8e6fd097e879d125" }
 
 [lints.clippy]
 unwrap_used = "deny"

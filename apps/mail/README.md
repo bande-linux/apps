@@ -82,9 +82,9 @@ cargo test
   in light and dark, with the desktop's golden harness (`BANDE_UPDATE_GOLDENS=1` rewrites
   them).
 
-The toolkit comes from the desktop through a path dependency for now (`bande-*` crates in
-`~/unbound-linux/repos/desktop`); it moves to a git dependency on `bande-linux/desktop` once
-that is published.
+The toolkit and the desktop libraries (`bande-*` crates) come from
+[bande-linux/desktop](https://github.com/bande-linux/desktop), pinned to one commit in
+`Cargo.toml`; move the `rev` forward to pick up desktop changes.
 
 ## Dependencies
 
