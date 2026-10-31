@@ -11,12 +11,12 @@ use alacritty_terminal::tty::Shell;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_spring::{Decay, State as SpringState};
 use unbound_term::{
-    Axis, BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, Divider, FULL_SCREEN_LEADING,
-    GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, Notice,
-    Painter, Pane, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings,
-    TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed, dropped_text,
-    encode_key, is_openable, is_settings_file, mouse_report, next_font_size, reports_mouse,
-    settings_folder, shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
+    Axis, Banner, BannerAction, CellPoint, Command, Divider, FULL_SCREEN_LEADING, GridSize,
+    HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane,
+    STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings, TabBar,
+    TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed, dropped_text, encode_key,
+    is_openable, is_settings_file, mouse_report, next_font_size, reports_mouse, settings_folder,
+    shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
 use unbound_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
@@ -316,11 +316,7 @@ impl TerminalApp {
 
     fn pane_area(&self) -> Rect {
         let sheet = self.sheet();
-        let banner = if self.banner.is_some() {
-            BANNER_HEIGHT
-        } else {
-            0.0
-        };
+        let banner = self.banner.as_ref().map_or(0.0, Banner::height);
         Rect::new(
             sheet.x,
             sheet.y + banner,
@@ -362,7 +358,8 @@ impl TerminalApp {
     fn layout(&mut self) {
         let sheet = self.sheet();
         if let Some(banner) = &mut self.banner {
-            banner.set_area(Rect::new(sheet.x, sheet.y, sheet.width, BANNER_HEIGHT));
+            let height = banner.height();
+            banner.set_area(Rect::new(sheet.x, sheet.y, sheet.width, height));
         }
         let area = self.pane_area();
         let metrics = self.painter.metrics;
@@ -630,7 +627,7 @@ impl TerminalApp {
 
     fn ask(&mut self, window: &mut Window, message: &str, pending: Pending) {
         self.close_banner();
-        let palette = window.appearance().palette();
+        let appearance = window.appearance();
         let button = match pending {
             Pending::Quit => L10N.tr("quit"),
             Pending::CloseTab(_) | Pending::ClosePane(_) | Pending::CloseOtherTabs(_) => {
@@ -638,7 +635,7 @@ impl TerminalApp {
             }
         };
         let text = self.painter.text_system().sharing_fonts();
-        self.banner = Some(Banner::confirm(palette, text, message, &button));
+        self.banner = Some(Banner::confirm(appearance, text, message, &button));
         self.pending = Some(pending);
         self.banner_focused = true;
         self.focus_terminal(false);
@@ -980,9 +977,8 @@ impl TerminalApp {
             Some(banner) => banner.take_focus(),
             None => {
                 self.close_banner();
-                let palette = window.appearance().palette();
                 let text = self.painter.text_system().sharing_fonts();
-                self.banner = Some(Banner::find(palette, text, &self.last_query));
+                self.banner = Some(Banner::find(window.appearance(), text, &self.last_query));
                 self.layout();
                 self.run_find();
             }
@@ -1698,7 +1694,8 @@ impl App for TerminalApp {
             WindowEvent::AppearanceChanged(appearance) => {
                 self.painter.set_appearance(appearance);
                 if let Some(banner) = &mut self.banner {
-                    banner.set_palette(appearance.palette());
+                    banner.set_appearance(appearance);
+                    self.layout();
                 }
             }
             _ => {}

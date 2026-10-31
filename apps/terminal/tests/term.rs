@@ -6,18 +6,17 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use unbound_term::{
-    Axis, BANNER_HEIGHT, Banner, BannerAction, CellPoint, Command, CursorStyle, DEFAULT_FONT_SIZE,
-    GridSize, HEADER_LEADING, Layout, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane,
-    Profile, Report, Reports, SETTINGS_SIZE, STRIP_HEIGHT, SavedWindow, SearchDirection,
-    SelectionKind, Session, Settings, Side, TabBar, TabBarLayout, TabTarget, Terminal,
-    TerminalContext, bracketed, claim, dropped_text, encode_key, is_openable, left_behind,
-    mouse_report, next_font_size, settings_view, shortcut, tab_menu, terminal_menu, window_file,
-    written_path,
+    Axis, Banner, BannerAction, CellPoint, Command, CursorStyle, DEFAULT_FONT_SIZE, GridSize,
+    HEADER_LEADING, Layout, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane, Profile,
+    Report, Reports, SETTINGS_SIZE, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind,
+    Session, Settings, Side, TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed,
+    claim, dropped_text, encode_key, is_openable, left_behind, mouse_report, next_font_size,
+    settings_view, shortcut, tab_menu, terminal_menu, window_file, written_path,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{
     Appearance, CpuRenderer, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene,
-    Scheme, Shape, framed_scene,
+    Scheme, Shape, TextSize, framed_scene,
 };
 
 fn plain() -> Modifiers {
@@ -226,6 +225,13 @@ fn appearance(scheme: Scheme) -> Appearance {
     Appearance {
         scheme,
         ..Appearance::default()
+    }
+}
+
+fn larger(scheme: Scheme) -> Appearance {
+    Appearance {
+        text_size: TextSize::from_percent(150),
+        ..appearance(scheme)
     }
 }
 
@@ -558,7 +564,7 @@ fn find_starts_at_the_newest_match_and_steps_through_the_scrollback() {
 #[test]
 fn the_find_bar_reports_typing_and_its_keys() {
     let mut bar = Banner::find(
-        unbound_toolkit::Palette::for_scheme(Scheme::Light),
+        appearance(Scheme::Light),
         unbound_toolkit::TextSystem::new(),
         "old",
     );
@@ -590,33 +596,55 @@ fn the_find_bar_reports_typing_and_its_keys() {
     );
 }
 
-#[test]
-fn found_text_and_the_find_bar_match_their_goldens() {
-    let scheme = Scheme::Light;
-    let mut painter = painter(scheme);
+fn find_scene(appearance: Appearance) -> Scene {
+    let mut painter = painter(appearance.scheme);
     let mut terminal = terminal(60, 4);
     terminal.feed(SESSION);
     terminal.set_focus(false);
     assert!(terminal.find("unbound"));
-    let mut bar = Banner::find(
-        unbound_toolkit::Palette::for_scheme(scheme),
-        unbound_toolkit::TextSystem::new(),
-        "unbound",
-    );
+    let mut bar = Banner::find(appearance, unbound_toolkit::TextSystem::new(), "unbound");
     bar.set_found(true);
     let (width, height) = painter.metrics.content_size(terminal.size());
-    let size = (width.ceil() as u32, (height + BANNER_HEIGHT).ceil() as u32);
-    bar.set_area(Rect::new(0.0, 0.0, size.0 as f32, BANNER_HEIGHT));
+    let banner = bar.height();
+    let size = (width.ceil() as u32, (height + banner).ceil() as u32);
+    bar.set_area(Rect::new(0.0, 0.0, size.0 as f32, banner));
     let highlights = terminal.highlights();
-    let mut items = painter.terminal(&terminal, Point::new(0.0, BANNER_HEIGHT), &highlights);
+    let mut items = painter.terminal(&terminal, Point::new(0.0, banner), &highlights);
     items.extend(bar.items(size.0, size.1));
-    let scene = Scene {
+    Scene {
         width: size.0,
         height: size.1,
         background: painter.theme.background,
         items,
-    };
-    shoot("term-find", &scene);
+    }
+}
+
+#[test]
+fn found_text_and_the_find_bar_match_their_goldens() {
+    shoot("term-find", &find_scene(appearance(Scheme::Light)));
+    shoot("term-find-150", &find_scene(larger(Scheme::Light)));
+}
+
+#[test]
+fn the_find_bar_grows_with_the_text_size_while_the_grid_keeps_its_font() {
+    let text = || unbound_toolkit::TextSystem::new();
+    let regular = Banner::find(appearance(Scheme::Light), text(), "");
+    let mut bar = Banner::find(larger(Scheme::Light), text(), "");
+    assert!(bar.height() > regular.height());
+    bar.set_area(Rect::new(0.0, 0.0, 480.0, bar.height()));
+    assert!(bar.contains(Point::new(10.0, regular.height() + 1.0)));
+    bar.set_appearance(appearance(Scheme::Light));
+    assert_eq!(bar.height(), regular.height());
+    assert_eq!(
+        painter(Scheme::Light).metrics,
+        Painter::new(
+            larger(Scheme::Light),
+            Profile::Datum,
+            DEFAULT_FONT_SIZE,
+            1.0
+        )
+        .metrics
+    );
 }
 
 #[test]
@@ -651,13 +679,13 @@ fn the_close_confirmation_answers_enter_and_escape_and_matches_its_goldens() {
     let scheme = Scheme::Light;
     let palette = Palette::for_scheme(scheme);
     let mut banner = Banner::confirm(
-        palette,
+        appearance(scheme),
         unbound_toolkit::TextSystem::new(),
         message,
         "Close",
     );
-    let size = (480, BANNER_HEIGHT as u32);
-    banner.set_area(Rect::new(0.0, 0.0, 480.0, BANNER_HEIGHT));
+    let size = (480, banner.height() as u32);
+    banner.set_area(Rect::new(0.0, 0.0, 480.0, banner.height()));
     let scene = Scene {
         width: size.0,
         height: size.1,
@@ -914,16 +942,21 @@ fn a_command_that_finishes_is_reported_with_its_name() {
 #[test]
 fn the_settings_window_matches_its_goldens() {
     let scheme = Scheme::Light;
-    let settings = std::rc::Rc::new(std::cell::RefCell::new(Settings {
-        profile: Profile::Midnight,
-        ..Settings::default()
-    }));
-    let mut ui = settings_view(appearance(scheme), &settings);
-    let mut content = ui.scene(SETTINGS_SIZE.0, SETTINGS_SIZE.1);
-    let palette = Palette::for_scheme(scheme);
-    content.background = palette.sheet;
-    let framed = framed_scene(&content, "Terminal Settings", None, None, &palette);
-    shoot("term-settings", &framed);
+    for (name, appearance) in [
+        ("term-settings", appearance(scheme)),
+        ("term-settings-150", larger(scheme)),
+    ] {
+        let settings = std::rc::Rc::new(std::cell::RefCell::new(Settings {
+            profile: Profile::Midnight,
+            ..Settings::default()
+        }));
+        let mut ui = settings_view(appearance, &settings);
+        let mut content = ui.scene(SETTINGS_SIZE.0, SETTINGS_SIZE.1);
+        let palette = Palette::for_scheme(scheme);
+        content.background = palette.sheet;
+        let framed = framed_scene(&content, "Terminal Settings", None, None, &palette);
+        shoot(name, &framed);
+    }
 }
 
 #[test]

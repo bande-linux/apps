@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use accesskit::{Node, Role};
 use unbound_toolkit::ui::{
-    Context, PopUpButton, SegmentedControl, Size, Stepper, Toggle, Ui, Widget, WidgetId,
+    Context, PopUpButton, ScrollView, SegmentedControl, Size, Stepper, Toggle, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{
     Appearance, Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
@@ -22,6 +22,8 @@ const PREVIEW: f32 = 76.0;
 const SWATCH: f32 = 14.0;
 const SWATCH_GAP: f32 = 4.0;
 const PREVIEW_PADDING: f32 = 12.0;
+const ROW_PADDING: f32 = 8.0;
+const LABEL_SHARE: f32 = 0.55;
 
 enum Line {
     Heading(String),
@@ -35,6 +37,7 @@ struct Form {
     children: Vec<Box<dyn Widget>>,
     profile: Rc<Cell<Profile>>,
     texts: Vec<(Point, Paragraph)>,
+    heights: Vec<f32>,
     preview: Option<Preview>,
     frame: Rect,
 }
@@ -46,14 +49,13 @@ struct Preview {
     swatches: Vec<(Rect, Color)>,
 }
 
-impl Form {
-    fn heights(&self) -> impl Iterator<Item = f32> + '_ {
-        self.lines.iter().map(|line| match line {
-            Line::Heading(_) => HEADING,
-            Line::Row(_) => ROW,
-            Line::Preview => PREVIEW,
-        })
-    }
+fn row_label(cx: &mut Context, text: &str, width: f32) -> Paragraph {
+    cx.text.paragraph(
+        text,
+        TextStyle::role(TextRole::Body, cx.palette.ink),
+        Some(width * LABEL_SHARE),
+        TextAlign::Start,
+    )
 }
 
 impl Widget for Form {
@@ -65,7 +67,21 @@ impl Widget for Form {
         for child in &mut self.children {
             child.measure(cx, available);
         }
-        Size::new(available.width, self.heights().sum::<f32>() + 2.0 * MARGIN)
+        let grown = cx.grown_line();
+        let width = available.width - 2.0 * MARGIN;
+        self.heights = self
+            .lines
+            .iter()
+            .map(|line| match line {
+                Line::Heading(_) => HEADING + grown,
+                Line::Row(text) => {
+                    let label = row_label(cx, text, width);
+                    (ROW + grown).max((label.height() + 2.0 * ROW_PADDING).ceil())
+                }
+                Line::Preview => PREVIEW + grown,
+            })
+            .collect();
+        Size::new(available.width, self.heights.iter().sum::<f32>() + MARGIN)
     }
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
@@ -75,7 +91,7 @@ impl Widget for Form {
         let width = frame.width - 2.0 * MARGIN;
         let mut y = frame.y + MARGIN / 2.0;
         let mut children = self.children.iter_mut();
-        for line in &self.lines {
+        for (line, &height) in self.lines.iter().zip(&self.heights) {
             match line {
                 Line::Heading(text) => {
                     let paragraph = cx.text.paragraph(
@@ -86,36 +102,32 @@ impl Widget for Form {
                     );
                     let origin = Point::new(
                         frame.x + MARGIN,
-                        (y + HEADING - paragraph.height() - 6.0).round(),
+                        (y + height - paragraph.height() - 6.0).round(),
                     );
                     self.texts.push((origin, paragraph));
-                    y += HEADING;
+                    y += height;
                 }
                 Line::Row(text) => {
-                    let paragraph = cx.text.paragraph(
-                        text,
-                        TextStyle::role(TextRole::Body, cx.palette.ink),
-                        Some(width * 0.55),
-                        TextAlign::Start,
-                    );
+                    let paragraph = row_label(cx, text, width);
                     let origin = Point::new(
                         frame.x + MARGIN,
-                        (y + (ROW - paragraph.height()) / 2.0).round(),
+                        (y + (height - paragraph.height()) / 2.0).round(),
                     );
                     self.texts.push((origin, paragraph));
                     if let Some(child) = children.next() {
-                        let size = child.measure(cx, Size::new(width * 0.45, ROW));
+                        let size =
+                            child.measure(cx, Size::new(width * (1.0 - LABEL_SHARE), height));
                         child.place(
                             cx,
                             Rect::new(
                                 frame.x + frame.width - MARGIN - size.width,
-                                (y + (ROW - size.height) / 2.0).round(),
+                                (y + (height - size.height) / 2.0).round(),
                                 size.width,
                                 size.height,
                             ),
                         );
                     }
-                    y += ROW;
+                    y += height;
                 }
                 Line::Preview => {
                     let appearance = Appearance {
@@ -123,7 +135,7 @@ impl Widget for Form {
                         ..Appearance::default()
                     };
                     let theme = Theme::new(appearance, self.profile.get());
-                    let rect = Rect::new(frame.x + MARGIN, y + 4.0, width, PREVIEW - 8.0);
+                    let rect = Rect::new(frame.x + MARGIN, y + 4.0, width, height - 8.0);
                     let sample = cx.text.paragraph(
                         &L10N.tr("settings-preview-sample"),
                         TextStyle::role(TextRole::Mono, theme.foreground),
@@ -150,7 +162,7 @@ impl Widget for Form {
                         edge: cx.palette.hairline,
                         swatches,
                     });
-                    y += PREVIEW;
+                    y += height;
                 }
             }
         }
@@ -304,6 +316,7 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
         ],
         profile,
         texts: Vec::new(),
+        heights: Vec::new(),
         preview: None,
         frame: Rect::default(),
     }
@@ -312,7 +325,7 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
 pub fn settings_view(appearance: Appearance, settings: &SharedSettings) -> Ui {
     let profile = Rc::new(Cell::new(settings.borrow().profile));
     let mut ui = Ui::new(
-        Box::new(form(settings, profile)),
+        Box::new(ScrollView::new(form(settings, profile))),
         Context::new(TextSystem::new(), appearance.palette()),
     );
     ui.set_appearance(appearance);

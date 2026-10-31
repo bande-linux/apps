@@ -7,12 +7,12 @@ use unbound_toolkit::ui::{
     WidgetId,
 };
 use unbound_toolkit::{
-    Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
+    Appearance, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem, grown_line,
 };
 
 use crate::L10N;
 
-pub const BANNER_HEIGHT: f32 = 36.0;
+const BANNER_HEIGHT: f32 = 36.0;
 const FIELD_WIDTH: f32 = 240.0;
 const MIN_FIELD_WIDTH: f32 = 80.0;
 const STATUS_ROOM: f32 = 80.0;
@@ -42,6 +42,7 @@ struct Model {
     status: Option<String>,
     actions: Vec<BannerAction>,
     area: Rect,
+    height: f32,
 }
 
 type Shared = Rc<RefCell<Model>>;
@@ -58,8 +59,8 @@ struct BannerView {
 
 impl BannerView {
     fn bar(&self) -> Rect {
-        let area = self.model.borrow().area;
-        Rect::new(area.x, area.y, area.width, BANNER_HEIGHT)
+        let model = self.model.borrow();
+        Rect::new(model.area.x, model.area.y, model.area.width, model.height)
     }
 
     fn status_origin(&self, bar: Rect, status: &Paragraph) -> Point {
@@ -80,8 +81,9 @@ impl Widget for BannerView {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        let width = self.model.borrow().area.width;
-        let bar = Size::new(width, BANNER_HEIGHT);
+        let bar = self.bar();
+        let width = bar.width;
+        let bar = Size::new(width, bar.height);
         let mut sizes: Vec<Size> = self
             .children
             .iter_mut()
@@ -91,8 +93,10 @@ impl Widget for BannerView {
         if model.kind == Kind::Find {
             let buttons: f32 = sizes.iter().skip(1).map(|size| size.width).sum();
             let room = width - 2.0 * MARGIN - buttons - SPACING * sizes.len() as f32;
+            let scale = cx.text.scale();
             if let Some(field) = sizes.first_mut() {
-                field.width = (room - STATUS_ROOM).clamp(MIN_FIELD_WIDTH, FIELD_WIDTH);
+                field.width = (room - STATUS_ROOM * scale)
+                    .clamp(MIN_FIELD_WIDTH * scale, FIELD_WIDTH * scale);
             }
         }
         self.sizes = sizes;
@@ -192,7 +196,7 @@ pub struct Banner {
 
 impl Banner {
     fn new(
-        palette: Palette,
+        appearance: Appearance,
         text: TextSystem,
         model: Shared,
         leading: usize,
@@ -209,21 +213,23 @@ impl Banner {
             frame: Rect::default(),
         };
         let mut banner = Self {
-            ui: Ui::new(Box::new(view), Context::new(text, palette)),
+            ui: Ui::new(Box::new(view), Context::new(text, appearance.palette())),
             focus,
             model,
         };
+        banner.set_appearance(appearance);
         banner.take_focus();
         banner
     }
 
-    pub fn find(palette: Palette, text: TextSystem, query: &str) -> Self {
+    pub fn find(appearance: Appearance, text: TextSystem, query: &str) -> Self {
         let model: Shared = Rc::new(RefCell::new(Model {
             kind: Kind::Find,
             query: query.to_owned(),
             status: None,
             actions: Vec::new(),
             area: Rect::default(),
+            height: BANNER_HEIGHT,
         }));
         let changed = model.clone();
         let field = TextField::new(&L10N.tr("find-placeholder"), query, move |text| {
@@ -238,21 +244,22 @@ impl Banner {
             action_button(&model, &L10N.tr("find-next"), BannerAction::Newer),
             action_button(&model, &L10N.tr("find-done"), BannerAction::Dismiss),
         ];
-        Self::new(palette, text, model, 3, children, focus)
+        Self::new(appearance, text, model, 3, children, focus)
     }
 
-    pub fn confirm(palette: Palette, text: TextSystem, message: &str, confirm: &str) -> Self {
+    pub fn confirm(appearance: Appearance, text: TextSystem, message: &str, confirm: &str) -> Self {
         let model: Shared = Rc::new(RefCell::new(Model {
             kind: Kind::Confirm,
             query: String::new(),
             status: Some(message.to_owned()),
             actions: Vec::new(),
             area: Rect::default(),
+            height: BANNER_HEIGHT,
         }));
         let cancel = action_button(&model, &L10N.tr("cancel"), BannerAction::Dismiss);
         let confirm = action_button(&model, confirm, BannerAction::Confirm);
         let focus = confirm.id();
-        Self::new(palette, text, model, 0, vec![cancel, confirm], focus)
+        Self::new(appearance, text, model, 0, vec![cancel, confirm], focus)
     }
 
     pub fn take_focus(&mut self) {
@@ -277,8 +284,13 @@ impl Banner {
         self.model.borrow().kind == Kind::Find
     }
 
-    pub fn set_palette(&mut self, palette: Palette) {
-        self.ui.context().palette = palette;
+    pub fn set_appearance(&mut self, appearance: Appearance) {
+        self.ui.set_appearance(appearance);
+        self.model.borrow_mut().height = BANNER_HEIGHT + grown_line(appearance.text_size);
+    }
+
+    pub fn height(&self) -> f32 {
+        self.model.borrow().height
     }
 
     pub fn set_area(&mut self, area: Rect) {
@@ -294,11 +306,12 @@ impl Banner {
     }
 
     pub fn contains(&self, point: Point) -> bool {
-        let area = self.model.borrow().area;
+        let model = self.model.borrow();
+        let area = model.area;
         point.x >= area.x
             && point.x < area.x + area.width
             && point.y >= area.y
-            && point.y < area.y + BANNER_HEIGHT
+            && point.y < area.y + model.height
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {

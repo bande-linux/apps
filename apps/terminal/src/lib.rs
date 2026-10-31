@@ -16,7 +16,7 @@ use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
-pub use banner::{BANNER_HEIGHT, Banner, BannerAction};
+pub use banner::{Banner, BannerAction};
 pub use keys::{
     Command, MouseButton, MouseKind, bracketed, dropped_text, encode_key, mouse_report,
     next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
