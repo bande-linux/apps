@@ -16,7 +16,8 @@ use unbound_toolkit::ui::{
     Event, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll, Widget,
 };
 use unbound_toolkit::{
-    FrameRegions, Image, Item, Paint, Palette, Point, Scheme, Shape, TextSystem, framed_scene,
+    Appearance, FrameRegions, Image, Item, Paint, Palette, Point, Scheme, Shape, TextSize,
+    TextSystem, framed_scene,
 };
 
 const MONITOR_SIZE: (u32, u32) = (860, 420);
@@ -147,14 +148,41 @@ fn shifted(key: Key) -> Event {
 
 fn render(screen: &mut impl Screen, title: &str, name: &str, size: (u32, u32)) {
     for scheme in [Scheme::Light, Scheme::Dark] {
-        let palette = Palette::for_scheme(scheme);
-        screen.set_palette(palette);
         let name = match scheme {
             Scheme::Light => name.to_owned(),
             Scheme::Dark => format!("{name}-dark"),
         };
-        render_in(screen, title, &name, size, &palette);
+        render_as(screen, title, &name, size, scheme, TextSize::DEFAULT);
     }
+}
+
+fn render_larger(screen: &mut impl Screen, title: &str, name: &str, size: (u32, u32)) {
+    let larger = TextSize::from_percent(150);
+    render_as(
+        screen,
+        title,
+        &format!("{name}-150"),
+        size,
+        Scheme::Light,
+        larger,
+    );
+    render_as(screen, title, name, size, Scheme::Light, TextSize::DEFAULT);
+}
+
+fn render_as(
+    screen: &mut impl Screen,
+    title: &str,
+    name: &str,
+    size: (u32, u32),
+    scheme: Scheme,
+    text_size: TextSize,
+) {
+    screen.set_appearance(Appearance {
+        scheme,
+        text_size,
+        ..Appearance::default()
+    });
+    render_in(screen, title, name, size, &Palette::for_scheme(scheme));
 }
 
 fn render_in(
@@ -192,6 +220,7 @@ fn activity_monitor_matches_its_goldens() {
     view.handle(&key(Key::Down));
     assert!(view.set_responding(710, "", false));
     render(&mut view, TITLE, "monitor-cpu", MONITOR_SIZE);
+    render_larger(&mut view, TITLE, "monitor-cpu", MONITOR_SIZE);
     view.handle(&command('2'));
     render(&mut view, TITLE, "monitor-memory", MONITOR_SIZE);
     view.handle(&command('3'));
@@ -258,6 +287,7 @@ fn force_quit_matches_its_golden() {
     view.handle(&key(Key::Down));
     view.handle(&key(Key::Down));
     render(&mut view, "Force Quit Apps", "force-quit", FORCE_QUIT_SIZE);
+    render_larger(&mut view, "Force Quit Apps", "force-quit", FORCE_QUIT_SIZE);
 }
 
 fn command(character: char) -> Event {

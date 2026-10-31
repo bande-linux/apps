@@ -7,7 +7,7 @@ use unbound_toolkit::ui::{
     Alert, Button, ClipboardRequest, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton,
 };
 use unbound_toolkit::{
-    Color, Header, Image, Item, Palette, Point, Rect, Scene, Shape, TextAlign, TextStyle,
+    Appearance, Color, Header, Image, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle,
     TextSystem,
 };
 
@@ -200,7 +200,7 @@ pub fn due_redraws(screens: &[Box<dyn Screen>], now: Instant) -> Vec<bool> {
 
 pub trait Screen {
     fn scene(&mut self, width: u32, height: u32) -> Scene;
-    fn set_palette(&mut self, palette: Palette);
+    fn set_appearance(&mut self, appearance: Appearance);
     fn set_focused(&mut self, focused: bool);
     fn handle(&mut self, event: &Event) -> bool;
     fn update(&mut self, snapshot: Snapshot);

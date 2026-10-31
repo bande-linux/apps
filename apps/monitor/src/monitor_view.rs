@@ -3,13 +3,13 @@ use std::time::Instant;
 
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use unbound_toolkit::ui::{
-    Animated, BUTTON_HEIGHT, Button, Cell, Column as TableColumn, Cursor, Event, HEADER_HEIGHT,
-    Key, Modifiers, Pointer, Row as TableRow, SEGMENTED_HEIGHT, SearchField, SegmentedControl,
-    Sort, Spring, TEXT_FIELD_HEIGHT, Table, WidgetId,
+    Animated, BUTTON_HEIGHT, Button, Cell, Column as TableColumn, Cursor, Event, Key, Modifiers,
+    Pointer, Row as TableRow, SEGMENTED_HEIGHT, SearchField, SegmentedControl, Size, Sort, Spring,
+    TEXT_FIELD_HEIGHT, Table, WidgetId,
 };
 use unbound_toolkit::{
-    Color, Header, Item, Palette, Path, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
-    TextRole, TextStyle, TextSystem,
+    Appearance, Color, Header, Item, Palette, Path, Point, Radius, Rect, SHEET_INSET, Scene, Shape,
+    TextAlign, TextRole, TextSize, TextStyle, TextSystem, grown_line,
 };
 
 use unbound_app_menu::Entry;
@@ -167,6 +167,7 @@ pub struct MonitorView {
     cores_moving: bool,
     edge_drag: Option<f32>,
     edge_hover: bool,
+    text_size: TextSize,
 }
 
 fn tabs_control(list: &List, tabs: &[Tab], tab: Tab) -> SegmentedControl {
@@ -187,16 +188,16 @@ impl MonitorView {
         table.set_sort(table_sort(monitor.columns(), monitor.sort()));
         let mut list = List::new(table, palette, text);
         let send = sender(list.signals());
-        let stop = list.insert(stop_button(move || send(Signal::Stop)));
+        let stop = list.insert_in_header(stop_button(move || send(Signal::Stop)));
         let send = sender(list.signals());
-        let inspect = list.insert(symbol_button(
+        let inspect = list.insert_in_header(symbol_button(
             icons.get(INSPECT_SYMBOL),
             &L10N.tr("inspect-label"),
             move || send(Signal::Inspect),
         ));
         let shown_tabs = monitor.tabs();
-        let tabs = list.insert(tabs_control(&list, &shown_tabs, tab));
-        let search = list.insert(search_field(&list, monitor.filter(), ""));
+        let tabs = list.insert_in_header(tabs_control(&list, &shown_tabs, tab));
+        let search = list.insert_in_header(search_field(&list, monitor.filter(), ""));
         let send = sender(list.signals());
         let mut clear_button =
             Button::new(&L10N.tr("clear-search"), move || send(Signal::ClearSearch)).quiet();
@@ -229,6 +230,7 @@ impl MonitorView {
             cores_moving: false,
             edge_drag: None,
             edge_hover: false,
+            text_size: TextSize::DEFAULT,
         };
         view.sync();
         view
@@ -459,11 +461,15 @@ impl MonitorView {
         ]
     }
 
+    fn grown(&self) -> f32 {
+        grown_line(self.text_size)
+    }
+
     fn footer_layout(&self) -> Footer {
         footer_layout(
             self.sheet(),
             slot_count(&self.monitor),
-            self.readout_width,
+            Size::new(self.readout_width, READOUT_ROW + self.grown()),
             self.cores_extent,
         )
     }
@@ -540,12 +546,13 @@ impl MonitorView {
         self.list.set_frame(self.list_frame());
         let nothing_found = self.nothing_found();
         let message = self.empty_message_frame();
+        let clear_width = (CLEAR_WIDTH * self.text_size.scale()).round();
         let clear = match nothing_found {
             true => Rect::new(
-                (message.x + (message.width - CLEAR_WIDTH) / 2.0).round(),
+                (message.x + (message.width - clear_width) / 2.0).round(),
                 message.y + message.height + ITEM_GAP / 2.0,
-                CLEAR_WIDTH,
-                BUTTON_HEIGHT,
+                clear_width,
+                BUTTON_HEIGHT + self.grown(),
             ),
             false => Rect::new(0.0, 0.0, 0.0, 0.0),
         };
@@ -561,13 +568,13 @@ impl MonitorView {
 
     fn empty_message_frame(&self) -> Rect {
         let list = self.list_frame();
-        let body_top = list.y + HEADER_HEIGHT;
+        let body_top = list.y + self.list.header_height();
         let middle = body_top + ((list.y + list.height - body_top) / 2.0).round();
         Rect::new(
             list.x + SIDE,
-            middle - EMPTY_MESSAGE_HEIGHT - ITEM_GAP / 2.0,
+            middle - EMPTY_MESSAGE_HEIGHT - self.grown() - ITEM_GAP / 2.0,
             (list.width - 2.0 * SIDE).max(0.0),
-            EMPTY_MESSAGE_HEIGHT,
+            EMPTY_MESSAGE_HEIGHT + self.grown(),
         )
     }
 
@@ -790,7 +797,7 @@ impl MonitorView {
         if self.list.has_dialog() || !contains(self.list.frame(), at) {
             return handled;
         }
-        let header = at.y < self.list.frame().y + HEADER_HEIGHT;
+        let header = at.y < self.list.frame().y + self.list.header_height();
         if is_secondary(pointer) && header && self.monitor.tab().has_column_choice() {
             let menu = columns_menu(self.monitor.tab(), self.monitor.columns());
             self.requests.push(Request::Menu(menu, at));
@@ -1031,7 +1038,7 @@ struct Footer {
     sheet: Rect,
     top: f32,
     rows: usize,
-    readout_width: f32,
+    readout: Size,
     graph: Option<Rect>,
     cores: Rect,
 }
@@ -1044,7 +1051,8 @@ fn readout_value(palette: Palette) -> TextStyle {
     TextStyle::role(TextRole::BodyStrong, palette.ink).tabular()
 }
 
-fn footer_layout(sheet: Rect, readouts: usize, readout_width: f32, cores: f32) -> Footer {
+fn footer_layout(sheet: Rect, readouts: usize, readout: Size, cores: f32) -> Footer {
+    let readout_width = readout.width;
     let available = sheet.width - 2.0 * FOOTER_PAD;
     let readouts_width = |columns: usize| {
         columns as f32 * readout_width + columns.saturating_sub(1) as f32 * READOUT_GAP
@@ -1055,7 +1063,7 @@ fn footer_layout(sheet: Rect, readouts: usize, readout_width: f32, cores: f32) -
         .unwrap_or(1);
     let columns = fitting.min(readouts.div_ceil(READOUT_ROWS)).max(1);
     let rows = readouts.div_ceil(columns).max(1);
-    let height = (rows as f32 * READOUT_ROW + 2.0 * FOOTER_PAD).max(FOOTER_HEIGHT);
+    let height = (rows as f32 * readout.height + 2.0 * FOOTER_PAD).max(FOOTER_HEIGHT);
     let top = sheet.y + sheet.height - height - cores;
     let graph_x = sheet.x + FOOTER_PAD + readouts_width(columns) + READOUT_GAP;
     let graph_width = sheet.x + sheet.width - FOOTER_PAD - graph_x;
@@ -1071,7 +1079,7 @@ fn footer_layout(sheet: Rect, readouts: usize, readout_width: f32, cores: f32) -
         sheet,
         top,
         rows,
-        readout_width,
+        readout,
         graph,
         cores: Rect::new(
             sheet.x + FOOTER_PAD,
@@ -1083,7 +1091,7 @@ fn footer_layout(sheet: Rect, readouts: usize, readout_width: f32, cores: f32) -
 }
 
 fn paint_footer(monitor: &Monitor, palette: Palette, footer: Footer, painter: &mut Painter) {
-    let (sheet, readout_width) = (footer.sheet, footer.readout_width);
+    let (sheet, readout) = (footer.sheet, footer.readout);
     let summary = monitor.summary();
     let bar = monitor.memory_bar();
     painter.fill(
@@ -1091,9 +1099,9 @@ fn paint_footer(monitor: &Monitor, palette: Palette, footer: Footer, painter: &m
         palette.hairline,
     );
     let slot = |index: usize| {
-        let x = sheet.x + FOOTER_PAD + (index / footer.rows) as f32 * (readout_width + READOUT_GAP);
-        let y = footer.top + FOOTER_PAD + (index % footer.rows) as f32 * READOUT_ROW;
-        Rect::new(x, y, readout_width, READOUT_ROW)
+        let x = sheet.x + FOOTER_PAD + (index / footer.rows) as f32 * (readout.width + READOUT_GAP);
+        let y = footer.top + FOOTER_PAD + (index % footer.rows) as f32 * readout.height;
+        Rect::new(x, y, readout.width, readout.height)
     };
     let colors = segment_colors(palette);
     if let Some(bar) = &bar {
@@ -1108,7 +1116,7 @@ fn paint_footer(monitor: &Monitor, palette: Palette, footer: Footer, painter: &m
             .position(|(readout, _)| *readout == index)
             .and_then(|segment| colors.get(segment));
         if let Some(color) = key {
-            let middle = row.y + ((READOUT_ROW - KEY_SIZE) / 2.0).round();
+            let middle = row.y + ((row.height - KEY_SIZE) / 2.0).round();
             painter.fill(
                 Shape::rounded(Rect::new(row.x, middle, KEY_SIZE, KEY_SIZE), KEY_RADIUS),
                 *color,
@@ -1275,9 +1283,10 @@ impl Screen for MonitorView {
         Some(app_menus(&self.monitor.tabs(), self.monitor.filter()))
     }
 
-    fn set_palette(&mut self, palette: Palette) {
-        self.palette = palette;
-        self.list.set_palette(palette);
+    fn set_appearance(&mut self, appearance: Appearance) {
+        self.palette = appearance.palette();
+        self.text_size = appearance.text_size;
+        self.list.set_appearance(appearance);
         self.sync();
     }
 

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, TreeId, TreeUpdate};
 use unbound_toolkit::ui::{Context, Cursor, Event, FreeLayout, Sort, Table, Ui, Widget, WidgetId};
-use unbound_toolkit::{Item, Palette, Rect, TextSystem};
+use unbound_toolkit::{Appearance, Item, Palette, Rect, TextSystem};
 
 use crate::apps::GroupKey;
 use crate::view::Request;
@@ -77,19 +77,29 @@ impl List {
         self.ui.widget_ref::<Table>(self.table)
     }
 
+    pub(crate) fn header_height(&self) -> f32 {
+        self.shown_table().map_or(0.0, Table::header_height)
+    }
+
     pub(crate) fn insert(&mut self, widget: impl Widget + 'static) -> WidgetId {
         self.ui
             .widget_as::<FreeLayout>(self.host)
             .map_or_else(WidgetId::next, |host| host.insert(widget, Rect::default()))
     }
 
+    pub(crate) fn insert_in_header(&mut self, widget: impl Widget + 'static) -> WidgetId {
+        self.ui
+            .widget_as::<FreeLayout>(self.host)
+            .map_or_else(WidgetId::next, |host| {
+                host.insert_in_header(widget, Rect::default())
+            })
+    }
+
     pub(crate) fn replace(&mut self, old: WidgetId, widget: impl Widget + 'static) -> WidgetId {
-        let frame = self.frame_of(old);
-        let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) else {
-            return old;
-        };
-        host.remove(old);
-        host.insert(widget, frame)
+        self.ui
+            .widget_as::<FreeLayout>(self.host)
+            .and_then(|host| host.replace(old, widget))
+            .unwrap_or(old)
     }
 
     pub(crate) fn frame_of(&self, id: WidgetId) -> Rect {
@@ -150,8 +160,8 @@ impl List {
         self.ui.has_sheet()
     }
 
-    pub(crate) fn set_palette(&mut self, palette: Palette) {
-        self.ui.context().palette = palette;
+    pub(crate) fn set_appearance(&mut self, appearance: Appearance) {
+        self.ui.set_appearance(appearance);
     }
 
     pub(crate) fn text(&mut self) -> &mut TextSystem {
