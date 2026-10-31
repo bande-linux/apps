@@ -3,6 +3,7 @@ name = "unbound-monitor"
 description = "Unbound Activity Monitor: CPU, memory, disk and network use per app"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 
