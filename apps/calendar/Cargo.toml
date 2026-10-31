@@ -39,7 +39,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "utils"
 priority = "optional"
-depends = "$auto, fonts-inter"
+depends = "$auto, fonts-inter, fonts-manrope"
 extended-description = """\
 The calendar of the Bande desktop: CalDAV accounts with offline sync, a local \
 calendar and read-only subscriptions, with day, week, month and year views and \

@@ -309,7 +309,7 @@ pub fn reschedule(
         object.events.push(exception);
         return object;
     }
-    if recurring && scope == Scope::Series {
+    if recurring && scope == Scope::Series && !editing_override {
         let Some(master_index) = object
             .events
             .iter()
@@ -388,8 +388,12 @@ pub fn apply_details(
         scope,
         local,
     );
-    let target = match scope == Scope::Occurrence
-        && object.master().is_some_and(|master| master.rule.is_some())
+    let editing_override = object
+        .events
+        .get(event_index)
+        .is_some_and(|event| event.recurrence_id.is_some());
+    let target = match editing_override
+        || scope == Scope::Occurrence && object.master().is_some_and(|master| master.rule.is_some())
     {
         true => object
             .events
@@ -562,6 +566,48 @@ mod tests {
             ["10-19 09:00", "10-26 09:00", "11-09 09:00"]
         );
         assert!(remove_occurrence(&object, key, Scope::Series).is_none());
+    }
+
+    #[test]
+    fn renaming_a_moved_occurrence_keeps_the_series_title() {
+        let local = berlin();
+        let object = weekly_standup();
+        let key = object.occurrences(
+            date(2026, 10, 26)
+                .to_zoned(local.clone())
+                .unwrap()
+                .timestamp(),
+            date(2026, 10, 27)
+                .to_zoned(local.clone())
+                .unwrap()
+                .timestamp(),
+            &local,
+        )[0]
+        .key;
+        let moved = reschedule(
+            &object,
+            0,
+            key,
+            date(2026, 10, 26).at(11, 0, 0, 0),
+            date(2026, 10, 26).at(11, 15, 0, 0),
+            false,
+            Scope::Occurrence,
+            &local,
+        );
+        let details = Details {
+            summary: "Standup (Sam leads)".to_owned(),
+            location: String::new(),
+            notes: String::new(),
+            all_day: false,
+            start: date(2026, 10, 26).at(11, 0, 0, 0),
+            end: date(2026, 10, 26).at(11, 15, 0, 0),
+            repeat: Repeat::Never,
+            alert: Alert::None,
+        };
+        let renamed = apply_details(&moved, 1, key, &details, Scope::Series, &local);
+        assert_eq!(renamed.master().unwrap().summary, "Standup");
+        assert!(renamed.master().unwrap().rule.is_some());
+        assert_eq!(renamed.events[1].summary, "Standup (Sam leads)");
     }
 
     #[test]
