@@ -27,18 +27,22 @@ apt install bande-<name>
 
 ## How it's built and published
 
-On every push to `main`, `.github/workflows/build.yml` builds only the apps whose directory
-changed, or every app when `ci/`, `rust-toolchain.toml` or the workflow changed. Each app is
-built for arm64 and amd64 on GitHub's runners in `debian:testing`: `cargo fmt --check`, clippy
-with `-D warnings`, the tests, then the `.deb`. That `.deb` is installed with apt into the
-container and its `smoke.sh` is run. A dispatch builds the apps you name, or `all`.
+CI runs only for releases. To release an app, set its `version` in `apps/<name>/Cargo.toml`,
+merge to `main`, and tag that commit `<name>-vX.Y.Z` with the same version:
 
-An app's version is `<Cargo version>+git<date>.<count>.<sha>`, counted over the commits that
-touch the app or the shared build, so any change that rebuilds an app makes it newer.
+```
+git tag mail-v0.1.0 && git push origin mail-v0.1.0
+```
 
-A green run uploads `bande-debs-arm64` and `bande-debs-amd64`. The archive's scheduled publish
-picks them up within 30 minutes. It only takes packages named after an app in this
-repository, and never a name the desktop publishes.
+The tag builds that one app for arm64 and amd64 on GitHub's runners in `debian:testing`:
+`cargo fmt --check`, clippy with `-D warnings`, the tests, then the `.deb`, installed with apt into
+the container and checked with its `smoke.sh`. A tag whose commit isn't on `main`, or whose
+version doesn't match `Cargo.toml`, fails. A green run uploads `bande-debs-arm64` and
+`bande-debs-amd64`; the archive's scheduled publish picks them up within 30 minutes, taking only
+the package named after the tagged app and never a name the desktop publishes.
+
+A manual dispatch (`gh workflow run build.yml -f apps=<name>`) test-builds any app on any branch
+with a `+git` version; it is never published.
 
 ## Licence
 
