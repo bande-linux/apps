@@ -4,13 +4,13 @@ mod fixture;
 
 use std::path::Path;
 
-use fixture::{Fixture, PAGE_SIZE, Task, battery_report};
-use unbound_monitor::{
+use bande_monitor::{
     Catalog, CoreKind, Graph, InterfaceKind, Monitor, Pressure, PressureLevel, Snapshot, Tab,
     read_cpu_ticks,
 };
+use fixture::{Fixture, PAGE_SIZE, Task, battery_report};
 
-fn process(snapshot: &Snapshot, pid: u32) -> &unbound_monitor::Process {
+fn process(snapshot: &Snapshot, pid: u32) -> &bande_monitor::Process {
     snapshot
         .processes
         .iter()
@@ -161,8 +161,8 @@ fn names_users_and_kernel_threads_come_from_proc() {
     });
     fixture.spawn(&Task {
         pid: 300,
-        comm: "unbound-composi",
-        command: &["/usr/bin/unbound-compositor", "--session"],
+        comm: "bande-composito",
+        command: &["/usr/bin/bande-compositor", "--session"],
         ..Task::default()
     });
     fixture.spawn(&Task {
@@ -178,7 +178,7 @@ fn names_users_and_kernel_threads_come_from_proc() {
     assert!(process(&snapshot, 40).identity.kernel_thread);
     assert!(!process(&snapshot, 300).identity.kernel_thread);
     assert_eq!(process(&snapshot, 40).identity.user, "root");
-    assert_eq!(process(&snapshot, 300).identity.name, "unbound-compositor");
+    assert_eq!(process(&snapshot, 300).identity.name, "bande-compositor");
     assert_eq!(process(&snapshot, 300).identity.user, "mikael");
     assert_eq!(process(&snapshot, 301).identity.name, "Web Content");
     assert_eq!(process(&snapshot, 301).identity.user, "4242");

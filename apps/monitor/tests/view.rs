@@ -6,19 +6,19 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use accesskit::Role;
-use fixture::{battery_report, check_golden, entry, process};
-use unbound_monitor::{
+use bande_monitor::{
     AppList, AppRow, Catalog, CpuShare, ForceQuitView, Graph, Icons, Interface, InterfaceKind,
     Memory, Monitor, MonitorView, Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab,
     app_menus, due_redraws,
 };
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Event, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll, Table, Widget,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, FrameRegions, Image, Item, Paint, Palette, Point, Scheme, Shape, TextSize,
     TextSystem, framed_scene,
 };
+use fixture::{battery_report, check_golden, entry, process};
 
 const MONITOR_SIZE: (u32, u32) = (860, 420);
 const FORCE_QUIT_SIZE: (u32, u32) = (380, 340);
@@ -26,29 +26,24 @@ const LIST_TOP: f32 = 48.0 + Table::HEADER_HEIGHT;
 const TITLE: &str = "Activity Monitor";
 
 fn catalog() -> Catalog {
-    let mut terminal = entry("org.unbound.Terminal", "Terminal", "unbound-term", false);
-    terminal.icon = Some("org.unbound.Terminal".to_owned());
-    let mut files = entry("org.unbound.Files", "Files", "unbound-files", false);
-    files.icon = Some("org.unbound.Files".to_owned());
-    let mut settings = entry(
-        "org.unbound.Settings",
-        "Settings",
-        "unbound-settings",
-        false,
-    );
-    settings.icon = Some("org.unbound.Settings".to_owned());
+    let mut terminal = entry("org.bande.Terminal", "Terminal", "bande-term", false);
+    terminal.icon = Some("org.bande.Terminal".to_owned());
+    let mut files = entry("org.bande.Files", "Files", "bande-files", false);
+    files.icon = Some("org.bande.Files".to_owned());
+    let mut settings = entry("org.bande.Settings", "Settings", "bande-settings", false);
+    settings.icon = Some("org.bande.Settings".to_owned());
     Catalog::new(&[terminal, files, settings])
 }
 
 fn icons() -> Icons {
     Icons::new(|name| {
-        let theme = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/icons/Unbound");
+        let theme = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/icons/Bande");
         let path = match name {
             "dialog-information-symbolic" => theme.join(format!("symbolic/status/{name}.svg")),
-            "org.unbound.Terminal"
-            | "org.unbound.Files"
-            | "org.unbound.Settings"
-            | "org.unbound.ActivityMonitor" => theme.join(format!("scalable/apps/{name}.svg")),
+            "org.bande.Terminal"
+            | "org.bande.Files"
+            | "org.bande.Settings"
+            | "org.bande.ActivityMonitor" => theme.join(format!("scalable/apps/{name}.svg")),
             _ => return None,
         };
         Image::load(&path, 32)
@@ -84,11 +79,11 @@ fn snapshot(step: usize) -> Snapshot {
             .collect(),
         capacities: vec![1024, 1024, 640, 640],
         processes: vec![
-            measured(process(500, 1, "/usr/bin/unbound-term"), 4.2, 84, 6),
+            measured(process(500, 1, "/usr/bin/bande-term"), 4.2, 84, 6),
             measured(process(501, 500, "/bin/bash"), 0.0, 5, 1),
             measured(process(502, 501, "/usr/bin/cargo"), 96.5, 410, 18),
-            measured(process(600, 1, "/usr/bin/unbound-files"), 1.3, 120, 4),
-            measured(process(650, 1, "/usr/bin/unbound-settings"), 0.4, 70, 3),
+            measured(process(600, 1, "/usr/bin/bande-files"), 1.3, 120, 4),
+            measured(process(650, 1, "/usr/bin/bande-settings"), 0.4, 70, 3),
             measured(
                 process(700, 1, "/usr/lib/systemd/systemd-journald"),
                 0.2,
@@ -283,7 +278,7 @@ fn force_quit_matches_its_golden() {
         icons(),
     );
     view.update(snapshot(0));
-    assert!(view.set_responding(500, "org.unbound.Terminal", false));
+    assert!(view.set_responding(500, "org.bande.Terminal", false));
     view.handle(&key(Key::Down));
     view.handle(&key(Key::Down));
     render(&mut view, "Force Quit Apps", "force-quit", FORCE_QUIT_SIZE);
@@ -384,7 +379,7 @@ fn another_tab_shows_its_own_columns_sorted_by_its_measure_and_keeps_the_selecti
     );
     assert_eq!(
         view.table().expect("table").selection(),
-        ["app:org.unbound.Terminal"]
+        ["app:org.bande.Terminal"]
     );
     view.handle(&Event::Key {
         key: Key::Character('r'),
@@ -461,7 +456,7 @@ fn the_selection_stays_on_its_process_while_the_numbers_reorder_the_list() {
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
     assert_eq!(
         shown_rows(&view)[..4],
-        ["Terminal", "cargo", "unbound-term", "bash"]
+        ["Terminal", "cargo", "bande-term", "bash"]
     );
     click(&mut view, row_point(1), Modifiers::default(), 1);
     assert_eq!(view.monitor.selection(), [cargo()]);
@@ -499,10 +494,7 @@ fn header_clicks_sort_numbers_largest_first_and_names_from_a() {
     click(&mut view, header(threads), Modifiers::default(), 1);
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
     assert_eq!(shown_rows(&view)[0], "Terminal");
-    assert_eq!(
-        view.monitor.sort(),
-        (unbound_monitor::Column::Threads, true)
-    );
+    assert_eq!(view.monitor.sort(), (bande_monitor::Column::Threads, true));
 }
 
 #[test]
@@ -515,7 +507,7 @@ fn several_selected_rows_quit_together() {
     assert_eq!(target.roots, [(710, 710)]);
     assert_eq!(
         target.apps,
-        [("org.unbound.Terminal".to_owned(), vec![(500, 500)])]
+        [("org.bande.Terminal".to_owned(), vec![(500, 500)])]
     );
     assert!(view.handle(&Event::Key {
         key: Key::Character('q'),
@@ -606,10 +598,10 @@ fn a_right_click_selects_the_row_and_offers_quit_turning_into_force_quit_with_al
 #[test]
 fn an_app_that_stopped_responding_is_marked_in_the_list_until_it_answers_again() {
     let mut view = monitor_view();
-    assert!(view.set_responding(600, "org.unbound.Files", false));
+    assert!(view.set_responding(600, "org.bande.Files", false));
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
     assert!(shown_rows(&view).contains(&"Files (Not Responding)".to_owned()));
-    assert!(view.set_responding(600, "org.unbound.Files", true));
+    assert!(view.set_responding(600, "org.bande.Files", true));
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
     assert!(shown_rows(&view).contains(&"Files".to_owned()));
 }
@@ -689,7 +681,7 @@ fn a_right_click_on_the_header_chooses_columns_and_the_choice_is_remembered() {
         column_headers(&view),
         ["Name", "CPU Time", "Threads", "PID", "Resident"]
     );
-    assert_eq!(view.monitor.sort(), (unbound_monitor::Column::Name, false));
+    assert_eq!(view.monitor.sort(), (bande_monitor::Column::Name, false));
     let remembered = match view.take_requests().last() {
         Some(Request::SaveState(text)) => text.clone(),
         other => panic!("expected the columns to be saved, got {other:?}"),
@@ -705,7 +697,7 @@ fn the_gpu_tab_appears_once_the_system_reports_gpu_use() {
     assert!(!view.handle(&command('5')));
     let mut busy = snapshot(1);
     busy.gpu = true;
-    busy.processes[3].gpu = Some(unbound_monitor::GpuUse {
+    busy.processes[3].gpu = Some(bande_monitor::GpuUse {
         percent: 30.0,
         seconds: 4.0,
         memory: 64_000_000,
@@ -742,7 +734,7 @@ fn painted(view: &mut MonitorView, width: u32) -> Vec<(Item, Option<Shape>)> {
     items
 }
 
-fn paints_area(items: &[(Item, Option<Shape>)], color: unbound_toolkit::Color) -> bool {
+fn paints_area(items: &[(Item, Option<Shape>)], color: bande_toolkit::Color) -> bool {
     items
         .iter()
         .any(|(item, _)| matches!(item, Item::FillPath { paint: Paint::Solid(paint), .. } if *paint == color))
@@ -863,7 +855,7 @@ fn the_memory_footer_names_what_holds_memory_and_graphs_the_pressure() {
     );
     assert_eq!(
         monitor.graph(),
-        Graph::Pressure(vec![(0.4, unbound_monitor::PressureLevel::Elevated)])
+        Graph::Pressure(vec![(0.4, bande_monitor::PressureLevel::Elevated)])
     );
     assert_eq!(
         monitor.graph_description(),
@@ -927,11 +919,11 @@ fn the_view_filter_keeps_my_processes_or_apps_and_is_remembered() {
     assert!(view.menu_action("filter-mine"));
     assert_eq!(
         all_menus,
-        Some(app_menus(&tabs, unbound_monitor::Filter::All))
+        Some(app_menus(&tabs, bande_monitor::Filter::All))
     );
     assert_eq!(
         view.app_menus(),
-        Some(app_menus(&tabs, unbound_monitor::Filter::Mine))
+        Some(app_menus(&tabs, bande_monitor::Filter::Mine))
     );
     assert_ne!(view.app_menus(), all_menus);
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
@@ -955,7 +947,7 @@ fn the_view_filter_keeps_my_processes_or_apps_and_is_remembered() {
     };
     let mut again = Monitor::new(catalog(), 1000);
     again.restore(&remembered);
-    assert_eq!(again.filter(), unbound_monitor::Filter::Apps);
+    assert_eq!(again.filter(), bande_monitor::Filter::Apps);
 }
 
 #[test]
@@ -964,8 +956,8 @@ fn quit_asks_an_app_politely_and_signals_only_a_chosen_process() {
     view.handle(&key(Key::Down));
     assert_eq!(
         view.monitor.selection(),
-        [RowKey::Group(unbound_monitor::GroupKey::App(
-            "org.unbound.Terminal".to_owned()
+        [RowKey::Group(bande_monitor::GroupKey::App(
+            "org.bande.Terminal".to_owned()
         ))]
     );
     assert!(view.handle(&Event::Key {
@@ -981,7 +973,7 @@ fn quit_asks_an_app_politely_and_signals_only_a_chosen_process() {
         view.take_requests(),
         [
             Request::QuitApp {
-                app_id: "org.unbound.Terminal".to_owned(),
+                app_id: "org.bande.Terminal".to_owned(),
                 roots: vec![(500, 500)],
             },
             Request::Resample,
@@ -1016,7 +1008,7 @@ fn dragging_the_footer_edge_up_shows_the_cores_and_down_hides_them() {
     let edge = MONITOR_SIZE.1 as f32 - 6.0 - 112.0;
     let at = |y: f32| Pointer::at(Point::new(300.0, y));
     view.handle(&Event::PointerMove(at(edge)));
-    assert_eq!(view.cursor(), unbound_toolkit::ui::Cursor::RowResize);
+    assert_eq!(view.cursor(), bande_toolkit::ui::Cursor::RowResize);
     assert!(view.handle(&Event::PointerDown(at(edge))));
     view.handle(&Event::PointerMove(at(edge - 10.0)));
     assert!(!view.monitor.cores_shown());

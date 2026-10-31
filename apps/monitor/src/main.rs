@@ -5,28 +5,28 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 
-use unbound_app_menu::{AppMenu, Entry, Standard};
-use unbound_monitor::{
+use bande_app_menu::{AppMenu, Entry, Standard};
+use bande_monitor::{
     AppList, Asked, BatteryReport, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, InspectorView,
     L10N, Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop,
     TOOLBAR_HEIGHT, Tab, battery_reader, due_redraws, list_sleep_blockers, stop_all,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Role, Scene, Surfaces, TextSystem, Window,
     WindowError, WindowEvent,
 };
-use unbound_xdg::{
+use bande_xdg::{
     ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon, spawn_detached,
 };
 
-const APP_ID: &str = "org.unbound.ActivityMonitor";
+const APP_ID: &str = "org.bande.ActivityMonitor";
 const WINDOW_SIZE: (u32, u32) = (860, 600);
 const FORCE_QUIT_SIZE: (u32, u32) = (380, 440);
 const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
 const ICON_PIXELS: u32 = 32;
-const FILES: &str = "unbound-files";
-const FILES_APP_ID: &str = "org.unbound.Files";
+const FILES: &str = "bande-files";
+const FILES_APP_ID: &str = "org.bande.Files";
 const PROC_ROOT: &str = "/";
 
 struct ActivityMonitor {
@@ -234,7 +234,7 @@ impl ActivityMonitor {
 }
 
 fn state_file() -> Option<PathBuf> {
-    unbound_xdg::state_home().map(|state| state.join("unbound/monitor"))
+    bande_xdg::state_home().map(|state| state.join("bande/monitor"))
 }
 
 fn save_state(text: &str) {
@@ -474,7 +474,7 @@ fn open(
         inhibitors: None,
         battery: None,
     };
-    unbound_toolkit::run_surfaces(&mut app)
+    bande_toolkit::run_surfaces(&mut app)
 }
 
 fn run() -> Result<(), WindowError> {
@@ -514,7 +514,7 @@ fn run() -> Result<(), WindowError> {
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-monitor");
+    bande_log::init("bande-monitor");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use unbound_status::devices::battery;
-use unbound_status::history::{ChargeSample, charge_history};
-use unbound_status::status::Battery;
+use bande_status::devices::battery;
+use bande_status::history::{ChargeSample, charge_history};
+use bande_status::status::Battery;
 use zbus::blocking::Connection;
 
 pub const BATTERY_HISTORY: u32 = 12 * 3600;

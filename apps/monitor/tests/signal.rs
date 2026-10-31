@@ -3,7 +3,7 @@
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command};
 
-use unbound_monitor::{Sampler, SignalError, Stop, stop};
+use bande_monitor::{Sampler, SignalError, Stop, stop};
 
 fn sleeper() -> (Child, u64) {
     let child = Command::new("sleep").arg("60").spawn().expect("sleep");

@@ -2,11 +2,11 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, Cell, Column, Cursor, Event, Key, Modifiers, Pointer, Row, Table,
     WidgetId,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Item, Palette, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextSize,
     TextStyle, TextSystem, grown_line,
 };

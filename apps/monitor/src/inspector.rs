@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Button, Cell, Column, Cursor, Event, Key, Row, SEGMENTED_HEIGHT, SegmentedControl, Table,
     WidgetId,
 };
-use unbound_toolkit::{Appearance, Header, Palette, Rect, SHEET_INSET, Scene, TextSystem};
+use bande_toolkit::{Appearance, Header, Palette, Rect, SHEET_INSET, Scene, TextSystem};
 
 use crate::L10N;
 use crate::format::{format_bytes, format_cpu_time, format_percent};
@@ -20,7 +20,7 @@ use crate::view::{
 };
 
 pub const INSPECTOR_SIZE: (u32, u32) = (680, 520);
-const HEADER: f32 = unbound_toolkit::WINDOW_HEADER_HEIGHT as f32;
+const HEADER: f32 = bande_toolkit::WINDOW_HEADER_HEIGHT as f32;
 const SIDE: f32 = 12.0;
 const LEADING: f32 = 94.0;
 const BUTTON_SIZE: f32 = 28.0;

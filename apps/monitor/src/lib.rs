@@ -19,7 +19,7 @@ mod view;
 
 use std::sync::LazyLock;
 
-use unbound_l10n::Localizer;
+use bande_l10n::Localizer;
 
 pub use apps::{AppInfo, Catalog, Group, GroupKey};
 pub use asked::Asked;
@@ -41,7 +41,7 @@ pub use signal::{SignalError, Stop, stop};
 pub use system::{InterfaceKind, Memory, Pressure, PressureLevel};
 pub use view::{Icons, Request, Screen, due_redraws};
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-monitor.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-monitor.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -65,7 +65,7 @@ mod tests {
             include_str!("view.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

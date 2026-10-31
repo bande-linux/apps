@@ -2,17 +2,17 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Animated, BUTTON_HEIGHT, Button, Cell, Column as TableColumn, Cursor, Event, Key, Modifiers,
     Pointer, Row as TableRow, SEGMENTED_HEIGHT, SearchField, SegmentedControl, Size, Sort, Spring,
     TEXT_FIELD_HEIGHT, Table, WidgetId,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Color, Header, Item, Palette, Path, Point, Radius, Rect, SHEET_INSET, Scene, Shape,
     TextAlign, TextRole, TextSize, TextStyle, TextSystem, grown_line,
 };
 
-use unbound_app_menu::Entry;
+use bande_app_menu::Entry;
 
 use crate::L10N;
 use crate::list::{List, Signal, group_id, sender};
@@ -27,7 +27,7 @@ use crate::view::{
     is_secondary, opens_menu, stop_alert, stop_button, symbol_button,
 };
 
-pub const TOOLBAR_HEIGHT: f32 = unbound_toolkit::WINDOW_HEADER_HEIGHT as f32;
+pub const TOOLBAR_HEIGHT: f32 = bande_toolkit::WINDOW_HEADER_HEIGHT as f32;
 const FOOTER_HEIGHT: f32 = 112.0;
 const FOOTER_PAD: f32 = 16.0;
 const READOUT_WIDTH: f32 = 176.0;

@@ -3,15 +3,15 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Alert, Button, ClipboardRequest, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Color, Header, Image, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle,
     TextSystem,
 };
 
-use unbound_app_menu::Entry;
+use bande_app_menu::Entry;
 
 use crate::L10N;
 use crate::model::{StopTarget, stop_target};
@@ -21,7 +21,7 @@ use crate::signal::{SignalError, Stop};
 pub(crate) const QUIT: &str = "quit";
 pub(crate) const FORCE_QUIT: &str = "force-quit";
 const CANCEL: &str = "cancel";
-pub(crate) const ALERT_ICON: &str = "org.unbound.ActivityMonitor";
+pub(crate) const ALERT_ICON: &str = "org.bande.ActivityMonitor";
 pub(crate) const INSPECT_SYMBOL: &str = "dialog-information-symbolic";
 const STOP_SYMBOL: &[u8] = include_bytes!("../data/process-stop-symbolic.svg");
 const SYMBOL_PIXELS: u32 = 32;

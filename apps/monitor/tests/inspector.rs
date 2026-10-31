@@ -3,22 +3,22 @@
 mod fixture;
 
 use accesskit::Role;
-use fixture::{Fixture, TICKS_PER_SECOND, Task, check_golden};
-use unbound_monitor::{
+use bande_monitor::{
     Icons, InspectorView, OpenFile, Request, Screen, Section, Snapshot, read_details,
 };
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use unbound_toolkit::{
+use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
+use bande_toolkit::{
     Appearance, FrameRegions, Palette, Point, Scheme, TextSize, TextSystem, framed_scene,
 };
+use fixture::{Fixture, TICKS_PER_SECOND, Task, check_golden};
 
 const SIZE: (u32, u32) = (680, 520);
 
 fn family(fixture: &Fixture) -> Snapshot {
     fixture.spawn(&Task {
         pid: 300,
-        comm: "unbound-shell",
-        command: &["/usr/bin/unbound-shell"],
+        comm: "bande-shell",
+        command: &["/usr/bin/bande-shell"],
         start_ticks: 300,
         ..Task::default()
     });
@@ -64,7 +64,7 @@ fn family(fixture: &Fixture) -> Snapshot {
     fixture.sampler().sample().expect("sample")
 }
 
-fn bash(snapshot: &Snapshot) -> &unbound_monitor::Process {
+fn bash(snapshot: &Snapshot) -> &bande_monitor::Process {
     snapshot
         .processes
         .iter()
@@ -180,7 +180,7 @@ fn the_inspector_links_the_family_and_shows_each_section() {
     let mut view = inspector(&fixture, &snapshot);
     let shown = cells(&view);
     for value in [
-        "unbound-shell (300)",
+        "bande-shell (300)",
         "vim (500)",
         "/bin/bash --login",
         "session-1.scope",

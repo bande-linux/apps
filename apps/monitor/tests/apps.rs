@@ -4,13 +4,13 @@ mod fixture;
 
 use std::rc::Rc;
 
+use bande_monitor::{Catalog, Group, GroupKey, Process};
 use fixture::{entry, process};
-use unbound_monitor::{Catalog, Group, GroupKey, Process};
 
 fn catalog() -> Catalog {
     Catalog::new(&[
-        entry("org.unbound.Terminal", "Terminal", "unbound-term", false),
-        entry("org.unbound.Files", "Files", "unbound-files %U", false),
+        entry("org.bande.Terminal", "Terminal", "bande-term", false),
+        entry("org.bande.Files", "Files", "bande-files %U", false),
         entry("htop", "htop", "htop", true),
         entry(
             "org.example.Editor",
@@ -61,21 +61,21 @@ fn alone(pid: u32) -> GroupKey {
 #[test]
 fn terminal_children_stay_with_the_terminal_but_apps_started_from_it_stand_alone() {
     let processes = [
-        process(500, 1, "/usr/bin/unbound-term"),
+        process(500, 1, "/usr/bin/bande-term"),
         process(501, 500, "/bin/bash"),
         process(502, 501, "cargo build"),
         process(503, 502, "rustc --edition=2024"),
-        process(504, 501, "/usr/bin/unbound-files /tmp"),
+        process(504, 501, "/usr/bin/bande-files /tmp"),
         process(505, 504, "/usr/bin/helper"),
     ];
     let groups = catalog().group(&processes);
 
     assert_eq!(
-        pids(&groups, &processes, &app("org.unbound.Terminal")),
+        pids(&groups, &processes, &app("org.bande.Terminal")),
         [500, 501, 502, 503]
     );
     assert_eq!(
-        pids(&groups, &processes, &app("org.unbound.Files")),
+        pids(&groups, &processes, &app("org.bande.Files")),
         [504, 505]
     );
     assert_eq!(groups.len(), 2);
@@ -126,18 +126,15 @@ fn services_keep_their_same_named_workers_and_leave_other_children_alone() {
         process(800, 1, "/usr/sbin/sshd"),
         process(801, 800, "/usr/sbin/sshd"),
         process(802, 801, "/bin/bash"),
-        process(900, 1, "/usr/bin/unbound-dock"),
-        process(901, 900, "/usr/bin/unbound-term"),
+        process(900, 1, "/usr/bin/bande-dock"),
+        process(901, 900, "/usr/bin/bande-term"),
     ];
     let groups = catalog().group(&processes);
 
     assert_eq!(pids(&groups, &processes, &alone(800)), [800, 801]);
     assert_eq!(pids(&groups, &processes, &alone(802)), [802]);
     assert_eq!(pids(&groups, &processes, &alone(900)), [900]);
-    assert_eq!(
-        pids(&groups, &processes, &app("org.unbound.Terminal")),
-        [901]
-    );
+    assert_eq!(pids(&groups, &processes, &app("org.bande.Terminal")), [901]);
 }
 
 #[test]
@@ -145,8 +142,8 @@ fn kernel_threads_share_one_group_and_the_oldest_root_leads_an_app() {
     let processes = [
         process(2, 0, "kthreadd"),
         process(30, 2, "kworker/0:1"),
-        process(1200, 1, "/usr/bin/unbound-files"),
-        process(1100, 1, "/usr/bin/unbound-files"),
+        process(1200, 1, "/usr/bin/bande-files"),
+        process(1100, 1, "/usr/bin/bande-files"),
         process(1300, 1200, "/usr/bin/thumbnailer"),
     ];
     let groups = catalog().group(&processes);
@@ -154,7 +151,7 @@ fn kernel_threads_share_one_group_and_the_oldest_root_leads_an_app() {
     assert_eq!(pids(&groups, &processes, &GroupKey::Kernel), [2, 30]);
     let files = groups
         .iter()
-        .find(|group| group.key == app("org.unbound.Files"))
+        .find(|group| group.key == app("org.bande.Files"))
         .expect("files");
     assert_eq!(processes[files.leader].pid, 1100);
     assert_eq!(files.name, "Files");

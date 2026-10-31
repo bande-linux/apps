@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use crate::L10N;
 use crate::apps::{Catalog, Group, GroupKey};
-use unbound_status::history::{charging_spans, time_on_battery};
-use unbound_status::status::Power;
+use bande_status::history::{charging_spans, time_on_battery};
+use bande_status::status::Power;
 
 use crate::format::{format_bytes, format_cpu_time, format_hours, format_percent, format_rate};
 use crate::power::{BATTERY_HISTORY, BatteryReport};

@@ -2,11 +2,11 @@
 
 mod fixture;
 
-use fixture::process;
-use unbound_monitor::{
+use bande_monitor::{
     Catalog, Inhibitor, Monitor, SleepBlocker, Snapshot, Tab, list_sleep_blockers, sleep_blockers,
 };
-use unbound_test_bus::SessionBus;
+use bande_test_bus::SessionBus;
+use fixture::process;
 
 fn inhibitor(what: &str, who: &str, why: &str, mode: &str, pid: u32) -> Inhibitor {
     (
@@ -37,7 +37,7 @@ fn only_blocking_sleep_and_idle_inhibitors_keep_the_computer_awake() {
             inhibitor("shutdown:sleep", "Videos", "Playing", "block", 10),
             inhibitor("idle", "Backup", "Copying files", "block", 11),
             inhibitor("sleep", "NetworkManager", "", "delay", 12),
-            inhibitor("handle-lid-switch", "unbound-power", "", "block", 13),
+            inhibitor("handle-lid-switch", "bande-power", "", "block", 13),
         ]),
         [
             SleepBlocker {
@@ -96,7 +96,7 @@ fn a_sleep_blocker_from_logind_marks_its_app_in_the_energy_tab() {
     let column = monitor
         .columns()
         .iter()
-        .position(|column| *column == unbound_monitor::Column::PreventingSleep)
+        .position(|column| *column == bande_monitor::Column::PreventingSleep)
         .expect("a Preventing Sleep column");
     let rows = monitor
         .rows()

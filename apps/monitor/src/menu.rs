@@ -1,5 +1,5 @@
-use unbound_app_menu::{Entry, app_submenu, close_window, window_submenu};
-use unbound_toolkit::ui::{Menu, MenuItem};
+use bande_app_menu::{Entry, app_submenu, close_window, window_submenu};
+use bande_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
 use crate::model::{Column, Filter, Tab};

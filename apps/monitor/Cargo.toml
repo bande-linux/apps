@@ -1,6 +1,6 @@
 [package]
-name = "unbound-monitor"
-description = "Unbound Activity Monitor: CPU, memory, disk and network use per app"
+name = "bande-monitor"
+description = "Bande Activity Monitor: CPU, memory, disk and network use per app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,31 +11,31 @@ repository.workspace = true
 accesskit.workspace = true
 rustix.workspace = true
 tracing.workspace = true
-unbound-app-menu.workspace = true
-unbound-l10n.workspace = true
-unbound-log.workspace = true
-unbound-status.workspace = true
-unbound-toolkit.workspace = true
-unbound-xdg.workspace = true
+bande-app-menu.workspace = true
+bande-l10n.workspace = true
+bande-log.workspace = true
+bande-status.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-unbound-golden.workspace = true
-unbound-test-bus.workspace = true
+bande-golden.workspace = true
+bande-test-bus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, fonts-inter"
 extended-description = """\
-The activity monitor of the Unbound desktop: lists running apps with their \
+The activity monitor of the Bande desktop: lists running apps with their \
 processes and shows CPU, memory, disk and network use, and quits or force \
 quits any app."""
 assets = [
-    ["target/release/unbound-monitor", "usr/bin/", "755"],
-    ["data/org.unbound.ActivityMonitor.desktop", "usr/share/applications/", "644"],
-    ["data/org.unbound.ActivityMonitor.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["target/release/bande-monitor", "usr/bin/", "755"],
+    ["data/org.bande.ActivityMonitor.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.ActivityMonitor.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
 ]
 
 [lints]

@@ -2,16 +2,16 @@
 
 mod fixture;
 
-use fixture::{entry, process};
-use unbound_monitor::{
+use bande_monitor::{
     Catalog, Column, GroupKey, Interface, InterfaceKind, Monitor, Process, Rates, Row, RowKey,
     Snapshot, Tab, format_bytes, format_cpu_time, format_rate,
 };
+use fixture::{entry, process};
 
 fn catalog() -> Catalog {
     Catalog::new(&[
-        entry("org.unbound.Terminal", "Terminal", "unbound-term", false),
-        entry("org.unbound.Files", "Files", "unbound-files", false),
+        entry("org.bande.Terminal", "Terminal", "bande-term", false),
+        entry("org.bande.Files", "Files", "bande-files", false),
     ])
 }
 
@@ -30,10 +30,10 @@ fn snapshot(processes: Vec<Process>) -> Snapshot {
 
 fn desk(terminal: f32, cargo: f32, files: f32) -> Snapshot {
     snapshot(vec![
-        busy(process(500, 1, "/usr/bin/unbound-term"), terminal),
+        busy(process(500, 1, "/usr/bin/bande-term"), terminal),
         busy(process(501, 500, "/bin/bash"), 0.5),
         busy(process(502, 501, "/usr/bin/cargo"), cargo),
-        busy(process(600, 1, "/usr/bin/unbound-files"), files),
+        busy(process(600, 1, "/usr/bin/bande-files"), files),
         busy(process(700, 1, "/usr/sbin/sshd"), 0.0),
     ])
 }
@@ -47,7 +47,7 @@ fn child_names(row: &Row) -> Vec<&str> {
 }
 
 fn terminal() -> RowKey {
-    RowKey::Group(GroupKey::App("org.unbound.Terminal".to_owned()))
+    RowKey::Group(GroupKey::App("org.bande.Terminal".to_owned()))
 }
 
 fn cargo() -> RowKey {
@@ -82,13 +82,13 @@ fn an_apps_processes_sort_under_it_and_a_selected_one_stays_selected() {
     monitor.update(desk(1.0, 2.0, 10.0));
     assert_eq!(
         child_names(&monitor.rows()[1]),
-        ["cargo", "unbound-term", "bash"]
+        ["cargo", "bande-term", "bash"]
     );
     monitor.set_selection(vec![cargo()]);
     monitor.update(desk(1.0, 0.0, 10.0));
     assert_eq!(
         child_names(&monitor.rows()[1]),
-        ["unbound-term", "bash", "cargo"]
+        ["bande-term", "bash", "cargo"]
     );
     assert_eq!(monitor.selection(), [cargo()]);
 }
@@ -98,7 +98,7 @@ fn a_selected_process_that_exits_leaves_nothing_selected() {
     let mut monitor = Monitor::new(catalog(), 1000);
     monitor.update(desk(1.0, 2.0, 10.0));
     monitor.set_selection(vec![RowKey::Group(GroupKey::App(
-        "org.unbound.Files".to_owned(),
+        "org.bande.Files".to_owned(),
     ))]);
     let mut without_files = desk(1.0, 2.0, 10.0);
     without_files.processes.retain(|process| process.pid != 600);
@@ -132,7 +132,7 @@ fn quitting_an_app_signals_its_roots_and_force_quitting_signals_every_process() 
     assert!(target.roots.is_empty());
     assert_eq!(
         target.apps,
-        [("org.unbound.Terminal".to_owned(), vec![(500, 500)])]
+        [("org.bande.Terminal".to_owned(), vec![(500, 500)])]
     );
     assert_eq!(target.processes, [(500, 500), (501, 501), (502, 502)]);
 

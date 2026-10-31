@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use unbound_xdg::{DesktopEntry, unit_app_ids};
+use bande_xdg::{DesktopEntry, unit_app_ids};
 
 use crate::sampler::Process;
 
