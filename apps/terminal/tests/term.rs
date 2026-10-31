@@ -246,7 +246,7 @@ fn shoot(name: &str, scene: &Scene) {
     CpuRenderer::new()
         .render_into(scene, 1.0, &mut rgba)
         .expect("render");
-    check_golden(name, (scene.width, scene.height), rgba);
+    unbound_golden::assert_golden_rgba!(name, (scene.width, scene.height), rgba);
 }
 
 #[test]
@@ -446,10 +446,6 @@ fn the_tab_strip_shares_the_header_after_the_window_controls_and_keeps_room_for_
 
     let alone = TabBarLayout::new(1, 700.0, HEADER_LEADING);
     assert!(alone.tabs.is_empty());
-}
-
-fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
 }
 
 const SESSION: &[u8] = b"\x1b[1mmikael@unbound\x1b[0m:\x1b[34m~\x1b[0m$ ls --color\r\n\
