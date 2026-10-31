@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Calendar
+GenericName=Calendar
+Comment=Keep your events and CalDAV calendars in sync
+Icon=org.bande.Calendar
+Exec=bande-calendar %U
+Categories=Office;Calendar;
+Keywords=calendar;event;meeting;caldav;ics;webcal;schedule;
+MimeType=text/calendar;x-scheme-handler/webcal;x-scheme-handler/webcals;
+StartupNotify=true

@@ -314,6 +314,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 name = "bande-calendar"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "base64 0.22.1",
  "jiff",
  "roxmltree",
@@ -324,6 +325,7 @@ dependencies = [
  "tracing",
  "unbound-app-menu",
  "unbound-datetime",
+ "unbound-design",
  "unbound-golden",
  "unbound-l10n",
  "unbound-log",
