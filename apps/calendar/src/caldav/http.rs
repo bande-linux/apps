@@ -110,7 +110,11 @@ impl Http {
         let request = builder
             .body(body.unwrap_or_default().to_owned())
             .map_err(|error| network(&error))?;
-        let mut response = self.agent.run(request).map_err(|error| network(&error))?;
+        let mut response = match self.agent.run(request.clone()) {
+            Err(ureq::Error::Io(_)) => self.agent.run(request),
+            other => other,
+        }
+        .map_err(|error| network(&error))?;
         let header = |name: &str| {
             response
                 .headers()

@@ -25,10 +25,7 @@ fn event(uid: &str, summary: &str) -> String {
 }
 
 fn respond(stream: &mut TcpStream, status: &str, headers: &[(&str, String)], body: &str) {
-    let mut head = format!(
-        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n",
-        body.len()
-    );
+    let mut head = format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\n", body.len());
     for (name, value) in headers {
         head.push_str(&format!("{name}: {value}\r\n"));
     }
