@@ -1,7 +1,7 @@
 use data_encoding::BASE64;
 
 use crate::error::{Error, Result};
-use crate::net::{Link, Security, Server, Trust};
+use crate::net::{Link, Network, Security, Server};
 
 const MAX_LINE: usize = 64 * 1024;
 
@@ -89,7 +89,7 @@ pub fn dot_stuffed(message: &[u8]) -> Vec<u8> {
         .collect::<Vec<_>>();
     let mut stuffed = Vec::with_capacity(message.len() + 64);
     let count = match text.last() {
-        Some(last) if last.is_empty() => text.len() - 1,
+        Some([]) => text.len() - 1,
         _ => text.len(),
     };
     for line in &text[..count] {
@@ -118,7 +118,7 @@ fn checked(address: &str) -> Result<&str> {
 
 pub fn send(
     server: &Server,
-    trust: &Trust,
+    network: &Network,
     login: Option<(&str, &str)>,
     envelope: &Envelope<'_>,
 ) -> Result<()> {
@@ -126,7 +126,7 @@ pub fn send(
         return Err(Error::Refused("the message has no recipients".to_owned()));
     }
     let mut smtp = Smtp {
-        link: Link::connect(server, trust)?,
+        link: Link::connect(server, network)?,
     };
     smtp.expect(&[220])?;
     let name = "localhost";

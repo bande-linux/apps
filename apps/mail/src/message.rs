@@ -1,6 +1,6 @@
 use mailparse::{
-    DispositionType, MailAddr, MailHeader, MailHeaderMap, ParsedMail, addrparse,
-    addrparse_header, dateparse, parse_headers, parse_mail,
+    DispositionType, MailAddr, MailHeader, MailHeaderMap, ParsedMail, addrparse, addrparse_header,
+    dateparse, parse_headers, parse_mail,
 };
 
 use crate::html::{Document, render_html, render_plain};
@@ -244,13 +244,7 @@ pub fn preview(text: &str) -> String {
         if !preview.is_empty() {
             preview.push(' ');
         }
-        preview.extend(
-            line.split_whitespace()
-                .flat_map(|word| [word, " "])
-                .collect::<String>()
-                .trim_end()
-                .chars(),
-        );
+        preview.push_str(&line.split_whitespace().collect::<Vec<_>>().join(" "));
         if preview.chars().count() >= PREVIEW_LENGTH {
             break;
         }
@@ -307,13 +301,24 @@ JVBERi0=\r\n\
         );
         assert_eq!(content.envelope.to.len(), 2);
         assert_eq!(content.envelope.date, Some(1_793_089_800));
-        assert_eq!(content.envelope.message_id.as_deref(), Some("<abc@example.de>"));
+        assert_eq!(
+            content.envelope.message_id.as_deref(),
+            Some("<abc@example.de>")
+        );
         assert_eq!(
             content.envelope.references,
             ["<root@example.com>", "<parent@example.com>"]
         );
-        assert_eq!(content.plain.as_deref(), Some("Grüße aus Berlin\r\n> quoted"));
-        assert!(content.html.as_deref().is_some_and(|html| html.contains("<b>aus</b>")));
+        assert_eq!(
+            content.plain.as_deref(),
+            Some("Grüße aus Berlin\r\n> quoted")
+        );
+        assert!(
+            content
+                .html
+                .as_deref()
+                .is_some_and(|html| html.contains("<b>aus</b>"))
+        );
         assert_eq!(
             content.attachments,
             [Attachment {
@@ -323,7 +328,7 @@ JVBERi0=\r\n\
             }]
         );
         assert_eq!(content.preview(), "Grüße aus Berlin");
-        assert_eq!(content.document(false).blocks[0].bold, [8..11]);
+        assert_eq!(content.document(false).blocks[0].bold, vec![8..11]);
     }
 
     #[test]

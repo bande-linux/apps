@@ -352,7 +352,10 @@ fn find_links(text: &str) -> Vec<(Range<usize>, String)> {
         let end = text[start..]
             .find(|character: char| character.is_whitespace() || "<>\"".contains(character))
             .map_or(text.len(), |length| start + length);
-        let end = start + text[start..end].trim_end_matches(['.', ',', ')', ';', ':', '!', '?']).len();
+        let end = start
+            + text[start..end]
+                .trim_end_matches(['.', ',', ')', ';', ':', '!', '?'])
+                .len();
         links.push((start..end, text[start..end].to_owned()));
         from = end.max(start + 1);
     }
@@ -411,7 +414,7 @@ mod tests {
              <div>Second<br>line</div></body></html>",
         );
         assert_eq!(texts(&document), ["Hello dear world", "Second\nline"]);
-        assert_eq!(document.blocks[0].bold, [6..10]);
+        assert_eq!(document.blocks[0].bold, vec![6..10]);
     }
 
     #[test]
@@ -462,7 +465,12 @@ mod tests {
         );
         assert_eq!(
             texts(&document),
-            ["Hi,\nsee https://example.com/a.", "On Monday you wrote:", "old", "older"]
+            [
+                "Hi,\nsee https://example.com/a.",
+                "On Monday you wrote:",
+                "old",
+                "older"
+            ]
         );
         assert_eq!(
             document.blocks[0].links,

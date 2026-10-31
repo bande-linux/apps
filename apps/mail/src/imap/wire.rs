@@ -18,7 +18,8 @@ impl Value {
     }
 
     pub fn is_atom(&self, name: &str) -> bool {
-        self.atom().is_some_and(|atom| atom.eq_ignore_ascii_case(name))
+        self.atom()
+            .is_some_and(|atom| atom.eq_ignore_ascii_case(name))
     }
 
     pub fn number(&self) -> Option<u64> {
@@ -104,7 +105,9 @@ fn error<T>(what: &str, input: &[u8]) -> Result<T, WireError> {
 }
 
 pub fn literal_length(line: &[u8]) -> Option<usize> {
-    let line = line.strip_suffix(b"\r\n").or_else(|| line.strip_suffix(b"\n"))?;
+    let line = line
+        .strip_suffix(b"\r\n")
+        .or_else(|| line.strip_suffix(b"\n"))?;
     let inner = line.strip_suffix(b"}")?;
     let open = inner.iter().rposition(|byte| *byte == b'{')?;
     let digits = &inner[open + 1..];
@@ -307,10 +310,12 @@ impl Parser<'_> {
         if text.eq_ignore_ascii_case("NIL") {
             return Ok(Value::Nil);
         }
-        if !text.is_empty() && text.len() < 20 && text.bytes().all(|byte| byte.is_ascii_digit()) {
-            if let Ok(number) = text.parse() {
-                return Ok(Value::Number(number));
-            }
+        if !text.is_empty()
+            && text.len() < 20
+            && text.bytes().all(|byte| byte.is_ascii_digit())
+            && let Ok(number) = text.parse()
+        {
+            return Ok(Value::Number(number));
         }
         Ok(Value::Atom(text))
     }

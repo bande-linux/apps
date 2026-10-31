@@ -5,7 +5,7 @@ use data_encoding::BASE64;
 use super::wire::{Response, Status, Value, literal_length, parse_response, quote};
 use super::{Flag, Flags, Role, utf7};
 use crate::error::{Error, Result};
-use crate::net::{COMMAND_TIMEOUT, Closer, Link, Security, Server, Trust};
+use crate::net::{Closer, Link, Network, Security, Server};
 
 const MAX_LINE: usize = 1 << 20;
 const MAX_RESPONSE: usize = 128 << 20;
@@ -112,7 +112,7 @@ fn fetched(values: &[Value]) -> Option<Fetched> {
     }
     let items = values.get(2)?.list()?;
     let mut fetched = Fetched::default();
-    for pair in items.chunks_exact(2) {
+    for pair in items.as_chunks::<2>().0 {
         let Some(key) = pair[0].atom() else {
             continue;
         };
@@ -147,8 +147,8 @@ fn code_number(codes: &[Vec<Value>], name: &str) -> Option<u64> {
 }
 
 impl Session {
-    pub fn connect(server: &Server, trust: &Trust) -> Result<Self> {
-        let link = Link::connect(server, trust)?;
+    pub fn connect(server: &Server, network: &Network) -> Result<Self> {
+        let link = Link::connect(server, network)?;
         let mut session = Self {
             link,
             tag: 0,
@@ -196,7 +196,10 @@ impl Session {
     }
 
     fn take_capabilities(&mut self, code: &[Value]) -> bool {
-        if !code.first().is_some_and(|first| first.is_atom("CAPABILITY")) {
+        if !code
+            .first()
+            .is_some_and(|first| first.is_atom("CAPABILITY"))
+        {
             return false;
         }
         self.capabilities = code[1..].iter().filter_map(Value::text).collect();
@@ -291,11 +294,15 @@ impl Session {
                         _ => Err(Error::Protocol(text)),
                     };
                 }
-                Response::Status { tag: Some(other), .. } => {
+                Response::Status {
+                    tag: Some(other), ..
+                } => {
                     return Err(Error::Protocol(format!("an answer to {other}, not {tag}")));
                 }
                 Response::Continue(text) => {
-                    return Err(Error::Protocol(format!("an unexpected continuation {text}")));
+                    return Err(Error::Protocol(format!(
+                        "an unexpected continuation {text}"
+                    )));
                 }
             }
             if let Some(text) = bye.take() {
@@ -380,10 +387,7 @@ impl Session {
             .filter(|values| values.first().is_some_and(|word| word.is_atom("LIST")))
             .filter_map(|values| {
                 let attributes = atoms(values.get(1)?);
-                let delimiter = values
-                    .get(2)?
-                    .text()
-                    .and_then(|text| text.chars().next());
+                let delimiter = values.get(2)?.text().and_then(|text| text.chars().next());
                 let path = utf7::decode(&values.get(3)?.text()?);
                 let selectable = !attributes.iter().any(|attribute| {
                     attribute.eq_ignore_ascii_case("\\Noselect")
@@ -454,10 +458,7 @@ impl Session {
     }
 
     pub fn fetch_headers(&mut self, uids: &[u32]) -> Result<Vec<Fetched>> {
-        self.fetch(
-            uids,
-            "UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[HEADER]",
-        )
+        self.fetch(uids, "UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[HEADER]")
     }
 
     pub fn fetch_flags(&mut self, uids: &[u32]) -> Result<Vec<Fetched>> {
@@ -566,7 +567,7 @@ impl Session {
                 }
             },
         };
-        self.link.set_read_timeout(COMMAND_TIMEOUT)?;
+        self.link.restore_read_timeout()?;
         waited?;
         self.link.send(b"DONE\r\n")?;
         self.finish(&tag)?;

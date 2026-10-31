@@ -40,12 +40,22 @@ pub struct Server {
     pub security: Security,
 }
 
-#[derive(Clone, Default)]
-pub struct Trust {
+#[derive(Clone)]
+pub struct Network {
     pub extra_roots: Vec<Vec<u8>>,
+    pub timeout: Duration,
 }
 
-impl Trust {
+impl Default for Network {
+    fn default() -> Self {
+        Self {
+            extra_roots: Vec::new(),
+            timeout: COMMAND_TIMEOUT,
+        }
+    }
+}
+
+impl Network {
     fn connector(&self) -> Result<TlsConnector> {
         let mut builder = TlsConnector::builder();
         for pem in &self.extra_roots {
@@ -101,7 +111,7 @@ impl Write for Stream {
 pub struct Link {
     stream: Stream,
     buffer: Vec<u8>,
-    trust: Trust,
+    network: Network,
     host: String,
 }
 
@@ -114,17 +124,17 @@ pub fn is_loopback(host: &str) -> bool {
             .is_ok_and(|address| address.is_loopback())
 }
 
-fn open_tcp(host: &str, port: u16) -> Result<TcpStream> {
+fn open_tcp(host: &str, port: u16, timeout: Duration) -> Result<TcpStream> {
     let addresses = (host, port).to_socket_addrs()?.collect::<Vec<_>>();
     let mut last = Error::Io(io::Error::new(
         io::ErrorKind::NotFound,
         format!("{host} has no address"),
     ));
     for address in addresses {
-        match TcpStream::connect_timeout(&address, CONNECT_TIMEOUT) {
+        match TcpStream::connect_timeout(&address, timeout.min(CONNECT_TIMEOUT)) {
             Ok(stream) => {
-                stream.set_read_timeout(Some(COMMAND_TIMEOUT))?;
-                stream.set_write_timeout(Some(COMMAND_TIMEOUT))?;
+                stream.set_read_timeout(Some(timeout))?;
+                stream.set_write_timeout(Some(timeout))?;
                 stream.set_nodelay(true)?;
                 return Ok(stream);
             }
@@ -135,15 +145,15 @@ fn open_tcp(host: &str, port: u16) -> Result<TcpStream> {
 }
 
 impl Link {
-    pub fn connect(server: &Server, trust: &Trust) -> Result<Self> {
+    pub fn connect(server: &Server, network: &Network) -> Result<Self> {
         if server.security == Security::Plain && !is_loopback(&server.host) {
             return Err(Error::Insecure);
         }
-        let tcp = open_tcp(&server.host, server.port)?;
+        let tcp = open_tcp(&server.host, server.port, network.timeout)?;
         let link = Self {
             stream: Stream::Plain(tcp),
             buffer: Vec::new(),
-            trust: trust.clone(),
+            network: network.clone(),
             host: server.host.clone(),
         };
         match server.security {
@@ -161,7 +171,7 @@ impl Link {
                 "data arrived before the secure connection started".to_owned(),
             ));
         }
-        let connector = self.trust.connector()?;
+        let connector = self.network.connector()?;
         let host = self.host.trim_start_matches('[').trim_end_matches(']');
         let tls = connector
             .connect(host, tcp)
@@ -169,7 +179,7 @@ impl Link {
         Ok(Self {
             stream: Stream::Tls(Box::new(tls)),
             buffer: Vec::new(),
-            trust: self.trust,
+            network: self.network,
             host: self.host,
         })
     }
@@ -180,6 +190,10 @@ impl Link {
 
     pub fn set_read_timeout(&self, timeout: Duration) -> Result<()> {
         Ok(self.stream.tcp().set_read_timeout(Some(timeout))?)
+    }
+
+    pub fn restore_read_timeout(&self) -> Result<()> {
+        self.set_read_timeout(self.network.timeout)
     }
 
     pub fn closer(&self) -> Result<Closer> {
@@ -262,7 +276,7 @@ mod tests {
             security: Security::Plain,
         };
         assert!(matches!(
-            Link::connect(&server, &Trust::default()),
+            Link::connect(&server, &Network::default()),
             Err(Error::Insecure)
         ));
     }

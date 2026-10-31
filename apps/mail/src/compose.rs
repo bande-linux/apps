@@ -221,10 +221,7 @@ fn domain_of(address: &Address) -> &str {
 
 fn parameter(key: &str, value: &str) -> String {
     if value.is_ascii() {
-        return format!(
-            "{key}=\"{}\"",
-            value.replace(['"', '\\', '\r', '\n'], "_")
-        );
+        return format!("{key}=\"{}\"", value.replace(['"', '\\', '\r', '\n'], "_"));
     }
     let encoded = value
         .bytes()
@@ -244,10 +241,7 @@ pub fn build(draft: &Draft, now: &Zoned) -> Vec<u8> {
         "Date: {}\r\n",
         now.strftime("%a, %d %b %Y %H:%M:%S %z")
     ));
-    message.extend(address_header(
-        "From",
-        std::slice::from_ref(&draft.from),
-    ));
+    message.extend(address_header("From", std::slice::from_ref(&draft.from)));
     message.extend(address_header("To", &draft.to));
     message.extend(address_header("Cc", &draft.cc));
     message.push_str(&format!(
@@ -260,7 +254,10 @@ pub fn build(draft: &Draft, now: &Zoned) -> Vec<u8> {
         domain_of(&draft.from)
     ));
     if let Some(parent) = &draft.in_reply_to {
-        message.push_str(&format!("In-Reply-To: {}\r\n", sanitized_header_text(parent)));
+        message.push_str(&format!(
+            "In-Reply-To: {}\r\n",
+            sanitized_header_text(parent)
+        ));
     }
     if !draft.references.is_empty() {
         message.push_str(&format!(
@@ -338,7 +335,10 @@ mod tests {
         assert_eq!(parsed.envelope.date, Some(1_793_089_800));
         assert_eq!(parsed.envelope.references, ["<r@x>", "<p@x>"]);
         assert_eq!(
-            parsed.plain.as_deref().map(|body| body.replace("\r\n", "\n")),
+            parsed
+                .plain
+                .as_deref()
+                .map(|body| body.replace("\r\n", "\n")),
             Some(draft.body.clone())
         );
         assert_eq!(parsed.attachments, draft.attachments);
@@ -359,7 +359,10 @@ Message-ID: <m1@example.com>\r\nReferences: <m0@example.com>\r\n\r\nHi\r\n> earl
         let draft = reply(&original, &me, true, "Ann wrote:");
         assert_eq!(
             draft.to,
-            [person("Ann", "ann@example.com"), person("", "bob@example.com")]
+            [
+                person("Ann", "ann@example.com"),
+                person("", "bob@example.com")
+            ]
         );
         assert_eq!(draft.cc, [person("Cat", "cat@example.com")]);
         assert_eq!(draft.subject, "RE: plans");

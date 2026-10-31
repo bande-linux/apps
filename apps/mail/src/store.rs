@@ -247,7 +247,10 @@ impl Store {
     }
 
     pub fn account(&self, id: AccountId) -> Result<Option<Account>> {
-        Ok(self.accounts()?.into_iter().find(|account| account.id == id))
+        Ok(self
+            .accounts()?
+            .into_iter()
+            .find(|account| account.id == id))
     }
 
     pub fn add_account(&self, account: &Account) -> Result<AccountId> {
@@ -349,8 +352,8 @@ impl Store {
             .map(|folder| folder.path.clone())
             .collect::<Vec<_>>();
         let known: Vec<(MailboxId, String)> = {
-            let mut statement = transaction
-                .prepare("SELECT id, path FROM mailboxes WHERE account = ?1")?;
+            let mut statement =
+                transaction.prepare("SELECT id, path FROM mailboxes WHERE account = ?1")?;
             statement
                 .query_map([account], |row| Ok((row.get(0)?, row.get(1)?)))?
                 .collect::<rusqlite::Result<_>>()?
@@ -414,10 +417,7 @@ impl Store {
                 .collect::<Vec<_>>()
                 .join(", ");
             let flags = message.flags.unwrap_or_default();
-            let date = envelope
-                .date
-                .or(message.internal_date)
-                .unwrap_or_default();
+            let date = envelope.date.or(message.internal_date).unwrap_or_default();
             transaction.execute(
                 "INSERT INTO messages (mailbox, uid, message_id, subject, sender_name, sender_email, \
                  recipients, date, size, seen, flagged, answered, deleted, draft, header) \
@@ -789,18 +789,27 @@ mod tests {
                 folder("Archive", Some(Role::Archive)),
             ],
         )?;
-        let inbox = store.mailbox_with_role(id, Role::Inbox)?.map(|inbox| inbox.id);
+        let inbox = store
+            .mailbox_with_role(id, Role::Inbox)?
+            .map(|inbox| inbox.id);
         let Some(inbox) = inbox else {
             unreachable!("the inbox was added")
         };
         store.set_mailbox_state(inbox, 7, Some(4))?;
         store.insert_headers(
             inbox,
-            &[header(1, "First", true), header(2, "Second", false), header(3, "Third 100%", false)],
+            &[
+                header(1, "First", true),
+                header(2, "Second", false),
+                header(3, "Third 100%", false),
+            ],
         )?;
         let listed = store.summaries(&Scope::AllOf(Role::Inbox), "")?;
         assert_eq!(
-            listed.iter().map(|summary| summary.subject.as_str()).collect::<Vec<_>>(),
+            listed
+                .iter()
+                .map(|summary| summary.subject.as_str())
+                .collect::<Vec<_>>(),
             ["Third 100%", "Second", "First"]
         );
         assert_eq!(store.mailboxes(id)?[1].unread, 2);
@@ -808,7 +817,10 @@ mod tests {
         assert_eq!(store.summaries(&Scope::Mailbox(inbox), "_")?.len(), 0);
         assert_eq!(store.missing_bodies(inbox, 1000, 10)?, [3, 2, 1]);
         store.store_body(inbox, 2, b"Subject: Second\r\n\r\nHello body\r\n")?;
-        assert_eq!(store.summaries(&Scope::Mailbox(inbox), "hello")?[0].preview, "Hello body");
+        assert_eq!(
+            store.summaries(&Scope::Mailbox(inbox), "hello")?[0].preview,
+            "Hello body"
+        );
 
         store.set_flag(&[listed[1].id], Flag::Seen, true)?;
         assert_eq!(store.unread(&Scope::Mailbox(inbox))?, 1);
@@ -820,7 +832,10 @@ mod tests {
         assert_eq!(store.known_uids(inbox)?, [1, 2]);
         let pending = store.pending(id)?;
         assert_eq!(
-            pending.iter().map(|pending| (&pending.action, &pending.uids)).collect::<Vec<_>>(),
+            pending
+                .iter()
+                .map(|pending| (&pending.action, &pending.uids))
+                .collect::<Vec<_>>(),
             [
                 (&Action::Flag(Flag::Seen, true), &vec![2]),
                 (&Action::Move("Archive".to_owned()), &vec![3]),

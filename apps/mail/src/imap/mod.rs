@@ -62,7 +62,10 @@ impl Role {
             .unwrap_or(path)
             .to_lowercase();
         let guesses: [(&[&str], Self); 5] = [
-            (&["sent", "sent items", "sent mail", "sent messages"], Self::Sent),
+            (
+                &["sent", "sent items", "sent mail", "sent messages"],
+                Self::Sent,
+            ),
             (&["drafts", "draft"], Self::Drafts),
             (
                 &["trash", "deleted items", "deleted messages", "bin"],
