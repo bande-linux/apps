@@ -517,12 +517,13 @@ impl MonitorView {
         self.show_columns();
     }
 
-    fn measures(&self) -> (bool, bool, bool) {
-        (
+    fn measures(&self) -> [bool; 4] {
+        [
             self.monitor.measures_proportional_memory(),
             self.monitor.measures_gpu(),
             self.monitor.measures_wakeups(),
-        )
+            self.monitor.measures_disk(),
+        ]
     }
 
     fn show_columns(&mut self) {
@@ -1260,6 +1261,10 @@ impl Screen for MonitorView {
 
     fn measures_gpu(&self) -> bool {
         self.monitor.measures_gpu()
+    }
+
+    fn measures_disk(&self) -> bool {
+        self.monitor.measures_disk()
     }
 
     fn measures_proportional_memory(&self) -> bool {

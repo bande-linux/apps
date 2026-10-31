@@ -302,6 +302,13 @@ impl Column {
         matches!(self, Column::Wakeups | Column::EnergyImpact)
     }
 
+    fn uses_disk(self) -> bool {
+        matches!(
+            self,
+            Column::Read | Column::Written | Column::ReadTotal | Column::WrittenTotal
+        )
+    }
+
     pub fn id(self) -> &'static str {
         match self {
             Column::Name => "name",
@@ -954,6 +961,10 @@ impl Monitor {
 
     pub fn measures_sleep_blockers(&self) -> bool {
         self.columns().contains(&Column::PreventingSleep)
+    }
+
+    pub fn measures_disk(&self) -> bool {
+        self.columns().iter().any(|column| column.uses_disk())
     }
 
     pub fn tabs(&self) -> Vec<Tab> {

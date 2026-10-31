@@ -26,6 +26,7 @@ const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
 const ICON_PIXELS: u32 = 32;
 const FILES: &str = "unbound-files";
+const FILES_APP_ID: &str = "org.unbound.Files";
 const PROC_ROOT: &str = "/";
 
 struct ActivityMonitor {
@@ -46,6 +47,8 @@ impl ActivityMonitor {
             .iter()
             .any(|screen| screen.measures_proportional_memory());
         self.sampler.measure_proportional_memory(proportional);
+        let disk = self.screens.iter().any(|screen| screen.measures_disk());
+        self.sampler.measure_disk(disk);
         let gpu = self.screens.iter().any(|screen| screen.measures_gpu());
         self.sampler.measure_gpu(gpu);
         let wakeups = self.screens.iter().any(|screen| screen.measures_wakeups());
@@ -227,7 +230,7 @@ fn show_in_files(window: &mut Window, path: &Path) {
         .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
         .ok();
     let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
-    if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+    if let Err(error) = spawn_detached(FILES_APP_ID, &command, None, token.as_deref()) {
         tracing::warn!("cannot show {} in Files: {error}", path.display());
     }
 }
@@ -385,6 +388,7 @@ fn icons() -> Icons {
 fn first_sample(sampler: &mut Sampler, screen: &mut impl Screen) -> Snapshot {
     sampler.measure_gpu(screen.measures_gpu());
     sampler.measure_wakeups(screen.measures_wakeups());
+    sampler.measure_disk(screen.measures_disk());
     match sampler.sample() {
         Ok(snapshot) => {
             screen.update(snapshot.clone());

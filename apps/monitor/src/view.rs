@@ -233,6 +233,10 @@ pub trait Screen {
         false
     }
 
+    fn measures_disk(&self) -> bool {
+        false
+    }
+
     fn inspects(&self, _pid: u32) -> bool {
         false
     }
