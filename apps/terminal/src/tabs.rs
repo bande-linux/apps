@@ -1,6 +1,6 @@
-use unbound_toolkit::{HEADER_HEIGHT, Point, Rect};
+use unbound_toolkit::{Point, Rect, WINDOW_HEADER_HEIGHT};
 
-pub const STRIP_HEIGHT: f32 = HEADER_HEIGHT as f32;
+pub const STRIP_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 pub const TAB_HEIGHT: f32 = 28.0;
 pub const HEADER_LEADING: f32 = 94.0;
 pub const FULL_SCREEN_LEADING: f32 = 12.0;
