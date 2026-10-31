@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+use bande_mail::compose::{Draft, Outgoing};
 use bande_mail::imap::{Flag, Role, Session};
+use bande_mail::message::Address;
 use bande_mail::net::{Network, Security, Server};
 use bande_mail::store::{Account, Scope, Store};
 use bande_mail::worker::{Command as Order, Event, Mailroom, Status, Worker};
@@ -74,6 +76,10 @@ service anvil {{
 namespace inbox {{
   inbox = yes
   separator = /
+  mailbox Drafts {{
+    special_use = \\Drafts
+    auto = subscribe
+  }}
   mailbox Sent {{
     special_use = \\Sent
     auto = subscribe
@@ -223,7 +229,16 @@ fn a_real_dovecot_syncs_both_ways_and_pushes_new_mail_by_idle() {
         .into_iter()
         .filter_map(|mailbox| mailbox.role)
         .collect::<Vec<_>>();
-    assert_eq!(roles, [Role::Archive, Role::Inbox, Role::Sent, Role::Trash]);
+    assert_eq!(
+        roles,
+        [
+            Role::Archive,
+            Role::Drafts,
+            Role::Inbox,
+            Role::Sent,
+            Role::Trash
+        ]
+    );
     let inbox = store.summaries(&Scope::AllOf(Role::Inbox), "").unwrap();
     assert_eq!(inbox.len(), 2);
     assert!(inbox.iter().all(|summary| summary.downloaded));
@@ -262,4 +277,30 @@ fn a_real_dovecot_syncs_both_ways_and_pushes_new_mail_by_idle() {
     };
     let pushed = store.summary(arrived[0]).unwrap().unwrap();
     assert_eq!(pushed.subject, "Pushed");
+
+    worker.send(Order::SaveDraft(Box::new(Outgoing {
+        draft: Draft {
+            from: Address {
+                name: "Ann".to_owned(),
+                email: USER.to_owned(),
+            },
+            subject: "Unfinished".to_owned(),
+            body: "To be continued".to_owned(),
+            ..Draft::default()
+        },
+        ..Outgoing::default()
+    })));
+    let drafts = store.mailbox_with_role(id, Role::Drafts).unwrap().unwrap();
+    let deadline = Instant::now() + WAIT;
+    while !store
+        .summaries(&Scope::Mailbox(drafts.id), "")
+        .unwrap()
+        .iter()
+        .any(|summary| {
+            summary.downloaded && summary.flags.draft && summary.preview == "To be continued"
+        })
+    {
+        assert!(Instant::now() < deadline, "the draft never reached Drafts");
+        mailroom.wait(Duration::from_millis(100));
+    }
 }

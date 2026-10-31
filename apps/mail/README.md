@@ -29,16 +29,22 @@ apt install bande-mail
   headers, the plain text or sanitised HTML, and the attachments; clicking an attachment saves it
   to Downloads and opens it.
 - **HTML** is never rendered as a web page: it is turned into paragraphs, headings, lists,
-  quotes and links. Scripts, styles, forms and frames are dropped, only `http`, `https` and
-  `mailto` links survive, and no remote content is ever fetched; the reader says when a message
-  had some.
+  quotes, links and pictures. Scripts, styles, forms and frames are dropped, and only `http`,
+  `https` and `mailto` links survive. Pictures sent inside the message (`cid:`) show at once;
+  remote pictures are not fetched until **Load Remote Content** is clicked in the reader's
+  banner, and then only over HTTPS, at most 20 per message, 10 MB each, decoded with limits on
+  their size.
 - **Toolbar and keys.** Get Mail (⇧⌘N), New Message (⌘N), Archive (⇧⌘A), Delete (⌫), Junk
   (⇧⌘J), Reply (⌘R), Reply All (⇧⌘R), Forward (⇧⌘F), Flag (⇧⌘L), Mark as Read or Unread (⇧⌘U)
   and Search (⌘F), which searches sender, recipients, subject and text. ⌘ is the logo key.
 - **Compose** opens its own window, with From when there are several accounts. Replies quote the
-  message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. A sent
-  message is kept in Sent and the original is marked answered. If sending fails, the message
-  comes back in a window with the error.
+  message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. Files are
+  attached through the desktop's file chooser (the portal), up to 25 MB each, and a click on an
+  attachment removes it. A sent message is kept in Sent and the original is marked answered. If
+  sending fails, the message comes back in a window with the error.
+- **Drafts.** Closing a message that was changed and not sent keeps it in the account's Drafts
+  mailbox (also on quit). Double-click a draft, or press Return, to carry on; saving it again or
+  sending it removes the older copy.
 - **Offline store.** One SQLite database in `~/.local/share/bande-mail/` holds the accounts,
   folders, headers, flags and message bodies (bodies up to 2 MB are fetched ahead, larger ones
   when opened). Flag changes, moves and deletions apply at once and are queued until the
@@ -69,8 +75,8 @@ cargo test
   a changed `UIDVALIDITY`, servers without `MOVE`, `SPECIAL-USE` or `IDLE`, and servers that
   never answer or send garbage.
 - `tests/dovecot.rs` starts Debian's `dovecot` as the current user on a free loopback port and
-  checks sync, flags, moves and IDLE against it. It skips itself when `/usr/sbin/dovecot` is not
-  installed, so CI runs only the fake server.
+  checks sync, flags, moves, IDLE and drafts against it. It skips itself when
+  `/usr/sbin/dovecot` is not installed, so CI runs only the fake server.
 - `tests/secrets.rs` checks the keyring code against a fake Secret Service on a private bus.
 - `tests/views.rs` checks the window, the reader, the account sheet and their golden screenshots
   in light and dark, with the desktop's golden harness (`UNBOUND_UPDATE_GOLDENS=1` rewrites
@@ -90,6 +96,7 @@ Each one is in Debian, except where noted:
 | `mailparse` | MIME parsing, charsets and encoded words of incoming mail |
 | `rusqlite` | the offline store, on the system `libsqlite3` |
 | `html5ever` | a correct HTML tokenizer for turning mail HTML into safe text |
+| `image` | PNG, JPEG and GIF pictures in mail, with the same version and features as the toolkit |
 | `data-encoding` | base64 for MIME, `AUTH PLAIN` and modified UTF-7 (already pulled in by `mailparse`) |
 | `zeroize` | keeps the typed password out of freed memory (already used by the toolkit) |
 | `jiff`, `roxmltree`, `zbus`, `accesskit`, `tracing` | shared with the desktop |
@@ -100,9 +107,8 @@ the HTTPS autoconfig fetch are small, synchronous and bounded by timeouts.
 
 ## Not yet
 
-- Adding attachments in Compose (needs the file chooser portal), drafts saved to the server,
-  signatures, rich text.
-- Loading remote content on request, inline `cid:` images, printing.
+- Signatures, rich text, drag and drop of files into Compose, saving drafts while typing.
+- Remote pictures over plain `http` (they show their alt text), SVG pictures, printing.
 - Conversations (threads), multiple selection, drag and drop to mailboxes, mailbox
   management (create, rename, delete folders).
 - OAuth2 (Gmail and Outlook need app passwords for now), CONDSTORE/QRESYNC for faster flag
