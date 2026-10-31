@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use unbound_xdg::DesktopEntry;
+use unbound_xdg::{DesktopEntry, unit_app_ids};
 
 use crate::sampler::Process;
 
@@ -40,50 +40,6 @@ pub struct Group {
 
 fn file_name(path: &str) -> Option<&str> {
     Path::new(path).file_name()?.to_str()
-}
-
-fn unescape_unit(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(index) = rest.find("\\x") {
-        result.push_str(&rest[..index]);
-        let byte = rest
-            .get(index + 2..index + 4)
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
-        match byte {
-            Some(byte) => {
-                result.push(char::from(byte));
-                rest = &rest[index + 4..];
-            }
-            None => {
-                result.push_str("\\x");
-                rest = &rest[index + 2..];
-            }
-        }
-    }
-    result.push_str(rest);
-    result
-}
-
-fn unit_app_ids(unit: &str) -> Vec<String> {
-    let Some(rest) = unit.strip_prefix("app-") else {
-        return Vec::new();
-    };
-    let name = rest
-        .strip_suffix(".scope")
-        .and_then(|scope| scope.rsplit_once('-').map(|(name, _)| name))
-        .or_else(|| {
-            rest.strip_suffix(".service")
-                .map(|service| service.split_once('@').map_or(service, |(name, _)| name))
-        });
-    let Some(name) = name else {
-        return Vec::new();
-    };
-    let mut ids = vec![unescape_unit(name)];
-    if let Some((_, id)) = name.split_once('-') {
-        ids.push(unescape_unit(id));
-    }
-    ids
 }
 
 impl Catalog {
