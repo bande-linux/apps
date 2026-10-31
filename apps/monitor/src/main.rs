@@ -219,7 +219,7 @@ impl ActivityMonitor {
 
     fn appearance(&mut self, appearance: Appearance) {
         for (window, screen) in self.windows.iter_mut().zip(&mut self.screens) {
-            screen.set_palette(appearance.palette());
+            screen.set_appearance(appearance);
             window.request_redraw();
         }
     }
@@ -439,7 +439,7 @@ fn open(
     if let Err(error) = window.watch_apps() {
         tracing::debug!("cannot watch apps answer: {error}");
     }
-    screen.set_palette(window.appearance().palette());
+    screen.set_appearance(window.appearance());
     let published_menus = screen.app_menus();
     let mut app = ActivityMonitor {
         windows: vec![window],

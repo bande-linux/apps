@@ -7,7 +7,7 @@ use unbound_toolkit::ui::{
     Button, Cell, Column, Cursor, Event, Key, Row, SEGMENTED_HEIGHT, SegmentedControl, Table,
     WidgetId,
 };
-use unbound_toolkit::{Header, Palette, Rect, SHEET_INSET, Scene, TextSystem};
+use unbound_toolkit::{Appearance, Header, Palette, Rect, SHEET_INSET, Scene, TextSystem};
 
 use crate::L10N;
 use crate::format::{format_bytes, format_cpu_time, format_percent};
@@ -139,10 +139,10 @@ impl InspectorView {
         let table = Table::new(Section::Info.columns()).without_header();
         let mut list = List::new(table, palette, text);
         let send = sender(list.signals());
-        let stop = list.insert(stop_button(move || send(Signal::Stop)));
+        let stop = list.insert_in_header(stop_button(move || send(Signal::Stop)));
         let send = sender(list.signals());
         let titles = Section::ALL.map(Section::title);
-        let sections = list.insert(SegmentedControl::new(
+        let sections = list.insert_in_header(SegmentedControl::new(
             &L10N.tr("tab-label"),
             &titles,
             Some(0),
@@ -614,9 +614,9 @@ impl Screen for InspectorView {
         }
     }
 
-    fn set_palette(&mut self, palette: Palette) {
-        self.palette = palette;
-        self.list.set_palette(palette);
+    fn set_appearance(&mut self, appearance: Appearance) {
+        self.palette = appearance.palette();
+        self.list.set_appearance(appearance);
     }
 
     fn set_focused(&mut self, focused: bool) {

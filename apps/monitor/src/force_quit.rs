@@ -7,7 +7,8 @@ use unbound_toolkit::ui::{
     WidgetId,
 };
 use unbound_toolkit::{
-    Item, Palette, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle, TextSystem,
+    Appearance, Item, Palette, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextSize,
+    TextStyle, TextSystem, grown_line,
 };
 
 use crate::L10N;
@@ -23,6 +24,7 @@ use crate::view::{
 
 const PADDING: f32 = 16.0;
 const HINT_HEIGHT: f32 = 44.0;
+const HINT_MARGIN: f32 = 12.0;
 const LIST_INSET: f32 = 4.0;
 const BUTTON_WIDTH: f32 = 112.0;
 const FOOTER_HEIGHT: f32 = 60.0;
@@ -35,6 +37,8 @@ pub struct ForceQuitView {
     button: WidgetId,
     ids: HashMap<String, GroupKey>,
     size: (f32, f32),
+    hint_height: f32,
+    text_size: TextSize,
     stopping: Option<StopTarget>,
     requests: Vec<Request>,
     finished: bool,
@@ -57,6 +61,8 @@ impl ForceQuitView {
             button,
             ids: HashMap::new(),
             size: (0.0, 0.0),
+            hint_height: HINT_HEIGHT,
+            text_size: TextSize::DEFAULT,
             stopping: None,
             requests: Vec::new(),
             finished: false,
@@ -67,21 +73,28 @@ impl ForceQuitView {
         self.list.shown_table()
     }
 
+    fn footer_height(&self) -> f32 {
+        FOOTER_HEIGHT + grown_line(self.text_size)
+    }
+
     fn box_frame(&self) -> Rect {
         Rect::new(
             PADDING,
-            HINT_HEIGHT,
+            self.hint_height,
             self.size.0 - 2.0 * PADDING,
-            (self.size.1 - HINT_HEIGHT - FOOTER_HEIGHT).max(0.0),
+            (self.size.1 - self.hint_height - self.footer_height()).max(0.0),
         )
     }
 
     fn button_frame(&self) -> Rect {
+        let width = (BUTTON_WIDTH * self.text_size.scale()).round();
+        let height = BUTTON_HEIGHT + grown_line(self.text_size);
+        let footer = self.footer_height();
         Rect::new(
-            self.size.0 - PADDING - BUTTON_WIDTH,
-            self.size.1 - FOOTER_HEIGHT + ((FOOTER_HEIGHT - BUTTON_HEIGHT) / 2.0).round(),
-            BUTTON_WIDTH,
-            BUTTON_HEIGHT,
+            self.size.0 - PADDING - width,
+            self.size.1 - footer + ((footer - height) / 2.0).round(),
+            width,
+            height,
         )
     }
 
@@ -239,11 +252,20 @@ impl ForceQuitView {
 impl Screen for ForceQuitView {
     fn scene(&mut self, width: u32, height: u32) -> Scene {
         self.size = (width as f32, height as f32);
+        let palette = self.palette;
+        let hint_style = TextStyle::role(TextRole::Callout, palette.ink2);
+        let hint_width = width as f32 - 2.0 * PADDING;
+        let hint = self.list.text().paragraph(
+            &L10N.tr("force-quit-hint"),
+            hint_style,
+            Some(hint_width),
+            TextAlign::Start,
+        );
+        self.hint_height = (hint.height() + 2.0 * HINT_MARGIN).max(HINT_HEIGHT).ceil();
         let frame = self.box_frame();
         self.list.set_frame(frame.inset(LIST_INSET));
         self.list.place(self.button, self.button_frame());
         let (controls, dialog) = self.list.paint(width, height);
-        let palette = self.palette;
         let empty = self.apps.is_empty();
         let mut painter = Painter {
             text: self.list.text(),
@@ -251,8 +273,8 @@ impl Screen for ForceQuitView {
         };
         painter.text_in(
             &L10N.tr("force-quit-hint"),
-            TextStyle::role(TextRole::Callout, palette.ink2),
-            Rect::new(PADDING, 0.0, width as f32 - 2.0 * PADDING, HINT_HEIGHT),
+            hint_style,
+            Rect::new(PADDING, 0.0, hint_width, self.hint_height),
             TextAlign::Start,
         );
         let shape = Shape::rounded(frame, Radius::M);
@@ -280,9 +302,10 @@ impl Screen for ForceQuitView {
         }
     }
 
-    fn set_palette(&mut self, palette: Palette) {
-        self.palette = palette;
-        self.list.set_palette(palette);
+    fn set_appearance(&mut self, appearance: Appearance) {
+        self.palette = appearance.palette();
+        self.text_size = appearance.text_size;
+        self.list.set_appearance(appearance);
         self.sync();
     }
 

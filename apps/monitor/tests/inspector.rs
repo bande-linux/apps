@@ -8,7 +8,9 @@ use unbound_monitor::{
     Icons, InspectorView, OpenFile, Request, Screen, Section, Snapshot, read_details,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use unbound_toolkit::{FrameRegions, Palette, Point, Scheme, TextSystem, framed_scene};
+use unbound_toolkit::{
+    Appearance, FrameRegions, Palette, Point, Scheme, TextSize, TextSystem, framed_scene,
+};
 
 const SIZE: (u32, u32) = (680, 520);
 
@@ -217,12 +219,17 @@ fn the_inspector_matches_its_golden() {
     let fixture = Fixture::new();
     let snapshot = family(&fixture);
     let mut view = inspector(&fixture, &snapshot);
-    for (scheme, name) in [
-        (Scheme::Light, "inspector"),
-        (Scheme::Dark, "inspector-dark"),
+    for (scheme, text_size, name) in [
+        (Scheme::Light, TextSize::DEFAULT, "inspector"),
+        (Scheme::Dark, TextSize::DEFAULT, "inspector-dark"),
+        (Scheme::Light, TextSize::from_percent(150), "inspector-150"),
     ] {
         let palette = Palette::for_scheme(scheme);
-        view.set_palette(palette);
+        view.set_appearance(Appearance {
+            scheme,
+            text_size,
+            ..Appearance::default()
+        });
         let scene = view.scene(SIZE.0, SIZE.1);
         let scene = framed_scene(
             &scene,
