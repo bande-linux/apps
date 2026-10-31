@@ -1,6 +1,8 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use accesskit::{Action, ActionRequest, TreeId};
+
 use unbound_toolkit::ui::{
     Button, Event, Key, Label, Modifiers, PopUpButton, SecureField, TEXT_FIELD_HEIGHT, TextField,
     Ui, WidgetId,
@@ -27,6 +29,7 @@ pub struct Setup {
     password_field: Option<WidgetId>,
     collecting: bool,
     note: WidgetId,
+    cancel: WidgetId,
     panel: WidgetId,
     dismissed: Rc<Cell<bool>>,
     pub busy: bool,
@@ -102,6 +105,7 @@ impl Setup {
             password_field: panel.id_of(password),
             collecting: false,
             note: panel.id_of(note).unwrap_or_else(WidgetId::next),
+            cancel: panel.id_of(cancel).unwrap_or_else(WidgetId::next),
             panel: unbound_toolkit::ui::Widget::id(&panel),
             dismissed: panel.dismisser(),
             busy: false,
@@ -155,5 +159,15 @@ impl Setup {
 
     pub fn dismiss(&self) {
         self.dismissed.set(true);
+    }
+
+    pub fn close(&self, ui: &mut Ui) {
+        self.dismiss();
+        ui.perform(&ActionRequest {
+            action: Action::Click,
+            target_tree: TreeId::ROOT,
+            target_node: self.cancel.into(),
+            data: None,
+        });
     }
 }

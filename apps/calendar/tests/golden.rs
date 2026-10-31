@@ -101,3 +101,15 @@ fn the_inspector_names_a_new_event_and_saves_it_on_escape() {
         .map(|event| event.location.clone());
     assert_eq!(found.as_deref(), Some("Cafe"));
 }
+
+#[test]
+fn the_account_sheet_closes_when_the_account_is_added() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut view = view(directory.path(), Scheme::Light);
+    view.scene(SIZE.0, SIZE.1);
+    view.open_account_setup();
+    view.scene(SIZE.0, SIZE.1);
+    assert!(view.has_sheet());
+    view.account_added();
+    assert!(!view.has_sheet());
+}

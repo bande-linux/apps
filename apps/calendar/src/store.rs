@@ -260,7 +260,7 @@ impl Library {
                 account: LOCAL_ACCOUNT.to_owned(),
                 url: None,
                 name: "Calendar".to_owned(),
-                color: "#3478F6".to_owned(),
+                color: "#E8590C".to_owned(),
                 read_only: false,
                 visible: true,
                 ctag: None,

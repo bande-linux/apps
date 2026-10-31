@@ -155,11 +155,12 @@ fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Eve
                 view.close_inspector(true);
                 return true;
             }
-            Key::Escape if view.ui.focus() == Some(view.toolbar.search) => {
+            Key::Escape if view.inspector.is_none() => {
                 view.ui.clear_focus();
                 return true;
             }
-            _ => return view.ui.handle(event),
+            _ if view.ui.handle(event) => return true,
+            _ => {}
         }
     }
     let command = modifiers.logo;

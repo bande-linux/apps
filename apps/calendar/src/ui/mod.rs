@@ -225,9 +225,11 @@ impl CalendarView {
         let toolbar = toolbar::Toolbar::new(&mut host, &signals, Mode::Week);
         let host_id = unbound_toolkit::ui::Widget::id(&host);
         let today = now.date();
+        let mut cx = Context::new(text, palette);
+        cx.keyboard_navigation = true;
         Self {
             library,
-            ui: Ui::new(Box::new(host), Context::new(text, palette)),
+            ui: Ui::new(Box::new(host), cx),
             host: host_id,
             signals,
             toolbar,
@@ -404,6 +406,10 @@ impl CalendarView {
         self.ui.deadline()
     }
 
+    pub fn has_sheet(&self) -> bool {
+        self.ui.has_sheet()
+    }
+
     pub fn text_input_area(&self) -> Option<Rect> {
         self.ui.text_input_area()
     }
@@ -450,8 +456,9 @@ impl CalendarView {
 
     pub fn account_added(&mut self) {
         if let Some(setup) = self.setup.take() {
-            setup.dismiss();
+            setup.close(&mut self.ui);
         }
+        self.drain();
     }
 
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
