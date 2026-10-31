@@ -2,3 +2,4 @@ radicale
 fonts-inter
 fonts-manrope
 libfontconfig1
+libxkbcommon-dev
