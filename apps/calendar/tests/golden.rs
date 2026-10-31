@@ -4,6 +4,7 @@ use bande_calendar::edit::{Alert, new_event};
 use bande_calendar::ical::{DaySpec, Frequency, Rule};
 use bande_calendar::store::{Account, AccountKind, CalendarInfo, LOCAL_ACCOUNT, Library};
 use bande_calendar::ui::{CalendarView, Mode, SIDEBAR_WIDTH};
+use unbound_toolkit::ui::{Event, Key, Modifiers};
 use jiff::civil::{Weekday, date};
 use jiff::tz::TimeZone;
 use unbound_datetime::{DateFormats, posix_locale};
@@ -191,4 +192,20 @@ fn a_new_event_opens_the_inspector() {
     view.scene(SIZE.0, SIZE.1);
     assert!(view.menu_action("new-event"));
     render("inspector", &mut view, Scheme::Light);
+}
+
+#[test]
+fn search_lists_matching_events() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut view = view(directory.path(), Scheme::Light);
+    view.set_mode(Mode::Month);
+    view.scene(SIZE.0, SIZE.1);
+    assert!(view.menu_action("find"));
+    for character in "review".chars() {
+        view.handle(&Event::Key {
+            key: Key::Character(character),
+            modifiers: Modifiers::default(),
+        });
+    }
+    render("search", &mut view, Scheme::Light);
 }

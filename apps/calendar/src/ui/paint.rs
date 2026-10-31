@@ -823,7 +823,10 @@ fn paint_month(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut Vie
                     },
                 )
                 .tabular();
-                let time_width = painter.measure(&time, time_style);
+                let time_width = match rect.width > 120.0 {
+                    true => painter.measure(&time, time_style),
+                    false => 0.0,
+                };
                 let text_rect = Rect::new(
                     rect.x + 15.0,
                     rect.y,
@@ -837,7 +840,10 @@ fn paint_month(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut Vie
                     TextAlign::Start,
                 );
                 painter.label(
-                    &time,
+                    match time_width > 0.0 {
+                        true => &time,
+                        false => "",
+                    },
                     time_style,
                     Rect::new(
                         rect.x + rect.width - time_width - 4.0,
