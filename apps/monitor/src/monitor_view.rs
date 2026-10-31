@@ -119,7 +119,9 @@ fn table_row(
     if let Some(name) = cells.first_mut() {
         name.icon = row.icon.as_deref().and_then(|icon| icons.get(icon));
         if !row.responding {
-            name.text = L10N.tr_args("not-responding", [("name", row.name.clone().into())]);
+            name.text = L10N
+                .tr_args("not-responding", [("name", row.name.clone().into())])
+                .into();
             name.tint = Some(alarm);
         }
     }
