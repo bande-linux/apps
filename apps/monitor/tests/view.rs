@@ -919,3 +919,22 @@ fn a_tick_between_samples_redraws_only_a_window_whose_own_timer_is_due() {
     );
     assert_eq!(due_redraws(&screens, tooltip), [false, true]);
 }
+
+#[test]
+fn dragging_the_footer_edge_up_shows_the_cores_and_down_hides_them() {
+    let mut view = monitor_view();
+    let edge = MONITOR_SIZE.1 as f32 - 6.0 - 112.0;
+    let at = |y: f32| Pointer::at(Point::new(300.0, y));
+    view.handle(&Event::PointerMove(at(edge)));
+    assert_eq!(view.cursor(), unbound_toolkit::ui::Cursor::RowResize);
+    assert!(view.handle(&Event::PointerDown(at(edge))));
+    view.handle(&Event::PointerMove(at(edge - 10.0)));
+    assert!(!view.monitor.cores_shown());
+    view.handle(&Event::PointerMove(at(edge - 40.0)));
+    assert!(view.monitor.cores_shown());
+    view.handle(&Event::PointerMove(at(edge - 30.0)));
+    assert!(view.monitor.cores_shown());
+    view.handle(&Event::PointerMove(at(edge - 10.0)));
+    assert!(!view.monitor.cores_shown());
+    assert!(view.handle(&Event::PointerUp(at(edge - 10.0))));
+}

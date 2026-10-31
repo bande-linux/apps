@@ -46,6 +46,8 @@ const STRIP_GAP: f32 = 4.0;
 const STRIP_MIN_WIDTH: f32 = 200.0;
 const STRIP_COLUMNS: usize = 4;
 const GROUP_LABEL: f32 = 20.0;
+const EDGE_GRAB: f32 = 4.0;
+const EDGE_SNAP: f32 = 24.0;
 const BAR_HEIGHT: f32 = 8.0;
 const KEY_SIZE: f32 = 8.0;
 const KEY_RADIUS: f32 = 2.0;
@@ -155,6 +157,8 @@ pub struct MonitorView {
     cores: Animated,
     cores_extent: f32,
     cores_moving: bool,
+    edge_drag: Option<f32>,
+    edge_hover: bool,
 }
 
 fn tabs_control(list: &List, tabs: &[Tab], tab: Tab) -> SegmentedControl {
@@ -209,6 +213,8 @@ impl MonitorView {
             cores: Animated::points(0.0),
             cores_extent: 0.0,
             cores_moving: false,
+            edge_drag: None,
+            edge_hover: false,
         };
         view.sync();
         view
@@ -459,6 +465,23 @@ impl MonitorView {
         (self.cores_extent, self.cores_moving) = self.cores.value_at(now);
     }
 
+    fn on_footer_edge(&self, at: Point) -> bool {
+        let sheet = self.sheet();
+        self.monitor.tab() == Tab::Cpu
+            && at.x >= sheet.x
+            && at.x < sheet.x + sheet.width
+            && (at.y - self.footer_layout().top).abs() <= EDGE_GRAB
+    }
+
+    fn drag_edge(&mut self, from: f32, to: f32) {
+        let raised = from - to;
+        let shown = self.monitor.cores_shown();
+        if (raised >= EDGE_SNAP && !shown) || (raised <= -EDGE_SNAP && shown) {
+            self.toggle_cores();
+            self.edge_drag = Some(to);
+        }
+    }
+
     fn toggle_cores(&mut self) -> bool {
         if self.monitor.tab() != Tab::Cpu {
             self.set_tab(Tab::Cpu);
@@ -703,6 +726,10 @@ impl MonitorView {
 
     fn pointer_down(&mut self, event: &Event, pointer: &Pointer) -> bool {
         let at = pointer.position;
+        if !self.list.has_dialog() && self.on_footer_edge(at) {
+            self.edge_drag = Some(at.y);
+            return true;
+        }
         let on_graph = self
             .footer_layout()
             .graph
@@ -1215,6 +1242,17 @@ impl Screen for MonitorView {
         match event {
             Event::Key { key, modifiers } => self.key(event, *key, *modifiers),
             Event::PointerDown(pointer) => self.pointer_down(event, pointer),
+            Event::PointerMove(pointer) => match self.edge_drag {
+                Some(from) => {
+                    self.drag_edge(from, pointer.position.y);
+                    true
+                }
+                None => {
+                    self.edge_hover = self.on_footer_edge(pointer.position);
+                    self.pass(event)
+                }
+            },
+            Event::PointerUp(_) if self.edge_drag.take().is_some() => true,
             _ => self.pass(event),
         }
     }
@@ -1322,7 +1360,10 @@ impl Screen for MonitorView {
     }
 
     fn cursor(&self) -> Cursor {
-        self.list.cursor()
+        match self.edge_drag.is_some() || self.edge_hover {
+            true => Cursor::RowResize,
+            false => self.list.cursor(),
+        }
     }
 
     fn animating(&self) -> bool {
