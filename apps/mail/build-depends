@@ -1,4 +1,9 @@
 libssl-dev
 libsqlite3-dev
 libxkbcommon-dev
-libwayland-dev
+libfontconfig1
+libwayland-client0
+dbus-daemon
+fonts-inter
+fonts-manrope
+fonts-jetbrains-mono

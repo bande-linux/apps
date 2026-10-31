@@ -5,7 +5,6 @@ use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use zbus::blocking::Connection;
-use zbus::fdo::{RequestNameFlags, RequestNameReply};
 
 const NAME: &str = "org.bande.Mail";
 const PATH: &str = "/org/bande/Mail";
@@ -35,31 +34,35 @@ pub struct Instance {
 
 impl Instance {
     pub fn claim(arguments: &[String]) -> zbus::Result<Option<Self>> {
-        let connection = Connection::session()?;
-        let reply = connection.request_name_with_flags(NAME, RequestNameFlags::DoNotQueue.into());
-        match reply {
-            Ok(RequestNameReply::PrimaryOwner | RequestNameReply::AlreadyOwner) => {}
-            Ok(_) | Err(zbus::Error::NameTaken) => {
-                connection.call_method(Some(NAME), PATH, Some(NAME), "Open", &(arguments,))?;
-                return Ok(None);
-            }
-            Err(error) => return Err(error),
-        }
         let (awake, wake) = UnixStream::pair()?;
         awake.set_nonblocking(true)?;
         let (sender, received) = mpsc::channel();
-        connection.object_server().at(
-            PATH,
-            Opener {
-                arguments: Mutex::new(sender),
-                wake,
-            },
-        )?;
-        Ok(Some(Self {
-            _connection: connection,
-            arguments: received,
-            awake,
-        }))
+        let opener = Opener {
+            arguments: Mutex::new(sender),
+            wake,
+        };
+        let claimed = zbus::blocking::connection::Builder::session()?
+            .serve_at(PATH, opener)?
+            .name(NAME)?
+            .build();
+        match claimed {
+            Ok(connection) => Ok(Some(Self {
+                _connection: connection,
+                arguments: received,
+                awake,
+            })),
+            Err(zbus::Error::NameTaken) => {
+                Connection::session()?.call_method(
+                    Some(NAME),
+                    PATH,
+                    Some(NAME),
+                    "Open",
+                    &(arguments,),
+                )?;
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     pub fn fd(&self) -> BorrowedFd<'_> {
