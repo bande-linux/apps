@@ -67,10 +67,6 @@ impl Icons {
     }
 }
 
-pub(crate) fn contains(rect: Rect, at: Point) -> bool {
-    at.x >= rect.x && at.x < rect.x + rect.width && at.y >= rect.y && at.y < rect.y + rect.height
-}
-
 pub fn is_secondary(pointer: &Pointer) -> bool {
     pointer.button == PointerButton::Secondary
         || (pointer.button == PointerButton::Primary && pointer.modifiers.control)
