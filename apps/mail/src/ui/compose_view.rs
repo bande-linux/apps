@@ -14,7 +14,7 @@ use unbound_toolkit::{
 };
 
 use crate::L10N;
-use crate::compose::Draft;
+use crate::compose::{Draft, Outgoing};
 use crate::message::{Address, Attachment, parse_addresses};
 use crate::store::MessageId;
 use crate::ui::symbols::Symbol;
@@ -58,9 +58,11 @@ pub struct ComposeView {
     sender: usize,
     draft: Draft,
     answering: Option<MessageId>,
+    replaces: Option<MessageId>,
+    initial: Draft,
     palette: Palette,
     size: (f32, f32),
-    sent: Option<(Draft, Option<MessageId>)>,
+    sent: Option<Outgoing>,
     requests: Vec<ComposeRequest>,
     chips: Vec<(Rect, usize)>,
     token: u64,
@@ -92,12 +94,16 @@ fn rows(from: bool) -> Vec<&'static str> {
 
 impl ComposeView {
     pub fn new(
-        draft: Draft,
-        answering: Option<MessageId>,
+        outgoing: Outgoing,
         senders: Vec<Address>,
         palette: Palette,
         text: TextSystem,
     ) -> Self {
+        let Outgoing {
+            draft,
+            answering,
+            replaces,
+        } = outgoing;
         let signals = Rc::new(RefCell::new(Vec::new()));
         let mut host = FreeLayout::new();
         let host_id = Widget::id(&host);
@@ -153,6 +159,8 @@ impl ComposeView {
             sender,
             draft,
             answering,
+            replaces,
+            initial: Draft::default(),
             palette,
             size: (0.0, 0.0),
             sent: None,
@@ -167,6 +175,7 @@ impl ComposeView {
         };
         view.ui.set_focus(first);
         view.ui.set_sheet_top(TOOLBAR_HEIGHT);
+        view.initial = view.compose_draft();
         view
     }
 
@@ -391,7 +400,7 @@ impl ComposeView {
             );
             return;
         }
-        self.sent = Some((draft, self.answering));
+        self.sent = Some(self.outgoing(draft));
         self.closed = true;
     }
 
@@ -475,8 +484,21 @@ impl ComposeView {
         self.ui.menu_closed()
     }
 
-    pub fn take_sent(&mut self) -> Option<(Draft, Option<MessageId>)> {
+    fn outgoing(&self, draft: Draft) -> Outgoing {
+        Outgoing {
+            draft,
+            answering: self.answering,
+            replaces: self.replaces,
+        }
+    }
+
+    pub fn take_sent(&mut self) -> Option<Outgoing> {
         self.sent.take()
+    }
+
+    pub fn unsent(&self) -> Option<Outgoing> {
+        let draft = self.compose_draft();
+        (self.sent.is_none() && !self.closed && draft != self.initial).then(|| self.outgoing(draft))
     }
 
     pub fn take_requests(&mut self) -> Vec<ComposeRequest> {

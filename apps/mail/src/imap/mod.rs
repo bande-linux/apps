@@ -112,6 +112,7 @@ pub enum Flag {
     Flagged,
     Answered,
     Deleted,
+    Draft,
 }
 
 impl Flag {
@@ -121,6 +122,7 @@ impl Flag {
             Self::Flagged => "\\Flagged",
             Self::Answered => "\\Answered",
             Self::Deleted => "\\Deleted",
+            Self::Draft => "\\Draft",
         }
     }
 
@@ -130,13 +132,20 @@ impl Flag {
             Self::Flagged => "flagged",
             Self::Answered => "answered",
             Self::Deleted => "deleted",
+            Self::Draft => "draft",
         }
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
-        [Self::Seen, Self::Flagged, Self::Answered, Self::Deleted]
-            .into_iter()
-            .find(|flag| flag.name() == name)
+        [
+            Self::Seen,
+            Self::Flagged,
+            Self::Answered,
+            Self::Deleted,
+            Self::Draft,
+        ]
+        .into_iter()
+        .find(|flag| flag.name() == name)
     }
 }
 

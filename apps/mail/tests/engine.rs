@@ -5,7 +5,7 @@ mod fake;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use bande_mail::compose::Draft;
+use bande_mail::compose::{Draft, Outgoing};
 use bande_mail::error::Error;
 use bande_mail::imap::{Flag, Role, Session};
 use bande_mail::message::Address;
@@ -287,10 +287,11 @@ fn a_sent_message_goes_out_by_smtp_and_is_kept_in_sent() {
         body: "Answer\n.\nwith a dot line".to_owned(),
         ..Draft::default()
     };
-    worker.send(Command::Send {
-        draft: Box::new(draft),
+    worker.send(Command::Send(Box::new(Outgoing {
+        draft,
         answering: Some(question.id),
-    });
+        replaces: None,
+    })));
     let id = setup.account.id;
     setup.wait_for(|event| *event == Event::Sent(id));
     setup.wait_for(|event| *event == Event::Changed(id));
@@ -344,14 +345,14 @@ fn a_failed_send_hands_the_draft_back() {
         subject: "Nobody".to_owned(),
         ..Draft::default()
     };
-    worker.send(Command::Send {
-        draft: Box::new(draft.clone()),
-        answering: None,
-    });
+    worker.send(Command::Send(Box::new(Outgoing {
+        draft: draft.clone(),
+        ..Outgoing::default()
+    })));
     let id = setup.account.id;
     let event = setup.wait_for(|event| matches!(event, Event::NotSent(..)));
     assert!(
-        matches!(event, Event::NotSent(account, _, returned) if account == id && *returned == draft)
+        matches!(event, Event::NotSent(account, _, returned) if account == id && returned.draft == draft)
     );
 }
 
@@ -478,4 +479,77 @@ fn account_setup_checks_both_servers_and_tells_what_is_wrong() {
         check(&request(PASSWORD, &broken), &network()),
         Outcome::NeedsServers(Some(found), _) if found == broken
     ));
+}
+
+#[test]
+fn drafts_are_kept_replaced_and_dropped_once_sent() {
+    let mut setup = Setup::new();
+    let worker = setup.worker(Some(PASSWORD));
+    setup.ready();
+    let id = setup.account.id;
+    let drafts = setup
+        .store
+        .mailbox_with_role(id, Role::Drafts)
+        .unwrap()
+        .unwrap();
+    let me = setup.account.address();
+    let draft = |body: &str| Draft {
+        from: me.clone(),
+        to: vec![Address {
+            name: String::new(),
+            email: "bob@example.com".to_owned(),
+        }],
+        subject: "Half written".to_owned(),
+        body: body.to_owned(),
+        ..Draft::default()
+    };
+    let kept = |setup: &Setup| {
+        setup
+            .store
+            .summaries(&Scope::Mailbox(drafts.id), "")
+            .unwrap()
+    };
+    worker.send(Command::SaveDraft(Box::new(Outgoing {
+        draft: draft("first words"),
+        ..Outgoing::default()
+    })));
+    let deadline = Instant::now() + WAIT;
+    while !kept(&setup).iter().any(|summary| summary.downloaded) {
+        assert!(Instant::now() < deadline, "the draft was not kept");
+        setup.mailroom.wait(Duration::from_millis(100));
+    }
+    let first = kept(&setup);
+    assert_eq!(first.len(), 1);
+    assert!(first[0].flags.draft);
+    assert_eq!(first[0].preview, "first words");
+
+    worker.send(Command::SaveDraft(Box::new(Outgoing {
+        draft: draft("more words"),
+        replaces: Some(first[0].id),
+        ..Outgoing::default()
+    })));
+    let deadline = Instant::now() + WAIT;
+    while kept(&setup)
+        .iter()
+        .map(|summary| summary.preview.as_str())
+        .collect::<Vec<_>>()
+        != ["more words"]
+    {
+        assert!(Instant::now() < deadline, "the draft was not replaced");
+        setup.mailroom.wait(Duration::from_millis(100));
+    }
+    assert_eq!(setup.fake.subjects("Entw&APw-rfe"), ["Half written"]);
+
+    let second = kept(&setup)[0].id;
+    worker.send(Command::Send(Box::new(Outgoing {
+        draft: draft("final words"),
+        replaces: Some(second),
+        ..Outgoing::default()
+    })));
+    setup.wait_for(|event| *event == Event::Sent(id));
+    let deadline = Instant::now() + WAIT;
+    while !setup.fake.subjects("Entw&APw-rfe").is_empty() || !kept(&setup).is_empty() {
+        assert!(Instant::now() < deadline, "the sent draft stayed in Drafts");
+        setup.mailroom.wait(Duration::from_millis(100));
+    }
 }

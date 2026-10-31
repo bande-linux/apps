@@ -285,7 +285,7 @@ fn reply_and_forward_open_drafts_that_quote_the_message() {
     let drafts = requests
         .iter()
         .filter_map(|request| match request {
-            Request::Compose { draft, answering } => Some((draft, *answering)),
+            Request::Compose(outgoing) => Some((&outgoing.draft, outgoing.answering)),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -348,8 +348,7 @@ fn a_reply_opens_in_a_compose_window_with_the_quote() {
     let first = view.messages()[0].id;
     view.select(first);
     view.respond(false);
-    let Some(Request::Compose { draft, answering }) = view.take_requests().into_iter().next()
-    else {
+    let Some(Request::Compose(outgoing)) = view.take_requests().into_iter().next() else {
         panic!("no draft")
     };
     let senders = view
@@ -358,8 +357,7 @@ fn a_reply_opens_in_a_compose_window_with_the_quote() {
         .map(|account| account.address())
         .collect();
     let mut compose = ComposeView::new(
-        *draft,
-        answering,
+        *outgoing,
         senders,
         Palette::for_scheme(Scheme::Light),
         TextSystem::new(),
@@ -395,9 +393,9 @@ fn a_reply_opens_in_a_compose_window_with_the_quote() {
             ..Modifiers::default()
         },
     });
-    let (sent, answering) = compose.take_sent().unwrap();
-    assert_eq!(answering, Some(first));
-    assert_eq!(sent.to[0].email, "jorg@example.de");
+    let sent = compose.take_sent().unwrap();
+    assert_eq!(sent.answering, Some(first));
+    assert_eq!(sent.draft.to[0].email, "jorg@example.de");
     assert!(compose.finished());
 }
 
@@ -420,8 +418,10 @@ fn attachments_added_to_a_message_can_be_removed_before_sending() {
         ..Draft::default()
     };
     let mut compose = ComposeView::new(
-        draft,
-        None,
+        bande_mail::compose::Outgoing {
+            draft,
+            ..Default::default()
+        },
         vec![me],
         Palette::for_scheme(Scheme::Light),
         TextSystem::new(),
@@ -448,6 +448,41 @@ fn attachments_added_to_a_message_can_be_removed_before_sending() {
             ..Modifiers::default()
         },
     });
-    let (sent, _) = compose.take_sent().unwrap();
-    assert_eq!(sent.attachments.len(), 1);
+    let sent = compose.take_sent().unwrap();
+    assert_eq!(sent.draft.attachments.len(), 1);
+}
+
+#[test]
+fn closing_an_untouched_reply_keeps_no_draft_but_an_edited_one_does() {
+    use bande_mail::ui::ComposeView;
+    let (_folder, path) = place();
+    let mut view = view(&path);
+    let first = view.messages()[0].id;
+    view.select(first);
+    view.respond(false);
+    let Some(Request::Compose(outgoing)) = view.take_requests().into_iter().next() else {
+        panic!("no draft")
+    };
+    let senders: Vec<_> = view
+        .accounts()
+        .iter()
+        .map(|account| account.address())
+        .collect();
+    let compose = ComposeView::new(
+        (*outgoing).clone(),
+        senders.clone(),
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+    );
+    assert_eq!(compose.unsent(), None);
+    let mut edited = ComposeView::new(
+        *outgoing,
+        senders,
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+    );
+    edited.handle(&Event::Commit("Sounds good".to_owned()));
+    let unsent = edited.unsent().unwrap();
+    assert!(unsent.draft.body.starts_with("Sounds good"));
+    assert_eq!(unsent.answering, Some(first));
 }

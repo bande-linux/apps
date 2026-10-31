@@ -9,9 +9,8 @@ use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use bande_mail::L10N;
-use bande_mail::compose::{Draft, from_mailto};
+use bande_mail::compose::{Outgoing, from_mailto};
 use bande_mail::message::Attachment;
-use bande_mail::store::MessageId;
 use bande_mail::ui::{COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Request, SIDEBAR_WIDTH};
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_notify::Urgency;
@@ -91,7 +90,7 @@ impl Mail {
             .get_or_insert_with(|| Apps::load(data_dirs(), &config_dirs()))
     }
 
-    fn open_compose(&mut self, draft: Draft, answering: Option<MessageId>) -> Option<usize> {
+    fn open_compose(&mut self, outgoing: Outgoing) -> Option<usize> {
         let senders = self
             .main_view()
             .map(|view| {
@@ -102,13 +101,7 @@ impl Mail {
             })
             .unwrap_or_default();
         let appearance = self.windows[0].appearance();
-        let mut view = ComposeView::new(
-            draft,
-            answering,
-            senders,
-            appearance.palette(),
-            TextSystem::new(),
-        );
+        let mut view = ComposeView::new(outgoing, senders, appearance.palette(), TextSystem::new());
         view.set_appearance(appearance);
         let role = Role::toplevel(&view.title(), APP_ID);
         match self.windows[0].open_beside(role, COMPOSE_SIZE) {
@@ -246,10 +239,8 @@ impl Mail {
                 tracing::warn!("cannot serve the message window: {error}");
             }
         }
-        if let Some((draft, answering)) = sent {
-            let delivered = self
-                .main_view()
-                .is_some_and(|main| main.send(draft, answering));
+        if let Some(outgoing) = sent {
+            let delivered = self.main_view().is_some_and(|main| main.send(outgoing));
             if !delivered {
                 tracing::warn!("no account sends from this address");
             }
@@ -271,14 +262,14 @@ impl Mail {
         };
         for request in requests {
             match request {
-                Request::Compose { draft, answering } => {
-                    self.open_compose(*draft, answering);
+                Request::Compose(outgoing) => {
+                    self.open_compose(*outgoing);
                 }
                 Request::OpenLink(url) => self.open_url(index, &url),
                 Request::OpenAttachment(path) => self.open_file(index, &path),
                 Request::Notify { summary, body } => announce(summary, body),
-                Request::NotSent { error, draft } => {
-                    if let Some(opened) = self.open_compose(*draft, None)
+                Request::NotSent { error, outgoing } => {
+                    if let Some(opened) = self.open_compose(*outgoing)
                         && let Screen::Compose(view) = &mut self.screens[opened]
                     {
                         view.show_error(&error);
@@ -327,11 +318,29 @@ impl Mail {
         }
     }
 
+    fn keep_draft(&mut self, index: usize) {
+        let unsent = match &self.screens[index] {
+            Screen::Compose(view) => view.unsent(),
+            Screen::Main(_) => None,
+        };
+        if let Some(outgoing) = unsent
+            && !self
+                .main_view()
+                .is_some_and(|main| main.save_draft(outgoing))
+        {
+            tracing::warn!("no account keeps drafts for this address");
+        }
+    }
+
     fn close(&mut self, index: usize) {
         if index == 0 {
+            for index in 1..self.screens.len() {
+                self.keep_draft(index);
+            }
             self.windows[0].close();
             return;
         }
+        self.keep_draft(index);
         self.windows.remove(index);
         self.screens.remove(index);
         self.focused = 0;
@@ -595,7 +604,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         mail.open_argument(&argument);
     }
     mail.serve(0);
-    unbound_toolkit::run_surfaces(&mut mail)?;
+    let ran = unbound_toolkit::run_surfaces(&mut mail);
+    if let Some(view) = mail.main_view() {
+        view.finish();
+    }
+    ran?;
     Ok(())
 }
 

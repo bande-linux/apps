@@ -643,6 +643,7 @@ impl Store {
             Flag::Flagged => "flagged",
             Flag::Answered => "answered",
             Flag::Deleted => "deleted",
+            Flag::Draft => "draft",
         };
         let accounts = self.queue(ids, &Action::Flag(flag, value))?;
         for id in ids {

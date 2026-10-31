@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::compose::{Draft, build};
+use crate::compose::{Draft, Outgoing, build};
 use crate::error::{Error, Result};
 use crate::imap::{Flag, Role, Session};
 use crate::net::{Closer, Network};
@@ -37,10 +37,8 @@ pub enum Command {
     Refresh(MailboxId),
     Body(MessageId),
     Flush,
-    Send {
-        draft: Box<Draft>,
-        answering: Option<MessageId>,
-    },
+    Send(Box<Outgoing>),
+    SaveDraft(Box<Outgoing>),
     Password(String),
     Stop,
 }
@@ -54,7 +52,7 @@ pub enum Event {
     LoginFailed(AccountId, String),
     Failed(AccountId, String),
     Sent(AccountId),
-    NotSent(AccountId, String, Box<Draft>),
+    NotSent(AccountId, String, Box<Outgoing>),
     Setup(Box<crate::setup::Outcome>),
 }
 
@@ -120,6 +118,7 @@ pub struct Worker {
     commands: Sender<Command>,
     stopping: Arc<AtomicBool>,
     idle: Arc<Mutex<Option<Closer>>>,
+    thread: Option<thread::JoinHandle<()>>,
 }
 
 impl Worker {
@@ -133,11 +132,12 @@ impl Worker {
         let (commands, received) = mpsc::channel();
         let stopping = Arc::new(AtomicBool::new(false));
         let idle = Arc::new(Mutex::new(None));
-        let worker = Self {
+        let mut worker = Self {
             account: account.id,
             commands: commands.clone(),
             stopping: Arc::clone(&stopping),
             idle: Arc::clone(&idle),
+            thread: None,
         };
         let id = account.id;
         let spawned = thread::Builder::new()
@@ -167,8 +167,9 @@ impl Worker {
                 }
                 .run();
             });
-        if let Err(error) = spawned {
-            tracing::error!("cannot start the mail worker: {error}");
+        match spawned {
+            Ok(thread) => worker.thread = Some(thread),
+            Err(error) => tracing::error!("cannot start the mail worker: {error}"),
         }
         worker.send(Command::Sync);
         worker
@@ -177,16 +178,32 @@ impl Worker {
     pub fn send(&self, command: Command) {
         let _ = self.commands.send(command);
     }
-}
 
-impl Drop for Worker {
-    fn drop(&mut self) {
-        self.stopping.store(true, Ordering::Relaxed);
+    fn close_idle(&self) {
         if let Ok(idle) = self.idle.lock()
             && let Some(closer) = idle.as_ref()
         {
             closer.close();
         }
+    }
+
+    pub fn finish(mut self, deadline: Instant) {
+        self.close_idle();
+        let _ = self.commands.send(Command::Stop);
+        if let Some(thread) = self.thread.take() {
+            while !thread.is_finished() && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(20));
+            }
+        }
+    }
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        if self.thread.is_some() {
+            self.stopping.store(true, Ordering::Relaxed);
+        }
+        self.close_idle();
         let _ = self.commands.send(Command::Stop);
     }
 }
@@ -330,11 +347,11 @@ impl Runner {
 
     fn failed(&mut self, command: &Command, error: Error) {
         tracing::warn!("{}: {error}", self.account.email);
-        if let Command::Send { draft, .. } = command {
+        if let Command::Send(outgoing) | Command::SaveDraft(outgoing) = command {
             self.emit(Event::NotSent(
                 self.account.id,
                 error.to_string(),
-                draft.clone(),
+                outgoing.clone(),
             ));
         }
         match error {
@@ -376,7 +393,8 @@ impl Runner {
                 Ok(())
             }
             Command::Body(id) => self.body(*id),
-            Command::Send { draft, answering } => self.send(draft, *answering),
+            Command::Send(outgoing) => self.send(outgoing),
+            Command::SaveDraft(outgoing) => self.save_draft(&outgoing.draft, outgoing.replaces),
             Command::Password(_) | Command::Stop => Ok(()),
         }
     }
@@ -478,7 +496,43 @@ impl Runner {
         Ok(())
     }
 
-    fn send(&mut self, draft: &Draft, answering: Option<MessageId>) -> Result<()> {
+    fn replace_draft(&mut self, replaces: Option<MessageId>) -> Result<()> {
+        if let Some(old) = replaces {
+            self.store.expunge(&[old])?;
+            self.flush()?;
+        }
+        if let Some(drafts) = self
+            .store
+            .mailbox_with_role(self.account.id, Role::Drafts)?
+        {
+            self.sync_one(&drafts)?;
+            self.bodies(&drafts)?;
+        }
+        Ok(())
+    }
+
+    fn save_draft(&mut self, draft: &Draft, replaces: Option<MessageId>) -> Result<()> {
+        let Some(drafts) = self
+            .store
+            .mailbox_with_role(self.account.id, Role::Drafts)?
+        else {
+            return Err(Error::Refused(
+                "the account has no Drafts mailbox".to_owned(),
+            ));
+        };
+        let raw = build(draft, &jiff::Zoned::now());
+        let session = self.session()?;
+        session.append(&drafts.path, &[Flag::Seen, Flag::Draft], &raw)?;
+        self.replace_draft(replaces)
+    }
+
+    fn send(&mut self, outgoing: &Outgoing) -> Result<()> {
+        let Outgoing {
+            draft,
+            answering,
+            replaces,
+        } = outgoing;
+        let (answering, replaces) = (*answering, *replaces);
         let raw = build(draft, &jiff::Zoned::now());
         let recipients = draft.recipients();
         let password = self.password()?;
@@ -506,6 +560,10 @@ impl Runner {
         }
         if let Some(sent) = self.store.mailbox_with_role(self.account.id, Role::Sent)? {
             self.sync_one(&sent)?;
+            self.bodies(&sent)?;
+        }
+        if replaces.is_some() {
+            self.replace_draft(replaces)?;
         }
         Ok(())
     }

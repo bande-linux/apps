@@ -17,7 +17,7 @@ use unbound_toolkit::{
 use zeroize::Zeroizing;
 
 use crate::L10N;
-use crate::compose::{Draft, forward, reply};
+use crate::compose::{Draft, Outgoing, forward, reply};
 use crate::discover::Settings;
 use crate::error::Result;
 use crate::imap::{Flag, Role};
@@ -41,10 +41,7 @@ const NOTIFIED_AT_ONCE: usize = 3;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
-    Compose {
-        draft: Box<Draft>,
-        answering: Option<MessageId>,
-    },
+    Compose(Box<Outgoing>),
     OpenLink(String),
     OpenAttachment(PathBuf),
     Notify {
@@ -53,7 +50,7 @@ pub enum Request {
     },
     NotSent {
         error: String,
-        draft: Box<Draft>,
+        outgoing: Box<Outgoing>,
     },
     ShowMenu(Menu, Point),
     Clipboard(ClipboardRequest),
@@ -434,6 +431,7 @@ impl MailView {
                 Flag::Flagged => summary.flags.flagged = value,
                 Flag::Answered => summary.flags.answered = value,
                 Flag::Deleted => summary.flags.deleted = value,
+                Flag::Draft => summary.flags.draft = value,
             }
         }
         self.refresh_sidebar();
@@ -560,10 +558,11 @@ impl MailView {
         if draft.from.email.is_empty() {
             draft.from = account.address();
         }
-        self.requests.push(Request::Compose {
-            draft: Box::new(draft),
+        self.requests.push(Request::Compose(Box::new(Outgoing {
+            draft,
             answering: None,
-        });
+            replaces: None,
+        })));
     }
 
     pub fn respond(&mut self, all: bool) {
@@ -590,10 +589,45 @@ impl MailView {
             ],
         );
         let draft = reply(&reading.content, &account.address(), all, &attribution);
-        self.requests.push(Request::Compose {
-            draft: Box::new(draft),
+        self.requests.push(Request::Compose(Box::new(Outgoing {
+            draft,
             answering: Some(summary.id),
-        });
+            replaces: None,
+        })));
+    }
+
+    pub fn continue_draft(&mut self) {
+        let (Some(summary), Some(reading)) = (self.selected_summary(), self.reading.as_ref())
+        else {
+            return;
+        };
+        let is_draft = summary.flags.draft
+            || self
+                .mailbox_of(&summary)
+                .is_some_and(|mailbox| mailbox.role == Some(Role::Drafts));
+        if !is_draft || !reading.downloaded {
+            return;
+        }
+        let Some(account) = self.account(summary.account) else {
+            return;
+        };
+        let envelope = &reading.content.envelope;
+        let draft = Draft {
+            from: account.address(),
+            to: envelope.to.clone(),
+            cc: envelope.cc.clone(),
+            bcc: Vec::new(),
+            subject: envelope.subject.clone(),
+            body: reading.content.text().replace("\r\n", "\n"),
+            in_reply_to: envelope.references.last().cloned(),
+            references: envelope.references.clone(),
+            attachments: reading.content.attachments.clone(),
+        };
+        self.requests.push(Request::Compose(Box::new(Outgoing {
+            draft,
+            answering: None,
+            replaces: Some(summary.id),
+        })));
     }
 
     pub fn forward_selected(&mut self) {
@@ -629,10 +663,11 @@ impl MailView {
             ],
         );
         let draft = forward(&reading.content, &account.address(), &heading);
-        self.requests.push(Request::Compose {
-            draft: Box::new(draft),
+        self.requests.push(Request::Compose(Box::new(Outgoing {
+            draft,
             answering: None,
-        });
+            replaces: None,
+        })));
     }
 
     pub fn get_mail(&mut self) {
@@ -641,23 +676,35 @@ impl MailView {
         }
     }
 
-    pub fn send(&mut self, draft: Draft, answering: Option<MessageId>) -> bool {
-        let Some(account) = self
-            .accounts
+    fn account_for(&self, draft: &Draft) -> Option<AccountId> {
+        self.accounts
             .iter()
             .map(|(account, _)| account)
             .find(|account| account.email.eq_ignore_ascii_case(&draft.from.email))
-        else {
+            .map(|account| account.id)
+    }
+
+    pub fn save_draft(&mut self, outgoing: Outgoing) -> bool {
+        let Some(account) = self.account_for(&outgoing.draft) else {
             return false;
         };
-        self.send_command(
-            account.id,
-            Command::Send {
-                draft: Box::new(draft),
-                answering,
-            },
-        );
+        self.send_command(account, Command::SaveDraft(Box::new(outgoing)));
         true
+    }
+
+    pub fn send(&mut self, outgoing: Outgoing) -> bool {
+        let Some(account) = self.account_for(&outgoing.draft) else {
+            return false;
+        };
+        self.send_command(account, Command::Send(Box::new(outgoing)));
+        true
+    }
+
+    pub fn finish(&mut self) {
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        for worker in self.workers.drain(..) {
+            worker.finish(deadline);
+        }
     }
 
     pub fn open_attachment(&mut self, index: usize) {
@@ -740,8 +787,8 @@ impl MailView {
                     tracing::warn!("account {account}: {error}");
                 }
                 MailEvent::Sent(_) => {}
-                MailEvent::NotSent(_, error, draft) => {
-                    self.requests.push(Request::NotSent { error, draft });
+                MailEvent::NotSent(_, error, outgoing) => {
+                    self.requests.push(Request::NotSent { error, outgoing });
                 }
                 MailEvent::Setup(outcome) => self.setup_checked(*outcome),
             }
@@ -1129,6 +1176,10 @@ impl MailView {
                 true
             }
             (Key::Space, false, _) => self.page_reader(),
+            (Key::Enter, false, _) => {
+                self.continue_draft();
+                true
+            }
             (Key::Character('n'), true, false) => {
                 self.compose(Draft::default());
                 true
@@ -1206,6 +1257,9 @@ impl MailView {
             Hit::Message(id) => {
                 if self.selected != Some(id) {
                     self.select(id);
+                }
+                if pointer.count >= 2 && !secondary {
+                    self.continue_draft();
                 }
                 if secondary {
                     let menu = self.message_menu();

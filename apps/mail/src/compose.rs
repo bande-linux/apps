@@ -4,6 +4,7 @@ use data_encoding::BASE64;
 use jiff::Zoned;
 
 use crate::message::{Address, Attachment, Content, parse_addresses};
+use crate::store::MessageId;
 
 const LINE_LENGTH: usize = 76;
 const WORD_BYTES: usize = 45;
@@ -19,6 +20,13 @@ pub struct Draft {
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
     pub attachments: Vec<Attachment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Outgoing {
+    pub draft: Draft,
+    pub answering: Option<MessageId>,
+    pub replaces: Option<MessageId>,
 }
 
 impl Draft {
