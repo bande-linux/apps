@@ -12,6 +12,7 @@ use unbound_term::{
     SelectionKind, Session, Settings, Side, TabBar, TabBarLayout, TabTarget, Terminal,
     TerminalContext, bracketed, claim, dropped_text, encode_key, is_openable, left_behind,
     mouse_report, next_font_size, settings_view, shortcut, tab_menu, terminal_menu, window_file,
+    written_path,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{
@@ -712,6 +713,7 @@ fn menu_actions_name_the_command_they_run() {
         MenuCommand::OpenLink("https://example.com/a:b?c=d".to_owned()),
         MenuCommand::CopyLink("mailto:someone@example.com".to_owned()),
         MenuCommand::ShowInFiles,
+        MenuCommand::Reveal(PathBuf::from("/home/anna/notes: draft.txt")),
         MenuCommand::CloseTab(7),
         MenuCommand::CloseOtherTabs(3),
     ];
@@ -756,6 +758,43 @@ fn the_terminal_menu_offers_the_link_under_the_pointer_and_copy_only_with_a_sele
             .iter()
             .any(|item| item.action == "copy" && item.enabled)
     );
+
+    context.link = Some("file:///home/anna/Read%20me.md".to_owned());
+    let on_file = terminal_menu(&context);
+    assert_eq!(
+        on_file.items[0].action,
+        "open-link:file:///home/anna/Read%20me.md"
+    );
+    assert_eq!(on_file.items[1].action, "copy-link:/home/anna/Read me.md");
+    assert_eq!(on_file.items[2].action, "reveal:/home/anna/Read me.md");
+}
+
+#[test]
+fn paths_in_the_output_are_links_to_files_that_exist() {
+    let folder = tempfile::tempdir().unwrap();
+    let home = folder.path().join("home");
+    std::fs::create_dir_all(home.join("notes")).unwrap();
+    std::fs::create_dir_all(folder.path().join("src")).unwrap();
+    std::fs::write(folder.path().join("src/main.rs"), "").unwrap();
+    let mut terminal = terminal(40, 4);
+    terminal.feed(b"error at src/main.rs:12:5, see\r\n");
+    terminal.feed(b"(~/notes) missing.rs");
+    let path = |terminal: &Terminal, column, line| {
+        terminal
+            .path_at(cell(column, line), folder.path(), &home)
+            .map(|link| (link.uri, link.range.end().column.0))
+    };
+
+    let main = format!("file://{}/src/main.rs", folder.path().display());
+    assert_eq!(path(&terminal, 12, 0), Some((main.clone(), 19)));
+    assert_eq!(path(&terminal, 9, 0), Some((main, 19)));
+    assert_eq!(path(&terminal, 20, 0), None);
+    let notes = format!("file://{}/notes", home.display());
+    assert_eq!(path(&terminal, 3, 1), Some((notes, 7)));
+    assert_eq!(path(&terminal, 12, 1), None);
+    assert_eq!(path(&terminal, 2, 0), None);
+    assert_eq!(written_path("src/lib.rs:40:2."), "src/lib.rs");
+    assert_eq!(written_path("a:b"), "a:b");
 }
 
 #[test]
@@ -923,4 +962,35 @@ fn split_panes_match_their_goldens() {
         items,
     };
     shoot("term-split", &scene);
+}
+
+#[test]
+fn super_up_and_down_jump_between_the_commands_typed_at_the_prompt() {
+    assert_eq!(
+        shortcut(Key::Up, logo(false)),
+        Some(Command::PreviousPrompt)
+    );
+    assert_eq!(shortcut(Key::Down, logo(false)), Some(Command::NextPrompt));
+    let mut terminal = terminal(20, 3);
+    for command in ["one", "two"] {
+        terminal.feed(format!("$ {command}").as_bytes());
+        terminal.mark_prompt();
+        terminal.feed(b"\r\n");
+        for line in 0..4 {
+            terminal.feed(format!("{command} output {line}\r\n").as_bytes());
+        }
+    }
+    terminal.feed(b"$ ");
+    assert_eq!(terminal.screen_text()[0], "two output 2");
+
+    assert!(terminal.jump_to_prompt(true));
+    assert_eq!(terminal.screen_text()[0], "$ two");
+    assert_eq!(terminal.link_at(cell(0, 0)), None);
+    assert!(terminal.jump_to_prompt(true));
+    assert_eq!(terminal.screen_text()[0], "$ one");
+    assert!(!terminal.jump_to_prompt(true));
+    assert!(terminal.jump_to_prompt(false));
+    assert_eq!(terminal.screen_text()[0], "$ two");
+    assert!(terminal.jump_to_prompt(false));
+    assert_eq!(terminal.screen_text()[0], "two output 2");
 }

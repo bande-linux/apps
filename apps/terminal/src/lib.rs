@@ -34,7 +34,7 @@ pub use tabs::{
 };
 pub use terminal::{
     CellPoint, GridSize, Highlights, Link, SearchDirection, SelectionKind, Terminal, escape_regex,
-    is_openable,
+    is_openable, written_path,
 };
 pub use theme::{Profile, Theme, ansi_colors};
 

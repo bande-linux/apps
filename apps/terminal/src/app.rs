@@ -826,6 +826,9 @@ impl TerminalApp {
         };
         if let Some(bytes) = encode_key(key, modifiers, mode) {
             self.session().terminal.scroll_to_bottom();
+            if key == Key::Enter && modifiers == Modifiers::default() && !in_alternate_screen {
+                self.session().terminal.mark_prompt();
+            }
             self.send(&bytes);
             window.request_redraw();
         }
@@ -871,6 +874,12 @@ impl TerminalApp {
             Command::SplitStacked => self.split(window, Axis::Stacked),
             Command::NextPane => self.move_focus(window, true),
             Command::PreviousPane => self.move_focus(window, false),
+            Command::PreviousPrompt => {
+                self.session().terminal.jump_to_prompt(true);
+            }
+            Command::NextPrompt => {
+                self.session().terminal.jump_to_prompt(false);
+            }
             Command::Settings => spawn_self(window, vec![SETTINGS_OPTION.to_owned()]),
         }
         window.request_redraw();
@@ -907,7 +916,12 @@ impl TerminalApp {
             MenuCommand::Run(command) => self.perform(window, command),
             MenuCommand::OpenLink(uri) => self.open_link(window, &uri),
             MenuCommand::CopyLink(uri) => window.copy(&uri),
-            MenuCommand::ShowInFiles => self.show_in_files(window),
+            MenuCommand::ShowInFiles => {
+                if let Some(directory) = self.session().working_directory() {
+                    self.show_in_files(window, &directory);
+                }
+            }
+            MenuCommand::Reveal(path) => self.show_in_files(window, &path),
             MenuCommand::CloseTab(id) => {
                 if let Some(index) = self.tabs.iter().position(|tab| tab.id == id) {
                     self.request_close_tab(window, index);
@@ -917,19 +931,16 @@ impl TerminalApp {
         }
     }
 
-    fn show_in_files(&mut self, window: &mut Window) {
-        let Some(directory) = self.session().working_directory() else {
-            return;
-        };
+    fn show_in_files(&mut self, window: &mut Window, path: &Path) {
         let token = window
             .activation_token(APP_ID)
             .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
             .ok();
-        let command = [FILES.to_owned(), directory.to_string_lossy().into_owned()];
+        let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
         if let Err(error) =
             unbound_xdg::spawn_detached(FILES_APP_ID, &command, None, token.as_deref())
         {
-            tracing::warn!("cannot show {} in Files: {error}", directory.display());
+            tracing::warn!("cannot show {} in Files: {error}", path.display());
         }
     }
 
@@ -1213,12 +1224,21 @@ impl TerminalApp {
         contains(self.pane_area(), at)
     }
 
+    fn link_at(&mut self, at: Point) -> Option<Link> {
+        let cell = self.cell_at(at);
+        let directory = self.session().working_directory();
+        let terminal = &mut self.session().terminal;
+        terminal.link_at(cell).or_else(|| {
+            let home = std::env::home_dir()?;
+            terminal.path_at(cell, directory.as_deref().unwrap_or(&home), &home)
+        })
+    }
+
     fn hover_link(&mut self, window: &mut Window, modifiers: Modifiers) {
         let at = self.pointer;
         let over_focused = self.pane_at(at) == Some(self.tab().focused);
         let link = if modifiers.logo && self.gesture == Gesture::Idle && over_focused {
-            let cell = self.cell_at(at);
-            self.session().terminal.link_at(cell)
+            self.link_at(at)
         } else {
             None
         };
@@ -1320,13 +1340,11 @@ impl TerminalApp {
         let modifiers = pointer.modifiers;
         let program_takes_mouse = !modifiers.shift && reports_mouse(self.mode());
         if asks_for_menu(&pointer) && !program_takes_mouse {
-            let cell = self.cell_at(at);
-            let link = self.session().terminal.link_at(cell);
+            let link = self.link_at(at);
             return self.terminal_menu(window, at, link);
         }
         if modifiers.logo && pointer.is_primary() {
-            let cell = self.cell_at(at);
-            if let Some(link) = self.session().terminal.link_at(cell) {
+            if let Some(link) = self.link_at(at) {
                 self.open_link(window, &link.uri);
             }
             return;

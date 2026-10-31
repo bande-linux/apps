@@ -1,13 +1,16 @@
 use std::cell::RefCell;
+use std::path::Path;
 use std::rc::Rc;
 
 use alacritty_terminal::event::{Event as TermEvent, EventListener, WindowSize};
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Boundary, Column, Direction, Line, Point as GridPoint, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
+use alacritty_terminal::term::cell::Hyperlink;
 use alacritty_terminal::term::search::{Match, RegexIter, RegexSearch};
 use alacritty_terminal::term::{self, Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{ClearMode, CursorShape, CursorStyle, Handler, Processor};
+use unbound_xdg::file_uri;
 
 use crate::SCROLLBACK;
 
@@ -106,6 +109,29 @@ fn trimmed_url(text: &str) -> &str {
         }
         url = trimmed;
     }
+}
+
+const PROMPT_MARK: &str = "unbound-prompt";
+
+const PATH_DELIMITERS: &[char] = &[
+    ' ', '\t', '\0', '"', '\'', '`', '(', ')', '[', ']', '{', '}', '<', '>', '|', ',', ';', '=',
+];
+
+pub fn written_path(text: &str) -> &str {
+    let mut path = trimmed_url(text);
+    for _ in 0..2 {
+        match path.rsplit_once(':') {
+            Some((before, number))
+                if !before.is_empty()
+                    && !number.is_empty()
+                    && number.chars().all(|digit| digit.is_ascii_digit()) =>
+            {
+                path = before;
+            }
+            _ => break,
+        }
+    }
+    path
 }
 
 struct Search {
@@ -277,6 +303,46 @@ impl Terminal {
         self.scroll_display(Scroll::Delta(lines));
     }
 
+    pub fn mark_prompt(&mut self) {
+        let start = self.term.line_search_left(self.term.grid().cursor.point);
+        let cell = &mut self.term.grid_mut()[start.line][Column(0)];
+        if cell.hyperlink().is_none() {
+            cell.set_hyperlink(Some(Hyperlink::new(Some(PROMPT_MARK), String::new())));
+        }
+    }
+
+    fn prompt_marks(&self) -> Vec<Line> {
+        let grid = self.term.grid();
+        (grid.topmost_line().0..=grid.bottommost_line().0)
+            .map(Line)
+            .filter(|line| {
+                grid[*line][Column(0)]
+                    .hyperlink()
+                    .is_some_and(|hyperlink| hyperlink.id() == PROMPT_MARK)
+            })
+            .collect()
+    }
+
+    pub fn jump_to_prompt(&mut self, older: bool) -> bool {
+        let current = self.display_offset() as i32;
+        let top = Line(-current);
+        let marks = self.prompt_marks();
+        let target = match older {
+            true => marks.into_iter().rev().find(|line| *line < top),
+            false => marks.into_iter().find(|line| *line > top),
+        };
+        let offset = match target {
+            Some(line) => (-line.0).max(0),
+            None if older => return false,
+            None => 0,
+        };
+        if offset == current {
+            return false;
+        }
+        self.scroll_display(Scroll::Delta(offset - current));
+        true
+    }
+
     pub fn clear_scrollback(&mut self) {
         self.shift = 0.0;
         self.term.clear_screen(ClearMode::Saved);
@@ -436,7 +502,10 @@ impl Terminal {
         let point = self.grid_point(cell);
         let first = self.term.line_search_left(point);
         let last = self.term.line_search_right(point);
-        if let Some(hyperlink) = self.term.grid()[point].hyperlink() {
+        if let Some(hyperlink) = self.term.grid()[point]
+            .hyperlink()
+            .filter(|hyperlink| hyperlink.id() != PROMPT_MARK)
+        {
             let term = &self.term;
             let same = |at: GridPoint| term.grid()[at].hyperlink().as_ref() == Some(&hyperlink);
             let mut start = point;
@@ -465,6 +534,37 @@ impl Terminal {
         (point <= end).then(|| Link {
             range: *found.start()..=end,
             uri: url.to_owned(),
+        })
+    }
+
+    pub fn path_at(&self, cell: CellPoint, directory: &Path, home: &Path) -> Option<Link> {
+        let point = self.grid_point(cell);
+        let term = &self.term;
+        let first = term.line_search_left(point);
+        let last = term.line_search_right(point);
+        let part_of_path = |at: GridPoint| !PATH_DELIMITERS.contains(&term.grid()[at].c);
+        if !part_of_path(point) {
+            return None;
+        }
+        let mut start = point;
+        while start > first && part_of_path(start.sub(term, Boundary::None, 1)) {
+            start = start.sub(term, Boundary::None, 1);
+        }
+        let mut end = point;
+        while end < last && part_of_path(end.add(term, Boundary::None, 1)) {
+            end = end.add(term, Boundary::None, 1);
+        }
+        let text = term.bounds_to_string(start, end);
+        let typed = written_path(&text);
+        let path = match typed.strip_prefix("~/") {
+            Some(rest) => home.join(rest),
+            None => directory.join(typed),
+        };
+        let dropped = text[typed.len()..].chars().count();
+        let end = end.sub(term, Boundary::None, dropped);
+        (point <= end && path.symlink_metadata().is_ok()).then(|| Link {
+            range: start..=end,
+            uri: file_uri(&path),
         })
     }
 

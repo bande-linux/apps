@@ -254,6 +254,8 @@ pub enum Command {
     SplitStacked,
     NextPane,
     PreviousPane,
+    PreviousPrompt,
+    NextPrompt,
     Settings,
 }
 
@@ -261,8 +263,11 @@ pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
     if !modifiers.logo || modifiers.control || modifiers.alt {
         return None;
     }
-    let Key::Character(character) = key else {
-        return None;
+    let character = match key {
+        Key::Character(character) => character,
+        Key::Up if !modifiers.shift => return Some(Command::PreviousPrompt),
+        Key::Down if !modifiers.shift => return Some(Command::NextPrompt),
+        _ => return None,
     };
     let command = match (character.to_ascii_lowercase(), modifiers.shift) {
         ('c', false) => Command::Copy,

@@ -1,10 +1,13 @@
+use std::path::PathBuf;
+
 use unbound_app_menu::{Entry, Standard, app_submenu, window_submenu};
 use unbound_toolkit::ui::{Menu, MenuItem};
+use unbound_xdg::path_from_file_uri;
 
 use crate::L10N;
 use crate::keys::Command;
 
-const COMMANDS: [(Command, &str, &str, &str); 19] = [
+const COMMANDS: [(Command, &str, &str, &str); 21] = [
     (Command::Copy, "copy", "menu-copy", "Super+C"),
     (Command::Paste, "paste", "menu-paste", "Super+V"),
     (
@@ -69,6 +72,18 @@ const COMMANDS: [(Command, &str, &str, &str); 19] = [
     ),
     (Command::Settings, "settings", "menu-settings", "Super+,"),
     (
+        Command::PreviousPrompt,
+        "previous-prompt",
+        "menu-previous-prompt",
+        "Super+Up",
+    ),
+    (
+        Command::NextPrompt,
+        "next-prompt",
+        "menu-next-prompt",
+        "Super+Down",
+    ),
+    (
         Command::FindPrevious,
         "find-previous",
         "menu-find-previous",
@@ -81,6 +96,7 @@ const COPY_LINK: &str = "copy-link:";
 const CLOSE_TAB: &str = "close-tab:";
 const CLOSE_OTHER_TABS: &str = "close-other-tabs:";
 const SHOW_IN_FILES: &str = "show-in-files";
+const REVEAL: &str = "reveal:";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MenuCommand {
@@ -88,6 +104,7 @@ pub enum MenuCommand {
     OpenLink(String),
     CopyLink(String),
     ShowInFiles,
+    Reveal(PathBuf),
     CloseTab(u32),
     CloseOtherTabs(u32),
 }
@@ -103,6 +120,7 @@ impl MenuCommand {
             Self::OpenLink(uri) => format!("{OPEN_LINK}{uri}"),
             Self::CopyLink(uri) => format!("{COPY_LINK}{uri}"),
             Self::ShowInFiles => SHOW_IN_FILES.to_owned(),
+            Self::Reveal(path) => format!("{REVEAL}{}", path.display()),
             Self::CloseTab(id) => format!("{CLOSE_TAB}{id}"),
             Self::CloseOtherTabs(id) => format!("{CLOSE_OTHER_TABS}{id}"),
         }
@@ -120,6 +138,8 @@ impl MenuCommand {
             Some(Self::OpenLink(uri.to_owned()))
         } else if let Some(uri) = action.strip_prefix(COPY_LINK) {
             Some(Self::CopyLink(uri.to_owned()))
+        } else if let Some(path) = action.strip_prefix(REVEAL) {
+            Some(Self::Reveal(PathBuf::from(path)))
         } else if let Some(id) = action.strip_prefix(CLOSE_TAB) {
             tab(id).map(Self::CloseTab)
         } else {
@@ -160,8 +180,20 @@ pub struct TerminalContext {
 pub fn terminal_menu(context: &TerminalContext) -> Menu {
     let mut items = Vec::new();
     if let Some(uri) = &context.link {
-        items.push(item("menu-open-link", MenuCommand::OpenLink(uri.clone())));
-        items.push(item("menu-copy-link", MenuCommand::CopyLink(uri.clone())));
+        match path_from_file_uri(uri) {
+            Some(path) => items.extend([
+                item("menu-open", MenuCommand::OpenLink(uri.clone())),
+                item(
+                    "menu-copy-path",
+                    MenuCommand::CopyLink(path.display().to_string()),
+                ),
+                item("menu-show-in-files", MenuCommand::Reveal(path)),
+            ]),
+            None => items.extend([
+                item("menu-open-link", MenuCommand::OpenLink(uri.clone())),
+                item("menu-copy-link", MenuCommand::CopyLink(uri.clone())),
+            ]),
+        }
         items.push(MenuItem::separator());
     }
     items.extend([
@@ -237,6 +269,9 @@ pub fn app_menus() -> Vec<Entry> {
                 Some(Command::Find),
                 Some(Command::FindNext),
                 Some(Command::FindPrevious),
+                None,
+                Some(Command::PreviousPrompt),
+                Some(Command::NextPrompt),
             ]),
         ),
         Entry::submenu(
