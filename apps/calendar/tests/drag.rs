@@ -238,3 +238,26 @@ fn calendars_are_created_renamed_and_deleted_from_the_menus() {
     press(&mut view, Key::Space);
     assert!(!names(&view).contains(&"Sport".to_owned()));
 }
+
+#[test]
+fn the_more_chip_opens_the_day() {
+    let (_directory, mut view) = ready();
+    let zone = jiff::tz::TimeZone::get("Europe/Berlin").unwrap();
+    for index in 0..5 {
+        let start = date(2026, 10, 27).at(9, 30 + index, 0, 0);
+        let end = start.checked_add(jiff::Span::new().minutes(90)).unwrap();
+        let object = bande_calendar::edit::new_event(start, end, false, "Crowd", &zone);
+        view.library_mut().put_object(0, object);
+    }
+    view.scene(SIZE.0, SIZE.1);
+    let grid = grid();
+    let column = grid.column(1);
+    let chip = Point::new(
+        column.x + column.width - 10.0,
+        grid.y_for_minutes(10 * 60) + 2.0,
+    );
+    view.handle(&Event::PointerDown(Pointer::at(chip)));
+    view.handle(&Event::PointerUp(Pointer::at(chip)));
+    assert_eq!(view.mode(), bande_calendar::ui::Mode::Day);
+    assert_eq!(view.focus_date(), date(2026, 10, 27));
+}

@@ -7,7 +7,8 @@ use jiff::ToSpan;
 use jiff::civil::{Date, DateTime, Time};
 
 use super::geometry::{
-    self, DAY_HEADER, GUTTER, TimeGrid, at_minutes, lanes, minutes_of, month_cell, stack_rows,
+    self, DAY_HEADER, GUTTER, Slot, TimeGrid, arrange, at_minutes, minutes_of, month_cell,
+    stack_rows,
 };
 use super::painter::{Painter, parse_color};
 use super::{Drag, Hit, L10N, Mode, Part, ViewModel};
@@ -533,15 +534,19 @@ fn paint_hours(model: &ViewModel, grid: &TimeGrid, shown: &[Found], painter: &mu
             };
             spans.push((found_index, from, to));
         }
-        let placed = lanes(
+        let (slots, more) = arrange(
             &spans
                 .iter()
                 .map(|(_, from, to)| (*from, *to))
                 .collect::<Vec<_>>(),
+            grid.lanes_that_fit(),
         );
-        for ((found_index, from, to), place) in spans.iter().zip(placed) {
+        for ((found_index, from, to), slot) in spans.iter().zip(slots) {
+            let Some(slot) = slot else {
+                continue;
+            };
             let found = &shown[*found_index];
-            let rect = grid.block(index, *from, *to, place.lane, place.lanes);
+            let rect = grid.block(index, *from, *to, slot);
             let color = calendar_color(model, found.calendar);
             let selected = model.is_selected(found);
             let (start, _, _) = preview_of(model, found).unwrap_or((
@@ -575,6 +580,18 @@ fn paint_hours(model: &ViewModel, grid: &TimeGrid, shown: &[Found], painter: &mu
                 );
             }
         }
+        for chip in more {
+            let rect = grid.block(index, chip.start, chip.end, chip.slot);
+            painter.fill(rect, Radius::XS, palette.well);
+            painter.stroke(rect, Radius::XS, 1.0, palette.hairline);
+            painter.label(
+                &format!("+{}", chip.count),
+                TextStyle::new(12.0, palette.ink2).weight(TextStyle::SEMIBOLD),
+                Rect::new(rect.x, rect.y + 2.0, rect.width, 16.0),
+                TextAlign::Center,
+            );
+            painter.hit(rect, Hit::More(day));
+        }
     }
     if let Some(Drag::Create {
         anchor,
@@ -589,7 +606,16 @@ fn paint_hours(model: &ViewModel, grid: &TimeGrid, shown: &[Found], painter: &mu
                 true => geometry::MINUTES_PER_DAY,
                 false => minutes_of(end),
             };
-            let rect = grid.block(index, minutes_of(start), to, 0, 1);
+            let rect = grid.block(
+                index,
+                minutes_of(start),
+                to,
+                Slot {
+                    lane: 0,
+                    span: 1,
+                    lanes: 1,
+                },
+            );
             let label = start
                 .to_zoned(model.zone.clone())
                 .map(|at| time_label(model, &at))

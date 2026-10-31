@@ -85,9 +85,15 @@ impl Radicale {
         let home = format!("{}{USER}/", self.url);
         let _ = client.calendars(&home);
         let url = format!("{}{USER}/{slug}/", self.url);
-        client
-            .make_calendar(&url, name, "#FF9500FF")
-            .expect("a new calendar");
+        let mut made = client.make_calendar(&url, name, "#FF9500FF");
+        for _ in 0..5 {
+            if !matches!(made, Err(bande_calendar::caldav::Error::Network(_))) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+            made = client.make_calendar(&url, name, "#FF9500FF");
+        }
+        made.expect("a new calendar");
         url
     }
 }

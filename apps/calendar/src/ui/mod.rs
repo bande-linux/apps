@@ -137,6 +137,7 @@ pub(crate) enum Hit {
     MonthDay(Date),
     YearDay(Date),
     YearMonth(Date),
+    More(Date),
     Result(usize),
 }
 

@@ -495,6 +495,11 @@ fn pointer_down(view: &mut CalendarView, pointer: &Pointer) -> bool {
             }
             true
         }
+        Some(Hit::More(day)) => {
+            view.go_to(day);
+            view.set_mode(Mode::Day);
+            true
+        }
         Some(Hit::YearMonth(first)) => {
             view.go_to(first);
             view.set_mode(Mode::Month);

@@ -113,3 +113,42 @@ fn the_account_sheet_closes_when_the_account_is_added() {
     view.account_added();
     assert!(!view.has_sheet());
 }
+
+fn crowd(view: &mut CalendarView) {
+    let zone = jiff::tz::TimeZone::get("Europe/Berlin").unwrap();
+    let local = view
+        .library()
+        .calendars
+        .iter()
+        .position(|calendar| calendar.info.account == bande_calendar::store::LOCAL_ACCOUNT)
+        .unwrap();
+    for (index, title) in [
+        "Team lunch",
+        "Interview",
+        "Board call",
+        "Yoga",
+        "Pick up kids",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let start = jiff::civil::date(2026, 10, 31).at(16, (index as i8) * 5, 0, 0);
+        let end = start.checked_add(jiff::Span::new().minutes(60)).unwrap();
+        let object = bande_calendar::edit::new_event(start, end, false, title, &zone);
+        view.library_mut().put_object(local, object);
+    }
+}
+
+#[test]
+fn crowded_hours_stay_readable() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut crowded = view(directory.path(), Scheme::Light);
+    crowd(&mut crowded);
+    render("week-crowded", &mut crowded, Scheme::Light);
+    let directory = tempfile::tempdir().unwrap();
+    let mut crowded = view(directory.path(), Scheme::Light);
+    crowd(&mut crowded);
+    crowded.set_mode(Mode::Day);
+    crowded.go_to(jiff::civil::date(2026, 10, 31));
+    render("day-crowded", &mut crowded, Scheme::Light);
+}

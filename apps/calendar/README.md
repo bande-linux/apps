@@ -30,6 +30,8 @@ views. Packaged as `bande-calendar`.
 - **Calendars.** New, rename and delete, on this computer or on a CalDAV server (MKCALENDAR,
   PROPPATCH of the name and colour, DELETE): File ▸ New Calendar…, or right-click a calendar or
   an account heading.
+- **Busy hours.** Overlapping events share the column and widen into free lanes; when there are
+  more than fit readably, a "+N" chip opens that day in the Day view.
 - **Editing.** Drag on empty time to create, drag an event to move it (also between days in the
   month view and into the all-day row), drag its bottom edge to change its length, and an
   inspector popover with title, location, all-day, start and end, repeat, alert, calendar and

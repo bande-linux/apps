@@ -9,6 +9,8 @@ pub const DAY_HEADER: f32 = 44.0;
 pub const ALL_DAY_ROW: f32 = 22.0;
 pub const SNAP_MINUTES: i32 = 15;
 pub const MINUTES_PER_DAY: i32 = 24 * 60;
+pub const MIN_LANE: f32 = 64.0;
+const SHORTEST: i32 = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TimeGrid {
@@ -104,16 +106,20 @@ impl TimeGrid {
         )
     }
 
-    pub fn block(&self, column: usize, start: i32, end: i32, lane: usize, lanes: usize) -> Rect {
+    pub fn lanes_that_fit(&self) -> usize {
+        ((self.column_width() - 6.0) / MIN_LANE).floor().max(2.0) as usize
+    }
+
+    pub fn block(&self, column: usize, start: i32, end: i32, slot: Slot) -> Rect {
         let day = self.column(column);
-        let lanes = lanes.max(1) as f32;
-        let width = (day.width - 6.0) / lanes;
+        let width = (day.width - 6.0) / slot.lanes.max(1) as f32;
+        let (lane, span) = (slot.lane, slot.span.max(1));
         let top = self.y_for_minutes(start);
         let bottom = self.y_for_minutes(end.max(start + 20));
         Rect::new(
             day.x + 1.0 + width * lane as f32,
             top + 1.0,
-            (width - 1.0).max(4.0),
+            (width * span as f32 - 1.0).max(4.0),
             (bottom - top - 2.0).max(10.0),
         )
     }
@@ -138,29 +144,37 @@ pub fn minutes_of(at: DateTime) -> i32 {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Placed {
+pub struct Slot {
     pub lane: usize,
+    pub span: usize,
     pub lanes: usize,
 }
 
-pub fn lanes(spans: &[(i32, i32)]) -> Vec<Placed> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct More {
+    pub slot: Slot,
+    pub start: i32,
+    pub end: i32,
+    pub count: usize,
+}
+
+fn overlap(a: (i32, i32), b: (i32, i32)) -> bool {
+    a.0 < b.1.max(b.0 + SHORTEST) && b.0 < a.1.max(a.0 + SHORTEST)
+}
+
+fn clusters(spans: &[(i32, i32)]) -> Vec<Vec<(usize, usize)>> {
     let mut order: Vec<usize> = (0..spans.len()).collect();
     order.sort_by_key(|index| (spans[*index].0, -spans[*index].1));
-    let mut placed = vec![Placed { lane: 0, lanes: 1 }; spans.len()];
-    let mut cluster: Vec<usize> = Vec::new();
+    let mut found: Vec<Vec<(usize, usize)>> = Vec::new();
     let mut lane_ends: Vec<i32> = Vec::new();
     let mut cluster_end = i32::MIN;
-    let finish = |cluster: &mut Vec<usize>, lane_ends: &mut Vec<i32>, placed: &mut Vec<Placed>| {
-        for index in cluster.drain(..) {
-            placed[index].lanes = lane_ends.len().max(1);
-        }
-        lane_ends.clear();
-    };
     for index in order {
         let (start, end) = spans[index];
-        let end = end.max(start + 20);
-        if start >= cluster_end && !cluster.is_empty() {
-            finish(&mut cluster, &mut lane_ends, &mut placed);
+        let end = end.max(start + SHORTEST);
+        if start >= cluster_end || found.is_empty() {
+            found.push(Vec::new());
+            lane_ends.clear();
+            cluster_end = end;
         }
         let lane = match lane_ends.iter().position(|lane_end| *lane_end <= start) {
             Some(lane) => {
@@ -172,15 +186,67 @@ pub fn lanes(spans: &[(i32, i32)]) -> Vec<Placed> {
                 lane_ends.len() - 1
             }
         };
-        placed[index].lane = lane;
-        cluster.push(index);
-        cluster_end = match cluster.len() {
-            1 => end,
-            _ => cluster_end.max(end),
-        };
+        cluster_end = cluster_end.max(end);
+        if let Some(cluster) = found.last_mut() {
+            cluster.push((index, lane));
+        }
     }
-    finish(&mut cluster, &mut lane_ends, &mut placed);
-    placed
+    found
+}
+
+pub fn arrange(spans: &[(i32, i32)], fits: usize) -> (Vec<Option<Slot>>, Vec<More>) {
+    let mut slots = vec![None; spans.len()];
+    let mut more = Vec::new();
+    for cluster in clusters(spans) {
+        let lanes = cluster.iter().map(|(_, lane)| lane + 1).max().unwrap_or(1);
+        let shown = match lanes > fits {
+            true => fits.saturating_sub(1).max(1),
+            false => lanes,
+        };
+        let columns = match lanes > shown {
+            true => shown + 1,
+            false => shown,
+        };
+        let hidden: Vec<usize> = cluster
+            .iter()
+            .filter(|(_, lane)| *lane >= shown)
+            .map(|(index, _)| *index)
+            .collect();
+        if !hidden.is_empty() {
+            more.push(More {
+                slot: Slot {
+                    lane: shown,
+                    span: 1,
+                    lanes: columns,
+                },
+                start: hidden
+                    .iter()
+                    .map(|index| spans[*index].0)
+                    .min()
+                    .unwrap_or(0),
+                end: hidden
+                    .iter()
+                    .map(|index| spans[*index].1.max(spans[*index].0 + SHORTEST))
+                    .max()
+                    .unwrap_or(0),
+                count: hidden.len(),
+            });
+        }
+        for (index, lane) in cluster.iter().filter(|(_, lane)| *lane < shown) {
+            let blocked = |other_lane: usize| {
+                cluster.iter().any(|(other, placed)| {
+                    *placed == other_lane && overlap(spans[*index], spans[*other])
+                })
+            };
+            let span = (lane + 1..shown).take_while(|next| !blocked(*next)).count() + 1;
+            slots[*index] = Some(Slot {
+                lane: *lane,
+                span,
+                lanes: columns,
+            });
+        }
+    }
+    (slots, more)
 }
 
 pub fn stack_rows(spans: &[(usize, usize)]) -> (Vec<usize>, usize) {
@@ -253,11 +319,37 @@ mod tests {
 
     #[test]
     fn overlapping_events_share_lanes_per_cluster() {
-        let placed = lanes(&[(540, 600), (570, 660), (600, 630), (700, 760)]);
-        assert_eq!(placed[0], Placed { lane: 0, lanes: 2 });
-        assert_eq!(placed[1], Placed { lane: 1, lanes: 2 });
-        assert_eq!(placed[2], Placed { lane: 0, lanes: 2 });
-        assert_eq!(placed[3], Placed { lane: 0, lanes: 1 });
+        let (slots, more) = arrange(&[(540, 600), (570, 660), (600, 630), (700, 760)], 4);
+        let lanes: Vec<(usize, usize)> = slots
+            .iter()
+            .map(|slot| slot.map_or((9, 9), |slot| (slot.lane, slot.lanes)))
+            .collect();
+        assert_eq!(lanes, [(0, 2), (1, 2), (0, 2), (0, 1)]);
+        assert!(more.is_empty());
+    }
+
+    #[test]
+    fn a_short_event_widens_into_free_lanes() {
+        let (slots, _) = arrange(&[(540, 660), (540, 600), (540, 570), (600, 630)], 4);
+        let slot = slots[3].unwrap();
+        assert_eq!((slot.lane, slot.span, slot.lanes), (1, 2, 3));
+        assert_eq!(slots[1].unwrap().span, 1);
+    }
+
+    #[test]
+    fn too_many_overlaps_leave_readable_lanes_and_a_more_chip() {
+        let spans = [(960, 1020); 5];
+        let (slots, more) = arrange(&spans, 3);
+        let shown: Vec<Slot> = slots.iter().flatten().copied().collect();
+        assert_eq!(shown.len(), 2);
+        assert!(shown.iter().all(|slot| slot.lanes == 3));
+        assert_eq!(more.len(), 1);
+        assert_eq!(
+            (more[0].slot.lane, more[0].count, more[0].start, more[0].end),
+            (2, 3, 960, 1020)
+        );
+        assert_eq!(grid().lanes_that_fit(), 2);
+        assert_eq!(TimeGrid { days: 1, ..grid() }.lanes_that_fit(), 10);
     }
 
     #[test]
