@@ -29,7 +29,6 @@ use crate::edit::{Details, Scope};
 use crate::ical::{CalendarObject, InstanceKey};
 use crate::store::{Found, LOCAL_ACCOUNT, Library};
 
-pub use inspector::parse_time;
 pub use toolbar::TOOLBAR_HEIGHT;
 
 const ENGLISH: &str = include_str!("../../locales/en-US/bande-calendar.ftl");

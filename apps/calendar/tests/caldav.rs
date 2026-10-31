@@ -228,3 +228,62 @@ fn an_invalid_sync_token_falls_back_to_a_full_sync() {
             .contains("SUMMARY:Kept")
     );
 }
+
+#[test]
+fn an_edit_made_while_the_create_is_in_flight_is_pushed_as_an_update() {
+    let radicale = Radicale::start();
+    radicale.calendar("work", "Work");
+    let directory = tempfile::tempdir().unwrap();
+    let (mut library, work) = library_for(&radicale, directory.path());
+    library.put_object(work, meeting("m1", ""));
+    let snapshot = library.calendars[work].clone();
+    let index = library.calendars[work].find("m1").unwrap();
+    let mut named = library.calendars[work].objects[index]
+        .parsed
+        .clone()
+        .unwrap();
+    named.master_mut().unwrap().summary = "Team lunch".to_owned();
+    library.put_object(work, named);
+    let outcome = sync_calendar(&radicale.client(), &snapshot).unwrap();
+    assert!(apply(&mut library, outcome, false).is_empty());
+    assert!(sync(&radicale, &mut library, work).is_empty());
+    assert!(
+        library.calendars[work]
+            .objects
+            .iter()
+            .all(|stored| stored.pending.is_none())
+    );
+    let (mut other, other_work) = library_for(&radicale, tempfile::tempdir().unwrap().path());
+    sync(&radicale, &mut other, other_work);
+    assert_eq!(summaries(&other, other_work), ["Team lunch"]);
+}
+
+#[test]
+fn a_create_that_already_reached_the_server_is_sent_again_as_an_update() {
+    let radicale = Radicale::start();
+    radicale.calendar("work", "Work");
+    let directory = tempfile::tempdir().unwrap();
+    let (mut library, work) = library_for(&radicale, directory.path());
+    library.put_object(work, meeting("m1", ""));
+    let snapshot = library.calendars[work].clone();
+    sync_calendar(&radicale.client(), &snapshot).unwrap();
+    let index = library.calendars[work].find("m1").unwrap();
+    let mut named = library.calendars[work].objects[index]
+        .parsed
+        .clone()
+        .unwrap();
+    named.master_mut().unwrap().summary = "Team lunch".to_owned();
+    library.put_object(work, named);
+    assert_eq!(
+        library.calendars[work].objects[index].pending,
+        Some(Pending::Create)
+    );
+    assert!(sync(&radicale, &mut library, work).is_empty());
+    assert_eq!(summaries(&library, work), ["Team lunch"]);
+    assert!(
+        library.calendars[work]
+            .objects
+            .iter()
+            .all(|stored| stored.pending.is_none())
+    );
+}

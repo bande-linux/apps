@@ -58,9 +58,20 @@ fn push(client: &Client, calendar: &Calendar, outcome: &mut Outcome) -> Result<(
             continue;
         };
         let result = match pending {
-            Pending::Create => client
-                .put(&stored.href, &stored.data, &Precondition::Create)
-                .map(Some),
+            Pending::Create => {
+                match client.put(&stored.href, &stored.data, &Precondition::Create) {
+                    Err(Error::PreconditionFailed) => {
+                        client.get(&stored.href).and_then(|existing| {
+                            let precondition = existing
+                                .etag
+                                .map_or(Precondition::None, Precondition::Match);
+                            client.put(&stored.href, &stored.data, &precondition)
+                        })
+                    }
+                    other => other,
+                }
+                .map(Some)
+            }
             Pending::Update => {
                 let precondition = match &stored.etag {
                     Some(etag) => Precondition::Match(etag.clone()),
