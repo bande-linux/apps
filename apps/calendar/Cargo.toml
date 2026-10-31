@@ -14,7 +14,7 @@ rustix = { version = "=1.1.6", features = ["event", "pipe"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 tracing = "=0.1.44"
-ureq = "3"
+ureq = { version = "=3.5.0", features = ["platform-verifier"] }
 zbus = "=5.19.0"
 unbound-app-menu = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/app-menu" }
 unbound-datetime = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/datetime" }
