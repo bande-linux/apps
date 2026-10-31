@@ -8,8 +8,8 @@ use accesskit::TreeUpdate;
 use unbound_app_menu::{AppMenu, Entry, Standard};
 use unbound_monitor::{
     AppList, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, Inhibitors, InspectorView, L10N,
-    Monitor, MonitorView, Request, Sampler, Screen, Snapshot, Stop, TOOLBAR_HEIGHT, due_redraws,
-    stop_all,
+    Monitor, MonitorView, Request, Sampler, Screen, Snapshot, Stop, TOOLBAR_HEIGHT, Tab,
+    due_redraws, stop_all,
 };
 use unbound_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Role, Scene, Surfaces, TextSystem, Window,
@@ -473,6 +473,9 @@ fn run() -> Result<(), WindowError> {
         let mut monitor = Monitor::new(catalog, rustix::process::getuid().as_raw());
         if let Some(text) = state_file().and_then(|file| std::fs::read_to_string(file).ok()) {
             monitor.restore(&text);
+        }
+        if std::env::args().any(|argument| argument == "--memory") {
+            monitor.set_tab(Tab::Memory);
         }
         let mut screen = MonitorView::new(monitor, palette, TextSystem::new(), icons());
         let snapshot = first_sample(&mut sampler, &mut screen);
