@@ -63,9 +63,8 @@ Super+F search, Super+R refresh, Delete to delete, Enter to open the selected ev
 | `src/main.rs` | the app: window, menus, sync timers, alerts, files and links |
 
 It uses the desktop's toolkit, design tokens and theme (light/dark, accent, text size), like
-Files and Settings. For now it depends on the desktop crates by path
-(`/home/mikael/unbound-linux/repos/desktop`); that becomes a git dependency on
-`bande-linux/desktop` once the desktop is published, so this app must not reach `main` before.
+Files and Settings. The desktop crates come from `bande-linux/desktop`, pinned to a commit in
+`Cargo.toml`; move the `rev` forward to pick up toolkit changes.
 
 ## Tests
 
