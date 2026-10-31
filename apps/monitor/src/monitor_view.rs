@@ -27,7 +27,7 @@ use crate::view::{
     contains, is_secondary, opens_menu, stop_alert, stop_button, symbol_button,
 };
 
-pub const TOOLBAR_HEIGHT: f32 = unbound_toolkit::HEADER_HEIGHT as f32;
+pub const TOOLBAR_HEIGHT: f32 = unbound_toolkit::WINDOW_HEADER_HEIGHT as f32;
 const FOOTER_HEIGHT: f32 = 112.0;
 const FOOTER_PAD: f32 = 16.0;
 const READOUT_WIDTH: f32 = 176.0;

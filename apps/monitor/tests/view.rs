@@ -13,7 +13,7 @@ use unbound_monitor::{
     app_menus, due_redraws,
 };
 use unbound_toolkit::ui::{
-    Event, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll, Widget,
+    Event, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll, Table, Widget,
 };
 use unbound_toolkit::{
     Appearance, FrameRegions, Image, Item, Paint, Palette, Point, Scheme, Shape, TextSize,
@@ -22,7 +22,7 @@ use unbound_toolkit::{
 
 const MONITOR_SIZE: (u32, u32) = (860, 420);
 const FORCE_QUIT_SIZE: (u32, u32) = (380, 340);
-const LIST_TOP: f32 = 48.0 + HEADER_HEIGHT;
+const LIST_TOP: f32 = 48.0 + Table::HEADER_HEIGHT;
 const TITLE: &str = "Activity Monitor";
 
 fn catalog() -> Catalog {
@@ -481,7 +481,7 @@ fn the_selection_stays_on_its_process_while_the_numbers_reorder_the_list() {
 #[test]
 fn header_clicks_sort_numbers_largest_first_and_names_from_a() {
     let mut view = monitor_view();
-    let header = |x: f32| Point::new(x, 48.0 + HEADER_HEIGHT / 2.0);
+    let header = |x: f32| Point::new(x, 48.0 + Table::HEADER_HEIGHT / 2.0);
     click(&mut view, header(40.0), Modifiers::default(), 1);
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
     assert_eq!(
@@ -674,7 +674,10 @@ fn column_headers(view: &MonitorView) -> Vec<String> {
 #[test]
 fn a_right_click_on_the_header_chooses_columns_and_the_choice_is_remembered() {
     let mut view = monitor_view();
-    assert!(view.handle(&right_click(Point::new(300.0, 48.0 + HEADER_HEIGHT / 2.0))));
+    assert!(view.handle(&right_click(Point::new(
+        300.0,
+        48.0 + Table::HEADER_HEIGHT / 2.0
+    ))));
     let shown = menu_actions(view.take_requests());
     assert_eq!(shown[0], ("column:name".to_owned(), false));
     assert!(shown.contains(&("column:resident".to_owned(), true)));

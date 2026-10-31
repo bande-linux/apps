@@ -20,7 +20,7 @@ use crate::view::{
 };
 
 pub const INSPECTOR_SIZE: (u32, u32) = (680, 520);
-const HEADER: f32 = unbound_toolkit::HEADER_HEIGHT as f32;
+const HEADER: f32 = unbound_toolkit::WINDOW_HEADER_HEIGHT as f32;
 const SIDE: f32 = 12.0;
 const LEADING: f32 = 94.0;
 const BUTTON_SIZE: f32 = 28.0;
