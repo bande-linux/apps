@@ -9,7 +9,7 @@ use unbound_app_menu::{AppMenu, Standard};
 use unbound_monitor::{
     AppList, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, Inhibitors, InspectorView, L10N,
     Monitor, MonitorView, Request, Sampler, Screen, Snapshot, Stop, TOOLBAR_HEIGHT, app_menus,
-    stop_all,
+    due_redraws, stop_all,
 };
 use unbound_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Role, Scene, Surfaces, TextSystem, Window,
@@ -348,8 +348,11 @@ impl Surfaces for ActivityMonitor {
             self.sample();
             self.next_sample = now + INTERVAL;
         }
-        for window in &mut self.windows {
-            window.request_redraw();
+        let due = due_redraws(&self.screens, now);
+        for (window, due) in self.windows.iter_mut().zip(due) {
+            if due {
+                window.request_redraw();
+            }
         }
     }
 
@@ -381,6 +384,7 @@ fn icons() -> Icons {
 
 fn first_sample(sampler: &mut Sampler, screen: &mut impl Screen) -> Snapshot {
     sampler.measure_gpu(screen.measures_gpu());
+    sampler.measure_wakeups(screen.measures_wakeups());
     match sampler.sample() {
         Ok(snapshot) => {
             screen.update(snapshot.clone());

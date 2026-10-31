@@ -35,7 +35,7 @@ pub use monitor_view::{MonitorView, TOOLBAR_HEIGHT};
 pub use sampler::{GpuUse, Identity, Interface, Process, Rates, Sampler, Snapshot};
 pub use signal::{SignalError, Stop, stop};
 pub use system::{Memory, Pressure, PressureLevel};
-pub use view::{Icons, Request, Screen};
+pub use view::{Icons, Request, Screen, due_redraws};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-monitor.ftl");
 

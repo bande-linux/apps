@@ -9,7 +9,7 @@ use accesskit::Role;
 use fixture::{check_golden, entry, process};
 use unbound_monitor::{
     AppList, AppRow, Catalog, CpuShare, ForceQuitView, Graph, Icons, Interface, Memory, Monitor,
-    MonitorView, Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab,
+    MonitorView, Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab, due_redraws,
 };
 use unbound_toolkit::ui::{
     Event, HEADER_HEIGHT, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll, Widget,
@@ -902,4 +902,20 @@ fn quit_asks_an_app_politely_and_signals_only_a_chosen_process() {
     let target = view.monitor.stop_target().expect("cargo");
     assert_eq!(target.roots, [(502, 502)]);
     assert!(target.apps.is_empty());
+}
+
+#[test]
+fn a_tick_between_samples_redraws_only_a_window_whose_own_timer_is_due() {
+    let idle = monitor_view();
+    let mut hovered = monitor_view();
+    hovered.handle(&Event::PointerMove(Pointer::at(Point::new(282.0, 24.0))));
+    hovered.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    let tooltip = hovered.deadline().expect("the tooltip waits");
+    assert_eq!(idle.deadline(), None);
+    let screens: Vec<Box<dyn Screen>> = vec![Box::new(idle), Box::new(hovered)];
+    assert_eq!(
+        due_redraws(&screens, tooltip - Duration::from_millis(1)),
+        [false, false]
+    );
+    assert_eq!(due_redraws(&screens, tooltip), [false, true]);
 }

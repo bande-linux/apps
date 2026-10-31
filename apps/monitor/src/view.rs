@@ -189,6 +189,13 @@ pub(crate) fn answer_stop(
     }
 }
 
+pub fn due_redraws(screens: &[Box<dyn Screen>], now: Instant) -> Vec<bool> {
+    screens
+        .iter()
+        .map(|screen| screen.deadline().is_some_and(|deadline| deadline <= now))
+        .collect()
+}
+
 pub trait Screen {
     fn scene(&mut self, width: u32, height: u32) -> Scene;
     fn set_palette(&mut self, palette: Palette);
