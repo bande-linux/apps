@@ -7,6 +7,7 @@ pub mod http;
 pub mod imap;
 pub mod message;
 pub mod net;
+pub mod picture;
 pub mod portal;
 pub mod secrets;
 pub mod setup;

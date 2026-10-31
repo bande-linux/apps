@@ -10,6 +10,7 @@ publish = false
 accesskit = "=0.25.2"
 data-encoding = "2.11"
 html5ever = "0.40"
+image = { version = "=0.25.10", default-features = false, features = ["gif", "jpeg", "png"] }
 jiff = "=0.2.38"
 mailparse = "0.18"
 native-tls = "0.2.18"

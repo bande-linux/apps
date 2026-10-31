@@ -54,6 +54,7 @@ pub enum Event {
     Sent(AccountId),
     NotSent(AccountId, String, Box<Outgoing>),
     Setup(Box<crate::setup::Outcome>),
+    Pictures(MessageId, Vec<(String, crate::picture::Picture)>),
 }
 
 #[derive(Clone)]

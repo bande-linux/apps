@@ -27,7 +27,7 @@ use crate::secrets::Keyring;
 use crate::setup::{Outcome, Request as SetupRequest, check};
 use crate::store::{Account, AccountId, Mailbox, MessageId, Store, Summary};
 use crate::ui::format::full_date;
-use crate::ui::reader::{Layout, Reading};
+use crate::ui::reader::{Layout, Reading, Remote};
 use crate::ui::setup_sheet::{AccountSheet, Action, Field, Mode, Shared, SheetState};
 use crate::ui::sidebar::{Place, Row, rows};
 use crate::ui::symbols::Symbols;
@@ -38,6 +38,7 @@ pub const SIDEBAR_WIDTH: f32 = 220.0;
 pub const LIST_WIDTH: f32 = 340.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const NOTIFIED_AT_ONCE: usize = 3;
+const MAX_PICTURE_BYTES: usize = 10 << 20;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -62,6 +63,7 @@ pub enum Hit {
     Message(MessageId),
     Link(String),
     Attachment(usize),
+    LoadRemote,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -250,7 +252,7 @@ impl MailView {
 
     pub fn cursor(&self) -> Cursor {
         match self.hover {
-            Some(Hit::Link(_)) => Cursor::Pointer,
+            Some(Hit::Link(_) | Hit::Attachment(_) | Hit::LoadRemote) => Cursor::Pointer,
             _ => self.ui.cursor(),
         }
     }
@@ -707,6 +709,37 @@ impl MailView {
         }
     }
 
+    pub fn load_remote(&mut self) {
+        let (Some(id), Some(reading)) = (self.selected, self.reading.as_mut()) else {
+            return;
+        };
+        if reading.remote != Remote::Blocked {
+            return;
+        }
+        reading.remote = Remote::Loading;
+        self.layout = None;
+        let sources = reading.remote_sources();
+        let network = self.network.clone();
+        let notifier = self.mailroom.notifier();
+        let spawned = std::thread::Builder::new()
+            .name("remote-content".to_owned())
+            .spawn(move || {
+                let pictures = sources
+                    .into_iter()
+                    .filter_map(|source| {
+                        let bytes = crate::http::get(&source, &network, MAX_PICTURE_BYTES)
+                            .inspect_err(|error| tracing::debug!("cannot load {source}: {error}"))
+                            .ok()?;
+                        crate::picture::decode(&bytes).map(|picture| (source, picture))
+                    })
+                    .collect();
+                notifier.send(MailEvent::Pictures(id, pictures));
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot load remote content: {error}");
+        }
+    }
+
     pub fn open_attachment(&mut self, index: usize) {
         let Some(attachment) = self
             .reading
@@ -791,6 +824,17 @@ impl MailView {
                     self.requests.push(Request::NotSent { error, outgoing });
                 }
                 MailEvent::Setup(outcome) => self.setup_checked(*outcome),
+                MailEvent::Pictures(id, pictures) => {
+                    if self.selected == Some(id)
+                        && let Some(reading) = self.reading.as_mut()
+                    {
+                        for (source, picture) in pictures {
+                            reading.add_picture(source, picture);
+                        }
+                        reading.remote = Remote::Loaded;
+                        self.layout = None;
+                    }
+                }
             }
         }
         changed
@@ -1269,6 +1313,7 @@ impl MailView {
             }
             Hit::Link(url) => self.requests.push(Request::OpenLink(url)),
             Hit::Attachment(index) => self.open_attachment(index),
+            Hit::LoadRemote => self.load_remote(),
         }
         true
     }

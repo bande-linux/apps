@@ -1,11 +1,14 @@
+use std::collections::HashMap;
+
 use jiff::tz::TimeZone;
 use unbound_toolkit::{
-    Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle, TextSystem,
+    Image, Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle, TextSystem,
 };
 
 use crate::L10N;
 use crate::html::{BlockKind, Document};
 use crate::message::{Address, Content};
+use crate::picture::{Picture, decode};
 use crate::ui::format::{full_date, initials};
 use crate::ui::symbols::{Symbol, Symbols};
 
@@ -26,21 +29,79 @@ const CHIP_MAX: f32 = 260.0;
 const SYMBOL_SIZE: f32 = 16.0;
 const SYMBOL_PIXELS: u32 = 32;
 const BOLD: f32 = 700.0;
+const MAX_REMOTE: usize = 20;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Remote {
+    Blocked,
+    Loading,
+    Loaded,
+}
 
 pub struct Reading {
     pub content: Content,
     pub document: Document,
     pub downloaded: bool,
+    pub pictures: HashMap<String, Image>,
+    pub remote: Remote,
+}
+
+fn image_of(picture: Picture) -> Option<Image> {
+    Image::from_rgba(picture.width, picture.height, picture.rgba)
 }
 
 impl Reading {
     pub fn new(content: Content, downloaded: bool) -> Self {
         let document = content.document(false);
+        let pictures = document
+            .blocks
+            .iter()
+            .filter_map(|block| block.image.as_deref())
+            .filter_map(|source| {
+                let part = content.inline_part(source)?;
+                let image = decode(&part.data).and_then(image_of)?;
+                Some((source.to_owned(), image))
+            })
+            .collect();
         Self {
             content,
             document,
             downloaded,
+            pictures,
+            remote: Remote::Blocked,
         }
+    }
+
+    pub fn remote_sources(&self) -> Vec<String> {
+        let mut sources = Vec::new();
+        for source in self
+            .document
+            .blocks
+            .iter()
+            .filter_map(|block| block.image.as_deref())
+        {
+            let remote = source
+                .get(..8)
+                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("https://"));
+            if remote && !sources.iter().any(|known| known == source) && sources.len() < MAX_REMOTE
+            {
+                sources.push(source.to_owned());
+            }
+        }
+        sources
+    }
+
+    pub fn add_picture(&mut self, source: String, picture: Picture) {
+        if let Some(image) = image_of(picture) {
+            self.pictures.insert(source, image);
+        }
+    }
+
+    fn shown_inline(&self, index: usize) -> bool {
+        self.content
+            .inline
+            .iter()
+            .any(|(id, part)| *part == index && self.pictures.contains_key(&format!("cid:{id}")))
     }
 }
 
@@ -50,6 +111,7 @@ pub struct Layout {
     pub height: f32,
     pub links: Vec<(Rect, String)>,
     pub attachments: Vec<(Rect, usize)>,
+    pub load_remote: Option<Rect>,
 }
 
 fn names(addresses: &[Address]) -> String {
@@ -166,7 +228,7 @@ fn header(writer: &mut Writer<'_>, reading: &Reading, zone: &TimeZone) {
     writer.y += SECTION_GAP;
 }
 
-fn banner(writer: &mut Writer<'_>, symbols: &mut Symbols, message: &str) {
+fn banner(writer: &mut Writer<'_>, symbols: &mut Symbols, message: &str, action: Option<&str>) {
     let palette = *writer.palette;
     let frame = Rect::new(MARGIN, writer.y, writer.width - 2.0 * MARGIN, BANNER_HEIGHT);
     writer.layout.items.push(Item::Fill {
@@ -184,11 +246,36 @@ fn banner(writer: &mut Writer<'_>, symbols: &mut Symbols, message: &str) {
             image,
         });
     }
+    let mut right = frame.x + frame.width - CHIP_PADDING;
+    if let Some(action) = action {
+        let button = writer.text.paragraph(
+            action,
+            TextStyle::role(TextRole::Callout, palette.accent_text).weight(600.0),
+            None,
+            TextAlign::Start,
+        );
+        let x = right - button.width();
+        let target = Rect::new(
+            x - CHIP_PADDING,
+            frame.y,
+            button.width() + 2.0 * CHIP_PADDING,
+            BANNER_HEIGHT,
+        );
+        writer.layout.items.push(Item::Text {
+            origin: Point::new(
+                x,
+                frame.y + ((BANNER_HEIGHT - button.height()) / 2.0).round(),
+            ),
+            paragraph: button,
+        });
+        writer.layout.load_remote = Some(target);
+        right = x - 2.0 * CHIP_PADDING;
+    }
     let text_x = frame.x + 2.0 * CHIP_PADDING + SYMBOL_SIZE;
     let paragraph = writer.paragraph(
         message,
         TextStyle::role(TextRole::Callout, palette.ink2),
-        frame.x + frame.width - text_x - CHIP_PADDING,
+        right - text_x,
     );
     let y = writer.y;
     writer.y = frame.y + ((BANNER_HEIGHT - paragraph.height()) / 2.0).round();
@@ -196,7 +283,18 @@ fn banner(writer: &mut Writer<'_>, symbols: &mut Symbols, message: &str) {
     writer.y = y + BANNER_HEIGHT + SECTION_GAP;
 }
 
-fn body(writer: &mut Writer<'_>, document: &Document) {
+fn picture(writer: &mut Writer<'_>, image: &Image, x: f32, width: f32) {
+    let natural = (image.width() as f32, image.height() as f32);
+    let shown_width = natural.0.min(width).max(1.0);
+    let shown_height = (natural.1 * shown_width / natural.0.max(1.0)).round();
+    writer.layout.items.push(Item::Image {
+        rect: Rect::new(x, writer.y, shown_width.round(), shown_height),
+        image: image.clone(),
+    });
+    writer.y += shown_height + BLOCK_GAP;
+}
+
+fn body(writer: &mut Writer<'_>, document: &Document, pictures: &HashMap<String, Image>) {
     let palette = *writer.palette;
     for block in &document.blocks {
         let quote = f32::from(block.quote) * QUOTE_INDENT;
@@ -210,6 +308,12 @@ fn body(writer: &mut Writer<'_>, document: &Document) {
         if block.kind == BlockKind::Rule {
             writer.rule();
             writer.y += BLOCK_GAP;
+            continue;
+        }
+        if block.kind == BlockKind::Image {
+            if let Some(image) = block.image.as_ref().and_then(|source| pictures.get(source)) {
+                picture(writer, image, x, width);
+            }
             continue;
         }
         let color = match block.quote {
@@ -268,8 +372,9 @@ fn body(writer: &mut Writer<'_>, document: &Document) {
     }
 }
 
-fn attachments(writer: &mut Writer<'_>, symbols: &mut Symbols, content: &Content) {
-    if content.attachments.is_empty() {
+fn attachments(writer: &mut Writer<'_>, symbols: &mut Symbols, reading: &Reading) {
+    let content = &reading.content;
+    if (0..content.attachments.len()).all(|index| reading.shown_inline(index)) {
         return;
     }
     let palette = *writer.palette;
@@ -278,6 +383,9 @@ fn attachments(writer: &mut Writer<'_>, symbols: &mut Symbols, content: &Content
     writer.y += SECTION_GAP;
     let mut x = MARGIN;
     for (index, attachment) in content.attachments.iter().enumerate() {
+        if reading.shown_inline(index) {
+            continue;
+        }
         let label = format!(
             "{}  {}",
             attachment.name,
@@ -341,12 +449,26 @@ pub fn lay_out(
     };
     header(&mut writer, reading, zone);
     if !reading.downloaded {
-        banner(&mut writer, symbols, &L10N.tr("downloading-message"));
+        banner(&mut writer, symbols, &L10N.tr("downloading-message"), None);
     } else if reading.document.remote_images > 0 {
-        banner(&mut writer, symbols, &L10N.tr("remote-content-blocked"));
+        match reading.remote {
+            Remote::Blocked => banner(
+                &mut writer,
+                symbols,
+                &L10N.tr("remote-content-blocked"),
+                Some(&L10N.tr("load-remote-content")),
+            ),
+            Remote::Loading => banner(
+                &mut writer,
+                symbols,
+                &L10N.tr("remote-content-loading"),
+                None,
+            ),
+            Remote::Loaded => {}
+        }
     }
-    body(&mut writer, &reading.document);
-    attachments(&mut writer, symbols, &reading.content);
+    body(&mut writer, &reading.document, &reading.pictures);
+    attachments(&mut writer, symbols, reading);
     writer.layout.height = writer.y + MARGIN;
     writer.layout
 }

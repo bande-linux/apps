@@ -486,3 +486,99 @@ fn closing_an_untouched_reply_keeps_no_draft_but_an_edited_one_does() {
     assert!(unsent.draft.body.starts_with("Sounds good"));
     assert_eq!(unsent.answering, Some(first));
 }
+
+#[test]
+fn inline_pictures_show_at_once_and_remote_ones_only_on_request() {
+    let (_folder, path) = place();
+    let mut picture = Vec::new();
+    let pixels = image::RgbaImage::from_fn(240, 120, |x, y| {
+        image::Rgba([(x % 256) as u8, (120 + y % 100) as u8, 90, 255])
+    });
+    image::DynamicImage::ImageRgba8(pixels)
+        .write_to(
+            &mut std::io::Cursor::new(&mut picture),
+            image::ImageFormat::Png,
+        )
+        .unwrap();
+    let encoded = data_encoding::BASE64.encode(&picture);
+    let raw = format!(
+        "From: Garden Club <news@garden.example>\r\nTo: Ann Lee <ann@example.com>\r\nSubject: The new garden map\r\n\
+Date: Sat, 31 Oct 2026 14:00:00 +0000\r\nMIME-Version: 1.0\r\n\
+Content-Type: multipart/related; boundary=\"r\"\r\n\r\n--r\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+<p>Our new garden map:</p><img src=\"cid:map@garden\"><p>And a view from the gate:</p><img src=\"https://127.0.0.1:9/gate.png\">\r\n\
+--r\r\nContent-Type: image/png; name=\"map.png\"\r\nContent-ID: <map@garden>\r\nContent-Transfer-Encoding: base64\r\n\r\n{encoded}\r\n--r--\r\n"
+    )
+    .into_bytes();
+    {
+        let mut store = Store::open(&path).unwrap();
+        let account = store.accounts().unwrap()[0].id;
+        let inbox = store
+            .mailbox_with_role(account, Role::Inbox)
+            .unwrap()
+            .unwrap()
+            .id;
+        let header_end = raw
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        store
+            .insert_headers(
+                inbox,
+                &[Fetched {
+                    uid: 9,
+                    flags: Some(Flags::default()),
+                    size: Some(raw.len() as u64),
+                    internal_date: None,
+                    header: Some(raw[..header_end].to_vec()),
+                    body: None,
+                }],
+            )
+            .unwrap();
+        store.store_body(inbox, 9, &raw).unwrap();
+    }
+    let mut view = view(&path);
+    let map = view
+        .messages()
+        .iter()
+        .find(|summary| summary.subject == "The new garden map")
+        .unwrap()
+        .id;
+    view.select(map);
+    shoot("inline-picture", &mut view);
+    let banner = (0..SIZE.1)
+        .flat_map(|y| {
+            (0..SIZE.0)
+                .step_by(8)
+                .map(move |x| Point::new(x as f32, y as f32))
+        })
+        .find(|point| view.hit(*point) == Some(bande_mail::ui::Hit::LoadRemote))
+        .unwrap();
+    assert!(
+        !view
+            .hit(banner)
+            .is_some_and(|hit| matches!(hit, bande_mail::ui::Hit::Attachment(_)))
+    );
+    click(&mut view, banner);
+    view.scene(SIZE.0, SIZE.1);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        view.engine_ready();
+        view.scene(SIZE.0, SIZE.1);
+        let still_offered = (0..SIZE.1)
+            .flat_map(|y| {
+                (0..SIZE.0)
+                    .step_by(8)
+                    .map(move |x| Point::new(x as f32, y as f32))
+            })
+            .any(|point| view.hit(point) == Some(bande_mail::ui::Hit::LoadRemote));
+        if !still_offered {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the remote content never finished"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}

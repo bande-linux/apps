@@ -559,6 +559,12 @@ impl MailView {
                     .iter()
                     .map(|(rect, index)| (moved(rect), Hit::Attachment(*index))),
             )
+            .chain(
+                layout
+                    .load_remote
+                    .iter()
+                    .map(|rect| (moved(rect), Hit::LoadRemote)),
+            )
             .filter(|(rect, _)| rect.y + rect.height > frame.y && rect.y < frame.y + frame.height)
             .collect::<Vec<_>>();
         items.push(Item::Clip {

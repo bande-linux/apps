@@ -14,6 +14,7 @@ pub enum BlockKind {
     Preformatted,
     Item,
     Rule,
+    Image,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,6 +24,7 @@ pub struct Block {
     pub text: String,
     pub bold: Vec<Range<usize>>,
     pub links: Vec<(Range<usize>, String)>,
+    pub image: Option<String>,
 }
 
 impl Block {
@@ -33,6 +35,7 @@ impl Block {
             text: String::new(),
             bold: Vec::new(),
             links: Vec::new(),
+            image: None,
         }
     }
 }
@@ -106,7 +109,9 @@ impl Builder {
         if let Some(mut block) = self.current.take() {
             let trimmed = block.text.trim_end().len();
             block.text.truncate(trimmed);
-            if !block.text.trim().is_empty() || block.kind == BlockKind::Rule {
+            if !block.text.trim().is_empty()
+                || matches!(block.kind, BlockKind::Rule | BlockKind::Image)
+            {
                 self.blocks.push(block);
             }
         }
@@ -255,11 +260,18 @@ impl Builder {
                 }
             }
             "img" => {
-                let source = attribute("src").unwrap_or_default();
-                if source.starts_with("http:") || source.starts_with("https:") {
+                let source = attribute("src").unwrap_or_default().trim().to_owned();
+                let lowered = source.to_ascii_lowercase();
+                if lowered.starts_with("http:") || lowered.starts_with("https:") {
                     self.remote_images += 1;
                 }
-                if let Some(alt) = attribute("alt").filter(|alt| !alt.trim().is_empty()) {
+                if lowered.starts_with("https:") || lowered.starts_with("cid:") {
+                    let link = self.link.take();
+                    self.start_block(BlockKind::Image);
+                    self.block().image = Some(source);
+                    self.close_block();
+                    self.link = link.map(|(_, href)| (None, href));
+                } else if let Some(alt) = attribute("alt").filter(|alt| !alt.trim().is_empty()) {
                     self.push_text(&format!(" [{}] ", alt.trim()));
                 }
             }
@@ -430,12 +442,22 @@ mod tests {
              <img src=\"https://tracker.example/pixel.gif\" alt=\"\">\
              <img src=\"cid:logo\" alt=\"Logo\"></p>",
         );
-        assert_eq!(texts(&document), ["See the site or this. [Logo]"]);
+        assert_eq!(texts(&document), ["See the site or this.", "", ""]);
         assert_eq!(
             document.blocks[0].links,
             [(4..12, "https://example.com/x".to_owned())]
         );
+        let images = document
+            .blocks
+            .iter()
+            .filter_map(|block| block.image.as_deref())
+            .collect::<Vec<_>>();
+        assert_eq!(images, ["https://tracker.example/pixel.gif", "cid:logo"]);
         assert_eq!(document.remote_images, 1);
+        assert_eq!(document.text(), "See the site or this.");
+        let plain = render_html("<p><img src='http://old.example/a.png' alt='Chart'></p>");
+        assert_eq!(texts(&plain), ["[Chart]"]);
+        assert_eq!(plain.remote_images, 1);
     }
 
     #[test]

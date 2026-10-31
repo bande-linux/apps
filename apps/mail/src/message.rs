@@ -140,6 +140,7 @@ pub struct Content {
     pub plain: Option<String>,
     pub html: Option<String>,
     pub attachments: Vec<Attachment>,
+    pub inline: Vec<(String, usize)>,
 }
 
 fn file_name(part: &ParsedMail<'_>) -> Option<String> {
@@ -205,6 +206,19 @@ impl Content {
                     "message/rfc822" => "message.eml".to_owned(),
                     _ => "attachment".to_owned(),
                 });
+                if let Some(id) = part
+                    .headers
+                    .get_first_value("Content-ID")
+                    .map(|id| {
+                        id.trim()
+                            .trim_start_matches('<')
+                            .trim_end_matches('>')
+                            .to_owned()
+                    })
+                    .filter(|id| !id.is_empty())
+                {
+                    self.inline.push((id, self.attachments.len()));
+                }
                 self.attachments.push(Attachment { name, mime, data });
             }
         }
@@ -228,6 +242,17 @@ impl Content {
 
     pub fn preview(&self) -> String {
         preview(&self.text())
+    }
+
+    pub fn inline_part(&self, source: &str) -> Option<&Attachment> {
+        let id = source
+            .get(..4)
+            .filter(|scheme| scheme.eq_ignore_ascii_case("cid:"))
+            .map(|_| &source[4..])?;
+        self.inline
+            .iter()
+            .find(|(known, _)| known == id)
+            .and_then(|(_, index)| self.attachments.get(*index))
     }
 }
 
@@ -328,7 +353,27 @@ JVBERi0=\r\n\
             }]
         );
         assert_eq!(content.preview(), "Grüße aus Berlin");
+        assert!(content.inline.is_empty());
         assert_eq!(content.document(false).blocks[0].bold, vec![8..11]);
+    }
+
+    #[test]
+    fn inline_parts_are_found_by_their_content_id() {
+        let content = Content::parse(
+            b"Content-Type: multipart/related; boundary=\"r\"\r\n\r\n--r\r\n\
+Content-Type: text/html\r\n\r\n<img src=\"cid:logo@x\">\r\n--r\r\n\
+Content-Type: image/png\r\nContent-ID: <logo@x>\r\nContent-Transfer-Encoding: base64\r\n\r\n\
+iVBORw0KGgo=\r\n--r--\r\n",
+        );
+        assert_eq!(content.inline, [("logo@x".to_owned(), 0)]);
+        assert_eq!(
+            content
+                .inline_part("CID:logo@x")
+                .map(|part| part.mime.as_str()),
+            Some("image/png")
+        );
+        assert_eq!(content.inline_part("cid:other"), None);
+        assert_eq!(content.inline_part("https://x"), None);
     }
 
     #[test]

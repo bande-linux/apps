@@ -1,7 +1,6 @@
 use crate::error::{Error, Result};
 use crate::net::{Link, Network, Security, Server};
 
-const MAX_BODY: usize = 1 << 20;
 const MAX_HEADER_LINE: usize = 8 * 1024;
 const MAX_REDIRECTS: usize = 3;
 
@@ -33,7 +32,7 @@ fn parse_url(url: &str) -> Option<Url> {
     })
 }
 
-fn request(url: &Url, network: &Network) -> Result<(u16, Option<String>, Vec<u8>)> {
+fn request(url: &Url, network: &Network, limit: usize) -> Result<(u16, Option<String>, Vec<u8>)> {
     let server = Server {
         host: url.host.clone(),
         port: url.port,
@@ -70,32 +69,22 @@ fn request(url: &Url, network: &Network) -> Result<(u16, Option<String>, Vec<u8>
             }
         }
     }
-    let mut body = Vec::new();
-    loop {
-        if body.len() > MAX_BODY {
-            return Err(Error::Protocol(
-                "an HTTP answer that is too large".to_owned(),
-            ));
-        }
-        if length.is_some_and(|length| body.len() >= length) {
-            break;
-        }
-        match link.read_line(MAX_BODY) {
-            Ok(line) => body.extend(line),
-            Err(Error::Closed) => break,
-            Err(error) => return Err(error),
-        }
-    }
-    if let Some(length) = length {
-        body.truncate(length);
-    }
+    let too_large = || Error::Protocol("an HTTP answer that is too large".to_owned());
+    let body = match length {
+        Some(length) if length > limit => return Err(too_large()),
+        Some(length) => link.read_exact(length)?,
+        None => link.read_to_end(limit).map_err(|error| match error {
+            Error::Protocol(_) => too_large(),
+            other => other,
+        })?,
+    };
     Ok((status, location, body))
 }
 
-pub fn get(url: &str, network: &Network) -> Result<Vec<u8>> {
+pub fn get(url: &str, network: &Network, limit: usize) -> Result<Vec<u8>> {
     let mut current = parse_url(url).ok_or_else(|| Error::Protocol(format!("bad URL {url}")))?;
     for _ in 0..=MAX_REDIRECTS {
-        let (status, location, body) = request(&current, network)?;
+        let (status, location, body) = request(&current, network, limit)?;
         match (status, location) {
             (200, _) => return Ok(body),
             (301 | 302 | 303 | 307 | 308, Some(location)) => {

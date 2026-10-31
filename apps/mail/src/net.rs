@@ -238,6 +238,19 @@ impl Link {
         }
     }
 
+    pub fn read_to_end(&mut self, limit: usize) -> Result<Vec<u8>> {
+        loop {
+            if self.buffer.len() > limit {
+                return Err(Error::Protocol(format!("more than {limit} bytes")));
+            }
+            match self.fill() {
+                Ok(()) => {}
+                Err(Error::Closed) => return Ok(std::mem::take(&mut self.buffer)),
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
     pub fn read_exact(&mut self, length: usize) -> Result<Vec<u8>> {
         while self.buffer.len() < length {
             self.fill()?;
@@ -262,6 +275,33 @@ impl Closer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn served(bytes: &'static [u8]) -> Server {
+        let Ok(listener) = std::net::TcpListener::bind("127.0.0.1:0") else {
+            unreachable!("a loopback port")
+        };
+        let port = listener.local_addr().map_or(0, |address| address.port());
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let _ = stream.write_all(bytes);
+            }
+        });
+        Server {
+            host: "127.0.0.1".to_owned(),
+            port,
+            security: Security::Plain,
+        }
+    }
+
+    #[test]
+    fn binary_data_without_a_final_line_break_is_read_whole() -> Result<()> {
+        let mut link = Link::connect(&served(b"line\n\x89PNG\x00tail"), &Network::default())?;
+        assert_eq!(link.read_line(64)?, b"line\n");
+        assert_eq!(link.read_to_end(64)?, b"\x89PNG\x00tail");
+        let mut limited = Link::connect(&served(&[7; 100]), &Network::default())?;
+        assert!(matches!(limited.read_to_end(10), Err(Error::Protocol(_))));
+        Ok(())
+    }
 
     #[test]
     fn only_loopback_hosts_may_go_without_encryption() {

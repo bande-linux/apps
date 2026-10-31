@@ -20,7 +20,7 @@ no-subject = No Subject
 header-to = To: { $names }
 header-cc = Cc: { $names }
 downloading-message = Downloading the message…
-remote-content-blocked = This message has remote content, which was not loaded to protect your privacy.
+remote-content-blocked = Remote content in this message was not loaded, to protect your privacy.
 new-messages = { $count } new messages
 
 search-placeholder = Search
@@ -100,3 +100,5 @@ button-remove = Remove
 compose-attach = Attach Files
 compose-attach-title = Attach Files
 compose-too-large = { $name } is larger than { $limit } and was not attached.
+load-remote-content = Load Remote Content
+remote-content-loading = Loading remote content…

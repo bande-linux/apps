@@ -6,6 +6,7 @@ use crate::http;
 use crate::net::{Network, Security, Server};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(4);
+const CONFIG_LIMIT: usize = 1 << 20;
 const ISPDB: &str = "https://autoconfig.thunderbird.net/v1.1/";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,7 +96,7 @@ pub fn parse_config(xml: &str, email: &str) -> Option<Settings> {
 }
 
 fn from_config(url: &str, email: &str, network: &Network) -> Option<Settings> {
-    let body = http::get(url, network)
+    let body = http::get(url, network, CONFIG_LIMIT)
         .inspect_err(|error| tracing::debug!("{url}: {error}"))
         .ok()?;
     parse_config(&String::from_utf8_lossy(&body), email)
