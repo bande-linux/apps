@@ -1,10 +1,10 @@
-use jiff::ToSpan;
-use jiff::civil::{DateTime, Time};
-use unbound_design::{Accent, Scheme};
-use unbound_toolkit::Point;
-use unbound_toolkit::ui::{
+use bande_design::{Accent, Scheme};
+use bande_toolkit::Point;
+use bande_toolkit::ui::{
     Event, Key, Menu, MenuItem, Modifiers, Pointer, PointerButton, ScrollSource,
 };
+use jiff::ToSpan;
+use jiff::civil::{DateTime, Time};
 
 use super::geometry::{self, TimeGrid};
 use super::{

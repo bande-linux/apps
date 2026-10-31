@@ -1,6 +1,6 @@
+use bande_datetime::Month;
+use bande_toolkit::{Point, Radius, Rect, TextAlign, TextRole, TextStyle};
 use jiff::civil::Date;
-use unbound_datetime::Month;
-use unbound_toolkit::{Point, Radius, Rect, TextAlign, TextRole, TextStyle};
 
 use super::paint::calendar_color;
 use super::painter::Painter;
@@ -75,8 +75,8 @@ pub fn paint(
             match calendar.info.visible {
                 true => {
                     painter.fill(check, Radius::XS, color);
-                    painter.items.push(unbound_toolkit::Item::StrokePath {
-                        path: unbound_toolkit::Path::through(&[
+                    painter.items.push(bande_toolkit::Item::StrokePath {
+                        path: bande_toolkit::Path::through(&[
                             Point::new(check.x + 3.5, check.y + 7.5),
                             Point::new(check.x + 6.0, check.y + 10.0),
                             Point::new(check.x + 10.5, check.y + 4.5),

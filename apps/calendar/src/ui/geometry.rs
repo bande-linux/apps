@@ -1,7 +1,7 @@
 use jiff::ToSpan;
 use jiff::civil::{Date, DateTime, Time};
 
-use unbound_toolkit::{Point, Rect};
+use bande_toolkit::{Point, Rect};
 
 pub const HOUR_HEIGHT: f32 = 48.0;
 pub const GUTTER: f32 = 56.0;

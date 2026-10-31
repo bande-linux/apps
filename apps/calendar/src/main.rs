@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use bande_app_menu::{AppMenu, Entry, Standard, app_submenu, close_window, window_submenu};
 use bande_calendar::alerts::{Due, due_between};
 use bande_calendar::caldav::Discovered;
 use bande_calendar::ical::CalendarObject;
@@ -12,15 +13,14 @@ use bande_calendar::sync::{apply, subscription_outcome};
 use bande_calendar::ui::painter::{color_text, parse_color};
 use bande_calendar::ui::{CalendarView, L10N, Mode, Request, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
 use bande_calendar::worker::{Job, Reply, Worker};
-use jiff::tz::TimeZone;
-use jiff::{SignedDuration, Timestamp, Zoned};
-use unbound_app_menu::{AppMenu, Entry, Standard, app_submenu, close_window, window_submenu};
-use unbound_datetime::DateFormats;
-use unbound_design::{Accent, Scheme};
-use unbound_toolkit::{
+use bande_datetime::DateFormats;
+use bande_design::{Accent, Scheme};
+use bande_toolkit::{
     App, Appearance, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSystem, Window,
     WindowError, WindowEvent,
 };
+use jiff::tz::TimeZone;
+use jiff::{SignedDuration, Timestamp, Zoned};
 use zbus::zvariant::Value;
 
 const APP_ID: &str = "org.bande.Calendar";
@@ -53,7 +53,7 @@ struct CalendarApp {
 }
 
 fn data_dir() -> PathBuf {
-    unbound_xdg::data_home()
+    bande_xdg::data_home()
         .unwrap_or_else(std::env::temp_dir)
         .join(PROGRAM)
 }
@@ -599,7 +599,7 @@ fn open_arguments(view: &mut CalendarView, arguments: &[String]) {
             continue;
         }
         let path =
-            unbound_xdg::path_from_file_uri(argument).unwrap_or_else(|| PathBuf::from(argument));
+            bande_xdg::path_from_file_uri(argument).unwrap_or_else(|| PathBuf::from(argument));
         match std::fs::read_to_string(&path).map(|text| CalendarObject::parse(&text)) {
             Ok(Ok(objects)) if !objects.is_empty() => {
                 let name = path
@@ -659,7 +659,7 @@ fn run(arguments: Vec<String>) -> Result<(), WindowError> {
         title,
         errors: Vec::new(),
     };
-    unbound_toolkit::run(&mut window, &mut app)
+    bande_toolkit::run(&mut window, &mut app)
 }
 
 fn main() -> ExitCode {
@@ -668,7 +668,7 @@ fn main() -> ExitCode {
         println!("{PROGRAM} {}", env!("CARGO_PKG_VERSION"));
         return ExitCode::SUCCESS;
     }
-    unbound_log::init(PROGRAM);
+    bande_log::init(PROGRAM);
     match run(arguments) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

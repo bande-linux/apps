@@ -311,10 +311,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
+name = "bande-app-menu"
+version = "0.1.0"
+dependencies = [
+ "bande-inbox",
+ "bande-l10n",
+ "zbus",
+]
+
+[[package]]
+name = "bande-bus"
+version = "0.1.0"
+dependencies = [
+ "zbus",
+]
+
+[[package]]
 name = "bande-calendar"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-app-menu",
+ "bande-datetime",
+ "bande-design",
+ "bande-golden",
+ "bande-l10n",
+ "bande-log",
+ "bande-toolkit",
+ "bande-xdg",
  "base64 0.22.1",
  "jiff",
  "roxmltree",
@@ -323,15 +347,164 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tracing",
- "unbound-app-menu",
- "unbound-datetime",
- "unbound-design",
- "unbound-golden",
- "unbound-l10n",
- "unbound-log",
- "unbound-toolkit",
- "unbound-xdg",
  "ureq",
+ "zbus",
+]
+
+[[package]]
+name = "bande-datetime"
+version = "0.1.0"
+dependencies = [
+ "icu_calendar",
+ "icu_datetime",
+ "icu_locale_core",
+ "jiff",
+ "rustix",
+ "zbus",
+]
+
+[[package]]
+name = "bande-design"
+version = "0.1.0"
+
+[[package]]
+name = "bande-golden"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "image-compare",
+]
+
+[[package]]
+name = "bande-graphics"
+version = "0.1.0"
+dependencies = [
+ "bande-design",
+ "fontique",
+ "image",
+ "parley",
+ "pollster",
+ "resvg",
+ "skrifa",
+ "tracing",
+ "vello_cpu",
+ "vello_gpu",
+ "wgpu",
+]
+
+[[package]]
+name = "bande-inbox"
+version = "0.1.0"
+dependencies = [
+ "rustix",
+]
+
+[[package]]
+name = "bande-l10n"
+version = "0.1.0"
+dependencies = [
+ "fluent-bundle",
+ "tracing",
+ "unic-langid",
+]
+
+[[package]]
+name = "bande-log"
+version = "0.1.0"
+dependencies = [
+ "rustix",
+ "tracing",
+ "tracing-journald",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "bande-notify"
+version = "0.1.0"
+dependencies = [
+ "bande-bus",
+ "bande-log",
+ "bande-sound",
+ "rustix",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-protocols"
+version = "0.1.0"
+dependencies = [
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-scanner",
+]
+
+[[package]]
+name = "bande-sound"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-spring"
+version = "0.1.0"
+
+[[package]]
+name = "bande-toolkit"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-graphics",
+ "bande-toolkit-platform",
+ "bande-widgets",
+]
+
+[[package]]
+name = "bande-toolkit-platform"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "accesskit_unix",
+ "bande-bus",
+ "bande-graphics",
+ "bande-l10n",
+ "bande-protocols",
+ "bande-widgets",
+ "raw-window-handle",
+ "rustix",
+ "tracing",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-wlr",
+ "wgpu",
+ "xkbcommon",
+ "zbus",
+]
+
+[[package]]
+name = "bande-widgets"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-graphics",
+ "bande-l10n",
+ "bande-spring",
+ "parley",
+ "zeroize",
+]
+
+[[package]]
+name = "bande-xdg"
+version = "0.1.0"
+dependencies = [
+ "bande-l10n",
+ "bande-notify",
+ "rustix",
+ "tracing",
  "zbus",
 ]
 
@@ -3149,179 +3322,6 @@ dependencies = [
  "memoffset",
  "tempfile",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "unbound-app-menu"
-version = "0.1.0"
-dependencies = [
- "unbound-inbox",
- "unbound-l10n",
- "zbus",
-]
-
-[[package]]
-name = "unbound-bus"
-version = "0.1.0"
-dependencies = [
- "zbus",
-]
-
-[[package]]
-name = "unbound-datetime"
-version = "0.1.0"
-dependencies = [
- "icu_calendar",
- "icu_datetime",
- "icu_locale_core",
- "jiff",
- "rustix",
- "zbus",
-]
-
-[[package]]
-name = "unbound-design"
-version = "0.1.0"
-
-[[package]]
-name = "unbound-golden"
-version = "0.1.0"
-dependencies = [
- "image",
- "image-compare",
-]
-
-[[package]]
-name = "unbound-graphics"
-version = "0.1.0"
-dependencies = [
- "fontique",
- "image",
- "parley",
- "pollster",
- "resvg",
- "skrifa",
- "tracing",
- "unbound-design",
- "vello_cpu",
- "vello_gpu",
- "wgpu",
-]
-
-[[package]]
-name = "unbound-inbox"
-version = "0.1.0"
-dependencies = [
- "rustix",
-]
-
-[[package]]
-name = "unbound-l10n"
-version = "0.1.0"
-dependencies = [
- "fluent-bundle",
- "tracing",
- "unic-langid",
-]
-
-[[package]]
-name = "unbound-log"
-version = "0.1.0"
-dependencies = [
- "rustix",
- "tracing",
- "tracing-journald",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "unbound-notify"
-version = "0.1.0"
-dependencies = [
- "rustix",
- "tracing",
- "unbound-bus",
- "unbound-log",
- "unbound-sound",
- "zbus",
-]
-
-[[package]]
-name = "unbound-protocols"
-version = "0.1.0"
-dependencies = [
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-scanner",
-]
-
-[[package]]
-name = "unbound-sound"
-version = "0.1.0"
-dependencies = [
- "tracing",
- "zbus",
-]
-
-[[package]]
-name = "unbound-spring"
-version = "0.1.0"
-
-[[package]]
-name = "unbound-toolkit"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "unbound-graphics",
- "unbound-toolkit-platform",
- "unbound-widgets",
-]
-
-[[package]]
-name = "unbound-toolkit-platform"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "accesskit_unix",
- "raw-window-handle",
- "rustix",
- "tracing",
- "unbound-bus",
- "unbound-graphics",
- "unbound-l10n",
- "unbound-protocols",
- "unbound-widgets",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-protocols-wlr",
- "wgpu",
- "xkbcommon",
- "zbus",
-]
-
-[[package]]
-name = "unbound-widgets"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "parley",
- "unbound-graphics",
- "unbound-l10n",
- "unbound-spring",
- "zeroize",
-]
-
-[[package]]
-name = "unbound-xdg"
-version = "0.1.0"
-dependencies = [
- "rustix",
- "tracing",
- "unbound-l10n",
- "unbound-notify",
- "zbus",
 ]
 
 [[package]]

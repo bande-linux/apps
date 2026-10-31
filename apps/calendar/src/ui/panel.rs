@@ -2,8 +2,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use accesskit::{Node, Role};
-use unbound_toolkit::ui::{Context, Size, Widget, WidgetId};
-use unbound_toolkit::{
+use bande_toolkit::ui::{Context, Size, Widget, WidgetId};
+use bande_toolkit::{
     Elevation, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
 };
 
@@ -274,7 +274,7 @@ impl Widget for Panel {
                     self.frame.y + self.frame.height - Radius::L - ARROW,
                 );
                 items.push(Item::FillPath {
-                    path: unbound_toolkit::Path::through(&[
+                    path: bande_toolkit::Path::through(&[
                         Point::new(x - reach.signum(), y - ARROW),
                         Point::new(x + reach, y),
                         Point::new(x - reach.signum(), y + ARROW),

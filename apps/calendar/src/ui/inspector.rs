@@ -1,10 +1,10 @@
-use jiff::ToSpan;
-use jiff::civil::{Date, DateTime, Time};
-use unbound_toolkit::Rect;
-use unbound_toolkit::ui::{
+use bande_toolkit::Rect;
+use bande_toolkit::ui::{
     Button, CheckState, Checkbox, Label, PopUpButton, TEXT_FIELD_HEIGHT, TextField, TextView,
     WidgetId,
 };
+use jiff::ToSpan;
+use jiff::civil::{Date, DateTime, Time};
 
 use super::panel::{Arrow, Line, Panel, Width};
 use super::{L10N, Signal, Signals, sender};
@@ -326,7 +326,7 @@ impl Inspector {
             .position(|(index, _)| *index == found.calendar)
             .unwrap_or(0);
         let inspector = Self {
-            panel: unbound_toolkit::ui::Widget::id(&panel),
+            panel: bande_toolkit::ui::Widget::id(&panel),
             title_field,
             read_only,
             original: details.clone(),

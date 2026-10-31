@@ -2,10 +2,10 @@ use bande_calendar::edit::{Alert, new_event};
 use bande_calendar::ical::{DaySpec, Frequency, Rule};
 use bande_calendar::store::{Account, AccountKind, CalendarInfo, LOCAL_ACCOUNT, Library};
 use bande_calendar::ui::CalendarView;
+use bande_datetime::{DateFormats, posix_locale};
+use bande_toolkit::{Appearance, Palette, Scheme, TextSystem};
 use jiff::civil::{Weekday, date};
 use jiff::tz::TimeZone;
-use unbound_datetime::{DateFormats, posix_locale};
-use unbound_toolkit::{Appearance, Palette, Scheme, TextSystem};
 
 pub fn library(directory: &std::path::Path, zone: &TimeZone) -> Library {
     let mut library = Library::load(directory.to_owned());

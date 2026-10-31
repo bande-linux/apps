@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, TreeId};
-use unbound_toolkit::ui::{Button, PopUpButton, TEXT_FIELD_HEIGHT, TextField, Ui, WidgetId};
+use bande_toolkit::ui::{Button, PopUpButton, TEXT_FIELD_HEIGHT, TextField, Ui, WidgetId};
 
 use super::panel::{Line, Panel, Width};
 use super::{L10N, Signal, Signals, sender};

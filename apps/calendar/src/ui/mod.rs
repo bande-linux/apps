@@ -14,22 +14,20 @@ use std::rc::Rc;
 use std::sync::LazyLock;
 
 use accesskit::{ActionRequest, TreeUpdate};
+use bande_datetime::DateFormats;
+use bande_l10n::Localizer;
+use bande_toolkit::ui::{Alert, ClipboardRequest, Context, Cursor, FreeLayout, Menu, Ui, WidgetId};
+use bande_toolkit::{
+    Appearance, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextSystem,
+};
 use jiff::civil::{Date, DateTime};
 use jiff::tz::TimeZone;
 use jiff::{ToSpan, Zoned};
-use unbound_datetime::DateFormats;
-use unbound_l10n::Localizer;
-use unbound_toolkit::ui::{
-    Alert, ClipboardRequest, Context, Cursor, FreeLayout, Menu, Ui, WidgetId,
-};
-use unbound_toolkit::{
-    Appearance, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextSystem,
-};
 
 use crate::edit::{Details, Scope};
 use crate::ical::{CalendarObject, InstanceKey};
 use crate::store::{AccountKind, CalendarInfo, Found, LOCAL_ACCOUNT, Library, new_uid};
-use unbound_design::{Accent, Scheme};
+use bande_design::{Accent, Scheme};
 
 pub use toolbar::TOOLBAR_HEIGHT;
 
@@ -236,7 +234,7 @@ impl CalendarView {
         let signals: Signals = Rc::new(RefCell::new(Vec::new()));
         let mut host = FreeLayout::new();
         let toolbar = toolbar::Toolbar::new(&mut host, &signals, Mode::Week);
-        let host_id = unbound_toolkit::ui::Widget::id(&host);
+        let host_id = bande_toolkit::ui::Widget::id(&host);
         let today = now.date();
         let mut cx = Context::new(text, palette);
         cx.keyboard_navigation = true;
@@ -297,7 +295,7 @@ impl CalendarView {
             .unwrap_or(1);
         let id = self.toolbar.modes;
         self.ui
-            .update_widget::<unbound_toolkit::ui::SegmentedControl>(id, |control, cx| {
+            .update_widget::<bande_toolkit::ui::SegmentedControl>(id, |control, cx| {
                 control.set_selected(cx, index)
             });
     }
@@ -388,7 +386,7 @@ impl CalendarView {
         pasted
     }
 
-    pub fn handle(&mut self, event: &unbound_toolkit::ui::Event) -> bool {
+    pub fn handle(&mut self, event: &bande_toolkit::ui::Event) -> bool {
         input::handle(self, event)
     }
 

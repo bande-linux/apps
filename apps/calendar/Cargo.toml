@@ -17,17 +17,17 @@ serde_json = "=1.0.154"
 tracing = "=0.1.44"
 ureq = { version = "=3.5.0", features = ["platform-verifier"] }
 zbus = "=5.19.0"
-unbound-app-menu = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/app-menu" }
-unbound-design = { path = "/home/mikael/unbound-linux/repos/desktop/crates/toolkit/design" }
-unbound-datetime = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/datetime" }
-unbound-l10n = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/l10n" }
-unbound-log = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/log" }
-unbound-toolkit = { path = "/home/mikael/unbound-linux/repos/desktop/crates/toolkit/toolkit" }
-unbound-xdg = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/xdg" }
+bande-app-menu = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/app-menu" }
+bande-design = { path = "/home/mikael/unbound-linux/repos/desktop/crates/toolkit/design" }
+bande-datetime = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/datetime" }
+bande-l10n = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/l10n" }
+bande-log = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/log" }
+bande-toolkit = { path = "/home/mikael/unbound-linux/repos/desktop/crates/toolkit/toolkit" }
+bande-xdg = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/xdg" }
 
 [dev-dependencies]
 tempfile = "=3.27.0"
-unbound-golden = { path = "/home/mikael/unbound-linux/repos/desktop/crates/testing/golden" }
+bande-golden = { path = "/home/mikael/unbound-linux/repos/desktop/crates/testing/golden" }
 
 [lints.clippy]
 unwrap_used = "deny"

@@ -3,9 +3,9 @@
 mod fixture;
 
 use bande_calendar::ui::{CalendarView, Mode, SIDEBAR_WIDTH};
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{CpuRenderer, FrameRegions, Palette, Scheme, framed_scene};
 use fixture::view;
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{CpuRenderer, FrameRegions, Palette, Scheme, framed_scene};
 
 const SIZE: (u32, u32) = (1120, 740);
 
@@ -23,7 +23,7 @@ fn render(name: &str, view: &mut CalendarView, scheme: Scheme) {
         &Palette::for_scheme(scheme),
     );
     let frame = CpuRenderer::new().render(&scene).expect("a frame");
-    unbound_golden::assert_golden_rgba!(name, SIZE, frame.rgba);
+    bande_golden::assert_golden_rgba!(name, SIZE, frame.rgba);
 }
 
 #[test]

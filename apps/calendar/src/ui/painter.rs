@@ -1,4 +1,4 @@
-use unbound_toolkit::{Color, Item, Paint, Point, Rect, Shape, TextAlign, TextStyle, TextSystem};
+use bande_toolkit::{Color, Item, Paint, Point, Rect, Shape, TextAlign, TextStyle, TextSystem};
 
 pub struct Painter<'a, H> {
     pub text: &'a mut TextSystem,

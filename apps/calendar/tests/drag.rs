@@ -5,9 +5,9 @@ mod fixture;
 use bande_calendar::store::Pending;
 use bande_calendar::ui::geometry::{HOUR_HEIGHT, TimeGrid};
 use bande_calendar::ui::{CalendarView, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
+use bande_toolkit::ui::{Event, Pointer};
+use bande_toolkit::{Point, Rect, SHEET_INSET, Scheme};
 use jiff::civil::{DateTime, date};
-use unbound_toolkit::ui::{Event, Pointer};
-use unbound_toolkit::{Point, Rect, SHEET_INSET, Scheme};
 
 const SIZE: (u32, u32) = (1120, 740);
 
@@ -178,17 +178,17 @@ fn dragging_in_the_month_view_moves_an_event_by_days_and_keeps_its_time() {
     assert_eq!(starts(&view, "Dentist"), ["Sat 16:00-17:30"]);
 }
 
-fn press(view: &mut CalendarView, key: unbound_toolkit::ui::Key) {
+fn press(view: &mut CalendarView, key: bande_toolkit::ui::Key) {
     view.handle(&Event::Key {
         key,
-        modifiers: unbound_toolkit::ui::Modifiers::default(),
+        modifiers: bande_toolkit::ui::Modifiers::default(),
     });
     view.scene(SIZE.0, SIZE.1);
 }
 
 fn type_text(view: &mut CalendarView, text: &str) {
     for character in text.chars() {
-        press(view, unbound_toolkit::ui::Key::Character(character));
+        press(view, bande_toolkit::ui::Key::Character(character));
     }
 }
 
@@ -202,7 +202,7 @@ fn names(view: &CalendarView) -> Vec<String> {
 
 #[test]
 fn calendars_are_created_renamed_and_deleted_from_the_menus() {
-    use unbound_toolkit::ui::Key;
+    use bande_toolkit::ui::Key;
     let (_directory, mut view) = ready();
     assert!(view.menu_action("new-calendar:local"));
     view.scene(SIZE.0, SIZE.1);

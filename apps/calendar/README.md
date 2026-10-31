@@ -81,7 +81,7 @@ cargo test
 - `tests/drag.rs` drives the view with pointer and key events: create, move, resize, month
   drag, calendar colours, and new, rename and delete calendar through the menus and sheets.
 - `tests/golden.rs` renders each view with the desktop's golden harness (light and dark, the
-  inspector, search). After a deliberate visual change, `UNBOUND_UPDATE_GOLDENS=1 cargo test
+  inspector, search). After a deliberate visual change, `BANDE_UPDATE_GOLDENS=1 cargo test
   --test golden` rewrites them.
 
 ## Not done yet

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, TreeId};
 
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Button, Event, Key, Label, Modifiers, PopUpButton, SecureField, TEXT_FIELD_HEIGHT, TextField,
     Ui, WidgetId,
 };
@@ -106,7 +106,7 @@ impl Setup {
             collecting: false,
             note: panel.id_of(note).unwrap_or_else(WidgetId::next),
             cancel: panel.id_of(cancel).unwrap_or_else(WidgetId::next),
-            panel: unbound_toolkit::ui::Widget::id(&panel),
+            panel: bande_toolkit::ui::Widget::id(&panel),
             dismissed: panel.dismisser(),
             busy: false,
         };
@@ -149,7 +149,7 @@ impl Setup {
     pub fn show_note(&mut self, ui: &mut Ui, message: &str) {
         let note = self.note;
         let replacement = Label::new(message);
-        let id = unbound_toolkit::ui::Widget::id(&replacement);
+        let id = bande_toolkit::ui::Widget::id(&replacement);
         if let Some(panel) = ui.widget_as::<Panel>(self.panel)
             && panel.replace(note, replacement)
         {
