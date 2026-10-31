@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use zbus::blocking::Connection;
+use zbus::fdo::{RequestNameFlags, RequestNameReply};
 
 const NAME: &str = "org.bande.Mail";
 const PATH: &str = "/org/bande/Mail";
@@ -41,24 +42,21 @@ impl Instance {
             arguments: Mutex::new(sender),
             wake,
         };
-        let claimed = zbus::blocking::connection::Builder::session()?
-            .serve_at(PATH, opener)?
-            .name(NAME)?
-            .build();
-        match claimed {
-            Ok(connection) => Ok(Some(Self {
+        let connection = Connection::session()?;
+        connection.object_server().at(PATH, opener)?;
+        let reply = connection.request_name_with_flags(NAME, RequestNameFlags::DoNotQueue.into());
+        match reply {
+            Ok(RequestNameReply::PrimaryOwner | RequestNameReply::AlreadyOwner) => Ok(Some(Self {
                 _connection: connection,
                 arguments: received,
                 awake,
             })),
-            Err(zbus::Error::NameTaken) => {
-                Connection::session()?.call_method(
-                    Some(NAME),
-                    PATH,
-                    Some(NAME),
-                    "Open",
-                    &(arguments,),
-                )?;
+            Ok(_) | Err(zbus::Error::NameTaken) => {
+                if let Err(error) =
+                    connection.call_method(Some(NAME), PATH, Some(NAME), "Open", &(arguments,))
+                {
+                    tracing::warn!("cannot reach the running Mail: {error}");
+                }
                 Ok(None)
             }
             Err(error) => Err(error),

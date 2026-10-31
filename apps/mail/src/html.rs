@@ -45,12 +45,17 @@ pub struct Document {
 
 impl Document {
     pub fn text(&self) -> String {
-        self.blocks
-            .iter()
-            .map(|block| block.text.as_str())
-            .filter(|text| !text.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n")
+        let mut text = String::new();
+        let mut previous: Option<&Block> = None;
+        for block in self.blocks.iter().filter(|block| !block.text.is_empty()) {
+            if let Some(previous) = previous {
+                let listed = previous.kind == BlockKind::Item && block.kind == BlockKind::Item;
+                text.push_str(if listed { "\n" } else { "\n\n" });
+            }
+            text.push_str(&block.text);
+            previous = Some(block);
+        }
+        text
     }
 }
 

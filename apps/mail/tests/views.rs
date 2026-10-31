@@ -339,3 +339,64 @@ fn the_account_sheet_asks_for_name_address_and_password() {
     }
     shoot("account-setup", &mut view);
 }
+
+#[test]
+fn a_reply_opens_in_a_compose_window_with_the_quote() {
+    use bande_mail::ui::{COMPOSE_SIZE, ComposeView};
+    let (_folder, path) = place();
+    let mut view = view(&path);
+    let first = view.messages()[0].id;
+    view.select(first);
+    view.respond(false);
+    let Some(Request::Compose { draft, answering }) = view.take_requests().into_iter().next()
+    else {
+        panic!("no draft")
+    };
+    let senders = view
+        .accounts()
+        .iter()
+        .map(|account| account.address())
+        .collect();
+    let mut compose = ComposeView::new(
+        *draft,
+        answering,
+        senders,
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+    );
+    assert_eq!(compose.title(), "Re: Plans for the weekend trip");
+    for (scheme, suffix) in [(Scheme::Light, ""), (Scheme::Dark, "-dark")] {
+        let palette = Palette::for_scheme(scheme);
+        compose.set_palette(palette);
+        compose.scene(COMPOSE_SIZE.0, COMPOSE_SIZE.1);
+        let scene = compose.scene(COMPOSE_SIZE.0, COMPOSE_SIZE.1);
+        let scene = framed_scene(
+            &scene,
+            &compose.title(),
+            Some(FrameRegions {
+                sidebar: 0.0,
+                toolbar: 0.0,
+            }),
+            Some(compose.header()),
+            &palette,
+        );
+        let frame = CpuRenderer::new().render(&scene).expect("render");
+        unbound_golden::assert_golden_rgba!(
+            &format!("compose-reply{suffix}"),
+            COMPOSE_SIZE,
+            frame.rgba
+        );
+    }
+    compose.handle(&Event::Key {
+        key: Key::Character('D'),
+        modifiers: Modifiers {
+            logo: true,
+            shift: true,
+            ..Modifiers::default()
+        },
+    });
+    let (sent, answering) = compose.take_sent().unwrap();
+    assert_eq!(answering, Some(first));
+    assert_eq!(sent.to[0].email, "jorg@example.de");
+    assert!(compose.finished());
+}
