@@ -1,7 +1,3 @@
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex};
-use std::thread;
-
 use zbus::blocking::Connection;
 
 pub type Inhibitor = (String, String, String, String, u32, u32);
@@ -36,39 +32,4 @@ pub fn list_sleep_blockers(bus: &Connection) -> zbus::Result<Vec<SleepBlocker>> 
     Ok(sleep_blockers(
         ManagerProxyBlocking::new(bus)?.list_inhibitors()?,
     ))
-}
-
-pub struct Inhibitors {
-    ask: Sender<()>,
-    latest: Arc<Mutex<Vec<SleepBlocker>>>,
-}
-
-impl Inhibitors {
-    pub fn start(bus: Connection) -> Self {
-        let (ask, asked): (Sender<()>, Receiver<()>) = mpsc::channel();
-        let latest = Arc::new(Mutex::new(Vec::new()));
-        let shared = Arc::clone(&latest);
-        thread::spawn(move || {
-            while asked.recv().is_ok() {
-                while asked.try_recv().is_ok() {}
-                match list_sleep_blockers(&bus) {
-                    Ok(blockers) => {
-                        if let Ok(mut latest) = shared.lock() {
-                            *latest = blockers;
-                        }
-                    }
-                    Err(error) => tracing::debug!("cannot list inhibitors: {error}"),
-                }
-            }
-        });
-        Self { ask, latest }
-    }
-
-    pub fn latest(&self) -> Vec<SleepBlocker> {
-        let _ = self.ask.send(());
-        self.latest
-            .lock()
-            .map(|latest| latest.clone())
-            .unwrap_or_default()
-    }
 }

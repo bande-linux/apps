@@ -3,9 +3,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::time::Duration;
 
 use tempfile::TempDir;
-use unbound_monitor::{Identity, Process, Sampler};
+use unbound_monitor::{BatteryReport, Identity, Process, Sampler};
+use unbound_status::history::charge_samples;
+use unbound_status::status::{Battery, Power};
 use unbound_toolkit::{CpuRenderer, Scene};
 use unbound_xdg::DesktopEntry;
 
@@ -260,4 +263,34 @@ pub fn check_golden(name: &str, scene: &Scene) {
         name,
         &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
     );
+}
+
+pub const BATTERY_NOW: u32 = 2_000_000;
+
+pub fn battery_report() -> BatteryReport {
+    const CHARGING: u32 = 1;
+    const DISCHARGING: u32 = 2;
+    const FULL: u32 = 4;
+    let start = BATTERY_NOW - 12 * 3600;
+    let half_hour = 1800;
+    let mut records = Vec::new();
+    for step in 0..=24 {
+        let at = start + step * half_hour;
+        let record = match step {
+            0..=3 => (at, 40.0 + 15.0 * f64::from(step), CHARGING),
+            4..=9 => (at, 100.0, FULL),
+            _ => (at, 98.0 - 2.4 * f64::from(step - 10), DISCHARGING),
+        };
+        records.push(record);
+    }
+    BatteryReport {
+        battery: Some(Battery {
+            percent: 64.0,
+            power: Power::Battery {
+                remaining: Some(Duration::from_secs(3 * 3600 + 20 * 60)),
+            },
+        }),
+        history: charge_samples(records),
+        now: BATTERY_NOW,
+    }
 }

@@ -7,6 +7,7 @@ use std::rc::Rc;
 use crate::L10N;
 use crate::cpu::{CpuShare, CpuTicks, read_cpu_ticks};
 use crate::inhibitors::SleepBlocker;
+use crate::power::BatteryReport;
 use crate::proc::{
     DrmUse, IoBytes, Stat, display_name, parse_cgroup_unit, parse_cmdline, parse_drm_fdinfo,
     parse_io, parse_kilobytes, parse_passwd, parse_stat, parse_switches, parse_uid,
@@ -90,6 +91,7 @@ pub struct Snapshot {
     pub interfaces: Vec<Interface>,
     pub gpu: bool,
     pub battery: bool,
+    pub power: Option<BatteryReport>,
 }
 
 impl Interface {
@@ -497,6 +499,7 @@ impl Sampler {
                 .collect(),
             gpu: self.gpu_seen,
             battery: self.battery,
+            power: None,
         };
         self.previous = Some(Previous {
             cpu,

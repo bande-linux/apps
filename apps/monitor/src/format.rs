@@ -47,3 +47,7 @@ pub fn format_cpu_time(seconds: f64) -> String {
         format!("{minutes}:{:02}.{:02}", seconds / 100, seconds % 100)
     }
 }
+
+pub fn format_hours(seconds: u64) -> String {
+    format!("{}:{:02}", seconds / 3600, seconds / 60 % 60)
+}

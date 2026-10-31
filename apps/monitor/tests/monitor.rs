@@ -4,9 +4,9 @@ mod fixture;
 
 use std::path::Path;
 
-use fixture::{Fixture, PAGE_SIZE, Task};
+use fixture::{Fixture, PAGE_SIZE, Task, battery_report};
 use unbound_monitor::{
-    Catalog, CoreKind, InterfaceKind, Monitor, Pressure, PressureLevel, Snapshot, Tab,
+    Catalog, CoreKind, Graph, InterfaceKind, Monitor, Pressure, PressureLevel, Snapshot, Tab,
     read_cpu_ticks,
 };
 
@@ -487,4 +487,46 @@ fn an_app_that_wakes_often_uses_more_energy_than_an_idle_one_and_only_on_a_lapto
             ("quiet".to_owned(), "0.0".to_owned())
         ]
     );
+}
+
+#[test]
+fn the_energy_footer_shows_the_charge_the_time_left_and_the_last_twelve_hours() {
+    let mut monitor = Monitor::new(Catalog::new(&[]), 1000);
+    monitor.update(Snapshot {
+        battery: true,
+        ..Snapshot::default()
+    });
+    monitor.set_tab(Tab::Energy);
+    assert!(monitor.measures_battery());
+    monitor.update(Snapshot {
+        battery: true,
+        power: Some(battery_report()),
+        ..Snapshot::default()
+    });
+    monitor.update(Snapshot {
+        battery: true,
+        ..Snapshot::default()
+    });
+
+    let readouts = monitor.summary();
+    assert_eq!(
+        readouts[2..],
+        [
+            ("Remaining Charge".to_owned(), "64 %".to_owned()),
+            ("Time Remaining".to_owned(), "3:20".to_owned()),
+            ("Time on Battery".to_owned(), "7:00".to_owned()),
+        ]
+    );
+    let Graph::Battery { charge, charging } = monitor.graph() else {
+        panic!("the Energy footer graphs the battery");
+    };
+    assert_eq!(charge.len(), 25);
+    assert_eq!(charge.first(), Some(&(0.0, 0.4)));
+    assert_eq!(charge.last().map(|(along, _)| *along), Some(1.0));
+    assert_eq!(charging.len(), 1);
+    assert_eq!(charging[0].0, 0.0);
+    assert!((charging[0].1 - 5.0 / 12.0).abs() < 1e-4);
+
+    monitor.set_tab(Tab::Cpu);
+    assert!(!monitor.measures_battery());
 }

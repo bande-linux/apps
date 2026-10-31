@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use accesskit::Role;
-use fixture::{check_golden, entry, process};
+use fixture::{battery_report, check_golden, entry, process};
 use unbound_monitor::{
     AppList, AppRow, Catalog, CpuShare, ForceQuitView, Graph, Icons, Interface, InterfaceKind,
     Memory, Monitor, MonitorView, Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab,
@@ -994,4 +994,18 @@ fn dragging_the_footer_edge_up_shows_the_cores_and_down_hides_them() {
     view.handle(&Event::PointerMove(at(edge - 10.0)));
     assert!(!view.monitor.cores_shown());
     assert!(view.handle(&Event::PointerUp(at(edge - 10.0))));
+}
+
+#[test]
+fn the_energy_tab_graphs_the_battery_of_the_last_twelve_hours() {
+    let mut view = monitor_view();
+    for step in 0..40 {
+        view.update(Snapshot {
+            battery: true,
+            power: Some(battery_report()),
+            ..snapshot(step)
+        });
+    }
+    view.handle(&command('3'));
+    render(&mut view, TITLE, "monitor-energy", MONITOR_SIZE);
 }
