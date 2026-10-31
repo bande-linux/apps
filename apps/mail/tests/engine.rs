@@ -442,3 +442,40 @@ fn bad_servers_fail_quickly_instead_of_hanging() {
     session.login(USER, PASSWORD).unwrap_or(());
     assert!(matches!(session.list(), Err(error) if error.is_connection()));
 }
+
+#[test]
+fn account_setup_checks_both_servers_and_tells_what_is_wrong() {
+    use bande_mail::discover::Settings;
+    use bande_mail::setup::{Outcome, Request, check};
+    let fake = Fake::start();
+    let settings = Settings {
+        imap: server(fake.imap_port),
+        smtp: server(fake.smtp_port),
+        user: USER.to_owned(),
+    };
+    let request = |password: &str, settings: &Settings| Request {
+        name: "Ann".to_owned(),
+        email: USER.to_owned(),
+        password: password.to_owned(),
+        servers: Some(settings.clone()),
+    };
+    assert_eq!(
+        check(&request(PASSWORD, &settings), &network()),
+        Outcome::Ready(settings.clone())
+    );
+    assert!(matches!(
+        check(&request("wrong", &settings), &network()),
+        Outcome::WrongPassword(found, text) if found == settings && text.contains("Invalid credentials")
+    ));
+    let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = closed.local_addr().unwrap().port();
+    drop(closed);
+    let broken = Settings {
+        smtp: server(port),
+        ..settings.clone()
+    };
+    assert!(matches!(
+        check(&request(PASSWORD, &broken), &network()),
+        Outcome::NeedsServers(Some(found), _) if found == broken
+    ));
+}

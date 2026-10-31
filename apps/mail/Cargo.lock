@@ -330,6 +330,7 @@ dependencies = [
  "unbound-l10n",
  "unbound-log",
  "unbound-notify",
+ "unbound-test-bus",
  "unbound-toolkit",
  "unbound-xdg",
  "zbus",
@@ -3118,6 +3119,14 @@ dependencies = [
 [[package]]
 name = "unbound-spring"
 version = "0.1.0"
+
+[[package]]
+name = "unbound-test-bus"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "zbus",
+]
 
 [[package]]
 name = "unbound-toolkit"

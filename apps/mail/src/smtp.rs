@@ -116,15 +116,11 @@ fn checked(address: &str) -> Result<&str> {
     }
 }
 
-pub fn send(
+fn open(
     server: &Server,
     network: &Network,
     login: Option<(&str, &str)>,
-    envelope: &Envelope<'_>,
-) -> Result<()> {
-    if envelope.recipients.is_empty() {
-        return Err(Error::Refused("the message has no recipients".to_owned()));
-    }
+) -> Result<(Smtp, Vec<String>)> {
     let mut smtp = Smtp {
         link: Link::connect(server, network)?,
     };
@@ -155,6 +151,25 @@ pub fn send(
             )));
         }
     }
+    Ok((smtp, extensions))
+}
+
+pub fn verify(server: &Server, network: &Network, user: &str, password: &str) -> Result<()> {
+    let (mut smtp, _) = open(server, network, Some((user, password)))?;
+    let _ = smtp.command("QUIT", &[221]);
+    Ok(())
+}
+
+pub fn send(
+    server: &Server,
+    network: &Network,
+    login: Option<(&str, &str)>,
+    envelope: &Envelope<'_>,
+) -> Result<()> {
+    if envelope.recipients.is_empty() {
+        return Err(Error::Refused("the message has no recipients".to_owned()));
+    }
+    let (mut smtp, extensions) = open(server, network, login)?;
     let utf8 = match has(&extensions, "SMTPUTF8") && !envelope.from.is_ascii() {
         true => " SMTPUTF8",
         false => "",

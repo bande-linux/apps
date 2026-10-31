@@ -1,9 +1,14 @@
 pub mod compose;
+pub mod discover;
+pub mod dns;
 pub mod error;
 pub mod html;
+pub mod http;
 pub mod imap;
 pub mod message;
 pub mod net;
+pub mod secrets;
+pub mod setup;
 pub mod smtp;
 pub mod store;
 pub mod sync;
