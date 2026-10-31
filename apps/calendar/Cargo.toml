@@ -1,0 +1,49 @@
+[package]
+name = "bande-calendar"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Bande Calendar: CalDAV, local and subscribed calendars"
+publish = false
+
+[dependencies]
+base64 = "=0.22.1"
+jiff = "=0.2.38"
+roxmltree = "=0.21.2"
+rustix = { version = "=1.1.6", features = ["event", "pipe"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+tracing = "=0.1.44"
+ureq = "3"
+zbus = "=5.19.0"
+unbound-app-menu = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/app-menu" }
+unbound-datetime = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/datetime" }
+unbound-l10n = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/l10n" }
+unbound-log = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/log" }
+unbound-toolkit = { path = "/home/mikael/unbound-linux/repos/desktop/crates/toolkit/toolkit" }
+unbound-xdg = { path = "/home/mikael/unbound-linux/repos/desktop/crates/libs/xdg" }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+unbound-golden = { path = "/home/mikael/unbound-linux/repos/desktop/crates/testing/golden" }
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+copyright = "2026 Mikael Hug"
+section = "utils"
+priority = "optional"
+depends = "$auto, fonts-inter"
+extended-description = """\
+The calendar of the Bande desktop: CalDAV accounts with offline sync, a local \
+calendar and read-only subscriptions, with day, week, month and year views and \
+event alerts."""
+assets = [
+    ["target/release/bande-calendar", "usr/bin/", "755"],
+    ["data/org.bande.Calendar.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.Calendar.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+]
