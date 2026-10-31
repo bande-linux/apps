@@ -52,7 +52,7 @@ fn run() -> Result<(), WindowError> {
     let settings = settings_folder()
         .map(|folder| Settings::load(&folder))
         .unwrap_or_default();
-    let saved_file = windows_folder(home.as_deref())
+    let saved_file = windows_folder()
         .filter(|_| arguments.command.is_none())
         .map(|folder| {
             let mine = window_file(&folder, std::process::id());

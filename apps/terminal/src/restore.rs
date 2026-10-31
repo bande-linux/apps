@@ -54,12 +54,8 @@ impl SavedWindow {
     }
 }
 
-pub fn windows_folder(home: Option<&Path>) -> Option<PathBuf> {
-    std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .or_else(|| home.map(|home| home.join(".local/state")))
-        .map(|state| state.join("unbound/terminal-windows"))
+pub fn windows_folder() -> Option<PathBuf> {
+    unbound_xdg::state_home().map(|state| state.join("unbound/terminal-windows"))
 }
 
 pub fn window_file(folder: &Path, pid: u32) -> PathBuf {
