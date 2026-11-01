@@ -34,9 +34,11 @@ apt install bande-mail
   remote pictures are not fetched until **Load Remote Content** is clicked in the reader's
   banner, and then only over HTTPS, at most 20 per message, 10 MB each, decoded with limits on
   their size.
-- **Toolbar and keys.** Get Mail (⇧⌘N), New Message (⌘N), Archive (⇧⌘A), Delete (⌫), Junk
-  (⇧⌘J), Reply (⌘R), Reply All (⇧⌘R), Forward (⇧⌘F), Flag (⇧⌘L), Mark as Read or Unread (⇧⌘U)
-  and Search (⌘F), which searches sender, recipients, subject and text. ⌘ is the logo key.
+- **Toolbar and keys.** Get Mail (Shift+Ctrl+N), New Message (Ctrl+N), Archive (Shift+Ctrl+A),
+  Delete (Delete or Backspace), Junk (Shift+Ctrl+J), Reply (Ctrl+R), Reply All (Shift+Ctrl+R),
+  Forward (Shift+Ctrl+F), Flag (Shift+Ctrl+L), Mark as Read or Unread (Shift+Ctrl+U), Send
+  (Shift+Ctrl+D), Close Window (Ctrl+W), Quit (Ctrl+Q) and Search (Ctrl+F), which searches
+  sender, recipients, subject and text.
 - **Compose** opens its own window, with From when there are several accounts. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. Files are
   attached through the desktop's file chooser (the portal), up to 25 MB each, and a click on an

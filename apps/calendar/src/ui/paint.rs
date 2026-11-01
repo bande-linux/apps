@@ -920,7 +920,7 @@ fn paint_year(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut View
             TextStyle::role(
                 TextRole::Heading,
                 match current {
-                    true => palette.danger,
+                    true => palette.danger_text,
                     false => palette.ink,
                 },
             ),

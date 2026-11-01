@@ -317,7 +317,7 @@ impl Widget for AccountSheet {
             .clone()
             .map_or((None, false), |(text, error)| (Some(text), error));
         let color = match error {
-            true => cx.palette.danger,
+            true => cx.palette.danger_text,
             false => cx.palette.ink2,
         };
         self.status = status.map(|status| {

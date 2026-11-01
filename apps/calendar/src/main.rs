@@ -15,6 +15,7 @@ use bande_calendar::ui::{CalendarView, L10N, Mode, Request, SIDEBAR_WIDTH, TOOLB
 use bande_calendar::worker::{Job, Reply, Worker};
 use bande_datetime::DateFormats;
 use bande_design::{Accent, Scheme};
+use bande_toolkit::ui::shortcut_pressed;
 use bande_toolkit::{
     App, Appearance, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSystem, Window,
     WindowError, WindowEvent,
@@ -29,7 +30,6 @@ const WINDOW_SIZE: (u32, u32) = (1120, 740);
 const SYNC_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const SUBSCRIPTION_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const PUSH_DELAY: Duration = Duration::from_secs(2);
-const CLOCK_INTERVAL: Duration = Duration::from_secs(30);
 const ALERT_HORIZON: SignedDuration = SignedDuration::from_hours(1);
 const NOTIFICATION_TIMEOUT: i32 = -1;
 
@@ -43,6 +43,7 @@ struct CalendarApp {
     next_subscriptions: Instant,
     next_clock: Instant,
     next_alerts: Instant,
+    alert_at: Timestamp,
     alerts_checked: Timestamp,
     fired: HashSet<String>,
     syncing: bool,
@@ -50,6 +51,11 @@ struct CalendarApp {
     title: String,
     published_mode: Mode,
     errors: Vec<String>,
+}
+
+fn until_next_minute() -> Duration {
+    let into_minute = Timestamp::now().as_millisecond().rem_euclid(60_000);
+    Duration::from_millis(u64::try_from(60_000 - into_minute).unwrap_or(60_000))
 }
 
 fn data_dir() -> PathBuf {
@@ -74,28 +80,28 @@ fn app_menus(mode: Mode) -> Vec<Entry> {
                 Mode::Year => "year",
             };
             entry(label, &format!("mode-{index}"))
-                .shortcut(&format!("Super+{}", index + 1))
+                .shortcut(&format!("Ctrl+{}", index + 1))
                 .radio(*shown == mode)
         })
         .collect();
     view.extend([
         Entry::separator(),
-        entry("go-to-today", "today").shortcut("Super+T"),
+        entry("go-to-today", "today").shortcut("Ctrl+T"),
         entry("previous-period", "previous"),
         entry("next-period", "next"),
         Entry::separator(),
-        entry("find", "find").shortcut("Super+F"),
+        entry("find", "find").shortcut("Ctrl+F"),
     ]);
     vec![
         app_submenu(&L10N.tr("app-name"), Vec::new()),
         Entry::submenu(
             &L10N.tr("menu-file"),
             vec![
-                entry("new-event", "new-event").shortcut("Super+N"),
+                entry("new-event", "new-event").shortcut("Ctrl+N"),
                 Entry::separator(),
-                entry("new-calendar", "new-calendar").shortcut("Alt+Super+N"),
+                entry("new-calendar", "new-calendar").shortcut("Alt+Ctrl+N"),
                 entry("add-account", "add-account"),
-                entry("refresh", "refresh").shortcut("Super+R"),
+                entry("refresh", "refresh").shortcut("Ctrl+R"),
                 Entry::separator(),
                 close_window(),
             ],
@@ -237,7 +243,11 @@ impl CalendarApp {
     }
 
     fn add_subscription(&mut self, url: String, data: &str) {
-        let objects = CalendarObject::parse(data).unwrap_or_default();
+        let Ok(objects) = CalendarObject::parse(data) else {
+            self.view
+                .account_failed(&L10N.tr_args("not-a-calendar", [("url", url.into())]));
+            return;
+        };
         let header = |name: &str| {
             objects
                 .first()
@@ -271,7 +281,9 @@ impl CalendarApp {
             },
             vec![info],
         );
-        apply(self.view.library_mut(), outcome, true);
+        if let Some(outcome) = outcome {
+            apply(self.view.library_mut(), outcome, true);
+        }
         self.view.account_added();
     }
 
@@ -304,9 +316,14 @@ impl CalendarApp {
                 }
                 Reply::Refreshed { calendar, data } => {
                     let library = self.view.library_mut();
-                    if let Some(index) = library.calendar_index(&calendar) {
-                        let outcome = subscription_outcome(&library.calendars[index].info, &data);
-                        apply(library, outcome, true);
+                    let outcome = library.calendar_index(&calendar).and_then(|index| {
+                        subscription_outcome(&library.calendars[index].info, &data)
+                    });
+                    match outcome {
+                        Some(outcome) => {
+                            apply(library, outcome, true);
+                        }
+                        None => tracing::warn!("{calendar} did not answer with a calendar"),
                     }
                 }
                 Reply::Failed { calendar, error } => {
@@ -453,6 +470,7 @@ impl CalendarApp {
             .first()
             .map_or(horizon, |due| due.at);
         let wait = now.duration_until(next).max(SignedDuration::from_secs(1));
+        self.alert_at = next;
         self.next_alerts =
             Instant::now() + Duration::try_from(wait).unwrap_or(Duration::from_secs(60));
     }
@@ -461,6 +479,7 @@ impl CalendarApp {
         let result = match Standard::parse(action) {
             Some(Standard::Hide | Standard::Minimize) => window.minimize(),
             Some(Standard::Zoom) => window.toggle_zoom(),
+            Some(Standard::Settings) => Ok(()),
             Some(Standard::Quit | Standard::CloseWindow) => {
                 window.close();
                 Ok(())
@@ -505,9 +524,15 @@ impl App for CalendarApp {
                 true
             }
             WindowEvent::Input(input) => {
-                let changed = self.view.handle(&input);
-                window.set_cursor(self.view.cursor());
-                changed
+                if let Some(standard) =
+                    Standard::for_shortcut(|shortcut| shortcut_pressed(&input, shortcut))
+                {
+                    self.menu_action(window, standard.action())
+                } else {
+                    let changed = self.view.handle(&input);
+                    window.set_cursor(self.view.cursor());
+                    changed
+                }
             }
             WindowEvent::Accessibility(request) => self.view.perform(&request),
             WindowEvent::MenuAction(action) => self.menu_action(window, &action),
@@ -564,10 +589,10 @@ impl App for CalendarApp {
         if now >= self.next_clock {
             self.view
                 .set_now(Zoned::now().with_time_zone(self.zone.clone()));
-            self.next_clock = now + CLOCK_INTERVAL;
+            self.next_clock = now + until_next_minute();
             window.request_redraw();
         }
-        if now >= self.next_alerts {
+        if now >= self.next_alerts || Timestamp::now() >= self.alert_at {
             self.check_alerts();
         }
         if now >= self.next_subscriptions {
@@ -650,8 +675,9 @@ fn run(arguments: Vec<String>) -> Result<(), WindowError> {
         formats,
         next_sync: started,
         next_subscriptions: started,
-        next_clock: started + CLOCK_INTERVAL,
+        next_clock: started + until_next_minute(),
         next_alerts: started,
+        alert_at: Timestamp::now(),
         alerts_checked: Timestamp::now(),
         fired: HashSet::new(),
         syncing: false,

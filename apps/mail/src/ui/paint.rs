@@ -150,6 +150,7 @@ impl MailView {
 
     fn paint_sidebar(&mut self, items: &mut Vec<Item>) {
         let palette = self.palette;
+        let window_active = self.ui.context().window_active;
         let frame = self.sidebar_frame();
         let row_height = self.sidebar_row_height();
         let heading_height = (SIDEBAR_HEADING * self.scale()).round();
@@ -222,7 +223,9 @@ impl MailView {
                     if selected {
                         drawn.push(Item::Fill {
                             shape: Shape::rounded(rect, Radius::S),
-                            paint: palette.well.into(),
+                            paint: palette
+                                .sidebar_selection(window_active, self.focus == Pane::Sidebar)
+                                .into(),
                         });
                     } else if self.hover == Some(Hit::Place(index)) {
                         drawn.push(Item::Fill {
@@ -352,7 +355,10 @@ impl MailView {
     fn paint_row(&mut self, items: &mut Vec<Item>, summary: &Summary, rect: Rect, now: Timestamp) {
         let palette = self.palette;
         let selected = self.selected == Some(summary.id);
-        let active = selected && self.focus == Pane::List && !self.ui.has_sheet();
+        let active = selected
+            && self.focus == Pane::List
+            && !self.ui.has_sheet()
+            && self.ui.context().window_active;
         let highlight = Rect::new(
             rect.x + ROW_INSET,
             rect.y + 1.0,

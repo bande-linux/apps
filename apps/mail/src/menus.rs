@@ -1,12 +1,12 @@
 use bande_app_menu::{Entry, app_submenu, close_window, window_submenu};
 use bande_mail::L10N;
-use bande_mail::ui::MailView;
+use bande_mail::ui::{MailView, SHORTCUTS};
 
-fn item(message: &str, action: &str, shortcut: &str) -> Entry {
+fn item(message: &str, action: &str) -> Entry {
     let entry = Entry::item(&L10N.tr(message), action);
-    match shortcut.is_empty() {
-        true => entry,
-        false => entry.shortcut(shortcut),
+    match SHORTCUTS.iter().find(|(known, _)| *known == action) {
+        Some((_, shortcut)) => entry.shortcut(shortcut),
+        None => entry,
     }
 }
 
@@ -21,13 +21,13 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
         Entry::submenu(
             &L10N.tr("menu-file"),
             vec![
-                item("action-compose", "compose", "Super+N"),
-                item("action-get-mail", "get-mail", "Shift+Super+N"),
+                item("action-compose", "compose"),
+                item("action-get-mail", "get-mail"),
                 Entry::separator(),
-                item("menu-add-account", "add-account", ""),
+                item("menu-add-account", "add-account"),
                 Entry::submenu(&L10N.tr("menu-remove-account"), accounts),
                 Entry::separator(),
-                item("menu-find", "find", "Super+F"),
+                item("menu-find", "find"),
                 Entry::separator(),
                 close_window(),
             ],
@@ -35,18 +35,18 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
         Entry::submenu(
             &L10N.tr("menu-message"),
             vec![
-                item("compose-send", "send", "Shift+Super+D"),
+                item("compose-send", "send"),
                 Entry::separator(),
-                item("action-reply", "reply", "Super+R"),
-                item("action-reply-all", "reply-all", "Shift+Super+R"),
-                item("action-forward", "forward", "Shift+Super+F"),
+                item("action-reply", "reply"),
+                item("action-reply-all", "reply-all"),
+                item("action-forward", "forward"),
                 Entry::separator(),
-                item("menu-toggle-read", "toggle-read", "Shift+Super+U"),
-                item("menu-toggle-flag", "toggle-flag", "Shift+Super+L"),
+                item("menu-toggle-read", "toggle-read"),
+                item("menu-toggle-flag", "toggle-flag"),
                 Entry::separator(),
-                item("action-archive", "archive", "Shift+Super+A"),
-                item("action-junk", "junk", "Shift+Super+J"),
-                item("action-delete", "delete", "Super+Backspace"),
+                item("action-archive", "archive"),
+                item("action-junk", "junk"),
+                item("action-delete", "delete"),
             ],
         ),
         window_submenu(Vec::new()),

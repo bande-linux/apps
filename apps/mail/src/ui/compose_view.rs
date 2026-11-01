@@ -5,8 +5,9 @@ use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
-    Alert, BUTTON_HEIGHT, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu,
+    Alert, BUTTON_HEIGHT, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Menu,
     PopUpButton, Size, TEXT_FIELD_HEIGHT, TextField, TextView, Ui, Widget, WidgetId,
+    shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, Header, Image, Item, Palette, Point, Radius, Rect, Scene, Shape, TextAlign,
@@ -18,7 +19,7 @@ use crate::compose::{Draft, Outgoing};
 use crate::message::{Address, Attachment, parse_addresses};
 use crate::store::MessageId;
 use crate::ui::symbols::Symbol;
-use crate::ui::view::TOOLBAR_HEIGHT;
+use crate::ui::view::{SHORTCUTS, TOOLBAR_HEIGHT};
 
 static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
 
@@ -433,10 +434,9 @@ impl ComposeView {
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {
-        if let Event::Key { key, modifiers } = event
-            && (modifiers.logo || modifiers.control)
-            && modifiers.shift
-            && matches!(key, Key::Character('d' | 'D'))
+        if SHORTCUTS
+            .iter()
+            .any(|(action, shortcut)| *action == "send" && shortcut_pressed(event, shortcut))
             && !self.ui.has_sheet()
         {
             self.try_send();

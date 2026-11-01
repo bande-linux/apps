@@ -275,7 +275,7 @@ fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Eve
             _ => {}
         }
     }
-    let command = modifiers.logo;
+    let command = modifiers.control && !modifiers.logo;
     match key {
         Key::Character(character) if command => match character.to_ascii_lowercase() {
             't' => menu_command(view, ACTION_TODAY),

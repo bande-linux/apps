@@ -309,7 +309,7 @@ fn archiving_moves_the_message_and_selects_the_next() {
     view.handle(&Event::Key {
         key: Key::Character('A'),
         modifiers: Modifiers {
-            logo: true,
+            control: true,
             shift: true,
             ..Modifiers::default()
         },
@@ -386,7 +386,7 @@ fn a_reply_opens_in_a_compose_window_with_the_quote() {
     compose.handle(&Event::Key {
         key: Key::Character('D'),
         modifiers: Modifiers {
-            logo: true,
+            control: true,
             shift: true,
             ..Modifiers::default()
         },
@@ -441,7 +441,7 @@ fn attachments_added_to_a_message_can_be_removed_before_sending() {
     compose.handle(&Event::Key {
         key: Key::Character('D'),
         modifiers: Modifiers {
-            logo: true,
+            control: true,
             shift: true,
             ..Modifiers::default()
         },

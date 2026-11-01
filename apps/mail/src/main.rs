@@ -15,6 +15,7 @@ use bande_mail::message::Attachment;
 use bande_mail::ui::{COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Request, SIDEBAR_WIDTH};
 use bande_notify::Urgency;
 use bande_notify::client::{Request as Notification, notify};
+use bande_toolkit::ui::shortcut_pressed;
 use bande_toolkit::{
     Appearance, FrameRegions, MenuPlacement, Rect, Role, Scene, Surfaces, TextSystem, Window,
     WindowEvent,
@@ -351,9 +352,10 @@ impl Mail {
         let result = match Standard::parse(action) {
             Some(Standard::Hide | Standard::Minimize) => window.minimize(),
             Some(Standard::Zoom) => window.toggle_zoom(),
+            Some(Standard::Settings) => Ok(()),
             Some(Standard::Quit) => {
-                self.windows[0].close();
-                Ok(())
+                self.close(0);
+                return;
             }
             Some(Standard::CloseWindow) => {
                 self.close(index);
@@ -432,10 +434,13 @@ impl Surfaces for Mail {
                 return;
             }
             WindowEvent::QuitRequested => {
-                self.windows[0].close();
+                self.close(0);
                 return;
             }
             WindowEvent::Focus(focused) => {
+                if let Screen::Main(view) = &mut self.screens[index] {
+                    view.set_window_active(focused);
+                }
                 if focused {
                     self.focused = index;
                     if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
@@ -444,10 +449,18 @@ impl Surfaces for Mail {
                 }
                 true
             }
-            WindowEvent::Input(input) => match &mut self.screens[index] {
-                Screen::Main(view) => view.handle(&input),
-                Screen::Compose(view) => view.handle(&input),
-            },
+            WindowEvent::Input(input) => {
+                if let Some(standard) =
+                    Standard::for_shortcut(|shortcut| shortcut_pressed(&input, shortcut))
+                {
+                    self.menu_action(index, standard.action());
+                    return;
+                }
+                match &mut self.screens[index] {
+                    Screen::Main(view) => view.handle(&input),
+                    Screen::Compose(view) => view.handle(&input),
+                }
+            }
             WindowEvent::Accessibility(request) => match &mut self.screens[index] {
                 Screen::Main(view) => view.perform(&request),
                 Screen::Compose(view) => view.perform(&request),
