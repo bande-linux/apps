@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use bande_xdg::Locale;
-use roxmltree::{Document, Node};
+use roxmltree::{Document, Node, ParsingOptions};
 
 use crate::component::{
     APPLICATION_KINDS, Block, Bundle, Component, Icon, Release, Screenshot, THUMBNAIL_WIDTH,
@@ -215,7 +215,11 @@ pub fn parse(
     source: &Source,
     locale: Option<&Locale>,
 ) -> Result<Vec<Component>, roxmltree::Error> {
-    let document = Document::parse(xml)?;
+    let options = ParsingOptions {
+        allow_dtd: true,
+        ..ParsingOptions::default()
+    };
+    let document = Document::parse_with_options(xml, options)?;
     let root = document.root_element();
     let source = match (root.attribute("origin"), &source.remote) {
         (Some(origin), None) => Source {
