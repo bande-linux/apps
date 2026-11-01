@@ -316,12 +316,8 @@ fn event_block(
         (rect.height - 4.0).max(0.0),
     );
     painter.clipped(Shape::rect(inner), |painter| {
-        painter.wrapped(title, title_style, inner);
+        let lines = painter.wrapped(title, title_style, inner);
         if let Some(time) = time {
-            let lines = painter
-                .text
-                .paragraph(title, title_style, Some(inner.width), TextAlign::Start)
-                .height();
             let y = (inner.y + lines).min(inner.y + inner.height - 14.0);
             painter.label(
                 time,

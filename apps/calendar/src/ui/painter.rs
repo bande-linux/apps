@@ -1,4 +1,6 @@
-use bande_toolkit::{Color, Item, Paint, Point, Rect, Shape, TextAlign, TextStyle, TextSystem};
+use bande_toolkit::{
+    Color, Cut, Item, Paint, Point, Rect, Shape, TextAlign, TextStyle, TextSystem, shortened,
+};
 
 pub struct Painter<'a, H> {
     pub text: &'a mut TextSystem,
@@ -46,7 +48,10 @@ impl<'a, H> Painter<'a, H> {
     }
 
     pub fn label(&mut self, text: &str, style: TextStyle, frame: Rect, align: TextAlign) {
-        let paragraph = self.text.paragraph(text, style, None, align);
+        let shown = shortened(text, Cut::End, |candidate| {
+            self.text.paragraph(candidate, style, None, align).width() <= frame.width + 0.5
+        });
+        let paragraph = self.text.paragraph(&shown, style, None, align);
         let x = match align {
             TextAlign::Center => frame.x + ((frame.width - paragraph.width()) / 2.0).round(),
             TextAlign::End => frame.x + frame.width - paragraph.width(),
@@ -62,10 +67,22 @@ impl<'a, H> Painter<'a, H> {
         });
     }
 
-    pub fn wrapped(&mut self, text: &str, style: TextStyle, frame: Rect) {
+    pub fn wrapped(&mut self, text: &str, style: TextStyle, frame: Rect) -> f32 {
+        let line = self
+            .text
+            .paragraph("X", style, None, TextAlign::Start)
+            .height();
+        let room = frame.height.max(line) + 0.5;
+        let shown = shortened(text, Cut::End, |candidate| {
+            let paragraph =
+                self.text
+                    .paragraph(candidate, style, Some(frame.width), TextAlign::Start);
+            paragraph.height() <= room && paragraph.width() <= frame.width + 0.5
+        });
         let paragraph = self
             .text
-            .paragraph(text, style, Some(frame.width), TextAlign::Start);
+            .paragraph(&shown, style, Some(frame.width), TextAlign::Start);
+        let height = paragraph.height();
         self.items.push(Item::Clip {
             shape: Shape::rect(frame),
             items: vec![Item::Text {
@@ -73,6 +90,7 @@ impl<'a, H> Painter<'a, H> {
                 paragraph,
             }],
         });
+        height
     }
 
     pub fn hit(&mut self, rect: Rect, hit: H) {
