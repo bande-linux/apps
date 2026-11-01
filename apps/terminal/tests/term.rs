@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use bande_app_settings::Stored;
-use bande_term::{
+use bande_terminal::{
     Axis, Banner, BannerAction, CellPoint, Command, CursorStyle, DEFAULT_FONT_SIZE, GridSize,
     HEADER_LEADING, Layout, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane, Profile,
     Report, Reports, SETTINGS_SIZE, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind,
@@ -290,8 +290,8 @@ fn a_drag_selects_text_for_copying() {
     let metrics = painter(Scheme::Light).metrics;
     let at = |column: f32| {
         metrics.cell_at(Point::new(
-            bande_term::PADDING + column * metrics.cell_width + 1.0,
-            bande_term::PADDING + metrics.cell_height / 2.0,
+            bande_terminal::PADDING + column * metrics.cell_width + 1.0,
+            bande_terminal::PADDING + metrics.cell_height / 2.0,
         ))
     };
 
@@ -476,11 +476,11 @@ selected underlined red 256 truecolor\r\n\
 fn every_profile_keeps_text_and_ansi_colours_legible() {
     for profile in Profile::ALL {
         for (scheme, _) in SCHEMES {
-            let theme = bande_term::Theme::new(appearance(scheme), profile);
+            let theme = bande_terminal::Theme::new(appearance(scheme), profile);
             let contrast = bande_design::wcag(theme.foreground, theme.background);
             assert!(contrast >= 7.0, "{profile:?} {scheme:?}: {contrast}");
             for index in 1..7 {
-                let color = bande_term::ansi_colors(&theme.palette)[index];
+                let color = bande_terminal::ansi_colors(&theme.palette)[index];
                 let contrast = bande_design::wcag(color, theme.background);
                 assert!(
                     contrast >= 3.0,

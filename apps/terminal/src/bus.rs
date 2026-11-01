@@ -70,7 +70,7 @@ fn serve(app_id: &str, receiver: &Receiver<Outgoing>) {
             Outgoing::Notify { summary, body } => notify(
                 &connection,
                 &Request {
-                    app_name: &bande_term::L10N.tr("title"),
+                    app_name: &bande_terminal::L10N.tr("title"),
                     replaces_id: 0,
                     app_icon: app_id,
                     summary: &summary,

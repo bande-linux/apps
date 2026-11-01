@@ -59,7 +59,7 @@ impl App for Running {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
     let appearance = window.appearance();
-    let apps = bande_catalog::system_catalog();
+    let apps = bande_software::catalog::system_catalog();
     let installed = installed_keys(&apps, &desktop_ids(&bande_xdg::data_dirs()));
     let system = zbus::blocking::Connection::system()?;
     let mut software = Software::new(
@@ -76,6 +76,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> ExitCode {
+    if std::env::args().nth(1).as_deref() == Some("--version") {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
+    }
     bande_log::init("bande-software");
     match run() {
         Ok(()) => ExitCode::SUCCESS,

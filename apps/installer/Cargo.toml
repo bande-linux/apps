@@ -1,32 +1,49 @@
 [package]
 name = "bande-installer"
 description = "Bande Package Installer: installs and removes .deb files through PackageKit"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-rust-version.workspace = true
-repository.workspace = true
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.95"
+repository = "https://github.com/bande-linux/apps"
+publish = false
 
 [dependencies]
-accesskit.workspace = true
-tracing.workspace = true
-bande-fs.workspace = true
-bande-l10n.workspace = true
-bande-log.workspace = true
-bande-packages.workspace = true
-bande-toolkit.workspace = true
-bande-xdg.workspace = true
-zbus.workspace = true
+accesskit = "=0.25.2"
+tracing = "=0.1.44"
+zbus = "=5.19.0"
+bande-fs = { git = "https://github.com/bande-linux/desktop", rev = "930e441c8f5aa7cc3fc3d4d41a58c46f4e09d3a2" }
+bande-l10n = { git = "https://github.com/bande-linux/desktop", rev = "930e441c8f5aa7cc3fc3d4d41a58c46f4e09d3a2" }
+bande-log = { git = "https://github.com/bande-linux/desktop", rev = "930e441c8f5aa7cc3fc3d4d41a58c46f4e09d3a2" }
+bande-packages = { git = "https://github.com/bande-linux/desktop", rev = "930e441c8f5aa7cc3fc3d4d41a58c46f4e09d3a2" }
+bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "930e441c8f5aa7cc3fc3d4d41a58c46f4e09d3a2" }
+bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "930e441c8f5aa7cc3fc3d4d41a58c46f4e09d3a2" }
 
 [dev-dependencies]
-tempfile.workspace = true
-bande-golden.workspace = true
-bande-test-bus.workspace = true
+tempfile = "=3.27.0"
+bande-golden = { git = "https://github.com/bande-linux/desktop", rev = "930e441c8f5aa7cc3fc3d4d41a58c46f4e09d3a2" }
+bande-test-bus = { git = "https://github.com/bande-linux/desktop", rev = "930e441c8f5aa7cc3fc3d4d41a58c46f4e09d3a2" }
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+copyright = "2026 Mikael Hug"
 section = "admin"
-depends = "$auto, packagekit, bande-polkit, fonts-inter"
+depends = "$auto, packagekit, fonts-inter"
+recommends = "bande-polkit"
 extended-description = """\
 The package installer of the Bande desktop: opens .deb files from Files or \
 a browser, checks that they fit this computer, shows what else they install \
@@ -37,6 +54,3 @@ assets = [
     ["data/org.bande.Installer.desktop", "usr/share/applications/", "644"],
     ["data/org.bande.Installer.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
 ]
-
-[lints]
-workspace = true

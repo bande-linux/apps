@@ -9,7 +9,7 @@ use alacritty_terminal::tty::Shell;
 use bande_app_menu::{AppMenu, Standard};
 use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_spring::{Decay, State as SpringState};
-use bande_term::{
+use bande_terminal::{
     Axis, Banner, BannerAction, CLOSE_TAB_SHORTCUT, CellPoint, Command, Divider,
     FULL_SCREEN_LEADING, GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton,
     MouseKind, Notice, Painter, Pane, QUIT_SHORTCUT, STRIP_HEIGHT, SavedWindow, SearchDirection,

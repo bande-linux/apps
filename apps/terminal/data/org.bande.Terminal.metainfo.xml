@@ -12,5 +12,5 @@
     <name>Bande</name>
   </developer>
   <launchable type="desktop-id">org.bande.Terminal.desktop</launchable>
-  <url type="homepage">https://github.com/bande-linux/desktop</url>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
 </component>

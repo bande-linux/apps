@@ -6,7 +6,7 @@ use std::process::ExitCode;
 
 use bande_app_menu::AppMenu;
 use bande_app_settings::{Stored, settings_folder};
-use bande_term::{
+use bande_terminal::{
     COLUMNS, GridSize, L10N, Painter, ROWS, SETTINGS_SIZE, SavedWindow, Session, Settings,
     Terminal, app_menus, claim, left_behind, settings_view, window_file, windows_folder,
 };
@@ -14,7 +14,7 @@ use bande_toolkit::{Role, Window, WindowError};
 
 use crate::app::{APP_ID, Arguments, RESTORE_OPTION, TerminalApp};
 
-const PROGRAM: &str = "bande-term";
+const PROGRAM: &str = "bande-terminal";
 
 fn running(pid: u32) -> bool {
     std::fs::read_to_string(format!("/proc/{pid}/comm"))
@@ -115,6 +115,10 @@ fn run() -> Result<(), WindowError> {
 }
 
 fn main() -> ExitCode {
+    if std::env::args().nth(1).as_deref() == Some("--version") {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
+    }
     bande_log::init(PROGRAM);
     match run() {
         Ok(()) => ExitCode::SUCCESS,
