@@ -65,7 +65,8 @@ impl Toolbar {
         let modes = host.insert_in_header(
             SegmentedControl::new(&L10N.tr("view-mode"), &titles, selected, move |index| {
                 send(Signal::Mode(index))
-            }),
+            })
+            .fill_equally(),
             Rect::default(),
         );
         let send = sender(signals);

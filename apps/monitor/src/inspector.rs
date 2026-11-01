@@ -142,12 +142,12 @@ impl InspectorView {
         let stop = list.insert_in_header(stop_button(move || send(Signal::Stop)));
         let send = sender(list.signals());
         let titles = Section::ALL.map(Section::title);
-        let sections = list.insert_in_header(SegmentedControl::new(
-            &L10N.tr("tab-label"),
-            &titles,
-            Some(0),
-            move |index| send(Signal::Tab(index)),
-        ));
+        let sections = list.insert_in_header(
+            SegmentedControl::new(&L10N.tr("tab-label"), &titles, Some(0), move |index| {
+                send(Signal::Tab(index))
+            })
+            .fill_equally(),
+        );
         let mut view = Self {
             pid: process.pid,
             start_ticks: process.start_ticks,

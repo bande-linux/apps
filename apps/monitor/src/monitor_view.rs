@@ -179,6 +179,7 @@ fn tabs_control(list: &List, tabs: &[Tab], tab: Tab) -> SegmentedControl {
         tabs.iter().position(|shown| *shown == tab),
         move |index| send(Signal::Tab(index)),
     )
+    .fill_equally()
 }
 
 impl MonitorView {
