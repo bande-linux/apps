@@ -634,12 +634,8 @@ impl Screen for InspectorView {
                     self.finished = true;
                     true
                 }
-                Key::Character('w') if modifiers.logo => {
-                    self.finished = true;
-                    true
-                }
-                Key::Character('c') if modifiers.logo => self.copy_selection(),
-                Key::Character(digit @ '1'..='4') if modifiers.logo => {
+                Key::Character('c') if modifiers.control => self.copy_selection(),
+                Key::Character(digit @ '1'..='4') if modifiers.control => {
                     let index = *digit as usize - '1' as usize;
                     if let Some(section) = Section::ALL.get(index) {
                         self.set_section(*section);

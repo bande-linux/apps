@@ -111,7 +111,7 @@ fn command(character: char) -> Event {
     Event::Key {
         key: Key::Character(character),
         modifiers: Modifiers {
-            logo: true,
+            control: true,
             ..Modifiers::default()
         },
     }

@@ -230,10 +230,9 @@ fn activity_monitor_matches_its_goldens() {
     render(&mut view, TITLE, "monitor-mine", MONITOR_SIZE);
     view.menu_action("filter-all");
     view.handle(&Event::Key {
-        key: Key::Character('q'),
+        key: Key::Character('e'),
         modifiers: Modifiers {
-            logo: true,
-            alt: true,
+            control: true,
             ..Modifiers::default()
         },
     });
@@ -289,7 +288,7 @@ fn command(character: char) -> Event {
     Event::Key {
         key: Key::Character(character),
         modifiers: Modifiers {
-            logo: true,
+            control: true,
             ..Modifiers::default()
         },
     }
@@ -384,7 +383,7 @@ fn another_tab_shows_its_own_columns_sorted_by_its_measure_and_keeps_the_selecti
     view.handle(&Event::Key {
         key: Key::Character('r'),
         modifiers: Modifiers {
-            logo: true,
+            control: true,
             shift: true,
             ..Modifiers::default()
         },
@@ -411,7 +410,7 @@ fn the_keyboard_alone_finds_a_process_and_asks_to_inspect_it() {
 }
 
 #[test]
-fn super_f_searches_as_you_type_and_escape_clears_the_search() {
+fn ctrl_f_searches_as_you_type_and_escape_clears_the_search() {
     let mut view = monitor_view();
     view.handle(&command('f'));
     for character in "pipe".chars() {
@@ -510,10 +509,9 @@ fn several_selected_rows_quit_together() {
         [("org.bande.Terminal".to_owned(), vec![(500, 500)])]
     );
     assert!(view.handle(&Event::Key {
-        key: Key::Character('q'),
+        key: Key::Character('e'),
         modifiers: Modifiers {
-            logo: true,
-            alt: true,
+            control: true,
             ..Modifiers::default()
         },
     }));
@@ -961,10 +959,9 @@ fn quit_asks_an_app_politely_and_signals_only_a_chosen_process() {
         ))]
     );
     assert!(view.handle(&Event::Key {
-        key: Key::Character('q'),
+        key: Key::Character('e'),
         modifiers: Modifiers {
-            logo: true,
-            alt: true,
+            control: true,
             ..Modifiers::default()
         },
     }));

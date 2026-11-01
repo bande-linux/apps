@@ -222,7 +222,6 @@ impl ForceQuitView {
         }
         match key {
             Key::Escape => self.finished = true,
-            Key::Character('w') if modifiers.logo => self.finished = true,
             Key::Enter => return self.confirm(),
             _ => return self.pass(event),
         }

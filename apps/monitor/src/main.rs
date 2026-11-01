@@ -11,6 +11,7 @@ use bande_monitor::{
     L10N, Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop,
     TOOLBAR_HEIGHT, Tab, battery_reader, due_redraws, list_sleep_blockers, stop_all,
 };
+use bande_toolkit::ui::shortcut_pressed;
 use bande_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Role, Scene, Surfaces, TextSystem, Window,
     WindowError, WindowEvent,
@@ -313,6 +314,12 @@ impl Surfaces for ActivityMonitor {
                 self.windows[index].request_redraw();
             }
             WindowEvent::Input(input) => {
+                if let Some(standard) =
+                    Standard::for_shortcut(|shortcut| shortcut_pressed(&input, shortcut))
+                {
+                    self.menu_action(index, standard.action());
+                    return;
+                }
                 if self.screens[index].handle(&input) {
                     self.windows[index].request_redraw();
                 }

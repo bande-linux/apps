@@ -752,7 +752,7 @@ impl MonitorView {
             return self.menu_from_keyboard();
         }
         match key {
-            Key::Character(digit @ '1'..='9') if modifiers.logo => {
+            Key::Character(digit @ '1'..='9') if modifiers.control => {
                 let index = digit as usize - '1' as usize;
                 match self.tabs.get(index).copied() {
                     Some(tab) => {
@@ -762,15 +762,15 @@ impl MonitorView {
                     None => false,
                 }
             }
-            Key::Character('f') if modifiers.logo => {
+            Key::Character('f') if modifiers.control => {
                 self.list.focus_widget(self.toolbar.search);
                 true
             }
-            Key::Character('q' | 'Q') if modifiers.logo && modifiers.alt => {
-                self.open_stop_dialog(false)
+            Key::Character('e') if modifiers.control => self.open_stop_dialog(false),
+            Key::Character('r' | 'R') if modifiers.control && modifiers.shift => {
+                self.show_in_files()
             }
-            Key::Character('r' | 'R') if modifiers.logo && modifiers.shift => self.show_in_files(),
-            Key::Character('i') if modifiers.logo => self.inspect(),
+            Key::Character('i') if modifiers.control => self.inspect(),
             Key::Escape if !self.monitor.search().is_empty() => {
                 self.clear_search();
                 true

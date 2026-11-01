@@ -72,15 +72,15 @@ pub fn process_menu(selected: Selected) -> Menu {
     let force_quit = item("menu-force-quit", MenuCommand::ForceQuit).enabled(selected.stoppable);
     Menu::new(vec![
         item("menu-quit", MenuCommand::Quit)
-            .shortcut("Alt+Super+Q")
+            .shortcut("Ctrl+E")
             .enabled(selected.stoppable)
             .alternate(force_quit),
         MenuItem::separator(),
         item("menu-inspect", MenuCommand::Inspect)
-            .shortcut("Super+I")
+            .shortcut("Ctrl+I")
             .enabled(selected.inspectable),
         item("menu-show-in-files", MenuCommand::ShowInFiles)
-            .shortcut("Shift+Super+R")
+            .shortcut("Shift+Ctrl+R")
             .enabled(selected.located),
         MenuItem::separator(),
         item("menu-copy-name", MenuCommand::CopyName),
@@ -122,7 +122,7 @@ pub fn app_menus(tabs: &[Tab], shown: Filter) -> Vec<Entry> {
         .zip(1..)
         .map(|(tab, digit)| {
             Entry::item(&tab.title(), MenuCommand::Show(*tab).action())
-                .shortcut(&format!("Super+{digit}"))
+                .shortcut(&format!("Ctrl+{digit}"))
         })
         .collect::<Vec<_>>();
     view.push(Entry::separator());
@@ -133,11 +133,11 @@ pub fn app_menus(tabs: &[Tab], shown: Filter) -> Vec<Entry> {
         Entry::separator(),
         entry("menu-show-cores", MenuCommand::ShowCores),
         Entry::separator(),
-        entry("menu-quit-process", MenuCommand::Quit).shortcut("Alt+Super+Q"),
+        entry("menu-quit-process", MenuCommand::Quit).shortcut("Ctrl+E"),
         entry("menu-force-quit-process", MenuCommand::ForceQuit),
-        entry("menu-inspect", MenuCommand::Inspect).shortcut("Super+I"),
+        entry("menu-inspect", MenuCommand::Inspect).shortcut("Ctrl+I"),
         Entry::separator(),
-        entry("menu-show-in-files", MenuCommand::ShowInFiles).shortcut("Shift+Super+R"),
+        entry("menu-show-in-files", MenuCommand::ShowInFiles).shortcut("Shift+Ctrl+R"),
     ]);
     vec![
         app_submenu(&L10N.tr("window-title"), Vec::new()),
@@ -147,7 +147,7 @@ pub fn app_menus(tabs: &[Tab], shown: Filter) -> Vec<Entry> {
                 entry("menu-copy-name", MenuCommand::CopyName),
                 entry("menu-copy-pid", MenuCommand::CopyPid),
                 Entry::separator(),
-                entry("menu-find", MenuCommand::Find).shortcut("Super+F"),
+                entry("menu-find", MenuCommand::Find).shortcut("Ctrl+F"),
             ],
         ),
         Entry::submenu(&L10N.tr("menu-view"), view),

@@ -69,7 +69,6 @@ impl Icons {
 
 pub fn is_secondary(pointer: &Pointer) -> bool {
     pointer.button == PointerButton::Secondary
-        || (pointer.button == PointerButton::Primary && pointer.modifiers.control)
 }
 
 pub fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
