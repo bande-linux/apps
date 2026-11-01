@@ -447,10 +447,11 @@ fn the_preview_and_a_refusal_match_their_goldens() {
             None,
             &Palette::for_scheme(scheme),
         );
-        let mut rgba = vec![0; WINDOW_SIZE.0 as usize * WINDOW_SIZE.1 as usize * 4];
+        let size = (scene.width, scene.height);
+        let mut rgba = vec![0; size.0 as usize * size.1 as usize * 4];
         CpuRenderer::new()
             .render_into(&scene, 1.0, &mut rgba)
             .expect("frame");
-        bande_golden::assert_golden_rgba!(name, WINDOW_SIZE, rgba);
+        bande_golden::assert_golden_rgba!(name, size, rgba);
     }
 }
