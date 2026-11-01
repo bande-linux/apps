@@ -1,7 +1,8 @@
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime};
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
@@ -15,7 +16,7 @@ use bande_toolkit::{
 };
 
 use crate::L10N;
-use crate::compose::{Draft, Outgoing};
+use crate::compose::{Draft, Outgoing, keep_unsent, unsent_folder};
 use crate::message::{Address, Attachment, parse_addresses};
 use crate::store::{Account, MessageId};
 use crate::ui::symbols::Symbol;
@@ -35,6 +36,7 @@ const BODY_GAP: f32 = 10.0;
 const CHIP_HEIGHT: f32 = 26.0;
 const CHIP_PADDING: f32 = 10.0;
 const CHIP_GAP: f32 = 8.0;
+const AUTOSAVE_DELAY: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Signal {
@@ -68,6 +70,10 @@ pub struct ComposeView {
     chips: Vec<(Rect, usize)>,
     token: u64,
     closed: bool,
+    unsent: Option<PathBuf>,
+    recovered: bool,
+    autosaved: Option<Draft>,
+    autosave_at: Option<Instant>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -104,7 +110,17 @@ impl ComposeView {
             draft,
             answering,
             replaces,
+            unsent,
         } = outgoing;
+        let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
+        let recovered = unsent.is_some();
+        let unsent = unsent.or_else(|| {
+            let started = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            unsent_folder().map(|folder| folder.join(format!("{started}-{token}.eml")))
+        });
         let signals = Rc::new(RefCell::new(Vec::new()));
         let mut host = FreeLayout::new();
         let host_id = Widget::id(&host);
@@ -170,8 +186,12 @@ impl ComposeView {
             sent: None,
             requests: Vec::new(),
             chips: Vec::new(),
-            token: NEXT_TOKEN.fetch_add(1, Ordering::Relaxed),
+            token,
             closed: false,
+            unsent,
+            recovered,
+            autosaved: None,
+            autosave_at: None,
         };
         let first = match view.draft.to.is_empty() {
             true => view.to,
@@ -368,6 +388,7 @@ impl ComposeView {
 
     pub fn add_attachments(&mut self, attachments: Vec<Attachment>) {
         self.draft.attachments.extend(attachments);
+        self.schedule_autosave();
     }
 
     pub fn attachments(&self) -> &[Attachment] {
@@ -467,6 +488,38 @@ impl ComposeView {
         if let Some((menu, at)) = self.ui.take_menu_request() {
             self.requests.push(ComposeRequest::ShowMenu(menu, at));
         }
+        self.schedule_autosave();
+    }
+
+    fn schedule_autosave(&mut self) {
+        if self.autosave_at.is_none() && !self.closed {
+            self.autosave_at = Some(Instant::now() + AUTOSAVE_DELAY);
+        }
+    }
+
+    pub fn autosave(&mut self, now: Instant) {
+        if self.autosave_at.is_none_or(|at| at > now) || self.closed {
+            return;
+        }
+        self.autosave_at = None;
+        let Some(path) = self.unsent.clone() else {
+            return;
+        };
+        let draft = self.compose_draft();
+        let unchanged = !self.recovered && self.autosaved.is_none() && draft == self.initial;
+        if unchanged || self.autosaved.as_ref() == Some(&draft) {
+            return;
+        }
+        match keep_unsent(&path, &draft) {
+            Ok(()) => self.autosaved = Some(draft),
+            Err(error) => tracing::warn!("cannot keep the unsent message: {error}"),
+        }
+    }
+
+    pub fn discard_unsent(&self) {
+        if !self.closed {
+            crate::compose::forget_unsent(&self.outgoing(Draft::default()));
+        }
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {
@@ -487,6 +540,7 @@ impl ComposeView {
                 .map(|(_, index)| *index)
         {
             self.draft.attachments.remove(index);
+            self.schedule_autosave();
             return true;
         }
         let handled = self.ui.handle(event);
@@ -525,6 +579,7 @@ impl ComposeView {
             draft,
             answering: self.answering,
             replaces: self.replaces,
+            unsent: self.unsent.clone(),
         }
     }
 
@@ -534,7 +589,8 @@ impl ComposeView {
 
     pub fn unsent(&self) -> Option<Outgoing> {
         let draft = self.compose_draft();
-        (self.sent.is_none() && !self.closed && draft != self.initial).then(|| self.outgoing(draft))
+        (self.sent.is_none() && !self.closed && (self.recovered || draft != self.initial))
+            .then(|| self.outgoing(draft))
     }
 
     pub fn take_requests(&mut self) -> Vec<ComposeRequest> {
@@ -554,7 +610,10 @@ impl ComposeView {
     }
 
     pub fn deadline(&self) -> Option<Instant> {
-        self.ui.deadline()
+        [self.ui.deadline(), self.autosave_at]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     pub fn accessibility(&self) -> TreeUpdate {

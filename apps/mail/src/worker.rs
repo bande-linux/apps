@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::compose::{Draft, Outgoing, build};
+use crate::compose::{Draft, Outgoing, build, forget_unsent};
 use crate::error::{Error, Result};
 use crate::imap::{Flag, Role, Session};
 use crate::net::{Closer, Network};
@@ -431,7 +431,11 @@ impl Runner {
             }
             Command::Body(id) => self.body(*id),
             Command::Send(outgoing) => self.send(outgoing),
-            Command::SaveDraft(outgoing) => self.save_draft(&outgoing.draft, outgoing.replaces),
+            Command::SaveDraft(outgoing) => {
+                self.save_draft(&outgoing.draft, outgoing.replaces)?;
+                forget_unsent(outgoing);
+                Ok(())
+            }
             Command::Password(_) | Command::Stop => Ok(()),
         }
     }
@@ -568,6 +572,7 @@ impl Runner {
             draft,
             answering,
             replaces,
+            ..
         } = outgoing;
         let (answering, replaces) = (*answering, *replaces);
         let raw = build(draft, &jiff::Zoned::now());
@@ -583,6 +588,7 @@ impl Runner {
                 message: &raw,
             },
         )?;
+        forget_unsent(outgoing);
         self.emit(Event::Sent(self.account.id));
         let mut kept = self.file_sent(&raw, answering, replaces);
         if matches!(&kept, Err(error) if error.is_connection()) {

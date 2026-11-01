@@ -10,9 +10,9 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | General | Default email reader | Mailto handler via Settings → Default Apps; the General tab points there |
 | General | Check for new messages | Not needed: IMAP IDLE on the Inbox, 5 min poll without IDLE, 15 min full sync |
 | General | New message sound / notifications | Have: toggles for notifications and their sound |
-| General | Downloads folder, remove unedited downloads | Missing: opening an attachment writes it into Downloads and leaves it there |
+| General | Downloads folder, remove unedited downloads | Opened attachments are private copies removed on quit unless edited; Save to Downloads Folder in their menu; no folder choice |
 | Accounts | Add, edit, remove IMAP/SMTP accounts | Have: list, Add Account… (setup sheet in the viewer), Remove… with confirmation, full name, server settings (user, hosts, ports, TLS/STARTTLS) checked against the servers before they are saved |
-| Accounts | Provider presets (Gmail, Outlook, iCloud, Fastmail) | Autodiscovery (provider autoconfig, ISPDB, SRV, MX) finds them; no provider hint for app passwords yet |
+| Accounts | Provider presets (Gmail, Outlook, iCloud, Fastmail) | Autodiscovery (provider autoconfig, ISPDB, SRV, MX) finds them; a refused password names the provider's app-password page |
 | Accounts | OAuth sign-in | Missing: Gmail and Outlook need app passwords |
 | Accounts | Enable/disable an account, change its password | Missing in Settings (the password sheet appears when the server refuses it) |
 | Junk | Junk filtering | Server-side only; Move to Junk files a message |
@@ -36,25 +36,24 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Flags | One flag; no colours |
 | Search | Local, over sender, recipients, subject and text; no server search or tokens |
 | Threads | Missing |
-| Attachments | Show, open (saved to Downloads), add from the portal; no Save As, no Quick Look |
+| Attachments | Show, open (private copy), Save to Downloads Folder, add from the portal; no Save As… to a chosen folder, no Quick Look |
 | Reply / forward | Have, with threading headers |
-| Drafts | Kept when a message window closes or Mail quits; not saved while typing |
+| Drafts | Kept in Drafts when a message window closes or Mail quits; a local copy is saved while typing and reopens after a crash or an offline quit |
 | Notifications | Have, Inbox only |
 | Offline | Have: full offline store, queued changes |
 | Selection | Single message only; no multiple selection, drag to mailbox, undo |
 
 ## Remaining, ranked by how much users rely on it
 
-1. Drafts saved while typing (a crash loses the message today).
-2. Attachments: open from a private cache, Save Attachment… to a chosen folder, remove unedited downloads.
-3. Multiple selection, drag to mailbox, Undo for delete/move.
-4. Conversations (threads) in the list and the reader.
-5. App-password hint for Gmail, Outlook, iCloud and Yahoo when sign-in fails; OAuth2 later (owner decision: client IDs).
-6. Mailbox management: new, rename, delete, move to any mailbox.
-7. Mark All as Read, sort order, flag colours.
-8. Rules (move/flag/mark by sender, subject, account).
-9. Rich text compose and spelling (both need desktop services first).
-10. Enable/disable an account and change its password in Settings.
-11. Per-sender "always load remote content"; a privacy proxy for remote pictures.
-12. Message font and size, fixed-width plain text.
-13. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
+1. Save Attachment… to a chosen folder (needs a portal SaveFile chooser) and Save All.
+2. Multiple selection, drag to mailbox, Undo for delete/move.
+3. Conversations (threads) in the list and the reader.
+4. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses passwords.
+5. Mailbox management: new, rename, delete, move to any mailbox.
+6. Sort order, flag colours (Mark All as Read is in the Mailbox menu).
+7. Rules (move/flag/mark by sender, subject, account).
+8. Rich text compose and spelling (both need desktop services first).
+9. Enable/disable an account and change its password in Settings.
+10. Per-sender "always load remote content"; a privacy proxy for remote pictures.
+11. Message font and size, fixed-width plain text.
+12. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).

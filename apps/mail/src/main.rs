@@ -11,7 +11,7 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_settings::{Stored, settings_folder};
 use bande_inbox::Inbox;
 use bande_mail::L10N;
-use bande_mail::compose::{Outgoing, from_mailto};
+use bande_mail::compose::{Outgoing, from_mailto, keep_unsent, left_unsent};
 use bande_mail::message::Attachment;
 use bande_mail::settings::{Change, MailSettings, listen};
 use bande_mail::ui::{
@@ -142,7 +142,10 @@ impl View for Pane {
         }
     }
 
-    fn tick(&mut self, _window: &mut Window, _now: Instant) -> bool {
+    fn tick(&mut self, _window: &mut Window, now: Instant) -> bool {
+        if let Self::Compose(view) = self {
+            view.autosave(now);
+        }
         true
     }
 
@@ -207,6 +210,14 @@ fn announce(summary: String, body: String, sound: bool) {
         });
     if let Err(error) = spawned {
         tracing::warn!("cannot notify: {error}");
+    }
+}
+
+fn keep_locally(outgoing: &Outgoing) {
+    if let Some(path) = &outgoing.unsent
+        && let Err(error) = keep_unsent(path, &outgoing.draft)
+    {
+        tracing::warn!("cannot keep the unsent message: {error}");
     }
 }
 
@@ -375,6 +386,7 @@ impl Mail {
             }
         }
         if let Some(outgoing) = sent {
+            keep_locally(&outgoing);
             let delivered =
                 main_view(cx, self.main, &mut self.parked).is_some_and(|main| main.send(outgoing));
             if !delivered {
@@ -466,12 +478,20 @@ impl Mail {
 
     fn keep_draft(&mut self, cx: &mut Cx<Self>, window: WindowId) {
         let unsent = match cx.window(window) {
-            Some((_, Pane::Compose(view))) => view.unsent(),
+            Some((_, Pane::Compose(view))) => {
+                let unsent = view.unsent();
+                if unsent.is_none() {
+                    view.discard_unsent();
+                }
+                unsent
+            }
             _ => None,
         };
-        if let Some(outgoing) = unsent
-            && !main_view(cx, self.main, &mut self.parked)
-                .is_some_and(|main| main.save_draft(outgoing))
+        let Some(outgoing) = unsent else {
+            return;
+        };
+        keep_locally(&outgoing);
+        if !main_view(cx, self.main, &mut self.parked).is_some_and(|main| main.save_draft(outgoing))
         {
             tracing::warn!("no account keeps drafts for this address");
         }
@@ -552,6 +572,9 @@ impl Program for Mail {
             mail.open_argument(cx, &argument);
         }
         mail.serve(cx, main);
+        for outgoing in left_unsent() {
+            mail.open_compose(cx, outgoing);
+        }
         Ok(mail)
     }
 

@@ -2,7 +2,7 @@
 
 From the pre-release review of Mail and Calendar and the apps component review (2026-11-01).
 Fixed items are in git history. Before tagging `mail-v0.1.0` and `calendar-v0.1.0`, decide the
-medium items; only the 412 conflict and offline drafts on quit lose data.
+medium items; only the 412 conflict loses data.
 
 ## All apps
 - Mail and Calendar wake about twice a second at idle (likely a toolkit thread); trace in the desktop.
@@ -24,7 +24,7 @@ medium items; only the 412 conflict and offline drafts on quit lose data.
 - Medium: every IDLE wake runs `UID SEARCH ALL` and FETCH FLAGS on the whole Inbox (no CONDSTORE/QRESYNC).
 - Medium: after the first sync (5000 headers) the rest is fetched, and bodies under 2 MB are fetched ahead in every folder.
 - Medium: SRV/MX discovery trusts unauthenticated DNS; confirm a host outside the address's domain.
-- Medium: message parsing runs on the UI thread; drafts that cannot reach the server on quit are lost.
+- Medium: message parsing runs on the UI thread.
 - Medium: a concurrent sync can flip a local Seen flag back until the queued change is flushed.
 - Medium: the unified Inbox is loaded twice before the first frame.
 - Low: without UIDPLUS, `EXPUNGE` removes every `\Deleted` message in the folder.

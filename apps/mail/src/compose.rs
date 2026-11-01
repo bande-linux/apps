@@ -1,4 +1,6 @@
 use std::hash::{BuildHasher, RandomState};
+use std::io;
+use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64;
 use jiff::Zoned;
@@ -27,6 +29,7 @@ pub struct Outgoing {
     pub draft: Draft,
     pub answering: Option<MessageId>,
     pub replaces: Option<MessageId>,
+    pub unsent: Option<PathBuf>,
 }
 
 impl Draft {
@@ -123,6 +126,65 @@ pub fn signed(body: &str, signature: &str) -> String {
         "" => body.to_owned(),
         signature => format!("\n\n{signature}{body}"),
     }
+}
+
+const MAX_UNSENT: u64 = 256 << 20;
+
+pub fn unsent_folder() -> Option<PathBuf> {
+    bande_xdg::data_home().map(|data| data.join("bande-mail/unsent"))
+}
+
+pub fn keep_unsent(path: &Path, draft: &Draft) -> io::Result<()> {
+    let message = build(draft, &Zoned::now());
+    bande_xdg::replace_file(path, &String::from_utf8_lossy(&message))
+}
+
+pub fn forget_unsent(outgoing: &Outgoing) {
+    if let Some(path) = &outgoing.unsent
+        && let Err(error) = std::fs::remove_file(path)
+        && error.kind() != io::ErrorKind::NotFound
+    {
+        tracing::warn!("cannot remove {}: {error}", path.display());
+    }
+}
+
+fn recovered(raw: &[u8]) -> Draft {
+    let content = Content::parse(raw);
+    let body = content.text().replace("\r\n", "\n");
+    let envelope = content.envelope;
+    Draft {
+        from: envelope.from.into_iter().next().unwrap_or_default(),
+        to: envelope.to,
+        cc: envelope.cc,
+        bcc: Vec::new(),
+        subject: envelope.subject,
+        body,
+        in_reply_to: envelope.references.last().cloned(),
+        references: envelope.references,
+        attachments: content.attachments,
+    }
+}
+
+pub fn left_unsent() -> Vec<Outgoing> {
+    let Some(entries) = unsent_folder().and_then(|folder| std::fs::read_dir(folder).ok()) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "eml"))
+        .filter(|path| std::fs::metadata(path).is_ok_and(|metadata| metadata.len() <= MAX_UNSENT))
+        .filter_map(|path| {
+            let raw = std::fs::read(&path)
+                .inspect_err(|error| tracing::warn!("cannot read {}: {error}", path.display()))
+                .ok()?;
+            Some(Outgoing {
+                draft: recovered(&raw),
+                unsent: Some(path),
+                ..Outgoing::default()
+            })
+        })
+        .collect()
 }
 
 fn decoded(text: &str) -> String {

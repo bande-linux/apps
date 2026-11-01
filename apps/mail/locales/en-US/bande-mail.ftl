@@ -72,6 +72,11 @@ setup-missing-password = Enter your password.
 setup-missing-servers = Enter both server names.
 setup-exists = This account is already set up.
 setup-wrong-password = The user name or password is incorrect.
+hint-google = Google needs an app password for Mail: turn on 2-Step Verification, then create one at myaccount.google.com/apppasswords.
+hint-microsoft = Outlook.com and Microsoft 365 may refuse passwords from mail apps; Mail cannot sign in with Microsoft yet.
+hint-icloud = iCloud needs an app-specific password: create one at account.apple.com under Sign-In and Security.
+hint-yahoo = Yahoo and AOL need an app password: create one in your account's security settings.
+hint-fastmail = Fastmail needs an app password: create one in Settings → Privacy & Security.
 setup-no-servers = Mail could not reach the servers: { $reason }
 
 compose-title = New Message
@@ -89,6 +94,8 @@ button-ok = OK
 
 menu-file = File
 menu-message = Message
+menu-mailbox = Mailbox
+menu-mark-all-read = Mark All as Read
 menu-add-account = Add Account…
 menu-find = Find
 menu-toggle-read = Mark as Read or Unread
@@ -100,6 +107,8 @@ compose-attach = Attach Files
 compose-attach-title = Attach Files
 compose-too-large = { $name } is larger than { $limit } and was not attached.
 load-remote-content = Load Remote Content
+attachment-open = Open Attachment
+attachment-save = Save to Downloads Folder
 remote-content-loading = Loading remote content…
 
 settings-title = Settings

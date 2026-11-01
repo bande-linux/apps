@@ -16,7 +16,6 @@ pub fn app_menus() -> Vec<Entry> {
             &L10N.tr("menu-file"),
             vec![
                 item("action-compose", "compose"),
-                item("action-get-mail", "get-mail"),
                 Entry::separator(),
                 item("menu-add-account", "add-account"),
                 Entry::separator(),
@@ -24,6 +23,14 @@ pub fn app_menus() -> Vec<Entry> {
             ],
         ),
         edit_submenu(Vec::new()),
+        Entry::submenu(
+            &L10N.tr("menu-mailbox"),
+            vec![
+                item("action-get-mail", "get-mail"),
+                Entry::separator(),
+                item("menu-mark-all-read", "mark-all-read"),
+            ],
+        ),
         Entry::submenu(
             &L10N.tr("menu-message"),
             vec![
