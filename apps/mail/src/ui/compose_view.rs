@@ -142,7 +142,7 @@ impl ComposeView {
             )
         });
         let body = host.insert(
-            TextView::new(&L10N.tr("compose-placeholder"), &draft.body, |_| {}),
+            TextView::new(&L10N.tr("compose-placeholder"), &draft.body, |_| {}).borderless(),
             Rect::default(),
         );
         let mut view = Self {
@@ -219,13 +219,19 @@ impl ComposeView {
         let mut fields = vec![self.to, self.cc, self.subject];
         fields.extend(self.from);
         for id in fields {
+            let height = self
+                .ui
+                .widget_ref::<TextField>(id)
+                .map(|field| field.frame().height)
+                .filter(|height| *height > 0.0)
+                .unwrap_or(TEXT_FIELD_HEIGHT);
             frames.push((
                 id,
                 Rect::new(
                     field_x,
-                    y + ((FIELD_ROW - TEXT_FIELD_HEIGHT) / 2.0).round(),
+                    y + ((FIELD_ROW - height) / 2.0).round(),
                     field_width,
-                    TEXT_FIELD_HEIGHT,
+                    height,
                 ),
             ));
             y += FIELD_ROW;
@@ -260,14 +266,21 @@ impl ComposeView {
 
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
         self.size = (width as f32, height as f32);
-        let frames = self.frames();
-        let host = self.host;
-        if let Some(host) = self.ui.widget_as::<FreeLayout>(host) {
-            for (id, frame) in frames {
-                host.set_frame(id, frame);
+        let mut placed = Vec::new();
+        for _ in 0..3 {
+            let frames = self.frames();
+            if frames == placed {
+                break;
             }
+            let host = self.host;
+            if let Some(host) = self.ui.widget_as::<FreeLayout>(host) {
+                for (id, frame) in &frames {
+                    host.set_frame(*id, *frame);
+                }
+            }
+            self.ui.layout(Size::new(self.size.0, self.size.1));
+            placed = frames;
         }
-        self.ui.layout(Size::new(self.size.0, self.size.1));
         let (controls, sheet) = self.ui.paint_layers(width, height);
         let palette = self.palette;
         let mut items = Vec::new();
