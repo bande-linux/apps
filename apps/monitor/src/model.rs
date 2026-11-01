@@ -461,9 +461,7 @@ impl Column {
             Column::Threads => sum(|process| f64::from(process.threads)),
             Column::Pid => Measure::Number(f64::from(leader.pid)),
             Column::User => Measure::Text(leader.identity.user.clone()),
-            Column::Memory => {
-                sum(|process| process.proportional.unwrap_or(process.resident) as f64)
-            }
+            Column::Memory => sum(|process| process.footprint.unwrap_or(process.resident) as f64),
             Column::Resident => sum(|process| process.resident as f64),
             Column::Read => disk(|rates| rates.read_per_second),
             Column::Written => disk(|rates| rates.written_per_second),
@@ -870,7 +868,7 @@ impl Monitor {
         changed
     }
 
-    pub fn measures_proportional_memory(&self) -> bool {
+    pub fn measures_footprint(&self) -> bool {
         self.columns().contains(&Column::Memory)
     }
 

@@ -599,7 +599,7 @@ impl MonitorView {
 
     fn measures(&self) -> [bool; 4] {
         [
-            self.monitor.measures_proportional_memory(),
+            self.monitor.measures_footprint(),
             self.monitor.measures_gpu(),
             self.monitor.measures_wakeups(),
             self.monitor.measures_disk(),
@@ -1439,8 +1439,8 @@ impl Screen for MonitorView {
         self.monitor.measures_disk()
     }
 
-    fn measures_proportional_memory(&self) -> bool {
-        self.monitor.measures_proportional_memory()
+    fn measures_footprint(&self) -> bool {
+        self.monitor.measures_footprint()
     }
 
     fn measures_wakeups(&self) -> bool {

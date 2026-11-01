@@ -298,8 +298,8 @@ impl InspectorView {
                 format_bytes(process.resident),
             ),
         ];
-        if let Some(proportional) = process.proportional {
-            resources.push(row("memory", "column-memory", format_bytes(proportional)));
+        if let Some(footprint) = process.footprint {
+            resources.push(row("memory", "column-memory", format_bytes(footprint)));
         }
         if let Some(size) = self.details.virtual_size {
             resources.push(row("virtual", "inspector-virtual", format_bytes(size)));
@@ -674,7 +674,7 @@ impl Screen for InspectorView {
         self.refresh();
     }
 
-    fn measures_proportional_memory(&self) -> bool {
+    fn measures_footprint(&self) -> bool {
         false
     }
 
