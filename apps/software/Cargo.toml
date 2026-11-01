@@ -1,0 +1,38 @@
+[package]
+name = "bande-software"
+description = "Bande Software: browse, search and install apps from Debian and Flathub"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+tracing.workspace = true
+bande-catalog.workspace = true
+bande-l10n.workspace = true
+bande-log.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+
+[dev-dependencies]
+bande-golden.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "admin"
+depends = "$auto, appstream, fonts-inter"
+extended-description = """\
+The app store of the Bande desktop: browse and search the apps Debian and \
+Flathub describe with AppStream, read about them before installing, and \
+hide apps that need X11, which Bande does not run."""
+assets = [
+    ["target/release/bande-software", "usr/bin/", "755"],
+    ["data/org.bande.Software.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.Software.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["data/org.bande.Software.metainfo.xml", "usr/share/metainfo/", "644"],
+]
+
+[lints]
+workspace = true

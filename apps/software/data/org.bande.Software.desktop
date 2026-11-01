@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Software
+Comment=Find and install apps
+Icon=org.bande.Software
+Exec=bande-software
+Categories=System;PackageManager;
+Keywords=apps;store;install;flatpak;

@@ -24,14 +24,15 @@ fn rank(query: &Query, app: &Component) -> Option<(Field, u32)> {
         .or_else(|| loose(&app.summary).map(|score| (Field::Summary, score)))
 }
 
-pub fn search<'a>(apps: &'a [Component], text: &str) -> Vec<&'a Component> {
+pub fn search(apps: &[Component], text: &str) -> Vec<usize> {
     let Some(query) = Query::new(text) else {
-        return apps.iter().collect();
+        return (0..apps.len()).collect();
     };
     let mut ranked: Vec<_> = apps
         .iter()
-        .filter_map(|app| rank(&query, app).map(|rank| (rank, app)))
+        .enumerate()
+        .filter_map(|(index, app)| rank(&query, app).map(|rank| (rank, &app.name, index)))
         .collect();
-    ranked.sort_by(|(left, a), (right, b)| right.cmp(left).then_with(|| a.name.cmp(&b.name)));
-    ranked.into_iter().map(|(_, app)| app).collect()
+    ranked.sort_by(|(left, a, _), (right, b, _)| right.cmp(left).then_with(|| a.cmp(b)));
+    ranked.into_iter().map(|(_, _, index)| index).collect()
 }

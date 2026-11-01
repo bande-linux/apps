@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::path::{Path, PathBuf};
 
 use bande_catalog::{
@@ -175,6 +176,11 @@ fn cached_icons_are_preferred_and_missing_ones_fall_back_to_stock() {
         .join("icons/hicolor/scalable/apps/mini.xterm.svg");
     std::fs::create_dir_all(stock.parent().expect("parent")).expect("icon directory");
     std::fs::write(&stock, "<svg/>").expect("icon");
+    std::fs::write(
+        themes.path().join("icons/hicolor/index.theme"),
+        "[Icon Theme]\nName=Hicolor\nDirectories=scalable/apps\n\n[scalable/apps]\nSize=128\nMinSize=8\nMaxSize=512\nType=Scalable\n",
+    )
+    .expect("index.theme");
     let xterm = find(&apps, "debian-xterm")
         .map(|app| app.icons.clone())
         .unwrap_or_default();
@@ -223,7 +229,7 @@ fn search_ranks_names_before_keywords_before_summaries() {
     let keys = |text| {
         search(&apps, text)
             .into_iter()
-            .map(Component::key)
+            .filter_map(|index| apps.get(index).map(Component::key))
             .collect::<Vec<_>>()
     };
     assert_eq!(keys("calc"), ["org.gnome.Calculator"]);
