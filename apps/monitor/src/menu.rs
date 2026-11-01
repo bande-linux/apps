@@ -140,7 +140,11 @@ pub fn app_menus(tabs: &[Tab], shown: Filter) -> Vec<Entry> {
         entry("menu-show-in-files", MenuCommand::ShowInFiles).shortcut("Shift+Ctrl+R"),
     ]);
     vec![
-        app_submenu(&L10N.tr("window-title"), Vec::new()),
+        app_submenu(
+            &L10N.tr("window-title"),
+            env!("CARGO_PKG_VERSION"),
+            Vec::new(),
+        ),
         Entry::submenu(
             &L10N.tr("menu-edit"),
             vec![

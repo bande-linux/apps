@@ -242,13 +242,7 @@ fn save_state(text: &str) {
     let Some(file) = state_file() else {
         return;
     };
-    let staging = file.with_extension("new");
-    let written = file
-        .parent()
-        .map_or(Ok(()), std::fs::create_dir_all)
-        .and_then(|()| std::fs::write(&staging, text))
-        .and_then(|()| std::fs::rename(&staging, &file));
-    if let Err(error) = written {
+    if let Err(error) = bande_xdg::replace_file(&file, text) {
         tracing::warn!("cannot remember the view: {error}");
     }
 }
