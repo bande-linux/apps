@@ -84,7 +84,7 @@ pub fn read(path: &Path) -> Option<Deb> {
         version: (*version).to_owned(),
         arch: (*arch).to_owned(),
         maintainer: (*maintainer).to_owned(),
-        installed_size: size.trim().parse::<u64>().unwrap_or(0) * 1024,
+        installed_size: size.trim().parse::<u64>().unwrap_or(0).saturating_mul(1024),
         homepage: (*homepage).to_owned(),
         summary,
         description,
