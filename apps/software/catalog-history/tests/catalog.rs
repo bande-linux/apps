@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use bande_catalog::{
     Block, Bundle, Category, Component, Icon, flatpak_files, flatpak_needs_x11, icon_path, load,
-    mark_x11, read_text, search, system_files, x11_only_packages,
+    mark_x11, parse_dep11, read_text, search, system_files, x11_only_packages,
 };
 use bande_xdg::Locale;
 
@@ -259,4 +259,18 @@ fn freedesktop_categories_map_to_store_categories() {
         [Category::MusicAndVideo, Category::Internet]
     );
     assert!(categories(&["GTK"]).is_empty());
+}
+
+#[test]
+fn a_dep11_file_with_a_syntax_error_is_read_up_to_the_error_and_no_further() {
+    let (sender, parsed) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let yaml = "---\nFile: DEP-11\n---\nType: desktop-application\nID: a\nName: [\n---\nID: b\n";
+        let _ = sender.send(parse_dep11(yaml, Path::new("/icons"), None).len());
+    });
+    assert!(
+        parsed
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .is_ok()
+    );
 }

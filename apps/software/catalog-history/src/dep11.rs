@@ -193,10 +193,17 @@ pub fn parse(yaml: &str, icon_root: &Path, locale: Option<&Locale>) -> Vec<Compo
         media: String::new(),
     };
     let mut components = Vec::new();
+    let mut failed_at = None;
     for raw in serde_yaml_ng::Deserializer::from_str(yaml) {
         let document = match Document::deserialize(raw) {
             Ok(document) => document,
             Err(error) => {
+                let at = error.location().map(|location| location.index());
+                if at.is_some() && at == failed_at {
+                    tracing::warn!(%error, "stopped reading a broken DEP-11 file");
+                    break;
+                }
+                failed_at = at;
                 tracing::debug!(%error, "skipping DEP-11 document");
                 continue;
             }
