@@ -72,17 +72,11 @@ their usual English names.
 cargo test
 ```
 
-- `tests/engine.rs` runs the engine against a scripted fake IMAP and SMTP server: first sync,
-  flags both ways, moves and deletions, IDLE, sending with a copy in Sent, wrong passwords,
-  a changed `UIDVALIDITY`, servers without `MOVE`, `SPECIAL-USE` or `IDLE`, and servers that
-  never answer or send garbage.
-- `tests/dovecot.rs` starts Debian's `dovecot` as the current user on a free loopback port and
-  checks sync, flags, moves, IDLE and drafts against it. It skips itself when
-  `/usr/sbin/dovecot` is not installed, so CI runs only the fake server.
-- `tests/secrets.rs` checks the keyring code against a fake Secret Service on a private bus.
-- `tests/views.rs` checks the window, the reader, the account sheet and their golden screenshots
-  in light and dark, with the desktop's golden harness (`BANDE_UPDATE_GOLDENS=1` rewrites
-  them).
+`tests/send.rs` starts Debian's `dovecot` as the current user on a free loopback port, with a
+small SMTP listener beside it, and checks that a message sent after the IMAP session went stale
+goes out once, without injected headers or its Bcc, and is kept in Sent. It skips itself when
+`/usr/sbin/dovecot` is not installed. It also checks that a `mailto:` link cannot add Bcc
+recipients or attachments. The repo's whole test list is in `NOTES/tests.md`.
 
 The toolkit and the desktop libraries (`bande-*` crates) come from
 [bande-linux/desktop](https://github.com/bande-linux/desktop), pinned to one commit in

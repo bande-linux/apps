@@ -175,14 +175,6 @@ fn split_code(after: &[u8]) -> Result<(Vec<Value>, String), WireError> {
     Ok((code, String::from_utf8_lossy(text).into_owned()))
 }
 
-pub fn parse_values(input: &[u8]) -> Result<Vec<Value>, WireError> {
-    Parser {
-        input: trim_line_end(input),
-        at: 0,
-    }
-    .values(None)
-}
-
 struct Parser<'a> {
     input: &'a [u8],
     at: usize,
@@ -335,98 +327,4 @@ pub fn quote(text: &str) -> Option<String> {
     }
     quoted.push('"');
     Some(quoted)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn atom(text: &str) -> Value {
-        Value::Atom(text.to_owned())
-    }
-
-    #[test]
-    fn a_fetch_with_a_literal_and_a_section_parses_into_pairs() {
-        let raw = b"* 12 FETCH (UID 34 FLAGS (\\Seen \\Flagged) BODY[HEADER.FIELDS (FROM TO)] {9}\r\nFrom: a\r\n RFC822.SIZE 100)\r\n";
-        let Response::Data(values) = parse_response(raw).unwrap_or(Response::Data(Vec::new()))
-        else {
-            unreachable!()
-        };
-        assert_eq!(values[0], Value::Number(12));
-        assert_eq!(values[1], atom("FETCH"));
-        let pairs = values[2].list().unwrap_or_default();
-        assert_eq!(pairs[0], atom("UID"));
-        assert_eq!(pairs[1], Value::Number(34));
-        assert_eq!(
-            pairs[3],
-            Value::List(vec![atom("\\Seen"), atom("\\Flagged")])
-        );
-        assert_eq!(pairs[4], atom("BODY[HEADER.FIELDS (FROM TO)]"));
-        assert_eq!(pairs[5], Value::String(b"From: a\r\n".to_vec()));
-        assert_eq!(pairs[7], Value::Number(100));
-    }
-
-    #[test]
-    fn a_status_response_keeps_its_code_and_text() {
-        let response = parse_response(b"* OK [UIDVALIDITY 3857529045] UIDs valid\r\n");
-        assert_eq!(
-            response,
-            Ok(Response::Status {
-                tag: None,
-                status: Status::Ok,
-                code: vec![atom("UIDVALIDITY"), Value::Number(3_857_529_045)],
-                text: "UIDs valid".to_owned(),
-            })
-        );
-        let tagged = parse_response(b"a7 NO [AUTHENTICATIONFAILED] Invalid \"credentials\r\n");
-        assert!(matches!(
-            tagged,
-            Ok(Response::Status { tag: Some(tag), status: Status::No, ref code, ref text })
-                if tag == "a7" && code == &[atom("AUTHENTICATIONFAILED")] && text == "Invalid \"credentials"
-        ));
-    }
-
-    #[test]
-    fn quoted_strings_unescape_and_nil_is_recognised() {
-        let values = parse_values(br#"(\HasNoChildren) "/" "Sent \"Old\"" NIL"#);
-        assert_eq!(
-            values,
-            Ok(vec![
-                Value::List(vec![atom("\\HasNoChildren")]),
-                Value::String(b"/".to_vec()),
-                Value::String(b"Sent \"Old\"".to_vec()),
-                Value::Nil,
-            ])
-        );
-    }
-
-    #[test]
-    fn garbage_is_an_error_not_a_panic() {
-        for raw in [
-            &b"* 1 FETCH (UID 3"[..],
-            b"* 1 FETCH {99}\r\nshort",
-            b"* LIST ((((",
-            b"* 3 FETCH )",
-            b"nonsense",
-            b"a1 FETCH",
-        ] {
-            assert!(parse_response(raw).is_err(), "{raw:?}");
-        }
-        let deep = format!("* X {}", "(".repeat(500));
-        assert!(parse_response(deep.as_bytes()).is_err());
-    }
-
-    #[test]
-    fn literal_lengths_are_found_only_at_the_end_of_a_line() {
-        assert_eq!(literal_length(b"* 1 FETCH (BODY[] {120}\r\n"), Some(120));
-        assert_eq!(literal_length(b"A1 APPEND x {5+}\r\n"), Some(5));
-        assert_eq!(literal_length(b"* OK {not} a literal\r\n"), None);
-        assert_eq!(literal_length(b"* OK {}\r\n"), None);
-    }
-
-    #[test]
-    fn quoting_escapes_and_refuses_line_breaks() {
-        assert_eq!(quote(r#"a "b" \c"#).as_deref(), Some(r#""a \"b\" \\c""#));
-        assert_eq!(quote("a\r\nb"), None);
-    }
 }

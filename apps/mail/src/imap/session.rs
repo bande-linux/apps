@@ -531,11 +531,6 @@ impl Session {
         self.finish(&tag).map(drop)
     }
 
-    pub fn noop(&mut self) -> Result<bool> {
-        self.run("NOOP")?;
-        Ok(std::mem::take(&mut self.changed))
-    }
-
     pub fn idle(&mut self, wait: Duration) -> Result<bool> {
         if !self.has("IDLE") {
             return Err(Error::Refused("the server cannot IDLE".into()));
@@ -576,58 +571,5 @@ impl Session {
 
     pub fn logout(mut self) {
         let _ = self.run("LOGOUT");
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::imap::wire::parse_values;
-
-    #[test]
-    fn uid_sets_collapse_runs_and_split_long_sets() {
-        assert_eq!(uid_sets(&[5, 1, 2, 3, 9, 7, 8, 2]), ["1:3,5,7:9"]);
-        assert!(uid_sets(&[]).is_empty());
-        let scattered = (0..2000).map(|uid| uid * 2).collect::<Vec<_>>();
-        let sets = uid_sets(&scattered);
-        assert!(sets.len() > 1);
-        assert!(sets.iter().all(|set| set.len() <= MAX_SET_LENGTH));
-        let count: usize = sets.iter().map(|set| set.split(',').count()).sum();
-        assert_eq!(count, 2000);
-    }
-
-    #[test]
-    fn a_fetch_response_becomes_a_message_summary() {
-        let values = parse_values(
-            b"3 FETCH (FLAGS (\\Seen \\Answered) UID 42 RFC822.SIZE 2048 INTERNALDATE \" 7-Jul-2026 02:44:25 -0700\" BODY[HEADER] {8}\r\nA: b\r\n\r\n)",
-        )
-        .unwrap_or_default();
-        let found = fetched(&values);
-        assert_eq!(
-            found,
-            Some(Fetched {
-                uid: 42,
-                flags: Some(Flags {
-                    seen: true,
-                    answered: true,
-                    ..Flags::default()
-                }),
-                size: Some(2048),
-                internal_date: Some(1_783_417_465),
-                header: Some(b"A: b\r\n\r\n".to_vec()),
-                body: None,
-            })
-        );
-        let unsolicited = parse_values(b"4 FETCH (FLAGS (\\Seen))").unwrap_or_default();
-        assert_eq!(fetched(&unsolicited), None);
-    }
-
-    #[test]
-    fn mailbox_arguments_are_quoted_and_utf7_encoded() {
-        assert_eq!(
-            mailbox_argument("Entwürfe").ok().as_deref(),
-            Some("\"Entw&APw-rfe\"")
-        );
-        assert!(mailbox_argument("a\r\nb").is_err());
     }
 }

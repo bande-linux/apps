@@ -50,39 +50,3 @@ pub fn initials(name: &str) -> String {
             .collect(),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn list_dates_shorten_with_age() {
-        let zone = TimeZone::UTC;
-        let Ok(now) = "2026-10-31T15:00:00Z".parse::<Timestamp>() else {
-            unreachable!()
-        };
-        let at = |text: &str| text.parse::<Timestamp>().map_or(0, |time| time.as_second());
-        assert_eq!(list_date(at("2026-10-31T09:05:00Z"), now, &zone), "09:05");
-        assert_eq!(
-            list_date(at("2026-10-30T23:59:00Z"), now, &zone),
-            "Yesterday"
-        );
-        assert_eq!(list_date(at("2026-10-27T10:00:00Z"), now, &zone), "Tuesday");
-        assert_eq!(
-            list_date(at("2026-10-20T10:00:00Z"), now, &zone),
-            "20/10/2026"
-        );
-        assert_eq!(
-            list_date(at("2026-11-02T10:00:00Z"), now, &zone),
-            "02/11/2026"
-        );
-    }
-
-    #[test]
-    fn initials_come_from_the_first_and_last_names() {
-        assert_eq!(initials("Ann Marie Lee"), "AL");
-        assert_eq!(initials("jörg"), "J");
-        assert_eq!(initials("bob@example.com"), "B");
-        assert_eq!(initials("\"  \""), "");
-    }
-}

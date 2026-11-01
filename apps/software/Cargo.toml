@@ -25,11 +25,6 @@ bande-search.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 
-[dev-dependencies]
-tempfile.workspace = true
-bande-golden.workspace = true
-bande-test-bus.workspace = true
-
 [lints]
 workspace = true
 

@@ -195,31 +195,3 @@ pub fn system_catalog() -> Vec<Component> {
     mark_x11(&mut apps, &x11_only);
     apps
 }
-
-pub fn icon_path(icons: &[Icon], size: u32, data_dirs: &[PathBuf]) -> Option<PathBuf> {
-    let mut cached: Vec<_> = icons
-        .iter()
-        .filter_map(|icon| match icon {
-            Icon::Cached { path, size } if path.is_file() => Some((*size, path)),
-            _ => None,
-        })
-        .collect();
-    cached.sort_by_key(|(found, _)| (*found < size, found.abs_diff(size)));
-    cached
-        .first()
-        .map(|(_, path)| (*path).clone())
-        .or_else(|| {
-            icons.iter().find_map(|icon| match icon {
-                Icon::Local(path) if path.is_file() => Some(path.clone()),
-                _ => None,
-            })
-        })
-        .or_else(|| {
-            icons.iter().find_map(|icon| match icon {
-                Icon::Stock(name) => {
-                    bande_xdg::find_icon(name, size, &bande_xdg::ICON_THEMES, data_dirs)
-                }
-                _ => None,
-            })
-        })
-}

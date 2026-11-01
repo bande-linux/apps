@@ -176,11 +176,6 @@ impl MailView {
         Ok(view)
     }
 
-    pub fn set_clock(&mut self, now: Timestamp, zone: TimeZone) {
-        self.now = Some(now);
-        self.zone = zone;
-    }
-
     pub fn start(&mut self) {
         for (account, _) in &self.accounts {
             let source = keyring_password(account.email.clone(), account.imap.host.clone());

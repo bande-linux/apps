@@ -32,8 +32,6 @@ zeroize.workspace = true
 [dev-dependencies]
 rustix = { workspace = true, features = ["process"] }
 tempfile.workspace = true
-bande-golden.workspace = true
-bande-test-bus.workspace = true
 
 [lints]
 workspace = true

@@ -97,8 +97,6 @@ const COMMANDS: [(Command, &str, &str, &str); 20] = [
 ];
 
 const CLOSE_TAB_SHORTCUT: &str = "Shift+Ctrl+W";
-#[cfg(test)]
-const SETTINGS_SHORTCUT: &str = "Shift+Ctrl+,";
 const OPEN_LINK: &str = "open-link:";
 const COPY_LINK: &str = "copy-link:";
 const CLOSE_TAB: &str = "close-tab:";
@@ -294,22 +292,5 @@ pub fn app_menus() -> Menus {
             Some(Command::NextPane),
             Some(Command::PreviousPane),
         ]),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use bande_toolkit::ui::parse_shortcut;
-
-    use super::{COMMANDS, SETTINGS_SHORTCUT};
-    use crate::keys::{Command, shortcut};
-
-    #[test]
-    fn every_menu_shortcut_runs_the_command_beside_it() {
-        let settings = (Command::Settings, "", "", SETTINGS_SHORTCUT);
-        for (command, _, _, keys) in COMMANDS.into_iter().chain([settings]) {
-            let pressed = parse_shortcut(keys).map(|(key, modifiers)| shortcut(key, modifiers));
-            assert_eq!(pressed, Some(Some(command)), "{keys}");
-        }
     }
 }

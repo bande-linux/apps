@@ -421,7 +421,6 @@ dependencies = [
  "bande-app-menu",
  "bande-datetime",
  "bande-design",
- "bande-golden",
  "bande-l10n",
  "bande-toolkit",
  "bande-xdg",
@@ -474,15 +473,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bande-golden"
-version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=828e497512cedd1127e43cfe041bed9571ba9afa#828e497512cedd1127e43cfe041bed9571ba9afa"
-dependencies = [
- "image",
- "image-compare",
-]
-
-[[package]]
 name = "bande-graphics"
 version = "0.1.0"
 source = "git+https://github.com/bande-linux/desktop?rev=828e497512cedd1127e43cfe041bed9571ba9afa#828e497512cedd1127e43cfe041bed9571ba9afa"
@@ -517,10 +507,8 @@ dependencies = [
  "bande-app",
  "bande-app-menu",
  "bande-fs",
- "bande-golden",
  "bande-l10n",
  "bande-packages",
- "bande-test-bus",
  "bande-toolkit",
  "bande-xdg",
  "tempfile",
@@ -557,10 +545,8 @@ dependencies = [
  "bande-app",
  "bande-app-menu",
  "bande-fs",
- "bande-golden",
  "bande-l10n",
  "bande-notify",
- "bande-test-bus",
  "bande-toolkit",
  "bande-xdg",
  "data-encoding",
@@ -585,14 +571,11 @@ dependencies = [
  "accesskit",
  "bande-app",
  "bande-app-menu",
- "bande-golden",
  "bande-l10n",
  "bande-status",
- "bande-test-bus",
  "bande-toolkit",
  "bande-xdg",
  "rustix",
- "tempfile",
  "tracing",
  "zbus",
 ]
@@ -676,19 +659,16 @@ dependencies = [
  "accesskit",
  "bande-app",
  "bande-app-menu",
- "bande-golden",
  "bande-inbox",
  "bande-l10n",
  "bande-packages",
  "bande-search",
- "bande-test-bus",
  "bande-toolkit",
  "bande-xdg",
  "flate2",
  "roxmltree",
  "serde",
  "serde_yaml_ng",
- "tempfile",
  "tracing",
  "zbus",
 ]
@@ -748,7 +728,6 @@ dependencies = [
  "bande-app-menu",
  "bande-app-settings",
  "bande-design",
- "bande-golden",
  "bande-l10n",
  "bande-notify",
  "bande-spring",
@@ -756,15 +735,6 @@ dependencies = [
  "bande-xdg",
  "tempfile",
  "tracing",
- "zbus",
-]
-
-[[package]]
-name = "bande-test-bus"
-version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=828e497512cedd1127e43cfe041bed9571ba9afa#828e497512cedd1127e43cfe041bed9571ba9afa"
-dependencies = [
- "tempfile",
  "zbus",
 ]
 
@@ -1180,25 +1150,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ba106e844045ddc02c20768ac4b0b7cb45f2cc2ecbd833ac9f5dacb183c2055"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "crossbeam-deque"
-version = "0.8.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "622f3fc73690be383c7214310406f28a90e6edeadc3cea882f9d71e495b9711a"
-dependencies = [
- "crossbeam-epoch",
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-epoch"
-version = "0.9.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc74980687109a3b14c72fd458107bf0baa1da1a1a805e178d15501ba9b86d9d"
-dependencies = [
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -2183,18 +2134,6 @@ dependencies = [
  "png",
  "zune-core",
  "zune-jpeg",
-]
-
-[[package]]
-name = "image-compare"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "176623a137baf75908084aff53578d6336cbd932bffaf12fabe26b343eb13338"
-dependencies = [
- "image",
- "itertools 0.14.0",
- "rayon",
- "thiserror",
 ]
 
 [[package]]
@@ -3378,26 +3317,6 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation",
  "objc2-quartz-core",
-]
-
-[[package]]
-name = "rayon"
-version = "1.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d"
-dependencies = [
- "either",
- "rayon-core",
-]
-
-[[package]]
-name = "rayon-core"
-version = "1.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
-dependencies = [
- "crossbeam-deque",
- "crossbeam-utils",
 ]
 
 [[package]]

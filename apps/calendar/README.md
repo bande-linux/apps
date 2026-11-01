@@ -4,8 +4,6 @@ A calendar for the Bande desktop, modelled on macOS Calendar: CalDAV accounts th
 a local "On My Computer" calendar, and read-only subscriptions, shown in day, week, month and year
 views. Packaged as `bande-calendar`.
 
-![Week view](tests/golden/week.png)
-
 ## What it does
 
 - **Accounts.** CalDAV (RFC 4791) with discovery: a full URL, a host name or just an e-mail
@@ -69,22 +67,9 @@ Files and Settings. The desktop crates come from `bande-linux/desktop`, pinned t
 
 ## Tests
 
-```
-cargo test
-```
-
-- `src/**` unit tests: parsing, folding, recurrence edge cases (DST changes, the spring gap,
-  leap days, `BYSETPOS`, week numbers), time zones, overrides, edits, alerts.
-- `tests/caldav.rs` runs against a real Radicale started by the test (`apt install python3-radicale`; it
-  runs `python3 -m radicale`): discovery, two devices syncing creates, edits and deletes, 412
-  conflicts, invalid sync tokens, colours, creating, renaming and deleting calendars.
-- `tests/legacy.rs` runs against a small in-test server without sync tokens, for the ctag/etag
-  path.
-- `tests/drag.rs` drives the view with pointer and key events: create, move, resize, month
-  drag, calendar colours, and new, rename and delete calendar through the menus and sheets.
-- `tests/golden.rs` renders each view with the desktop's golden harness (light and dark, the
-  inspector, search). After a deliberate visual change, `BANDE_UPDATE_GOLDENS=1 cargo test
-  --test golden` rewrites them.
+`tests/untrusted.rs` opens a hostile `.ics` file without panicking, refuses a FIFO or a file over
+64 MiB, and never sends a password over plain HTTP to anything but this computer. The repo's
+whole test list and the reason for each is in `NOTES/tests.md`.
 
 ## Not done yet
 

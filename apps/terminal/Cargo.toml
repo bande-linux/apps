@@ -25,7 +25,6 @@ bande-xdg.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-bande-golden.workspace = true
 
 [lints]
 workspace = true

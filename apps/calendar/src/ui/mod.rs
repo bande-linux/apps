@@ -306,10 +306,6 @@ impl CalendarView {
         self.mini_month = day.first_of_month();
     }
 
-    pub fn focus_date(&self) -> Date {
-        self.focus
-    }
-
     pub fn set_now(&mut self, now: Zoned) {
         self.now = now;
     }

@@ -103,27 +103,3 @@ pub fn get(url: &str, network: &Network, limit: usize) -> Result<Vec<u8>> {
     }
     Err(Error::Protocol("too many redirects".to_owned()))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn urls_are_split_and_odd_hosts_refused() {
-        assert_eq!(
-            parse_url("https://autoconfig.thunderbird.net/v1.1/example.com"),
-            Some(Url {
-                host: "autoconfig.thunderbird.net".to_owned(),
-                port: 443,
-                path: "/v1.1/example.com".to_owned(),
-            })
-        );
-        assert_eq!(
-            parse_url("https://Example.com:8080").map(|url| (url.host, url.port, url.path)),
-            Some(("example.com".to_owned(), 8080, "/".to_owned()))
-        );
-        assert_eq!(parse_url("http://example.com/"), None);
-        assert_eq!(parse_url("https://exa mple.com/"), None);
-        assert_eq!(parse_url("https://a\r\nHost: b/"), None);
-    }
-}

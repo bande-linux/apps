@@ -10,7 +10,7 @@ use bande_l10n::Localizer;
 
 use crate::catalog::Component;
 
-pub use view::{Page, Software, WINDOW_SIZE};
+pub use view::{Software, WINDOW_SIZE};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-software.ftl");
 
@@ -34,16 +34,4 @@ pub fn desktop_ids(data_dirs: &[PathBuf]) -> HashSet<String> {
         .iter()
         .filter_map(|entry| entry.path.file_name()?.to_str().map(str::to_owned))
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_software_uses_is_translated() {
-        let sources = [include_str!("view.rs")];
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
 }

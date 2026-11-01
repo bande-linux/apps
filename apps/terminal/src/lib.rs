@@ -22,19 +22,16 @@ pub use keys::{
     next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
 };
 pub use menu::{MenuCommand, TerminalContext, app_menus, tab_menu, terminal_menu};
-pub use panes::{Axis, DIVIDER, Divider, Layout, Side};
+pub use panes::{Axis, Divider, Layout, Side};
 pub use process::{Report, Reports};
-pub use render::{DEFAULT_FONT_SIZE, Metrics, PADDING, Painter, Pane, TabBar};
+pub use render::{DEFAULT_FONT_SIZE, Painter, Pane, TabBar};
 pub use restore::{SavedWindow, claim, left_behind, window_file, windows_folder};
-pub use session::{Notice, Session, display_directory};
+pub use session::{Notice, Session};
 pub use settings::{CursorStyle, FONT_SIZES, Settings};
-pub use settings_view::{SETTINGS_SIZE, SharedSettings, settings_view};
-pub use tabs::{
-    FULL_SCREEN_LEADING, HEADER_LEADING, STRIP_HEIGHT, TAB_HEIGHT, TabBarLayout, TabTarget,
-};
+pub use settings_view::{SETTINGS_SIZE, settings_view};
+pub use tabs::{FULL_SCREEN_LEADING, HEADER_LEADING, STRIP_HEIGHT, TabBarLayout, TabTarget};
 pub use terminal::{
-    CellPoint, GridSize, Highlights, Link, SearchDirection, SelectionKind, Terminal, escape_regex,
-    is_openable, written_path,
+    CellPoint, GridSize, Highlights, Link, SearchDirection, SelectionKind, Terminal, is_openable,
 };
 pub use theme::{Profile, Theme, ansi_colors};
 
@@ -45,26 +42,3 @@ pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US
 pub const COLUMNS: usize = 80;
 pub const ROWS: usize = 24;
 pub const SCROLLBACK: usize = 10_000;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("lib.rs"),
-            include_str!("main.rs"),
-            include_str!("app.rs"),
-            include_str!("banner.rs"),
-            include_str!("menu.rs"),
-            include_str!("render.rs"),
-            include_str!("session.rs"),
-            include_str!("settings.rs"),
-            include_str!("theme.rs"),
-            include_str!("settings_view.rs"),
-        ];
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
-}

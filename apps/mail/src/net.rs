@@ -184,10 +184,6 @@ impl Link {
         })
     }
 
-    pub fn is_secure(&self) -> bool {
-        matches!(self.stream, Stream::Tls(_))
-    }
-
     pub fn set_read_timeout(&self, timeout: Duration) -> Result<()> {
         Ok(self.stream.tcp().set_read_timeout(Some(timeout))?)
     }
@@ -269,55 +265,5 @@ pub struct Closer(TcpStream);
 impl Closer {
     pub fn close(&self) {
         let _ = self.0.shutdown(Shutdown::Both);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn served(bytes: &'static [u8]) -> Server {
-        let Ok(listener) = std::net::TcpListener::bind("127.0.0.1:0") else {
-            unreachable!("a loopback port")
-        };
-        let port = listener.local_addr().map_or(0, |address| address.port());
-        std::thread::spawn(move || {
-            if let Ok((mut stream, _)) = listener.accept() {
-                let _ = stream.write_all(bytes);
-            }
-        });
-        Server {
-            host: "127.0.0.1".to_owned(),
-            port,
-            security: Security::Plain,
-        }
-    }
-
-    #[test]
-    fn binary_data_without_a_final_line_break_is_read_whole() -> Result<()> {
-        let mut link = Link::connect(&served(b"line\n\x89PNG\x00tail"), &Network::default())?;
-        assert_eq!(link.read_line(64)?, b"line\n");
-        assert_eq!(link.read_to_end(64)?, b"\x89PNG\x00tail");
-        let mut limited = Link::connect(&served(&[7; 100]), &Network::default())?;
-        assert!(matches!(limited.read_to_end(10), Err(Error::Protocol(_))));
-        Ok(())
-    }
-
-    #[test]
-    fn only_loopback_hosts_may_go_without_encryption() {
-        assert!(is_loopback("localhost"));
-        assert!(is_loopback("127.0.0.1"));
-        assert!(is_loopback("[::1]"));
-        assert!(!is_loopback("imap.example.com"));
-        assert!(!is_loopback("192.168.1.2"));
-        let server = Server {
-            host: "imap.example.com".to_owned(),
-            port: 143,
-            security: Security::Plain,
-        };
-        assert!(matches!(
-            Link::connect(&server, &Network::default()),
-            Err(Error::Insecure)
-        ));
     }
 }

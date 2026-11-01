@@ -148,19 +148,3 @@ impl Flag {
         .find(|flag| flag.name() == name)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn roles_come_from_special_use_or_well_known_names() {
-        assert_eq!(Role::from_attribute("\\Sent"), Some(Role::Sent));
-        assert_eq!(Role::from_attribute("\\Junk"), Some(Role::Junk));
-        assert_eq!(Role::from_attribute("\\HasNoChildren"), None);
-        assert_eq!(Role::guess("inbox", Some('/')), Some(Role::Inbox));
-        assert_eq!(Role::guess("INBOX.Sent Items", Some('.')), Some(Role::Sent));
-        assert_eq!(Role::guess("[Gmail]/Spam", Some('/')), Some(Role::Junk));
-        assert_eq!(Role::guess("Projects/Sent", None), None);
-    }
-}

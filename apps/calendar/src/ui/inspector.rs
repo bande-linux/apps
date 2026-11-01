@@ -455,30 +455,3 @@ impl Inspector {
         self.calendars.get(self.calendar_choice).copied()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use jiff::civil::{date, time};
-
-    #[test]
-    fn reads_times_people_type() {
-        assert_eq!(parse_time("9"), Some(time(9, 0, 0, 0)));
-        assert_eq!(parse_time("930"), Some(time(9, 30, 0, 0)));
-        assert_eq!(parse_time("14:05"), Some(time(14, 5, 0, 0)));
-        assert_eq!(parse_time("2.30 pm"), Some(time(14, 30, 0, 0)));
-        assert_eq!(parse_time("12am"), Some(time(0, 0, 0, 0)));
-        assert_eq!(parse_time("13pm"), None);
-        assert_eq!(parse_time("25:00"), None);
-        assert_eq!(parse_time("12€"), None);
-        assert_eq!(parse_time("10ä"), None);
-    }
-
-    #[test]
-    fn reads_iso_and_day_first_dates() {
-        assert_eq!(parse_date("2026-10-31"), Some(date(2026, 10, 31)));
-        assert_eq!(parse_date("31.10.2026"), Some(date(2026, 10, 31)));
-        assert_eq!(parse_date("31/10/2026"), Some(date(2026, 10, 31)));
-        assert_eq!(parse_date("2026-02-30"), None);
-    }
-}

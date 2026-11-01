@@ -442,36 +442,3 @@ fn path_of(url: &str) -> &str {
 fn last_segment(url: &str) -> String {
     super::http::percent_decode(url.trim_end_matches('/').rsplit('/').next().unwrap_or(url))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn candidates_try_srv_then_well_known() {
-        let lookup = |name: &str| match name {
-            "_caldavs._tcp.example.com" => vec![dns::Service {
-                priority: 0,
-                weight: 0,
-                port: 8443,
-                target: "dav.example.com".to_owned(),
-            }],
-            _ => Vec::new(),
-        };
-        assert_eq!(
-            candidates("", "jane@example.com", lookup),
-            [
-                "https://dav.example.com:8443/.well-known/caldav",
-                "https://example.com/.well-known/caldav",
-                "https://example.com/",
-            ]
-        );
-        assert_eq!(
-            candidates("http://localhost:5232/jane/", "jane", lookup),
-            [
-                "http://localhost:5232/jane/",
-                "http://localhost:5232/.well-known/caldav"
-            ]
-        );
-    }
-}

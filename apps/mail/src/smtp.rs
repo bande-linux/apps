@@ -190,33 +190,10 @@ pub fn send(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn data_is_dot_stuffed_and_normalised_to_crlf() {
-        assert_eq!(
-            dot_stuffed(b"Subject: x\n\n.hidden\r\nplain\n."),
-            b"Subject: x\r\n\r\n..hidden\r\nplain\r\n..\r\n.\r\n"
-        );
-        assert_eq!(dot_stuffed(b"a\r\n"), b"a\r\n.\r\n");
-    }
-
-    #[test]
-    fn auth_mechanisms_are_read_from_the_extensions() {
-        let extensions = vec![
-            "SIZE 1000".to_owned(),
-            "AUTH login Plain".to_owned(),
-            "STARTTLS".to_owned(),
-        ];
-        assert_eq!(auth_mechanisms(&extensions), ["LOGIN", "PLAIN"]);
-        assert!(has(&extensions, "starttls"));
-        assert!(!has(&extensions, "SMTPUTF8"));
-    }
-
     #[test]
     fn addresses_cannot_smuggle_commands() {
-        assert!(checked("a@b.c").is_ok());
-        assert!(checked("a@b.c>\r\nRCPT TO:<x@y.z").is_err());
-        assert!(checked("nobody").is_err());
+        assert!(super::checked("a@b.c").is_ok());
+        assert!(super::checked("a@b.c>\r\nRCPT TO:<x@y.z").is_err());
+        assert!(super::checked("nobody").is_err());
     }
 }

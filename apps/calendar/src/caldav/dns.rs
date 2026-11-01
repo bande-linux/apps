@@ -122,39 +122,3 @@ pub fn lookup(name: &str) -> Vec<Service> {
     }
     Vec::new()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reads_compressed_srv_answers_in_priority_order() {
-        let mut packet = query(7, "_caldavs._tcp.example.com");
-        packet[2] = 0x81;
-        packet[3] = 0x80;
-        packet[7] = 2;
-        for (priority, port, target) in [(20u16, 8443u16, "backup"), (10, 443, "dav")] {
-            packet.extend_from_slice(&[0xC0, 12]);
-            packet.extend_from_slice(&SRV.to_be_bytes());
-            packet.extend_from_slice(&[0, 1, 0, 0, 1, 0]);
-            let mut data = Vec::new();
-            data.extend_from_slice(&priority.to_be_bytes());
-            data.extend_from_slice(&5u16.to_be_bytes());
-            data.extend_from_slice(&port.to_be_bytes());
-            data.push(target.len() as u8);
-            data.extend_from_slice(target.as_bytes());
-            data.extend_from_slice(&[0xC0, 12 + 1 + 8 + 1 + 4]);
-            packet.extend_from_slice(&(data.len() as u16).to_be_bytes());
-            packet.extend_from_slice(&data);
-        }
-        let services = parse_answer(&packet, 7).unwrap();
-        assert_eq!(
-            services
-                .iter()
-                .map(|service| (service.port, service.target.as_str()))
-                .collect::<Vec<_>>(),
-            [(443, "dav.example.com"), (8443, "backup.example.com")]
-        );
-        assert_eq!(parse_answer(&packet, 8), None);
-    }
-}

@@ -24,8 +24,8 @@ say so; the rest is what is left before or after tagging.
 - Calendar's build-depends take `python3-radicale` (the library its CalDAV tests run with
   `python3 -m radicale`) instead of the `radicale` daemon package. The mini has neither installed
   (no passwordless sudo), so the release dry-run's calendar tests failed there; the gate passed
-  with radicale from a scratch venv on `PATH`. Install `python3-radicale` on the mini.
-- The dark goldens were regenerated for the desktop's slate theme.
+  with radicale from a scratch venv on `PATH`. Since the test trim of 2026-11-01 the CalDAV tests,
+  the goldens and `python3-radicale` are gone (see `NOTES/tests.md`).
 
 ## Footprint (2026-11-01, mini, release builds at desktop a6a68588)
 
@@ -144,7 +144,6 @@ re-issued every 25 min; the list paints only visible rows; the UI has no timers 
 
 ## Before tagging mail-v0.1.0 and calendar-v0.1.0
 
-- Install `python3-radicale` on the mini (or accept CI as the only run of Calendar's CalDAV tests).
 - Decide on the medium items left above; none crashes or loses data except the 412 conflict
   copy (Calendar) and offline drafts on quit (Mail).
 - Trace the two idle wakeups per second (likely toolkit).

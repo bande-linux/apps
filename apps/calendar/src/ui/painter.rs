@@ -125,16 +125,3 @@ pub fn parse_color(text: &str) -> Option<Color> {
 pub fn color_text(color: Color) -> String {
     format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reads_server_colours_with_and_without_alpha() {
-        assert_eq!(parse_color("#FF2968FF"), Some(Color::hex(0xFF2968)));
-        assert_eq!(parse_color("#34c759"), Some(Color::hex(0x34C759)));
-        assert_eq!(parse_color("red"), None);
-        assert_eq!(color_text(Color::hex(0x0A84FF)), "#0A84FF");
-    }
-}

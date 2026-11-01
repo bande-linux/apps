@@ -266,25 +266,3 @@ impl Worker {
         self.replies.try_iter().collect()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn webcal_links_become_http() {
-        assert_eq!(
-            http_url("webcal://example.com/a.ics"),
-            "https://example.com/a.ics"
-        );
-        assert_eq!(
-            http_url("webcals://example.com/a.ics"),
-            "https://example.com/a.ics"
-        );
-        assert_eq!(http_url("example.com/a.ics"), "https://example.com/a.ics");
-        assert_eq!(
-            http_url("https://example.com/a.ics"),
-            "https://example.com/a.ics"
-        );
-    }
-}

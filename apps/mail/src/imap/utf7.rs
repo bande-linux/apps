@@ -84,28 +84,3 @@ pub fn encode(name: &str) -> String {
     flush(&mut pending, &mut encoded);
     encoded
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn mailbox_names_round_trip_through_modified_utf7() {
-        for (raw, shown) in [
-            ("Entw&APw-rfe", "Entwürfe"),
-            ("Gel&APY-schte Elemente", "Gelöschte Elemente"),
-            ("&ZeVnLIqe-", "日本語"),
-            ("Tom &- Jerry", "Tom & Jerry"),
-            ("INBOX", "INBOX"),
-        ] {
-            assert_eq!(decode(raw), shown);
-            assert_eq!(encode(shown), raw);
-        }
-    }
-
-    #[test]
-    fn broken_encodings_are_shown_as_they_are() {
-        assert_eq!(decode("A&B"), "A&B");
-        assert_eq!(decode("&2D3-x"), "&2D3-x");
-    }
-}

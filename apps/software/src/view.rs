@@ -196,11 +196,6 @@ impl Software {
         self.page
     }
 
-    pub fn show(&mut self, page: Page) {
-        self.intents.borrow_mut().push(Intent::Show(page));
-        self.pump();
-    }
-
     pub fn deadline(&self) -> Option<std::time::Instant> {
         self.ui.deadline()
     }
