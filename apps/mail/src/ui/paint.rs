@@ -26,7 +26,6 @@ const LIST_TEXT_X: f32 = 26.0;
 const LIST_TRAILING: f32 = 14.0;
 const DOT: f32 = 8.0;
 const ROW_INSET: f32 = 6.0;
-const PREVIEW_LINES: f32 = 2.0;
 const BADGE_GAP: f32 = 10.0;
 const SMALL_SYMBOL: f32 = 13.0;
 const PAGE_OVERLAP: f32 = 40.0;
@@ -72,7 +71,11 @@ impl MailView {
 
     pub(crate) fn row_height(&mut self) -> f32 {
         let scale = self.scale();
-        (2.0 * LIST_PADDING + (18.0 + 18.0 + 16.0 * PREVIEW_LINES) * scale).round()
+        (2.0 * LIST_PADDING + (18.0 + 18.0 + 16.0 * self.preview_lines()) * scale).round()
+    }
+
+    fn preview_lines(&self) -> f32 {
+        f32::from(self.settings.preview_lines)
     }
 
     fn sidebar_row_height(&mut self) -> f32 {
@@ -476,7 +479,10 @@ impl MailView {
             paragraph: subject,
         });
         y += line;
-        let preview_height = (16.0 * PREVIEW_LINES * scale).round();
+        if self.settings.preview_lines == 0 {
+            return;
+        }
+        let preview_height = (16.0 * self.preview_lines() * scale).round();
         let preview = self.ui.context().text.paragraph(
             &summary.preview,
             TextStyle::role(TextRole::Callout, ink2),

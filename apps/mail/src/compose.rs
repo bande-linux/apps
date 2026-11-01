@@ -69,7 +69,7 @@ fn same_person(a: &Address, b: &Address) -> bool {
     a.email.eq_ignore_ascii_case(&b.email)
 }
 
-pub fn reply(original: &Content, me: &Address, all: bool, attribution: &str) -> Draft {
+pub fn reply(original: &Content, me: &Address, all: bool, attribution: Option<&str>) -> Draft {
     let envelope = &original.envelope;
     let primary = match envelope.reply_to.is_empty() {
         true => envelope.from.clone(),
@@ -99,7 +99,9 @@ pub fn reply(original: &Content, me: &Address, all: bool, attribution: &str) -> 
         to,
         cc,
         subject: prefixed("Re:", &envelope.subject),
-        body: format!("\n\n{attribution}\n{}\n", quoted(&original.text())),
+        body: attribution
+            .map(|attribution| format!("\n\n{attribution}\n{}\n", quoted(&original.text())))
+            .unwrap_or_default(),
         in_reply_to: envelope.message_id.clone(),
         references,
         ..Draft::default()
@@ -113,6 +115,13 @@ pub fn forward(original: &Content, me: &Address, heading: &str) -> Draft {
         body: format!("\n\n{heading}\n\n{}\n", original.text().trim_end()),
         attachments: original.attachments.clone(),
         ..Draft::default()
+    }
+}
+
+pub fn signed(body: &str, signature: &str) -> String {
+    match signature.trim_end() {
+        "" => body.to_owned(),
+        signature => format!("\n\n{signature}{body}"),
     }
 }
 

@@ -7,8 +7,8 @@ use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
-    Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
-    Pointer, PointerButton, ScrollState, Ui, Widget, WidgetId, shortcut_pressed,
+    ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers, Pointer,
+    PointerButton, ScrollState, Ui, Widget, WidgetId, shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
@@ -18,13 +18,14 @@ use jiff::tz::TimeZone;
 use zeroize::Zeroizing;
 
 use crate::L10N;
-use crate::compose::{Draft, Outgoing, forward, reply};
+use crate::compose::{Draft, Outgoing, forward, reply, signed};
 use crate::discover::Settings;
 use crate::error::Result;
 use crate::imap::{Flag, Role};
 use crate::message::{Content, Envelope};
 use crate::net::Network;
 use crate::secrets::Keyring;
+use crate::settings::MailSettings;
 use crate::setup::{Outcome, Request as SetupRequest, check};
 use crate::store::{Account, AccountId, Mailbox, MessageId, Store, Summary};
 use crate::ui::format::full_date;
@@ -63,6 +64,7 @@ pub enum Request {
     Notify {
         summary: String,
         body: String,
+        sound: bool,
     },
     NotSent {
         error: String,
@@ -125,6 +127,7 @@ pub struct MailView {
     requests: Vec<Request>,
     setup: Option<SetupSheet>,
     pressed_ui: bool,
+    pub(crate) settings: MailSettings,
 }
 
 fn keyring_password(email: String, host: String) -> crate::worker::PasswordSource {
@@ -132,7 +135,12 @@ fn keyring_password(email: String, host: String) -> crate::worker::PasswordSourc
 }
 
 impl MailView {
-    pub fn new(store_path: PathBuf, palette: Palette, text: TextSystem) -> Result<Self> {
+    pub fn new(
+        store_path: PathBuf,
+        settings: MailSettings,
+        palette: Palette,
+        text: TextSystem,
+    ) -> Result<Self> {
         let store = Store::open(&store_path)?;
         let signals: Signals = Rc::new(RefCell::new(Vec::new()));
         let host = FreeLayout::new();
@@ -169,6 +177,7 @@ impl MailView {
             requests: Vec::new(),
             setup: None,
             pressed_ui: false,
+            settings,
         };
         view.insert_toolbar();
         view.ui.set_sheet_top(TOOLBAR_HEIGHT);
@@ -177,18 +186,58 @@ impl MailView {
     }
 
     pub fn start(&mut self) {
-        for (account, _) in &self.accounts {
-            let source = keyring_password(account.email.clone(), account.imap.host.clone());
-            self.workers.push(Worker::spawn(
-                account.clone(),
-                self.store_path.clone(),
-                source,
-                self.network.clone(),
-                self.mailroom.notifier(),
-            ));
+        for account in self.accounts() {
+            self.spawn_worker(account);
         }
         if self.accounts.is_empty() {
             self.present_setup(Mode::Add);
+        }
+    }
+
+    fn spawn_worker(&mut self, account: Account) {
+        let source = keyring_password(account.email.clone(), account.imap.host.clone());
+        self.workers.push(Worker::spawn(
+            account,
+            self.store_path.clone(),
+            source,
+            self.network.clone(),
+            self.mailroom.notifier(),
+        ));
+    }
+
+    pub fn set_settings(&mut self, settings: MailSettings) {
+        self.settings = settings;
+        self.layout = None;
+    }
+
+    pub fn accounts_changed(&mut self) {
+        let stored = self.store.accounts().unwrap_or_default();
+        let known = self.accounts();
+        let connects_alike = |a: &Account, b: &Account| {
+            (&a.email, &a.user, &a.imap, &a.smtp) == (&b.email, &b.user, &b.imap, &b.smtp)
+        };
+        let restarted = stored
+            .iter()
+            .filter(|account| {
+                !known
+                    .iter()
+                    .any(|old| old.id == account.id && connects_alike(old, account))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        self.workers.retain(|worker| {
+            stored.iter().any(|account| account.id == worker.account)
+                && !restarted.iter().any(|account| account.id == worker.account)
+        });
+        self.statuses
+            .retain(|(id, _)| stored.iter().any(|account| account.id == *id));
+        let same = restarted.is_empty() && stored.len() == known.len();
+        for account in restarted {
+            self.spawn_worker(account);
+        }
+        match same {
+            true => self.refresh_sidebar(),
+            false => self.reload(),
         }
     }
 
@@ -420,8 +469,12 @@ impl MailView {
                 )
             }
         };
+        let remote = reading.downloaded && reading.document.remote_images > 0;
         self.reading = Some(reading);
         self.layout = None;
+        if remote && self.settings.load_remote {
+            self.load_remote();
+        }
     }
 
     fn selected_summary(&self) -> Option<Summary> {
@@ -566,14 +619,27 @@ impl MailView {
             .or_else(|| self.accounts.first().map(|(account, _)| account.clone()))
     }
 
+    fn sending_account(&self) -> Option<Account> {
+        self.accounts
+            .iter()
+            .map(|(account, _)| account)
+            .find(|account| account.email.eq_ignore_ascii_case(&self.settings.send_from))
+            .cloned()
+            .or_else(|| self.default_account())
+    }
+
     pub fn compose(&mut self, mut draft: Draft) {
-        let Some(account) = self.default_account() else {
+        let Some(account) = self.sending_account() else {
             self.present_setup(Mode::Add);
             return;
         };
         if draft.from.email.is_empty() {
             draft.from = account.address();
         }
+        draft.body = match draft.body.trim_end() {
+            "" => signed("", &account.signature),
+            body => format!("{body}{}", signed("", &account.signature)),
+        };
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
             answering: None,
@@ -604,7 +670,9 @@ impl MailView {
                 ("name", envelope.sender().shown().to_owned().into()),
             ],
         );
-        let draft = reply(&reading.content, &account.address(), all, &attribution);
+        let quote = self.settings.quote.then_some(attribution.as_str());
+        let mut draft = reply(&reading.content, &account.address(), all, quote);
+        draft.body = signed(&draft.body, &account.signature);
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
             answering: Some(summary.id),
@@ -678,7 +746,8 @@ impl MailView {
                 ("to", names(&envelope.to).into()),
             ],
         );
-        let draft = forward(&reading.content, &account.address(), &heading);
+        let mut draft = forward(&reading.content, &account.address(), &heading);
+        draft.body = signed(&draft.body, &account.signature);
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
             answering: None,
@@ -868,6 +937,10 @@ impl MailView {
     }
 
     fn notify(&mut self, ids: &[MessageId]) {
+        if !self.settings.notify {
+            return;
+        }
+        let sound = self.settings.sound;
         let arrived = ids
             .iter()
             .filter_map(|id| self.store.summary(*id).ok().flatten())
@@ -881,6 +954,7 @@ impl MailView {
                     .map(|summary| summary.sender.shown().to_owned())
                     .collect::<Vec<_>>()
                     .join(", "),
+                sound,
             });
             return;
         }
@@ -891,6 +965,7 @@ impl MailView {
                     "" => L10N.tr("no-subject"),
                     subject => subject.to_owned(),
                 },
+                sound,
             });
         }
     }
@@ -1086,6 +1161,7 @@ impl MailView {
             user: settings.user,
             imap: settings.imap,
             smtp: settings.smtp,
+            signature: String::new(),
         };
         let id = match self.store.add_account(&account) {
             Ok(id) => id,
@@ -1118,25 +1194,6 @@ impl MailView {
         ));
         self.close_setup();
         self.reload();
-    }
-
-    fn confirm_removal(&mut self, id: AccountId) {
-        let Some(account) = self.account(id) else {
-            return;
-        };
-        let signals = Rc::clone(&self.signals);
-        let alert = Alert::new(
-            &L10N.tr_args("remove-title", [("email", account.email.clone().into())]),
-            &L10N.tr("remove-message"),
-            move |choice| {
-                if choice == "remove" {
-                    signals.borrow_mut().push(Signal::RemoveAccount(id));
-                }
-            },
-        )
-        .destructive(&L10N.tr("button-remove"), "remove")
-        .cancel(&L10N.tr("button-cancel"), "cancel");
-        self.ui.present_sheet(alert);
     }
 
     pub fn remove_account(&mut self, id: AccountId) {
@@ -1172,7 +1229,6 @@ impl MailView {
                 Signal::Forward => self.forward_selected(),
                 Signal::Flag => self.toggle_flag(),
                 Signal::Search(text) => self.search_for(&text),
-                Signal::RemoveAccount(id) => self.remove_account(id),
             }
         }
         if let Some(request) = self.ui.take_clipboard_request() {
@@ -1369,16 +1425,9 @@ impl MailView {
             "add-account" => self.present_setup(Mode::Add),
             "find" => self.ui.set_focus(self.toolbar.search),
             action => {
-                if let Some(id) = action
-                    .strip_prefix("remove-account:")
-                    .and_then(|id| id.parse().ok())
-                {
-                    self.confirm_removal(id);
-                } else {
-                    let handled = self.ui.menu_action(action);
-                    self.after_ui();
-                    return handled;
-                }
+                let handled = self.ui.menu_action(action);
+                self.after_ui();
+                return handled;
             }
         }
         self.after_ui();

@@ -17,7 +17,7 @@ use bande_toolkit::{
 use crate::L10N;
 use crate::compose::{Draft, Outgoing};
 use crate::message::{Address, Attachment, parse_addresses};
-use crate::store::MessageId;
+use crate::store::{Account, MessageId};
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{SHORTCUTS, TOOLBAR_HEIGHT};
 
@@ -55,7 +55,7 @@ pub struct ComposeView {
     from: Option<WidgetId>,
     body: WidgetId,
     signals: Rc<RefCell<Vec<Signal>>>,
-    senders: Vec<Address>,
+    senders: Vec<Account>,
     sender: usize,
     draft: Draft,
     answering: Option<MessageId>,
@@ -96,7 +96,7 @@ fn rows(from: bool) -> Vec<&'static str> {
 impl ComposeView {
     pub fn new(
         outgoing: Outgoing,
-        senders: Vec<Address>,
+        senders: Vec<Account>,
         palette: Palette,
         text: TextSystem,
     ) -> Self {
@@ -129,10 +129,13 @@ impl ComposeView {
         let subject = host.insert(field(&draft.subject), Rect::default());
         let sender = senders
             .iter()
-            .position(|address| address.email.eq_ignore_ascii_case(&draft.from.email))
+            .position(|account| account.email.eq_ignore_ascii_case(&draft.from.email))
             .unwrap_or(0);
         let from = (senders.len() > 1).then(|| {
-            let choices = senders.iter().map(Address::full).collect::<Vec<_>>();
+            let choices = senders
+                .iter()
+                .map(|account| account.address().full())
+                .collect::<Vec<_>>();
             let chosen = Rc::clone(&signals);
             host.insert(
                 PopUpButton::new(&L10N.tr("compose-from"), &choices, sender, move |index| {
@@ -383,7 +386,7 @@ impl ComposeView {
             from: self
                 .senders
                 .get(self.sender)
-                .cloned()
+                .map(Account::address)
                 .unwrap_or_else(|| self.draft.from.clone()),
             to: parse_addresses(&self.field_text(self.to)),
             cc: parse_addresses(&self.field_text(self.cc)),
@@ -428,13 +431,33 @@ impl ComposeView {
         );
     }
 
+    fn change_sender(&mut self, index: usize) {
+        let signature = |index: usize| {
+            self.senders
+                .get(index)
+                .map(|account| account.signature.trim_end().to_owned())
+                .unwrap_or_default()
+        };
+        let (old, new) = (signature(self.sender), signature(index));
+        self.sender = index;
+        let Some(body) = self.ui.widget_as::<TextView>(self.body) else {
+            return;
+        };
+        let text = body.text();
+        let swapped = match (old.is_empty(), text.find(&old)) {
+            (false, Some(at)) => format!("{}{new}{}", &text[..at], &text[at + old.len()..]),
+            _ => return,
+        };
+        body.set_text(&swapped);
+    }
+
     fn after_ui(&mut self) {
         let signals = std::mem::take(&mut *self.signals.borrow_mut());
         for signal in signals {
             match signal {
                 Signal::Send => self.try_send(),
                 Signal::Attach => self.requests.push(ComposeRequest::ChooseFiles),
-                Signal::From(index) => self.sender = index,
+                Signal::From(index) => self.change_sender(index),
                 Signal::Dismissed => {}
             }
         }

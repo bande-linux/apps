@@ -7,11 +7,17 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
+use bande_app_settings::{Stored, settings_folder};
+use bande_inbox::Inbox;
 use bande_mail::L10N;
 use bande_mail::compose::{Outgoing, from_mailto};
 use bande_mail::message::Attachment;
-use bande_mail::ui::{COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Request, SIDEBAR_WIDTH};
+use bande_mail::settings::{Change, MailSettings, listen};
+use bande_mail::ui::{
+    COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Mode, Request, SETTINGS_SIZE,
+    SIDEBAR_WIDTH, SettingsView,
+};
 use bande_notify::Urgency;
 use bande_notify::client::{Request as Notification, notify};
 use bande_toolkit::{
@@ -32,8 +38,27 @@ static INFO: Info = Info {
     version: env!("CARGO_PKG_VERSION"),
     name: || L10N.tr("app-name"),
     keys: Keys::Standard,
-    settings: None,
+    settings: Some(Settings {
+        title: || L10N.tr("settings-title"),
+        size: SETTINGS_SIZE,
+        view: settings_window,
+    }),
 };
+
+fn settings_window(appearance: Appearance) -> Box<dyn View> {
+    Box::new(SettingsView::new(
+        store_path(),
+        appearance,
+        TextSystem::new(),
+    ))
+}
+
+fn load_settings() -> MailSettings {
+    settings_folder()
+        .as_deref()
+        .map(MailSettings::load)
+        .unwrap_or_default()
+}
 
 enum Pane {
     Main(Box<MailView>),
@@ -148,6 +173,7 @@ struct Mail {
     parked: Option<Box<MailView>>,
     apps: Option<Apps>,
     picker: Picker,
+    changes: Inbox<Change>,
 }
 
 fn store_path() -> PathBuf {
@@ -156,7 +182,7 @@ fn store_path() -> PathBuf {
         .join("bande-mail/mail.sqlite3")
 }
 
-fn announce(summary: String, body: String) {
+fn announce(summary: String, body: String, sound: bool) {
     let spawned = std::thread::Builder::new()
         .name("notify".to_owned())
         .spawn(move || {
@@ -171,7 +197,7 @@ fn announce(summary: String, body: String) {
                         body: &body,
                         actions: &[],
                         urgency: Urgency::Normal,
-                        sound: Some(NEW_MAIL_SOUND),
+                        sound: sound.then_some(NEW_MAIL_SOUND),
                     },
                 )
             });
@@ -211,12 +237,7 @@ impl Mail {
 
     fn open_compose(&mut self, cx: &mut Cx<Self>, outgoing: Outgoing) -> Option<WindowId> {
         let senders = main_view(cx, self.main, &mut self.parked)
-            .map(|view| {
-                view.accounts()
-                    .iter()
-                    .map(|account| account.address())
-                    .collect::<Vec<_>>()
-            })
+            .map(|view| view.accounts())
             .unwrap_or_default();
         let mut view = ComposeView::new(
             outgoing,
@@ -382,7 +403,11 @@ impl Mail {
                 Request::Compose(outgoing) => {
                     self.open_compose(cx, *outgoing);
                 }
-                Request::Notify { summary, body } => announce(summary, body),
+                Request::Notify {
+                    summary,
+                    body,
+                    sound,
+                } => announce(summary, body, sound),
                 Request::NotSent { error, outgoing } => {
                     if let Some(opened) = self.open_compose(cx, *outgoing)
                         && let Some((_, Pane::Compose(view))) = cx.window(opened)
@@ -408,7 +433,11 @@ impl Mail {
                 }
                 Request::OpenLink(url) => self.open_url(cx, window, &url),
                 Request::OpenAttachment(path) => self.open_file(cx, window, &path),
-                Request::Notify { summary, body } => announce(summary, body),
+                Request::Notify {
+                    summary,
+                    body,
+                    sound,
+                } => announce(summary, body, sound),
                 Request::NotSent { error, outgoing } => {
                     if let Some(opened) = self.open_compose(cx, *outgoing)
                         && let Some((_, Pane::Compose(view))) = cx.window(opened)
@@ -448,6 +477,32 @@ impl Mail {
         }
     }
 
+    fn apply(&mut self, cx: &mut Cx<Self>, change: Change) {
+        if change == Change::AddAccount && self.main.is_none() {
+            self.reopen(cx);
+        }
+        let Some(view) = main_view(cx, self.main, &mut self.parked) else {
+            return;
+        };
+        match change {
+            Change::Settings => view.set_settings(load_settings()),
+            Change::Accounts => view.accounts_changed(),
+            Change::Remove(id) => view.remove_account(id),
+            Change::AddAccount => view.present_setup(Mode::Add),
+        }
+        if let Some(main) = self.main {
+            if let Some((window, _)) = cx.window(main)
+                && matches!(change, Change::AddAccount)
+                && let Err(error) = window
+                    .activation_token(APP_ID)
+                    .and_then(|token| window.activate(&token))
+            {
+                tracing::warn!("cannot raise the viewer: {error}");
+            }
+            self.serve(cx, main);
+        }
+    }
+
     fn finish(&mut self, cx: &mut Cx<Self>) {
         let windows: Vec<WindowId> = cx.windows().collect();
         for window in windows {
@@ -478,9 +533,12 @@ impl Program for Mail {
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let mut view = MailView::new(
             store_path(),
+            load_settings(),
             Appearance::default().palette(),
             TextSystem::new(),
         )?;
+        let changes = Inbox::new()?;
+        listen(changes.outbox());
         view.start();
         let main = show_main(cx, Box::new(view))?;
         let mut mail = Self {
@@ -488,6 +546,7 @@ impl Program for Mail {
             parked: None,
             apps: None,
             picker: Picker::new()?,
+            changes,
         };
         for argument in arguments {
             mail.open_argument(cx, &argument);
@@ -499,7 +558,7 @@ impl Program for Mail {
     fn menus(&self, cx: &Cx<Self>) -> Menus {
         Menus {
             menus: match self.main.and_then(|main| cx.view(main)) {
-                Some(Pane::Main(view)) => menus::app_menus(view),
+                Some(Pane::Main(_)) => menus::app_menus(),
                 _ => Vec::new(),
             },
             window: Vec::new(),
@@ -568,7 +627,7 @@ impl Program for Mail {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.picker.fd()];
+        let mut sources = vec![self.changes.fd(), self.picker.fd()];
         if let Some(view) = &self.parked {
             sources.extend(view.fds());
         }
@@ -576,7 +635,13 @@ impl Program for Mail {
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
-        if index > 0 {
+        if index == 0 {
+            for change in self.changes.drain() {
+                self.apply(cx, change);
+            }
+            return;
+        }
+        if index > 1 {
             if let Some(view) = &mut self.parked {
                 view.engine_ready();
             }

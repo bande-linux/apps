@@ -10,6 +10,7 @@ pub mod net;
 pub mod picture;
 pub mod portal;
 pub mod secrets;
+pub mod settings;
 pub mod setup;
 pub mod smtp;
 pub mod store;
