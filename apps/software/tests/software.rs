@@ -36,6 +36,7 @@ fn catalogue() -> Vec<Component> {
         Block::List(vec!["Basic".to_owned(), "Advanced".to_owned()]),
     ];
     calculator.launchable = Some("org.gnome.Calculator.desktop".to_owned());
+    calculator.bundles = vec![Bundle::Deb("gnome-calculator".to_owned())];
     calculator.releases = vec![Release {
         version: "48.1".to_owned(),
         timestamp: None,
