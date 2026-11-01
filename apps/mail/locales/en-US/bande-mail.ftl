@@ -95,6 +95,7 @@ button-ok = OK
 menu-file = File
 menu-message = Message
 menu-mailbox = Mailbox
+menu-move-to = Move To
 menu-mark-all-read = Mark All as Read
 menu-add-account = Add Account…
 menu-find = Find

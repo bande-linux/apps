@@ -581,7 +581,7 @@ impl Program for Mail {
     fn menus(&self, cx: &Cx<Self>) -> Menus {
         Menus {
             menus: match self.main.and_then(|main| cx.view(main)) {
-                Some(Pane::Main(_)) => menus::app_menus(),
+                Some(Pane::Main(view)) => menus::app_menus(view),
                 _ => Vec::new(),
             },
             window: Vec::new(),
