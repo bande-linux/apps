@@ -1,6 +1,6 @@
 use bande_app_menu::{Entry, edit_submenu};
 use bande_mail::L10N;
-use bande_mail::ui::{MailView, SHORTCUTS};
+use bande_mail::ui::SHORTCUTS;
 
 fn item(message: &str, action: &str) -> Entry {
     let entry = Entry::item(&L10N.tr(message), action);
@@ -10,26 +10,27 @@ fn item(message: &str, action: &str) -> Entry {
     }
 }
 
-pub fn app_menus(view: &MailView) -> Vec<Entry> {
-    let accounts = view
-        .accounts()
-        .into_iter()
-        .map(|account| Entry::item(&account.email, &format!("remove-account:{}", account.id)))
-        .collect::<Vec<_>>();
+pub fn app_menus() -> Vec<Entry> {
     vec![
         Entry::submenu(
             &L10N.tr("menu-file"),
             vec![
                 item("action-compose", "compose"),
-                item("action-get-mail", "get-mail"),
                 Entry::separator(),
                 item("menu-add-account", "add-account"),
-                Entry::submenu(&L10N.tr("menu-remove-account"), accounts),
                 Entry::separator(),
                 item("menu-find", "find"),
             ],
         ),
         edit_submenu(Vec::new()),
+        Entry::submenu(
+            &L10N.tr("menu-mailbox"),
+            vec![
+                item("action-get-mail", "get-mail"),
+                Entry::separator(),
+                item("menu-mark-all-read", "mark-all-read"),
+            ],
+        ),
         Entry::submenu(
             &L10N.tr("menu-message"),
             vec![

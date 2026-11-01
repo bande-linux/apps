@@ -1,14 +1,15 @@
 use std::cell::RefCell;
 use std::io::Write;
 use std::os::fd::BorrowedFd;
+use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
-    Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
-    Pointer, PointerButton, ScrollState, Ui, Widget, WidgetId, shortcut_pressed,
+    ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers, Pointer,
+    PointerButton, ScrollState, Ui, Widget, WidgetId, shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
@@ -18,13 +19,14 @@ use jiff::tz::TimeZone;
 use zeroize::Zeroizing;
 
 use crate::L10N;
-use crate::compose::{Draft, Outgoing, forward, reply};
+use crate::compose::{Draft, Outgoing, forward, reply, signed};
 use crate::discover::Settings;
 use crate::error::Result;
 use crate::imap::{Flag, Role};
 use crate::message::{Content, Envelope};
 use crate::net::Network;
 use crate::secrets::Keyring;
+use crate::settings::MailSettings;
 use crate::setup::{Outcome, Request as SetupRequest, check};
 use crate::store::{Account, AccountId, Mailbox, MessageId, Store, Summary};
 use crate::ui::format::full_date;
@@ -63,6 +65,7 @@ pub enum Request {
     Notify {
         summary: String,
         body: String,
+        sound: bool,
     },
     NotSent {
         error: String,
@@ -124,6 +127,8 @@ pub struct MailView {
     pub(crate) now: Option<Timestamp>,
     requests: Vec<Request>,
     setup: Option<SetupSheet>,
+    pub(crate) settings: MailSettings,
+    opened: Vec<(PathBuf, std::time::SystemTime)>,
 }
 
 fn keyring_password(email: String, host: String) -> crate::worker::PasswordSource {
@@ -131,7 +136,12 @@ fn keyring_password(email: String, host: String) -> crate::worker::PasswordSourc
 }
 
 impl MailView {
-    pub fn new(store_path: PathBuf, palette: Palette, text: TextSystem) -> Result<Self> {
+    pub fn new(
+        store_path: PathBuf,
+        settings: MailSettings,
+        palette: Palette,
+        text: TextSystem,
+    ) -> Result<Self> {
         let store = Store::open(&store_path)?;
         let signals: Signals = Rc::new(RefCell::new(Vec::new()));
         let host = FreeLayout::new();
@@ -167,6 +177,8 @@ impl MailView {
             now: None,
             requests: Vec::new(),
             setup: None,
+            settings,
+            opened: Vec::new(),
         };
         view.insert_toolbar();
         view.ui.set_sheet_top(TOOLBAR_HEIGHT);
@@ -175,18 +187,58 @@ impl MailView {
     }
 
     pub fn start(&mut self) {
-        for (account, _) in &self.accounts {
-            let source = keyring_password(account.email.clone(), account.imap.host.clone());
-            self.workers.push(Worker::spawn(
-                account.clone(),
-                self.store_path.clone(),
-                source,
-                self.network.clone(),
-                self.mailroom.notifier(),
-            ));
+        for account in self.accounts() {
+            self.spawn_worker(account);
         }
         if self.accounts.is_empty() {
             self.present_setup(Mode::Add);
+        }
+    }
+
+    fn spawn_worker(&mut self, account: Account) {
+        let source = keyring_password(account.email.clone(), account.imap.host.clone());
+        self.workers.push(Worker::spawn(
+            account,
+            self.store_path.clone(),
+            source,
+            self.network.clone(),
+            self.mailroom.notifier(),
+        ));
+    }
+
+    pub fn set_settings(&mut self, settings: MailSettings) {
+        self.settings = settings;
+        self.layout = None;
+    }
+
+    pub fn accounts_changed(&mut self) {
+        let stored = self.store.accounts().unwrap_or_default();
+        let known = self.accounts();
+        let connects_alike = |a: &Account, b: &Account| {
+            (&a.email, &a.user, &a.imap, &a.smtp) == (&b.email, &b.user, &b.imap, &b.smtp)
+        };
+        let restarted = stored
+            .iter()
+            .filter(|account| {
+                !known
+                    .iter()
+                    .any(|old| old.id == account.id && connects_alike(old, account))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        self.workers.retain(|worker| {
+            stored.iter().any(|account| account.id == worker.account)
+                && !restarted.iter().any(|account| account.id == worker.account)
+        });
+        self.statuses
+            .retain(|(id, _)| stored.iter().any(|account| account.id == *id));
+        let same = restarted.is_empty() && stored.len() == known.len();
+        for account in restarted {
+            self.spawn_worker(account);
+        }
+        match same {
+            true => self.refresh_sidebar(),
+            false => self.reload(),
         }
     }
 
@@ -418,8 +470,12 @@ impl MailView {
                 )
             }
         };
+        let remote = reading.downloaded && reading.document.remote_images > 0;
         self.reading = Some(reading);
         self.layout = None;
+        if remote && self.settings.load_remote {
+            self.load_remote();
+        }
     }
 
     fn selected_summary(&self) -> Option<Summary> {
@@ -454,6 +510,20 @@ impl MailView {
     pub fn toggle_flag(&mut self) {
         if let Some(summary) = self.selected_summary() {
             self.set_flag_on(&[summary.id], Flag::Flagged, !summary.flags.flagged);
+        }
+    }
+
+    pub fn mark_all_read(&mut self) {
+        let unread = self
+            .store
+            .summaries(&self.place.scope(), "")
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|summary| !summary.flags.seen)
+            .map(|summary| summary.id)
+            .collect::<Vec<_>>();
+        if !unread.is_empty() {
+            self.set_flag_on(&unread, Flag::Seen, true);
         }
     }
 
@@ -564,18 +634,32 @@ impl MailView {
             .or_else(|| self.accounts.first().map(|(account, _)| account.clone()))
     }
 
+    fn sending_account(&self) -> Option<Account> {
+        self.accounts
+            .iter()
+            .map(|(account, _)| account)
+            .find(|account| account.email.eq_ignore_ascii_case(&self.settings.send_from))
+            .cloned()
+            .or_else(|| self.default_account())
+    }
+
     pub fn compose(&mut self, mut draft: Draft) {
-        let Some(account) = self.default_account() else {
+        let Some(account) = self.sending_account() else {
             self.present_setup(Mode::Add);
             return;
         };
         if draft.from.email.is_empty() {
             draft.from = account.address();
         }
+        draft.body = match draft.body.trim_end() {
+            "" => signed("", &account.signature),
+            body => format!("{body}{}", signed("", &account.signature)),
+        };
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
             answering: None,
             replaces: None,
+            unsent: None,
         })));
     }
 
@@ -602,11 +686,14 @@ impl MailView {
                 ("name", envelope.sender().shown().to_owned().into()),
             ],
         );
-        let draft = reply(&reading.content, &account.address(), all, &attribution);
+        let quote = self.settings.quote.then_some(attribution.as_str());
+        let mut draft = reply(&reading.content, &account.address(), all, quote);
+        draft.body = signed(&draft.body, &account.signature);
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
             answering: Some(summary.id),
             replaces: None,
+            unsent: None,
         })));
     }
 
@@ -641,6 +728,7 @@ impl MailView {
             draft,
             answering: None,
             replaces: Some(summary.id),
+            unsent: None,
         })));
     }
 
@@ -676,11 +764,13 @@ impl MailView {
                 ("to", names(&envelope.to).into()),
             ],
         );
-        let draft = forward(&reading.content, &account.address(), &heading);
+        let mut draft = forward(&reading.content, &account.address(), &heading);
+        draft.body = signed(&draft.body, &account.signature);
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
             answering: None,
             replaces: None,
+            unsent: None,
         })));
     }
 
@@ -719,6 +809,7 @@ impl MailView {
         for worker in self.workers.drain(..) {
             worker.finish(deadline);
         }
+        self.remove_unedited_attachments();
     }
 
     pub fn load_remote(&mut self) {
@@ -752,11 +843,70 @@ impl MailView {
         }
     }
 
+    fn attachment_name(&self, index: usize) -> Option<String> {
+        let attachment = self.reading.as_ref()?.content.attachments.get(index)?;
+        let name = attachment
+            .name
+            .replace(['/', '\\', '\0'], "_")
+            .trim_start_matches('.')
+            .to_owned();
+        Some(match name.is_empty() {
+            true => "attachment".to_owned(),
+            false => name,
+        })
+    }
+
     pub fn open_attachment(&mut self, index: usize) {
-        let Some(attachment) = self
+        let (Some(id), Some(name)) = (self.selected, self.attachment_name(index)) else {
+            return;
+        };
+        let Some(data) = self
             .reading
             .as_ref()
             .and_then(|reading| reading.content.attachments.get(index))
+            .map(|attachment| attachment.data.clone())
+        else {
+            return;
+        };
+        let Some(folder) = bande_xdg::cache_home()
+            .map(|cache| cache.join("bande-mail/attachments").join(id.to_string()))
+        else {
+            return;
+        };
+        let path = folder.join(&name);
+        let current =
+            std::fs::metadata(&path).is_ok_and(|metadata| metadata.len() == data.len() as u64);
+        let written = match current {
+            true => Ok(()),
+            false => std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&folder)
+                .and_then(|()| std::fs::write(&path, &data)),
+        };
+        match written {
+            Ok(()) => {
+                let modified = std::fs::metadata(&path).and_then(|metadata| metadata.modified());
+                if let Ok(modified) = modified
+                    && !self.opened.iter().any(|(known, _)| *known == path)
+                {
+                    self.opened.push((path.clone(), modified));
+                }
+                self.requests.push(Request::OpenAttachment(path));
+            }
+            Err(error) => tracing::warn!("cannot open {name}: {error}"),
+        }
+    }
+
+    pub fn save_attachment(&mut self, index: usize) {
+        let Some(name) = self.attachment_name(index) else {
+            return;
+        };
+        let Some(data) = self
+            .reading
+            .as_ref()
+            .and_then(|reading| reading.content.attachments.get(index))
+            .map(|attachment| attachment.data.clone())
         else {
             return;
         };
@@ -767,15 +917,6 @@ impl MailView {
             .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
         let folder =
             bande_xdg::user_dir(&home, user_dirs.as_deref(), bande_xdg::UserDir::Downloads);
-        let name = attachment
-            .name
-            .replace(['/', '\\', '\0'], "_")
-            .trim_start_matches('.')
-            .to_owned();
-        let name = match name.is_empty() {
-            true => "attachment".to_owned(),
-            false => name,
-        };
         let (stem, extension) = match name.rsplit_once('.') {
             Some((stem, extension)) if !stem.is_empty() => {
                 (stem.to_owned(), format!(".{extension}"))
@@ -793,16 +934,29 @@ impl MailView {
                     .create_new(true)
                     .open(&path)
                 {
-                    Ok(mut file) => return file.write_all(&attachment.data).map(|()| path),
+                    Ok(mut file) => return file.write_all(&data),
                     Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
                     Err(error) => return Err(error),
                 }
             }
             Err(std::io::Error::other("no free file name"))
         });
-        match saved {
-            Ok(path) => self.requests.push(Request::OpenAttachment(path)),
-            Err(error) => tracing::warn!("cannot save {}: {error}", attachment.name),
+        if let Err(error) = saved {
+            tracing::warn!("cannot save {name}: {error}");
+        }
+    }
+
+    fn remove_unedited_attachments(&mut self) {
+        for (path, opened) in self.opened.drain(..) {
+            let unedited = std::fs::metadata(&path)
+                .and_then(|metadata| metadata.modified())
+                .is_ok_and(|modified| modified == opened);
+            if unedited
+                && std::fs::remove_file(&path).is_ok()
+                && let Some(folder) = path.parent()
+            {
+                let _ = std::fs::remove_dir(folder);
+            }
         }
     }
 
@@ -866,6 +1020,10 @@ impl MailView {
     }
 
     fn notify(&mut self, ids: &[MessageId]) {
+        if !self.settings.notify {
+            return;
+        }
+        let sound = self.settings.sound;
         let arrived = ids
             .iter()
             .filter_map(|id| self.store.summary(*id).ok().flatten())
@@ -879,6 +1037,7 @@ impl MailView {
                     .map(|summary| summary.sender.shown().to_owned())
                     .collect::<Vec<_>>()
                     .join(", "),
+                sound,
             });
             return;
         }
@@ -889,6 +1048,7 @@ impl MailView {
                     "" => L10N.tr("no-subject"),
                     subject => subject.to_owned(),
                 },
+                sound,
             });
         }
     }
@@ -1048,7 +1208,11 @@ impl MailView {
             Outcome::WrongPassword(settings, _) => {
                 let mut state = state.borrow_mut();
                 fill_servers(&mut state, &settings);
-                state.status = Some((L10N.tr("setup-wrong-password"), true));
+                let message = match app_password_hint(&settings.imap.host) {
+                    Some(hint) => format!("{} {}", L10N.tr("setup-wrong-password"), L10N.tr(hint)),
+                    None => L10N.tr("setup-wrong-password"),
+                };
+                state.status = Some((message, true));
             }
             Outcome::NeedsServers(settings, reason) => {
                 if let Some(settings) = &settings {
@@ -1084,6 +1248,7 @@ impl MailView {
             user: settings.user,
             imap: settings.imap,
             smtp: settings.smtp,
+            signature: String::new(),
         };
         let id = match self.store.add_account(&account) {
             Ok(id) => id,
@@ -1116,25 +1281,6 @@ impl MailView {
         ));
         self.close_setup();
         self.reload();
-    }
-
-    fn confirm_removal(&mut self, id: AccountId) {
-        let Some(account) = self.account(id) else {
-            return;
-        };
-        let signals = Rc::clone(&self.signals);
-        let alert = Alert::new(
-            &L10N.tr_args("remove-title", [("email", account.email.clone().into())]),
-            &L10N.tr("remove-message"),
-            move |choice| {
-                if choice == "remove" {
-                    signals.borrow_mut().push(Signal::RemoveAccount(id));
-                }
-            },
-        )
-        .destructive(&L10N.tr("button-remove"), "remove")
-        .cancel(&L10N.tr("button-cancel"), "cancel");
-        self.ui.present_sheet(alert);
     }
 
     pub fn remove_account(&mut self, id: AccountId) {
@@ -1170,7 +1316,6 @@ impl MailView {
                 Signal::Forward => self.forward_selected(),
                 Signal::Flag => self.toggle_flag(),
                 Signal::Search(text) => self.search_for(&text),
-                Signal::RemoveAccount(id) => self.remove_account(id),
             }
         }
         if let Some(request) = self.ui.take_clipboard_request() {
@@ -1305,6 +1450,20 @@ impl MailView {
                 }
             }
             Hit::Link(url) => self.requests.push(Request::OpenLink(url)),
+            Hit::Attachment(index) if secondary => {
+                let menu = Menu::new(vec![
+                    MenuItem::new(
+                        &L10N.tr("attachment-open"),
+                        &format!("attachment-open:{index}"),
+                    ),
+                    MenuItem::new(
+                        &L10N.tr("attachment-save"),
+                        &format!("attachment-save:{index}"),
+                    ),
+                ]);
+                self.requests
+                    .push(Request::ShowMenu(menu, pointer.position));
+            }
             Hit::Attachment(index) => self.open_attachment(index),
             Hit::LoadRemote => self.load_remote(),
         }
@@ -1353,6 +1512,7 @@ impl MailView {
             "forward" => self.forward_selected(),
             "toggle-read" => self.toggle_read(),
             "toggle-flag" => self.toggle_flag(),
+            "mark-all-read" => self.mark_all_read(),
             "archive" => self.move_selected(Role::Archive),
             "junk" => self.move_selected(Role::Junk),
             "delete" => self.delete_selected(),
@@ -1360,17 +1520,20 @@ impl MailView {
             "get-mail" => self.get_mail(),
             "add-account" => self.present_setup(Mode::Add),
             "find" => self.ui.set_focus(self.toolbar.search),
-            action => {
-                if let Some(id) = action
-                    .strip_prefix("remove-account:")
-                    .and_then(|id| id.parse().ok())
-                {
-                    self.confirm_removal(id);
-                } else {
-                    let handled = self.ui.menu_action(action);
-                    self.after_ui();
-                    return handled;
+            action if action.starts_with("attachment-") => {
+                let parsed = action
+                    .split_once(':')
+                    .and_then(|(verb, index)| Some((verb, index.parse::<usize>().ok()?)));
+                match parsed {
+                    Some(("attachment-open", index)) => self.open_attachment(index),
+                    Some(("attachment-save", index)) => self.save_attachment(index),
+                    _ => {}
                 }
+            }
+            action => {
+                let handled = self.ui.menu_action(action);
+                self.after_ui();
+                return handled;
             }
         }
         self.after_ui();
@@ -1383,6 +1546,28 @@ impl MailView {
             .rev()
             .find(|(rect, _)| rect.contains(at))
             .map(|(_, hit)| hit.clone())
+    }
+}
+
+fn app_password_hint(host: &str) -> Option<&'static str> {
+    let host = host.to_ascii_lowercase();
+    let provider = |domains: &[&str]| {
+        domains
+            .iter()
+            .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
+    };
+    if provider(&["gmail.com", "googlemail.com"]) {
+        Some("hint-google")
+    } else if provider(&["outlook.com", "office365.com", "hotmail.com", "live.com"]) {
+        Some("hint-microsoft")
+    } else if provider(&["me.com", "mac.com", "icloud.com"]) {
+        Some("hint-icloud")
+    } else if provider(&["yahoo.com", "aol.com"]) {
+        Some("hint-yahoo")
+    } else if provider(&["fastmail.com", "messagingengine.com"]) {
+        Some("hint-fastmail")
+    } else {
+        None
     }
 }
 

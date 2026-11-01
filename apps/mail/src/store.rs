@@ -2,7 +2,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::Path;
 use std::time::Duration;
 
-use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
+use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params, params_from_iter};
 
 use crate::error::Result;
 use crate::imap::{Fetched, Flag, Flags, Folder, Role};
@@ -84,6 +84,7 @@ pub struct Account {
     pub user: String,
     pub imap: Server,
     pub smtp: Server,
+    pub signature: String,
 }
 
 impl Account {
@@ -176,6 +177,7 @@ fn account_from(row: &Row<'_>) -> rusqlite::Result<Account> {
             port: row.get(8)?,
             security: security(row.get(9)?),
         },
+        signature: row.get(10)?,
     })
 }
 
@@ -245,17 +247,26 @@ impl Store {
             .append(true)
             .mode(0o600)
             .open(path)?;
-        let connection = Connection::open(path)?;
+        let mut connection = Connection::open(path)?;
         connection.busy_timeout(Duration::from_secs(10))?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
         connection.execute_batch(SCHEMA)?;
+        let migration = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let version: i64 = migration.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version < 1 {
+            migration.execute_batch(
+                "ALTER TABLE accounts ADD COLUMN signature TEXT NOT NULL DEFAULT ''; \
+                 PRAGMA user_version = 1;",
+            )?;
+        }
+        migration.commit()?;
         Ok(Self { connection })
     }
 
     pub fn accounts(&self) -> Result<Vec<Account>> {
         let mut statement = self.connection.prepare(
             "SELECT id, name, email, user, imap_host, imap_port, imap_security, \
-             smtp_host, smtp_port, smtp_security FROM accounts ORDER BY id",
+             smtp_host, smtp_port, smtp_security, signature FROM accounts ORDER BY id",
         )?;
         let accounts = statement
             .query_map([], account_from)?
@@ -273,7 +284,8 @@ impl Store {
     pub fn add_account(&self, account: &Account) -> Result<AccountId> {
         self.connection.execute(
             "INSERT INTO accounts (name, email, user, imap_host, imap_port, imap_security, \
-             smtp_host, smtp_port, smtp_security) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             smtp_host, smtp_port, smtp_security, signature) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 account.name,
                 account.email,
@@ -284,9 +296,31 @@ impl Store {
                 account.smtp.host,
                 account.smtp.port,
                 account.smtp.security.name(),
+                account.signature,
             ],
         )?;
         Ok(self.connection.last_insert_rowid())
+    }
+
+    pub fn update_account(&self, account: &Account) -> Result<()> {
+        self.connection.execute(
+            "UPDATE accounts SET name = ?2, user = ?3, imap_host = ?4, imap_port = ?5, \
+             imap_security = ?6, smtp_host = ?7, smtp_port = ?8, smtp_security = ?9, \
+             signature = ?10 WHERE id = ?1",
+            params![
+                account.id,
+                account.name,
+                account.user,
+                account.imap.host,
+                account.imap.port,
+                account.imap.security.name(),
+                account.smtp.host,
+                account.smtp.port,
+                account.smtp.security.name(),
+                account.signature,
+            ],
+        )?;
+        Ok(())
     }
 
     pub fn remove_account(&self, id: AccountId) -> Result<()> {
