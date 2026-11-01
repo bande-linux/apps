@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
-use std::os::fd::{AsFd, BorrowedFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use alacritty_terminal::event::{Event as TermEvent, OnResize};
 use alacritty_terminal::tty::{self, Options, Pty, Shell};
+use rustix::event::epoll::{self, CreateFlags, EventData, EventFlags};
 
 use crate::process::{self, Report, Reports};
 use crate::terminal::{GridSize, Terminal};
@@ -32,6 +33,8 @@ pub enum Notice {
 pub struct Session {
     pub terminal: Terminal,
     pty: Pty,
+    readiness: OwnedFd,
+    awaiting_room: bool,
     shell: u32,
     output: Vec<u8>,
     reports: Reports,
@@ -61,9 +64,18 @@ impl Session {
         };
         let pty = tty::new(&options, terminal.window_size(), 0)?;
         let shell = pty.child().id();
+        let readiness = epoll::create(CreateFlags::CLOEXEC)?;
+        epoll::add(
+            &readiness,
+            pty.file(),
+            EventData::new_u64(0),
+            EventFlags::IN,
+        )?;
         let mut session = Self {
             terminal,
             pty,
+            readiness,
+            awaiting_room: false,
             shell,
             output: Vec::new(),
             reports: Reports::new(process::host_name()),
@@ -83,7 +95,7 @@ impl Session {
     }
 
     pub fn fd(&self) -> BorrowedFd<'_> {
-        self.pty.file().as_fd()
+        self.readiness.as_fd()
     }
 
     pub fn exited(&self) -> bool {
@@ -110,6 +122,26 @@ impl Session {
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(_) => break,
             }
+        }
+        self.await_room(!self.output.is_empty());
+    }
+
+    fn await_room(&mut self, wanted: bool) {
+        if wanted == self.awaiting_room {
+            return;
+        }
+        let events = match wanted {
+            true => EventFlags::IN | EventFlags::OUT,
+            false => EventFlags::IN,
+        };
+        match epoll::modify(
+            &self.readiness,
+            self.pty.file(),
+            EventData::new_u64(0),
+            events,
+        ) {
+            Ok(()) => self.awaiting_room = wanted,
+            Err(error) => tracing::warn!("cannot wait to type into the terminal: {error}"),
         }
     }
 

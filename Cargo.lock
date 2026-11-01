@@ -734,6 +734,7 @@ dependencies = [
  "bande-spring",
  "bande-toolkit",
  "bande-xdg",
+ "rustix",
  "tempfile",
  "tracing",
  "zbus",
