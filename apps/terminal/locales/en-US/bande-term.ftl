@@ -47,7 +47,6 @@ menu-split-side-by-side = Split Side by Side
 menu-split-stacked = Split Top and Bottom
 menu-next-pane = Select Next Pane
 menu-previous-pane = Select Previous Pane
-menu-settings = Settings…
 new-tab = New Tab
 tabs = Tabs
 confirm-close-pane = Close this pane? { $program } is still running in it.

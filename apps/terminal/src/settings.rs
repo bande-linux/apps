@@ -1,14 +1,10 @@
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
-
 use alacritty_terminal::vte::ansi::CursorShape;
+use bande_app_settings::{Stored, flag, pairs};
 
 use crate::render::DEFAULT_FONT_SIZE;
 use crate::theme::Profile;
 
 pub const FONT_SIZES: (f32, f32) = (9.0, 32.0);
-const FILE_NAME: &str = "terminal.conf";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CursorStyle {
@@ -73,23 +69,13 @@ impl Default for Settings {
     }
 }
 
-fn flag(value: &str) -> Option<bool> {
-    match value {
-        "true" => Some(true),
-        "false" => Some(false),
-        _ => None,
-    }
-}
+impl Stored for Settings {
+    const FILE: &'static str = "terminal.conf";
 
-impl Settings {
-    pub fn parse(text: &str) -> Self {
+    fn parse(text: &str) -> Self {
         let mut settings = Self::default();
-        for line in text.lines() {
-            let Some((key, value)) = line.split_once('=') else {
-                continue;
-            };
-            let value = value.trim();
-            match key.trim() {
+        for (key, value) in pairs(text) {
+            match key {
                 "profile" => {
                     settings.profile = Profile::parse(value).unwrap_or(settings.profile);
                 }
@@ -116,7 +102,7 @@ impl Settings {
         settings
     }
 
-    pub fn to_text(&self) -> String {
+    fn to_text(&self) -> String {
         format!(
             "profile = {}\nfont-size = {}\ncursor = {}\nflash-on-bell = {}\nbadge-on-bell = {}\nnotify-finished = {}\n",
             self.profile.name(),
@@ -127,25 +113,4 @@ impl Settings {
             self.notify_finished,
         )
     }
-
-    pub fn load(folder: &Path) -> Self {
-        fs::read_to_string(folder.join(FILE_NAME))
-            .map(|text| Self::parse(&text))
-            .unwrap_or_default()
-    }
-
-    pub fn save(&self, folder: &Path) -> io::Result<()> {
-        fs::create_dir_all(folder)?;
-        let staging = folder.join(format!("{FILE_NAME}.new"));
-        fs::write(&staging, self.to_text())?;
-        fs::rename(staging, folder.join(FILE_NAME))
-    }
-}
-
-pub fn settings_folder() -> Option<PathBuf> {
-    bande_xdg::config_home().map(|config| config.join("bande"))
-}
-
-pub fn is_settings_file(path: &Path) -> bool {
-    path.file_name().is_some_and(|name| name == FILE_NAME)
 }

@@ -3,11 +3,11 @@ use std::rc::Rc;
 
 use accesskit::{Node, Role};
 use bande_toolkit::ui::{
-    Context, PopUpButton, ScrollView, SegmentedControl, Size, Stepper, Toggle, Ui, Widget, WidgetId,
+    Context, Form, FormLine, PopUpButton, ScrollView, SegmentedControl, Size, Stepper, Toggle, Ui,
+    Widget, WidgetId,
 };
 use bande_toolkit::{
-    Appearance, Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
-    TextSystem,
+    Appearance, Item, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle, TextSystem,
 };
 
 use crate::L10N;
@@ -15,204 +15,83 @@ use crate::settings::{CursorStyle, FONT_SIZES, Settings};
 use crate::theme::{Profile, Theme, ansi_colors};
 
 pub const SETTINGS_SIZE: (u32, u32) = (500, 480);
-const MARGIN: f32 = 24.0;
-const ROW: f32 = 44.0;
-const HEADING: f32 = 32.0;
 const PREVIEW: f32 = 76.0;
 const SWATCH: f32 = 14.0;
 const SWATCH_GAP: f32 = 4.0;
 const PREVIEW_PADDING: f32 = 12.0;
-const ROW_PADDING: f32 = 8.0;
-const LABEL_SHARE: f32 = 0.55;
-
-enum Line {
-    Heading(String),
-    Row(String),
-    Preview,
-}
-
-struct Form {
-    id: WidgetId,
-    lines: Vec<Line>,
-    children: Vec<Box<dyn Widget>>,
-    profile: Rc<Cell<Profile>>,
-    texts: Vec<(Point, Paragraph)>,
-    heights: Vec<f32>,
-    preview: Option<Preview>,
-    frame: Rect,
-}
 
 struct Preview {
-    rect: Rect,
-    background: Color,
-    edge: Color,
-    swatches: Vec<(Rect, Color)>,
+    id: WidgetId,
+    profile: Rc<Cell<Profile>>,
+    frame: Rect,
+    items: Vec<Item>,
 }
 
-fn row_label(cx: &mut Context, text: &str, width: f32) -> Paragraph {
-    cx.text.paragraph(
-        text,
-        TextStyle::role(TextRole::Body, cx.palette.ink),
-        Some(width * LABEL_SHARE),
-        TextAlign::Start,
-    )
-}
-
-impl Widget for Form {
+impl Widget for Preview {
     fn id(&self) -> WidgetId {
         self.id
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        for child in &mut self.children {
-            child.measure(cx, available);
-        }
-        let grown = cx.grown_line();
-        let width = available.width - 2.0 * MARGIN;
-        self.heights = self
-            .lines
-            .iter()
-            .map(|line| match line {
-                Line::Heading(_) => HEADING + grown,
-                Line::Row(text) => {
-                    let label = row_label(cx, text, width);
-                    (ROW + grown).max((label.height() + 2.0 * ROW_PADDING).ceil())
-                }
-                Line::Preview => PREVIEW + grown,
-            })
-            .collect();
-        Size::new(available.width, self.heights.iter().sum::<f32>() + MARGIN)
+        Size::new(available.width, PREVIEW + cx.grown_line())
     }
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
-        self.texts.clear();
-        self.preview = None;
-        let width = frame.width - 2.0 * MARGIN;
-        let mut y = frame.y + MARGIN / 2.0;
-        let mut children = self.children.iter_mut();
-        for (line, &height) in self.lines.iter().zip(&self.heights) {
-            match line {
-                Line::Heading(text) => {
-                    let paragraph = cx.text.paragraph(
-                        text,
-                        TextStyle::role(TextRole::Label, cx.palette.ink3),
-                        None,
-                        TextAlign::Start,
-                    );
-                    let origin = Point::new(
-                        frame.x + MARGIN,
-                        (y + height - paragraph.height() - 6.0).round(),
-                    );
-                    self.texts.push((origin, paragraph));
-                    y += height;
-                }
-                Line::Row(text) => {
-                    let paragraph = row_label(cx, text, width);
-                    let origin = Point::new(
-                        frame.x + MARGIN,
-                        (y + (height - paragraph.height()) / 2.0).round(),
-                    );
-                    self.texts.push((origin, paragraph));
-                    if let Some(child) = children.next() {
-                        let size =
-                            child.measure(cx, Size::new(width * (1.0 - LABEL_SHARE), height));
-                        child.place(
-                            cx,
-                            Rect::new(
-                                frame.x + frame.width - MARGIN - size.width,
-                                (y + (height - size.height) / 2.0).round(),
-                                size.width,
-                                size.height,
-                            ),
-                        );
+        let appearance = Appearance {
+            scheme: cx.palette.scheme,
+            ..Appearance::default()
+        };
+        let theme = Theme::new(appearance, self.profile.get());
+        let rect = Rect::new(frame.x, frame.y + 4.0, frame.width, frame.height - 8.0);
+        let sample = cx.text.paragraph(
+            &L10N.tr("settings-preview-sample"),
+            TextStyle::role(TextRole::Mono, theme.foreground),
+            None,
+            TextAlign::Start,
+        );
+        self.items = vec![
+            Item::Fill {
+                shape: Shape::rounded(rect, Radius::S),
+                paint: theme.background.into(),
+            },
+            Item::Stroke {
+                shape: Shape::rounded(rect.inset(0.5), Radius::S - 0.5),
+                width: 1.0,
+                paint: cx.palette.hairline.into(),
+            },
+        ];
+        self.items.extend(
+            ansi_colors(&theme.palette)
+                .iter()
+                .enumerate()
+                .map(|(index, color)| {
+                    let x = rect.x + PREVIEW_PADDING + index as f32 * (SWATCH + SWATCH_GAP);
+                    let y = rect.y + rect.height - PREVIEW_PADDING - SWATCH;
+                    Item::Fill {
+                        shape: Shape::rounded(Rect::new(x, y, SWATCH, SWATCH), 2.0),
+                        paint: (*color).into(),
                     }
-                    y += height;
-                }
-                Line::Preview => {
-                    let appearance = Appearance {
-                        scheme: cx.palette.scheme,
-                        ..Appearance::default()
-                    };
-                    let theme = Theme::new(appearance, self.profile.get());
-                    let rect = Rect::new(frame.x + MARGIN, y + 4.0, width, height - 8.0);
-                    let sample = cx.text.paragraph(
-                        &L10N.tr("settings-preview-sample"),
-                        TextStyle::role(TextRole::Mono, theme.foreground),
-                        None,
-                        TextAlign::Start,
-                    );
-                    self.texts.push((
-                        Point::new(rect.x + PREVIEW_PADDING, rect.y + PREVIEW_PADDING),
-                        sample,
-                    ));
-                    let colors = ansi_colors(&theme.palette);
-                    let swatches = colors
-                        .iter()
-                        .enumerate()
-                        .map(|(index, color)| {
-                            let x = rect.x + PREVIEW_PADDING + index as f32 * (SWATCH + SWATCH_GAP);
-                            let y = rect.y + rect.height - PREVIEW_PADDING - SWATCH;
-                            (Rect::new(x, y, SWATCH, SWATCH), *color)
-                        })
-                        .collect();
-                    self.preview = Some(Preview {
-                        rect,
-                        background: theme.background,
-                        edge: cx.palette.hairline,
-                        swatches,
-                    });
-                    y += height;
-                }
-            }
-        }
+                }),
+        );
+        self.items.push(Item::Text {
+            origin: Point::new(rect.x + PREVIEW_PADDING, rect.y + PREVIEW_PADDING),
+            paragraph: sample,
+        });
     }
 
     fn frame(&self) -> Rect {
         self.frame
     }
 
-    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        if let Some(preview) = &self.preview {
-            items.push(Item::Fill {
-                shape: Shape::rounded(preview.rect, Radius::S),
-                paint: preview.background.into(),
-            });
-            items.push(Item::Stroke {
-                shape: Shape::rounded(preview.rect.inset(0.5), Radius::S - 0.5),
-                width: 1.0,
-                paint: preview.edge.into(),
-            });
-            for (rect, color) in &preview.swatches {
-                items.push(Item::Fill {
-                    shape: Shape::rounded(*rect, 2.0),
-                    paint: (*color).into(),
-                });
-            }
-        }
-        for (origin, paragraph) in &self.texts {
-            items.push(Item::Text {
-                origin: *origin,
-                paragraph: paragraph.clone(),
-            });
-        }
-        for child in &self.children {
-            child.paint(cx, items);
-        }
+    fn paint(&self, _cx: &Context, items: &mut Vec<Item>) {
+        items.extend(self.items.iter().cloned());
     }
 
     fn access(&self, _cx: &Context) -> Node {
-        let mut node = Node::new(Role::Group);
-        node.set_label(L10N.tr("settings-title"));
+        let mut node = Node::new(Role::Image);
+        node.set_label(L10N.tr("settings-preview-sample"));
         node
-    }
-
-    fn children(&self) -> &[Box<dyn Widget>] {
-        &self.children
-    }
-
-    fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
-        &mut self.children
     }
 }
 
@@ -292,34 +171,28 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
         current.notify_finished,
         |settings, on| settings.notify_finished = on,
     );
-    Form {
-        id: WidgetId::next(),
-        lines: vec![
-            Line::Heading(L10N.tr("settings-appearance")),
-            Line::Row(L10N.tr("settings-profile")),
-            Line::Preview,
-            Line::Row(L10N.tr("settings-font-size")),
-            Line::Row(L10N.tr("settings-cursor")),
-            Line::Heading(L10N.tr("settings-bell")),
-            Line::Row(L10N.tr("settings-flash")),
-            Line::Row(L10N.tr("settings-badge")),
-            Line::Heading(L10N.tr("settings-notifications")),
-            Line::Row(L10N.tr("settings-notify")),
+    let heading = |message: &str| FormLine::Heading(L10N.tr(message));
+    let row = |message: &str, control: Box<dyn Widget>| FormLine::Row(L10N.tr(message), control);
+    Form::new(
+        &L10N.tr("settings-title"),
+        vec![
+            heading("settings-appearance"),
+            row("settings-profile", Box::new(profile_button)),
+            FormLine::Wide(Box::new(Preview {
+                id: WidgetId::next(),
+                profile,
+                frame: Rect::default(),
+                items: Vec::new(),
+            })),
+            row("settings-font-size", Box::new(size)),
+            row("settings-cursor", Box::new(cursor)),
+            heading("settings-bell"),
+            row("settings-flash", Box::new(flash)),
+            row("settings-badge", Box::new(badge)),
+            heading("settings-notifications"),
+            row("settings-notify", Box::new(notify)),
         ],
-        children: vec![
-            Box::new(profile_button),
-            Box::new(size),
-            Box::new(cursor),
-            Box::new(flash),
-            Box::new(badge),
-            Box::new(notify),
-        ],
-        profile,
-        texts: Vec::new(),
-        heights: Vec::new(),
-        preview: None,
-        frame: Rect::default(),
-    }
+    )
 }
 
 pub fn settings_view(appearance: Appearance, settings: &SharedSettings) -> Ui {

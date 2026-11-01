@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
-use bande_app_menu::{Entry, Standard, app_submenu_quitting_on, window_submenu};
+use bande_app_menu::{Entry, Standard, app_submenu_quitting_on, settings, window_submenu};
 use bande_toolkit::ui::{Menu, MenuItem};
 use bande_xdg::path_from_file_uri;
 
 use crate::L10N;
 use crate::keys::Command;
 
-const COMMANDS: [(Command, &str, &str, &str); 21] = [
+const COMMANDS: [(Command, &str, &str, &str); 20] = [
     (Command::Copy, "copy", "menu-copy", "Shift+Ctrl+C"),
     (Command::Paste, "paste", "menu-paste", "Shift+Ctrl+V"),
     (
@@ -76,12 +76,6 @@ const COMMANDS: [(Command, &str, &str, &str); 21] = [
         "Shift+Ctrl+[",
     ),
     (
-        Command::Settings,
-        "settings",
-        "menu-settings",
-        "Shift+Ctrl+,",
-    ),
-    (
         Command::PreviousPrompt,
         "previous-prompt",
         "menu-previous-prompt",
@@ -103,6 +97,7 @@ const COMMANDS: [(Command, &str, &str, &str); 21] = [
 
 pub const CLOSE_TAB_SHORTCUT: &str = "Shift+Ctrl+W";
 pub const QUIT_SHORTCUT: &str = "Shift+Ctrl+Q";
+pub const SETTINGS_SHORTCUT: &str = "Shift+Ctrl+,";
 const OPEN_LINK: &str = "open-link:";
 const COPY_LINK: &str = "copy-link:";
 const CLOSE_TAB: &str = "close-tab:";
@@ -267,7 +262,7 @@ pub fn app_menus() -> Vec<Entry> {
     vec![
         app_submenu_quitting_on(
             &L10N.tr("title"),
-            command_entries(&[Some(Command::Settings)]),
+            vec![settings().shortcut(SETTINGS_SHORTCUT)],
             QUIT_SHORTCUT,
         ),
         Entry::submenu(&L10N.tr("menu-shell"), shell),
@@ -313,12 +308,13 @@ pub fn app_menus() -> Vec<Entry> {
 mod tests {
     use bande_toolkit::ui::parse_shortcut;
 
-    use super::COMMANDS;
-    use crate::keys::shortcut;
+    use super::{COMMANDS, SETTINGS_SHORTCUT};
+    use crate::keys::{Command, shortcut};
 
     #[test]
     fn every_menu_shortcut_runs_the_command_beside_it() {
-        for (command, _, _, keys) in COMMANDS {
+        let settings = (Command::Settings, "", "", SETTINGS_SHORTCUT);
+        for (command, _, _, keys) in COMMANDS.into_iter().chain([settings]) {
             let pressed = parse_shortcut(keys).map(|(key, modifiers)| shortcut(key, modifiers));
             assert_eq!(pressed, Some(Some(command)), "{keys}");
         }

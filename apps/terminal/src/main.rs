@@ -1,14 +1,14 @@
 mod app;
 mod bus;
-mod preferences;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use bande_app_menu::AppMenu;
+use bande_app_settings::{Stored, settings_folder};
 use bande_term::{
-    COLUMNS, GridSize, L10N, Painter, ROWS, SavedWindow, Session, Settings, Terminal, app_menus,
-    claim, left_behind, settings_folder, window_file, windows_folder,
+    COLUMNS, GridSize, L10N, Painter, ROWS, SETTINGS_SIZE, SavedWindow, Session, Settings,
+    Terminal, app_menus, claim, left_behind, settings_view, window_file, windows_folder,
 };
 use bande_toolkit::{Role, Window, WindowError};
 
@@ -47,7 +47,12 @@ fn run() -> Result<(), WindowError> {
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let mut arguments = Arguments::parse(std::env::args().skip(1));
     if arguments.settings {
-        return preferences::run();
+        return bande_app_settings::run::<Settings>(
+            &L10N.tr("settings-title"),
+            APP_ID,
+            SETTINGS_SIZE,
+            settings_view,
+        );
     }
     let settings = settings_folder()
         .map(|folder| Settings::load(&folder))
