@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 accesskit.workspace = true
+bande-app.workspace = true
 base64.workspace = true
 jiff.workspace = true
 roxmltree.workspace = true
@@ -23,7 +24,6 @@ bande-app-menu.workspace = true
 bande-design.workspace = true
 bande-datetime.workspace = true
 bande-l10n.workspace = true
-bande-log.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 
@@ -39,7 +39,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "utils"
 priority = "optional"
-depends = "$auto, fonts-inter, fonts-manrope"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 extended-description = """\
 The calendar of the Bande desktop: CalDAV accounts with offline sync, a local \
 calendar and read-only subscriptions, with day, week, month and year views and \
@@ -47,5 +47,6 @@ event alerts."""
 assets = [
     ["target/release/bande-calendar", "usr/bin/", "755"],
     ["data/org.bande.Calendar.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.Calendar.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Calendar.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
 ]

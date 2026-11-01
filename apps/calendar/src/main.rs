@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::os::fd::BorrowedFd;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use bande_app_menu::{AppMenu, Entry, Standard, app_submenu, close_window, window_submenu};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
+use bande_app_menu::{Entry, edit_submenu};
 use bande_calendar::alerts::{Due, due_between};
 use bande_calendar::caldav::Discovered;
 use bande_calendar::ical::CalendarObject;
@@ -15,10 +16,8 @@ use bande_calendar::ui::{CalendarView, L10N, Mode, Request, SIDEBAR_WIDTH, TOOLB
 use bande_calendar::worker::{Job, Reply, Worker};
 use bande_datetime::DateFormats;
 use bande_design::{Accent, Scheme};
-use bande_toolkit::ui::shortcut_pressed;
 use bande_toolkit::{
-    App, Appearance, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSystem, Window,
-    WindowError, WindowEvent,
+    Appearance, FrameRegions, MenuPlacement, Rect, Scene, TextSystem, Window, WindowEvent,
 };
 use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp, Zoned};
@@ -33,10 +32,18 @@ const PUSH_DELAY: Duration = Duration::from_secs(2);
 const ALERT_HORIZON: SignedDuration = SignedDuration::from_hours(1);
 const NOTIFICATION_TIMEOUT: i32 = -1;
 
+static INFO: Info = Info {
+    id: APP_ID,
+    package: env!("CARGO_PKG_NAME"),
+    version: env!("CARGO_PKG_VERSION"),
+    name: || L10N.tr("app-name"),
+    keys: Keys::Standard,
+    settings: None,
+};
+
 struct CalendarApp {
-    view: CalendarView,
+    main: WindowId,
     worker: Worker,
-    app_menu: Option<AppMenu>,
     zone: TimeZone,
     formats: DateFormats,
     next_sync: Instant,
@@ -49,7 +56,6 @@ struct CalendarApp {
     syncing: bool,
     sync_again: bool,
     title: String,
-    published_mode: Mode,
     errors: Vec<String>,
 }
 
@@ -93,7 +99,6 @@ fn app_menus(mode: Mode) -> Vec<Entry> {
         entry("find", "find").shortcut("Ctrl+F"),
     ]);
     vec![
-        app_submenu(&L10N.tr("app-name"), env!("CARGO_PKG_VERSION"), Vec::new()),
         Entry::submenu(
             &L10N.tr("menu-file"),
             vec![
@@ -102,12 +107,10 @@ fn app_menus(mode: Mode) -> Vec<Entry> {
                 entry("new-calendar", "new-calendar").shortcut("Alt+Ctrl+N"),
                 entry("add-account", "add-account"),
                 entry("refresh", "refresh").shortcut("Ctrl+R"),
-                Entry::separator(),
-                close_window(),
             ],
         ),
+        edit_submenu(Vec::new()),
         Entry::submenu(&L10N.tr("menu-view"), view),
-        window_submenu(Vec::new()),
     ]
 }
 
@@ -169,7 +172,7 @@ fn host_of(url: &str) -> &str {
 }
 
 impl CalendarApp {
-    fn sync(&mut self, subscriptions: bool) {
+    fn sync(&mut self, view: &mut CalendarView, subscriptions: bool) {
         self.next_sync = Instant::now() + SYNC_INTERVAL;
         if subscriptions {
             self.next_subscriptions = Instant::now() + SUBSCRIPTION_INTERVAL;
@@ -178,7 +181,7 @@ impl CalendarApp {
             self.sync_again = true;
             return;
         }
-        let library = self.view.library();
+        let library = view.library();
         let calendars: Vec<_> = library
             .calendars
             .iter()
@@ -196,11 +199,18 @@ impl CalendarApp {
         }
         self.syncing = true;
         self.errors.clear();
-        self.view.set_status(Some(L10N.tr("syncing")));
+        view.set_status(Some(L10N.tr("syncing")));
         self.worker.send(Job::Sync(calendars));
     }
 
-    fn add_discovered(&mut self, id: String, server: String, user: String, found: Discovered) {
+    fn add_discovered(
+        &mut self,
+        view: &mut CalendarView,
+        id: String,
+        server: String,
+        user: String,
+        found: Discovered,
+    ) {
         let name = match user.contains('@') {
             true => user.clone(),
             false => format!("{user}@{}", host_of(&found.principal)),
@@ -237,15 +247,14 @@ impl CalendarApp {
                 home: found.home,
             },
         };
-        self.view.library_mut().add_account(account, calendars);
-        self.view.account_added();
-        self.sync(false);
+        view.library_mut().add_account(account, calendars);
+        view.account_added();
+        self.sync(view, false);
     }
 
-    fn add_subscription(&mut self, url: String, data: &str) {
+    fn add_subscription(&mut self, view: &mut CalendarView, url: String, data: &str) {
         let Ok(objects) = CalendarObject::parse(data) else {
-            self.view
-                .account_failed(&L10N.tr_args("not-a-calendar", [("url", url.into())]));
+            view.account_failed(&L10N.tr_args("not-a-calendar", [("url", url.into())]));
             return;
         };
         let header = |name: &str| {
@@ -273,7 +282,7 @@ impl CalendarApp {
             sync_token: None,
         };
         let outcome = subscription_outcome(&info, data);
-        self.view.library_mut().add_account(
+        view.library_mut().add_account(
             Account {
                 id: account,
                 name,
@@ -282,20 +291,20 @@ impl CalendarApp {
             vec![info],
         );
         if let Some(outcome) = outcome {
-            apply(self.view.library_mut(), outcome, true);
+            apply(view.library_mut(), outcome, true);
         }
-        self.view.account_added();
+        view.account_added();
     }
 
-    fn calendar_name(&self, id: &str) -> String {
-        let library = self.view.library();
+    fn calendar_name(view: &CalendarView, id: &str) -> String {
+        let library = view.library();
         library
             .calendar_index(id)
             .map(|index| library.calendars[index].info.name.clone())
             .unwrap_or_default()
     }
 
-    fn replies(&mut self) -> bool {
+    fn replies(&mut self, view: &mut CalendarView) -> bool {
         let replies = self.worker.take();
         let changed = !replies.is_empty();
         for reply in replies {
@@ -305,17 +314,17 @@ impl CalendarApp {
                     server,
                     user,
                     found,
-                } => self.add_discovered(id, server, user, found),
-                Reply::DiscoveryFailed(error) => self.view.account_failed(&error),
-                Reply::Subscribed { url, data } => self.add_subscription(url, &data),
+                } => self.add_discovered(view, id, server, user, found),
+                Reply::DiscoveryFailed(error) => view.account_failed(&error),
+                Reply::Subscribed { url, data } => self.add_subscription(view, url, &data),
                 Reply::Synced(outcome) => {
-                    for title in apply(self.view.library_mut(), outcome, false) {
+                    for title in apply(view.library_mut(), outcome, false) {
                         self.errors
                             .push(L10N.tr_args("conflict", [("title", title.into())]));
                     }
                 }
                 Reply::Refreshed { calendar, data } => {
-                    let library = self.view.library_mut();
+                    let library = view.library_mut();
                     let outcome = library.calendar_index(&calendar).and_then(|index| {
                         subscription_outcome(&library.calendars[index].info, &data)
                     });
@@ -327,7 +336,7 @@ impl CalendarApp {
                     }
                 }
                 Reply::Failed { calendar, error } => {
-                    let name = self.calendar_name(&calendar);
+                    let name = Self::calendar_name(view, &calendar);
                     tracing::warn!("cannot sync {name}: {error}");
                     self.errors.push(L10N.tr_args(
                         "sync-error",
@@ -340,7 +349,7 @@ impl CalendarApp {
                     name,
                     color,
                 } => {
-                    self.view.library_mut().add_calendar(CalendarInfo {
+                    view.library_mut().add_calendar(CalendarInfo {
                         id: new_uid(),
                         account,
                         url: Some(url),
@@ -354,7 +363,7 @@ impl CalendarApp {
                 }
                 Reply::ChangeFailed(error) => {
                     tracing::warn!("cannot change a calendar: {error}");
-                    self.view.set_status(Some(error));
+                    view.set_status(Some(error));
                 }
                 Reply::Finished => {
                     self.syncing = false;
@@ -362,7 +371,7 @@ impl CalendarApp {
                     let status = self.errors.first().cloned().unwrap_or_else(|| {
                         L10N.tr_args("synced-at", [("time", clock(&self.formats, &now).into())])
                     });
-                    self.view.set_status(Some(status));
+                    view.set_status(Some(status));
                     if std::mem::take(&mut self.sync_again) {
                         self.next_sync = Instant::now() + PUSH_DELAY;
                     }
@@ -370,14 +379,14 @@ impl CalendarApp {
             }
         }
         if changed {
-            self.view.refresh_search();
+            view.refresh_search();
             self.next_alerts = Instant::now();
         }
         changed
     }
 
-    fn serve(&mut self, window: &mut Window) {
-        for request in self.view.take_requests() {
+    fn serve(&mut self, window: &mut Window, view: &mut CalendarView) {
+        for request in view.take_requests() {
             match request {
                 Request::Menu(menu, at) => {
                     if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
@@ -401,26 +410,21 @@ impl CalendarApp {
                 }),
                 Request::Subscribe(url) => self.worker.send(Job::Subscribe { url }),
                 Request::RemoveAccount(id) => {
-                    self.view.library_mut().remove_account(&id);
+                    view.library_mut().remove_account(&id);
                     self.worker.send(Job::Forget(id));
                 }
                 Request::Changed => {
                     self.next_sync = self.next_sync.min(Instant::now() + PUSH_DELAY);
                     self.next_alerts = Instant::now();
-                    self.view.refresh_search();
+                    view.refresh_search();
                 }
-                Request::Refresh => self.sync(true),
+                Request::Refresh => self.sync(view, true),
                 Request::Collection {
                     account,
                     url,
                     change,
                 } => {
-                    let user = match self
-                        .view
-                        .library()
-                        .account(&account)
-                        .map(|known| &known.kind)
-                    {
+                    let user = match view.library().account(&account).map(|known| &known.kind) {
                         Some(AccountKind::CalDav { user, .. }) => user.clone(),
                         _ => continue,
                     };
@@ -433,29 +437,20 @@ impl CalendarApp {
                 }
             }
         }
-        let title = self.view.title();
+        let title = view.title();
         if title != self.title {
             window.set_title(&title);
             self.title = title;
         }
-        let mode = self.view.mode();
-        if mode != self.published_mode {
-            self.published_mode = mode;
-            if let Some(app_menu) = &self.app_menu
-                && let Err(error) = app_menu.update(app_menus(mode))
-            {
-                tracing::debug!("cannot update the menus: {error}");
-            }
-        }
     }
 
-    fn check_alerts(&mut self) {
+    fn check_alerts(&mut self, view: &CalendarView) {
         let now = Timestamp::now();
         let until = now
             .saturating_add(SignedDuration::from_secs(1))
             .unwrap_or(now);
         for due in due_between(
-            self.view.library(),
+            view.library(),
             self.alerts_checked.min(now),
             until,
             &self.zone,
@@ -466,7 +461,7 @@ impl CalendarApp {
         }
         self.alerts_checked = until;
         let horizon = now.saturating_add(ALERT_HORIZON).unwrap_or(now);
-        let next = due_between(self.view.library(), until, horizon, &self.zone)
+        let next = due_between(view.library(), until, horizon, &self.zone)
             .first()
             .map_or(horizon, |due| due.at);
         let wait = now.duration_until(next).max(SignedDuration::from_secs(1));
@@ -474,29 +469,14 @@ impl CalendarApp {
         self.next_alerts =
             Instant::now() + Duration::try_from(wait).unwrap_or(Duration::from_secs(60));
     }
-
-    fn menu_action(&mut self, window: &mut Window, action: &str) -> bool {
-        let result = match Standard::parse(action) {
-            Some(Standard::Hide | Standard::Minimize) => window.minimize(),
-            Some(Standard::Zoom) => window.toggle_zoom(),
-            Some(Standard::Settings) => Ok(()),
-            Some(Standard::Quit | Standard::CloseWindow) => {
-                window.close();
-                Ok(())
-            }
-            None => return self.view.menu_action(action),
-        };
-        if let Err(error) = result {
-            tracing::warn!("cannot {action}: {error}");
-        }
-        false
-    }
 }
 
-impl App for CalendarApp {
+struct Pane(CalendarView);
+
+impl View for Pane {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let full_screen = window.header_height() == 0;
-        self.view.set_full_screen(full_screen);
+        self.0.set_full_screen(full_screen);
         window.set_frame_regions(FrameRegions {
             sidebar: SIDEBAR_WIDTH,
             toolbar: match full_screen {
@@ -505,118 +485,180 @@ impl App for CalendarApp {
             },
         });
         let (width, height) = window.size();
-        let scene = self.view.scene(width, height);
-        window.set_header(self.view.header());
+        let scene = self.0.scene(width, height);
+        window.set_header(self.0.header());
         scene
     }
 
-    fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        let changed = match event {
-            WindowEvent::AppearanceChanged(appearance) => {
-                self.view.set_appearance(appearance);
-                true
-            }
-            WindowEvent::Focus(focused) => {
-                self.view.set_focused(focused);
-                if focused && let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
-                    tracing::warn!("{error}");
-                }
-                true
-            }
+    fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        match event {
             WindowEvent::Input(input) => {
-                if let Some(standard) =
-                    Standard::for_shortcut(|shortcut| shortcut_pressed(&input, shortcut))
-                {
-                    self.menu_action(window, standard.action())
-                } else {
-                    let changed = self.view.handle(&input);
-                    window.set_cursor(self.view.cursor());
-                    changed
-                }
+                let changed = self.0.handle(&input);
+                window.set_cursor(self.0.cursor());
+                changed
             }
-            WindowEvent::Accessibility(request) => self.view.perform(&request),
-            WindowEvent::MenuAction(action) => self.menu_action(window, &action),
-            WindowEvent::MenuClosed => self.view.menu_closed(),
-            WindowEvent::Pasted(text) => self.view.pasted(&text),
+            WindowEvent::Accessibility(request) => self.0.perform(&request),
+            WindowEvent::MenuAction(action) => self.0.menu_action(&action),
+            WindowEvent::MenuClosed => self.0.menu_closed(),
+            WindowEvent::Pasted(text) => self.0.pasted(&text),
             _ => false,
-        };
-        self.serve(window);
-        if changed {
+        }
+    }
+
+    fn set_appearance(&mut self, appearance: Appearance) {
+        self.0.set_appearance(appearance);
+    }
+
+    fn set_active(&mut self, active: bool) {
+        self.0.set_focused(active);
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.0.deadline()
+    }
+
+    fn tick(&mut self, _window: &mut Window, _now: Instant) -> bool {
+        true
+    }
+
+    fn animating(&self) -> bool {
+        self.0.animating()
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        self.0.text_input_area()
+    }
+
+    fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
+        Some(self.0.accessibility())
+    }
+}
+
+impl CalendarApp {
+    fn settle(&mut self, cx: &mut Cx<Self>) {
+        if let Some((window, Pane(view))) = cx.window(self.main) {
+            self.serve(window, view);
             window.request_redraw();
         }
+        cx.refresh_menus();
+    }
+}
+
+impl Program for CalendarApp {
+    type View = Pane;
+
+    fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        let zone = TimeZone::try_system().unwrap_or(TimeZone::UTC);
+        let library = Library::load(data_dir());
+        let formats = DateFormats::from_env();
+        let now = Zoned::now().with_time_zone(zone.clone());
+        let mut view = CalendarView::new(
+            library,
+            Appearance::default().palette(),
+            TextSystem::new(),
+            formats.clone(),
+            zone.clone(),
+            now,
+        );
+        let title = view.title();
+        let directory = std::env::current_dir().unwrap_or_default();
+        open_arguments(&mut view, &arguments, &directory);
+        let worker = Worker::start()?;
+        let main = cx.open(Kind::Main, &title, WINDOW_SIZE, |appearance| {
+            view.set_appearance(appearance);
+            Pane(view)
+        })?;
+        let started = Instant::now();
+        Ok(Self {
+            main,
+            worker,
+            zone,
+            formats,
+            next_sync: started,
+            next_subscriptions: started,
+            next_clock: started + until_next_minute(),
+            next_alerts: started,
+            alert_at: Timestamp::now(),
+            alerts_checked: Timestamp::now(),
+            fired: HashSet::new(),
+            syncing: false,
+            sync_again: false,
+            title,
+            errors: Vec::new(),
+        })
+    }
+
+    fn menus(&self, cx: &Cx<Self>) -> Menus {
+        Menus {
+            menus: cx
+                .view(self.main)
+                .map(|Pane(view)| app_menus(view.mode()))
+                .unwrap_or_default(),
+            window: Vec::new(),
+        }
+    }
+
+    fn command(&mut self, cx: &mut Cx<Self>, _window: WindowId, command: &str) {
+        if let Some((_, Pane(view))) = cx.window(self.main) {
+            view.menu_action(command);
+        }
+        self.settle(cx);
+    }
+
+    fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
+        if let Some((_, Pane(view))) = cx.window(self.main) {
+            open_arguments(view, &arguments, directory);
+        }
+        self.settle(cx);
+    }
+
+    fn changed(&mut self, cx: &mut Cx<Self>, _window: WindowId) {
+        self.settle(cx);
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.worker.fd()];
-        sources.extend(self.app_menu.iter().map(AppMenu::fd));
-        sources
+        vec![self.worker.fd()]
     }
 
-    fn source_ready(&mut self, window: &mut Window, index: usize) {
-        let changed = match index {
-            0 => self.replies(),
-            _ => {
-                let actions = self
-                    .app_menu
-                    .as_mut()
-                    .map(AppMenu::take_actions)
-                    .unwrap_or_default();
-                actions.iter().fold(false, |changed, action| {
-                    self.menu_action(window, action) | changed
-                })
-            }
-        };
-        self.serve(window);
-        if changed {
-            window.request_redraw();
+    fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {
+        if let Some((_, Pane(view))) = cx.window(self.main) {
+            self.replies(view);
         }
+        self.settle(cx);
     }
 
     fn deadline(&self) -> Option<Instant> {
         [
-            Some(self.next_sync),
-            Some(self.next_subscriptions),
-            Some(self.next_clock),
-            Some(self.next_alerts),
-            self.view.deadline(),
+            self.next_sync,
+            self.next_subscriptions,
+            self.next_clock,
+            self.next_alerts,
         ]
         .into_iter()
-        .flatten()
         .min()
     }
 
-    fn tick(&mut self, window: &mut Window, now: Instant) {
+    fn tick(&mut self, cx: &mut Cx<Self>, now: Instant) {
+        let Some((_, Pane(view))) = cx.window(self.main) else {
+            return;
+        };
         if now >= self.next_clock {
-            self.view
-                .set_now(Zoned::now().with_time_zone(self.zone.clone()));
+            view.set_now(Zoned::now().with_time_zone(self.zone.clone()));
             self.next_clock = now + until_next_minute();
-            window.request_redraw();
         }
         if now >= self.next_alerts || Timestamp::now() >= self.alert_at {
-            self.check_alerts();
+            self.check_alerts(view);
         }
         if now >= self.next_subscriptions {
-            self.sync(true);
+            self.sync(view, true);
         } else if now >= self.next_sync {
-            self.sync(false);
+            self.sync(view, false);
         }
-        self.serve(window);
-    }
-
-    fn animating(&self) -> bool {
-        self.view.animating()
-    }
-
-    fn text_input_area(&self) -> Option<Rect> {
-        self.view.text_input_area()
-    }
-
-    fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
-        Some(self.view.accessibility())
+        self.settle(cx);
     }
 }
 
-fn open_arguments(view: &mut CalendarView, arguments: &[String]) {
+fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Path) {
     for argument in arguments {
         let lower = argument.to_ascii_lowercase();
         if lower.starts_with("webcal://") || lower.starts_with("webcals://") {
@@ -624,7 +666,7 @@ fn open_arguments(view: &mut CalendarView, arguments: &[String]) {
             continue;
         }
         let path =
-            bande_xdg::path_from_file_uri(argument).unwrap_or_else(|| PathBuf::from(argument));
+            bande_xdg::path_from_file_uri(argument).unwrap_or_else(|| directory.join(argument));
         match std::fs::read_to_string(&path).map(|text| CalendarObject::parse(&text)) {
             Ok(Ok(objects)) if !objects.is_empty() => {
                 let name = path
@@ -643,63 +685,6 @@ fn open_arguments(view: &mut CalendarView, arguments: &[String]) {
     }
 }
 
-fn run(arguments: Vec<String>) -> Result<(), WindowError> {
-    let zone = TimeZone::try_system().unwrap_or(TimeZone::UTC);
-    let library = Library::load(data_dir());
-    let formats = DateFormats::from_env();
-    let now = Zoned::now().with_time_zone(zone.clone());
-    let palette = Appearance::default().palette();
-    let mut view = CalendarView::new(
-        library,
-        palette,
-        TextSystem::new(),
-        formats.clone(),
-        zone.clone(),
-        now,
-    );
-    let title = view.title();
-    let mut window = Window::open(Role::toplevel(&title, APP_ID), WINDOW_SIZE)?;
-    view.set_appearance(window.appearance());
-    open_arguments(&mut view, &arguments);
-    let app_menu = AppMenu::export(APP_ID, app_menus(view.mode()))
-        .inspect_err(|error| tracing::warn!("{error}"))
-        .ok();
-    let worker = Worker::start()?;
-    let started = Instant::now();
-    let mut app = CalendarApp {
-        published_mode: view.mode(),
-        view,
-        worker,
-        app_menu,
-        zone,
-        formats,
-        next_sync: started,
-        next_subscriptions: started,
-        next_clock: started + until_next_minute(),
-        next_alerts: started,
-        alert_at: Timestamp::now(),
-        alerts_checked: Timestamp::now(),
-        fired: HashSet::new(),
-        syncing: false,
-        sync_again: false,
-        title,
-        errors: Vec::new(),
-    };
-    bande_toolkit::run(&mut window, &mut app)
-}
-
 fn main() -> ExitCode {
-    let arguments: Vec<String> = std::env::args().skip(1).collect();
-    if arguments.first().map(String::as_str) == Some("--version") {
-        println!("{PROGRAM} {}", env!("CARGO_PKG_VERSION"));
-        return ExitCode::SUCCESS;
-    }
-    bande_log::init(PROGRAM);
-    match run(arguments) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            tracing::error!("{error}");
-            ExitCode::FAILURE
-        }
-    }
+    bande_app::run::<CalendarApp>(&INFO)
 }
