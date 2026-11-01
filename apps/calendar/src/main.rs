@@ -8,7 +8,7 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_calendar::alerts::{Due, due_between};
 use bande_calendar::caldav::Discovered;
-use bande_calendar::ical::CalendarObject;
+use bande_calendar::ical::{CalendarObject, read_file};
 use bande_calendar::store::{Account, AccountKind, CalendarInfo, Library, new_uid};
 use bande_calendar::sync::{apply, subscription_outcome};
 use bande_calendar::ui::painter::{color_text, parse_color};
@@ -667,7 +667,7 @@ fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Pat
         }
         let path =
             bande_xdg::path_from_file_uri(argument).unwrap_or_else(|| directory.join(argument));
-        match std::fs::read_to_string(&path).map(|text| CalendarObject::parse(&text)) {
+        match read_file(&path).map(|text| CalendarObject::parse(&text)) {
             Ok(Ok(objects)) if !objects.is_empty() => {
                 let name = path
                     .file_name()
