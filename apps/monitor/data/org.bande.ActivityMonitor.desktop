@@ -7,8 +7,3 @@ Icon=org.bande.ActivityMonitor
 Exec=bande-monitor
 Categories=System;Monitor;
 Keywords=process;task;cpu;memory;kill;force quit;
-Actions=force-quit;
-
-[Desktop Action force-quit]
-Name=Force Quit Apps
-Exec=bande-monitor --force-quit

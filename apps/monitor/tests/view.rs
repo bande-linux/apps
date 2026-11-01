@@ -7,9 +7,8 @@ use std::time::{Duration, Instant};
 
 use accesskit::Role;
 use bande_monitor::{
-    AppList, AppRow, Catalog, CpuShare, ForceQuitView, Graph, Icons, Interface, InterfaceKind,
-    Memory, Monitor, MonitorView, Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab,
-    app_menus, due_redraws,
+    Catalog, CpuShare, Graph, Icons, Interface, InterfaceKind, Memory, Monitor, MonitorView,
+    Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab, app_menus, due_redraws,
 };
 use bande_toolkit::ui::{
     Event, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll, Table, Widget,
@@ -21,7 +20,6 @@ use bande_toolkit::{
 use fixture::{battery_report, check_golden, entry, process};
 
 const MONITOR_SIZE: (u32, u32) = (860, 420);
-const FORCE_QUIT_SIZE: (u32, u32) = (380, 340);
 const LIST_TOP: f32 = 48.0 + Table::HEADER_HEIGHT;
 const TITLE: &str = "Activity Monitor";
 
@@ -266,22 +264,6 @@ fn a_search_that_finds_nothing_says_so_and_clear_search_brings_the_rows_back() {
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
 
     assert!(shown_rows(&view).contains(&"Terminal".to_owned()));
-}
-
-#[test]
-fn force_quit_matches_its_golden() {
-    let mut view = ForceQuitView::new(
-        AppList::new(catalog(), 1000),
-        Palette::for_scheme(Scheme::Light),
-        TextSystem::new(),
-        icons(),
-    );
-    view.update(snapshot(0));
-    assert!(view.set_responding(500, "org.bande.Terminal", false));
-    view.handle(&key(Key::Down));
-    view.handle(&key(Key::Down));
-    render(&mut view, "Force Quit Apps", "force-quit", FORCE_QUIT_SIZE);
-    render_larger(&mut view, "Force Quit Apps", "force-quit", FORCE_QUIT_SIZE);
 }
 
 fn command(character: char) -> Event {
@@ -602,54 +584,6 @@ fn an_app_that_stopped_responding_is_marked_in_the_list_until_it_answers_again()
     assert!(view.set_responding(600, "org.bande.Files", true));
     view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
     assert!(shown_rows(&view).contains(&"Files".to_owned()));
-}
-
-#[test]
-fn force_quit_marks_an_app_that_stopped_responding_until_it_answers_again() {
-    let mut apps = AppList::new(catalog(), 1000);
-    apps.update(snapshot(0));
-    let responding = |apps: &AppList| {
-        apps.rows()
-            .map(
-                |AppRow {
-                     name, responding, ..
-                 }| (name.to_owned(), responding),
-            )
-            .collect::<Vec<_>>()
-    };
-    assert!(apps.set_responding(501, "", false));
-    assert!(!apps.set_responding(501, "", false));
-    assert_eq!(
-        responding(&apps),
-        [
-            ("Files".to_owned(), true),
-            ("Settings".to_owned(), true),
-            ("Terminal".to_owned(), false),
-        ]
-    );
-    assert!(apps.set_responding(501, "", true));
-    assert!(responding(&apps).iter().all(|(_, responding)| *responding));
-}
-
-#[test]
-fn force_quit_lists_apps_for_assistive_technology_and_force_quits_the_selected_ones() {
-    let mut view = ForceQuitView::new(
-        AppList::new(catalog(), 1000),
-        Palette::for_scheme(Scheme::Light),
-        TextSystem::new(),
-        icons(),
-    );
-    view.update(snapshot(0));
-    view.scene(FORCE_QUIT_SIZE.0, FORCE_QUIT_SIZE.1);
-    assert_eq!(shown_rows(&view), ["Files", "Settings", "Terminal"]);
-    view.handle(&key(Key::Down));
-    view.handle(&shifted(Key::Down));
-    assert_eq!(view.table().expect("table").selection().len(), 2);
-    assert!(view.handle(&key(Key::Enter)));
-    view.handle(&key(Key::Escape));
-    assert!(!view.finished());
-    view.handle(&key(Key::Escape));
-    assert!(view.finished());
 }
 
 fn column_headers(view: &MonitorView) -> Vec<String> {

@@ -104,14 +104,6 @@ pub fn columns_menu(tab: Tab, shown: &[Column]) -> Menu {
     )
 }
 
-pub fn force_quit_menu(located: bool) -> Menu {
-    Menu::new(vec![
-        item("menu-force-quit", MenuCommand::ForceQuit).shortcut("Enter"),
-        MenuItem::separator(),
-        item("menu-show-in-files", MenuCommand::ShowInFiles).enabled(located),
-    ])
-}
-
 fn entry(message: &str, command: MenuCommand) -> Entry {
     Entry::item(&L10N.tr(message), command.action())
 }

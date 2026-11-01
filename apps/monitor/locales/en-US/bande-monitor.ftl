@@ -112,9 +112,6 @@ quit-message = Quit asks it to close. Force Quit ends it at once, and any unsave
 quit-denied = “{ $name }” belongs to another user.
 quit-denied-message = Only its owner or an administrator can quit it.
 
-force-quit-title = Force Quit Apps
-force-quit-hint = If an app does not respond, select it and click Force Quit.
-force-quit-empty = No apps are open.
 force-quit-confirm = { $count ->
     [one] Do you want to force quit “{ $name }”?
    *[other] Do you want to force quit the { $count } selected items?

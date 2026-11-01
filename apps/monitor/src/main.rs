@@ -7,9 +7,9 @@ use accesskit::TreeUpdate;
 
 use bande_app_menu::{AppMenu, Entry, Standard};
 use bande_monitor::{
-    AppList, Asked, BatteryReport, Catalog, ForceQuitView, INSPECTOR_SIZE, Icons, InspectorView,
-    L10N, Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop,
-    TOOLBAR_HEIGHT, Tab, battery_reader, due_redraws, list_sleep_blockers, stop_all,
+    Asked, BatteryReport, Catalog, INSPECTOR_SIZE, Icons, InspectorView, L10N, Monitor,
+    MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop, TOOLBAR_HEIGHT, Tab,
+    battery_reader, due_redraws, list_sleep_blockers, stop_all,
 };
 use bande_toolkit::ui::shortcut_pressed;
 use bande_toolkit::{
@@ -22,7 +22,6 @@ use bande_xdg::{
 
 const APP_ID: &str = "org.bande.ActivityMonitor";
 const WINDOW_SIZE: (u32, u32) = (860, 600);
-const FORCE_QUIT_SIZE: (u32, u32) = (380, 440);
 const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
 const ICON_PIXELS: u32 = 32;
@@ -486,32 +485,24 @@ fn run() -> Result<(), WindowError> {
     ));
     let palette = Appearance::default().palette();
     let mut sampler = Sampler::live();
-    if std::env::args().any(|argument| argument == "--force-quit") {
-        let apps = AppList::new(catalog, rustix::process::getuid().as_raw());
-        let mut screen = ForceQuitView::new(apps, palette, TextSystem::new(), icons());
-        let snapshot = first_sample(&mut sampler, &mut screen);
-        let title = L10N.tr("force-quit-title");
-        open(screen, sampler, snapshot, &title, FORCE_QUIT_SIZE, None)
-    } else {
-        let mut monitor = Monitor::new(catalog, rustix::process::getuid().as_raw());
-        if let Some(text) = state_file().and_then(|file| std::fs::read_to_string(file).ok()) {
-            monitor.restore(&text);
-        }
-        if std::env::args().any(|argument| argument == "--memory") {
-            monitor.set_tab(Tab::Memory);
-        }
-        let mut screen = MonitorView::new(monitor, palette, TextSystem::new(), icons());
-        let snapshot = first_sample(&mut sampler, &mut screen);
-        let app_menu = screen
-            .app_menus()
-            .map(|menus| AppMenu::export(APP_ID, menus))
-            .transpose()
-            .inspect_err(|error| tracing::warn!("{error}"))
-            .ok()
-            .flatten();
-        let title = L10N.tr("window-title");
-        open(screen, sampler, snapshot, &title, WINDOW_SIZE, app_menu)
+    let mut monitor = Monitor::new(catalog, rustix::process::getuid().as_raw());
+    if let Some(text) = state_file().and_then(|file| std::fs::read_to_string(file).ok()) {
+        monitor.restore(&text);
     }
+    if std::env::args().any(|argument| argument == "--memory") {
+        monitor.set_tab(Tab::Memory);
+    }
+    let mut screen = MonitorView::new(monitor, palette, TextSystem::new(), icons());
+    let snapshot = first_sample(&mut sampler, &mut screen);
+    let app_menu = screen
+        .app_menus()
+        .map(|menus| AppMenu::export(APP_ID, menus))
+        .transpose()
+        .inspect_err(|error| tracing::warn!("{error}"))
+        .ok()
+        .flatten();
+    let title = L10N.tr("window-title");
+    open(screen, sampler, snapshot, &title, WINDOW_SIZE, app_menu)
 }
 
 fn main() -> ExitCode {

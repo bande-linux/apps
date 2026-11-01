@@ -1,7 +1,6 @@
 mod apps;
 mod asked;
 mod cpu;
-mod force_quit;
 mod format;
 mod inhibitors;
 mod inspect;
@@ -24,15 +23,13 @@ use bande_l10n::Localizer;
 pub use apps::{AppInfo, Catalog, Group, GroupKey};
 pub use asked::Asked;
 pub use cpu::{CpuShare, read_cpu_ticks};
-pub use force_quit::ForceQuitView;
 pub use format::{format_bytes, format_cpu_time, format_rate};
 pub use inhibitors::{Inhibitor, SleepBlocker, list_sleep_blockers, sleep_blockers};
 pub use inspect::{Details, Mapping, OpenFile, Thread, read_details};
 pub use inspector::{INSPECTOR_SIZE, InspectorView, Section};
-pub use menu::{MenuCommand, Selected, app_menus, force_quit_menu, process_menu};
+pub use menu::{MenuCommand, Selected, app_menus, process_menu};
 pub use model::{
-    AppList, AppRow, Column, CoreGroup, CoreKind, Filter, Graph, Monitor, Row, RowKey, StopTarget,
-    Tab, stop_all,
+    Column, CoreGroup, CoreKind, Filter, Graph, Monitor, Row, RowKey, StopTarget, Tab, stop_all,
 };
 pub use monitor_view::{MonitorView, TOOLBAR_HEIGHT};
 pub use power::{BATTERY_HISTORY, BatteryReport, battery_reader};
@@ -51,7 +48,6 @@ mod tests {
     fn every_message_id_used_in_code_is_in_the_english_file() {
         let sources = [
             include_str!("apps.rs"),
-            include_str!("force_quit.rs"),
             include_str!("format.rs"),
             include_str!("inhibitors.rs"),
             include_str!("inspect.rs"),
