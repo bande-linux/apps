@@ -19,6 +19,30 @@ say so; the rest is what is left before or after tagging.
 - Calendar and the template get Mail's release profile (thin LTO, strip) and the
   unwrap/expect/panic lints; Calendar's smoke test checks its desktop file and icon.
 
+- Both apps ignore keys while Super is held (Super chords belong to the system, as in the
+  desktop's apps).
+- Calendar's build-depends take `python3-radicale` (the library its CalDAV tests run with
+  `python3 -m radicale`) instead of the `radicale` daemon package. The mini has neither installed
+  (no passwordless sudo), so the release dry-run's calendar tests failed there; the gate passed
+  with radicale from a scratch venv on `PATH`. Install `python3-radicale` on the mini.
+- The dark goldens were regenerated for the desktop's slate theme.
+
+## Footprint (2026-11-01, mini, release builds at desktop a6a68588)
+
+Measured with the desktop's `bande-footprint` (headless compositor in-process, lavapipe), a
+private session bus and a scratch HOME, so no account: Mail shows the account sheet, Calendar
+its local calendar. Idle is sampled over 55 s after 10 s of settling.
+
+| App | RSS MiB | Threads | CPU at idle (55 s) | Voluntary wakeups (55 s) | Binary |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| Mail | 82.9 | 8 | 0 ticks | 110 | 22.6 MB |
+| Calendar | 80.0 | 8 | 0 ticks | 113 | 22.6 MB |
+
+No measurable CPU. Both wake about twice a second with nothing to do, the same in both apps,
+so it is likely a toolkit thread rather than app code; worth tracing in the desktop (`perf
+trace`/`strace -f` on an idle app) since a desktop app should sleep fully. RSS is mostly the
+toolkit (fonts, renderer); not measured with a large mailbox or calendar cache.
+
 ## Calendar
 
 ### High (fixed)
@@ -117,3 +141,14 @@ before the handshake rejected; plain text only to exact loopback names; HTML san
 https, mailto links only; remote pictures blocked until asked, HTTPS only, 20 × 10 MB); no
 plaintext password fallback (Secret Service only); UIDVALIDITY change resets the mailbox; IDLE
 re-issued every 25 min; the list paints only visible rows; the UI has no timers at idle.
+
+## Before tagging mail-v0.1.0 and calendar-v0.1.0
+
+- Install `python3-radicale` on the mini (or accept CI as the only run of Calendar's CalDAV tests).
+- Decide on the medium items left above; none crashes or loses data except the 412 conflict
+  copy (Calendar) and offline drafts on quit (Mail).
+- Trace the two idle wakeups per second (likely toolkit).
+- Not done from M6: `ci/with-desktop.sh` and the `rebuild-apps` change (apps-repo names built
+  from this repo).
+- Then the release itself: version is already 0.1.0 in both; tag on main, CI builds and the
+  archive publishes.
