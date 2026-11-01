@@ -30,24 +30,24 @@ tracing = "=0.1.44"
 ureq = { version = "=3.5.0", features = ["platform-verifier"] }
 zbus = "=5.19.0"
 zeroize = "=1.8.1"
-bande-app = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-app-menu = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-app-settings = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-datetime = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-design = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-fs = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-golden = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-inbox = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-l10n = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-log = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-notify = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-packages = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-search = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-spring = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-status = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-test-bus = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
-bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "767084f16f40cdae559d0595d6cf6cd2efad4ec7" }
+bande-app = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-app-menu = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-app-settings = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-datetime = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-design = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-fs = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-golden = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-inbox = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-l10n = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-log = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-notify = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-packages = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-search = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-spring = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-status = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-test-bus = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
+bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "2d87a221526c47e0823b76ace184266c9bba1bc3" }
 
 
 [workspace.lints.clippy]
