@@ -10,8 +10,14 @@ repository.workspace = true
 [dependencies]
 flate2.workspace = true
 roxmltree.workspace = true
+serde.workspace = true
+serde_yaml_ng.workspace = true
 tracing.workspace = true
+bande-search.workspace = true
 bande-xdg.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use bande_xdg::Locale;
 use roxmltree::{Document, Node};
 
-use crate::component::{APPLICATION_KINDS, Block, Bundle, Component, Icon, Release, Screenshot};
+use crate::component::{
+    APPLICATION_KINDS, Block, Bundle, Component, Icon, Release, Screenshot, THUMBNAIL_WIDTH,
+};
 use crate::lang::best;
 
 const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
@@ -55,10 +57,19 @@ fn localized_text(node: Node, name: &'static str, locale: Option<&Locale>) -> Op
 }
 
 fn description(node: Node, locale: Option<&Locale>) -> Vec<Block> {
-    let descriptions = localized(children(node, "description"), locale);
-    let Some(description) = descriptions.first() else {
-        return Vec::new();
-    };
+    localized(children(node, "description"), locale)
+        .first()
+        .map(|description| blocks(*description, locale))
+        .unwrap_or_default()
+}
+
+pub fn description_blocks(markup: &str) -> Vec<Block> {
+    Document::parse(&format!("<description>{markup}</description>"))
+        .map(|document| blocks(document.root_element(), None))
+        .unwrap_or_default()
+}
+
+fn blocks(description: Node, locale: Option<&Locale>) -> Vec<Block> {
     let blocks: Vec<_> = description
         .children()
         .filter(|child| {
@@ -122,6 +133,7 @@ fn screenshot(node: Node, locale: Option<&Locale>) -> Option<Screenshot> {
         images
             .iter()
             .filter(|image| image.attribute("type") == Some(kind))
+            .filter(|image| kind != "thumbnail" || size(**image) <= THUMBNAIL_WIDTH)
             .max_by_key(|image| size(**image))
             .map(|image| text(*image))
     };
@@ -193,6 +205,7 @@ fn component(node: Node, source: &Source, locale: Option<&Locale>) -> Option<Com
             })
             .collect(),
         bundles: bundles(node, source),
+        needs_x11: false,
         id,
     })
 }

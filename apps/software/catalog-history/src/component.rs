@@ -48,6 +48,15 @@ pub struct Component {
     pub launchable: Option<String>,
     pub releases: Vec<Release>,
     pub bundles: Vec<Bundle>,
+    pub needs_x11: bool,
 }
 
 pub const APPLICATION_KINDS: [&str; 2] = ["desktop-application", "desktop"];
+
+pub const THUMBNAIL_WIDTH: u32 = 752;
+
+impl Component {
+    pub fn key(&self) -> &str {
+        self.id.strip_suffix(".desktop").unwrap_or(&self.id)
+    }
+}
