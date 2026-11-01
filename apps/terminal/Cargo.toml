@@ -12,13 +12,13 @@ accesskit.workspace = true
 alacritty_terminal.workspace = true
 tracing.workspace = true
 bande-app-menu.workspace = true
+bande-app-settings.workspace = true
 bande-design.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
 bande-notify.workspace = true
 bande-spring.workspace = true
 bande-toolkit.workspace = true
-bande-watch.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true
 

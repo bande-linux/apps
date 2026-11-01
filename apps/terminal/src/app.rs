@@ -1,7 +1,5 @@
 use std::collections::VecDeque;
-use std::io::Read;
-use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::net::UnixStream;
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -9,15 +7,15 @@ use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use bande_app_menu::{AppMenu, Standard};
+use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_spring::{Decay, State as SpringState};
 use bande_term::{
     Axis, Banner, BannerAction, CLOSE_TAB_SHORTCUT, CellPoint, Command, Divider,
     FULL_SCREEN_LEADING, GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton,
     MouseKind, Notice, Painter, Pane, QUIT_SHORTCUT, STRIP_HEIGHT, SavedWindow, SearchDirection,
     SelectionKind, Session, Settings, TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext,
-    bracketed, dropped_text, encode_key, is_openable, is_settings_file, mouse_report,
-    next_font_size, reports_mouse, settings_folder, shortcut, tab_menu, terminal_menu,
-    wants_scroll_as_arrows,
+    bracketed, dropped_text, encode_key, is_openable, mouse_report, next_font_size, reports_mouse,
+    shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
 use bande_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
@@ -27,7 +25,6 @@ use bande_toolkit::{
     App, DragAction, DragEvent, FrameRegions, Header, Item, MenuPlacement, Point, Radius, Rect,
     SHEET_INSET, Scene, Shape, Window, WindowEvent,
 };
-use bande_watch::{Changes, FolderWatch};
 
 use crate::bus::{Bus, Outgoing};
 
@@ -116,38 +113,6 @@ impl Tab {
     }
 }
 
-struct SettingsWatch {
-    _watch: FolderWatch,
-    wake: UnixStream,
-}
-
-impl SettingsWatch {
-    fn start(folder: &Path) -> Option<Self> {
-        let started = std::fs::create_dir_all(folder).and_then(|()| {
-            let (wake, mut signal) = UnixStream::pair()?;
-            wake.set_nonblocking(true)?;
-            let watch = FolderWatch::spawn(Changes::Saved, move |paths| {
-                if paths.iter().any(|path| is_settings_file(path)) {
-                    std::io::Write::write_all(&mut signal, &[1]).ok();
-                }
-            })?;
-            watch.watch(folder)?;
-            Ok(Self {
-                _watch: watch,
-                wake,
-            })
-        });
-        started
-            .inspect_err(|error| tracing::warn!("cannot follow the settings: {error}"))
-            .ok()
-    }
-
-    fn drain(&mut self) {
-        let mut buffer = [0u8; 64];
-        while matches!(self.wake.read(&mut buffer), Ok(read) if read > 0) {}
-    }
-}
-
 pub struct TerminalApp {
     tabs: Vec<Tab>,
     active: usize,
@@ -191,7 +156,8 @@ impl TerminalApp {
         saved_file: Option<PathBuf>,
         app_menu: Option<AppMenu>,
     ) -> Self {
-        let settings_watch = settings_folder().and_then(|folder| SettingsWatch::start(&folder));
+        let settings_watch =
+            settings_folder().and_then(|folder| SettingsWatch::start(&folder, Settings::FILE));
         let mut app = Self {
             active: active.min(sessions.len().saturating_sub(1)),
             tabs: sessions.into_iter().map(Tab::new).collect(),
@@ -903,6 +869,10 @@ impl TerminalApp {
             }
             Some(Standard::CloseWindow) => {
                 self.request_close(window);
+                Ok(())
+            }
+            Some(Standard::Settings) => {
+                self.perform(window, Command::Settings);
                 Ok(())
             }
             None => {
@@ -1729,7 +1699,7 @@ impl App for TerminalApp {
             .flat_map(|tab| tab.sessions.iter().map(Session::fd))
             .collect::<Vec<_>>();
         sources.extend(self.app_menu.as_ref().map(AppMenu::fd));
-        sources.extend(self.settings_watch.as_ref().map(|watch| watch.wake.as_fd()));
+        sources.extend(self.settings_watch.as_ref().map(SettingsWatch::fd));
         sources
     }
 

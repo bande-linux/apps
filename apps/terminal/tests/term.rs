@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
+use bande_app_settings::Stored;
 use bande_term::{
     Axis, Banner, BannerAction, CellPoint, Command, CursorStyle, DEFAULT_FONT_SIZE, GridSize,
     HEADER_LEADING, Layout, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane, Profile,

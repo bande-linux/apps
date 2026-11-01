@@ -30,7 +30,7 @@ pub use process::{Report, Reports};
 pub use render::{DEFAULT_FONT_SIZE, Metrics, PADDING, Painter, Pane, TabBar};
 pub use restore::{SavedWindow, claim, left_behind, window_file, windows_folder};
 pub use session::{Notice, Session, display_directory};
-pub use settings::{CursorStyle, FONT_SIZES, Settings, is_settings_file, settings_folder};
+pub use settings::{CursorStyle, FONT_SIZES, Settings};
 pub use settings_view::{SETTINGS_SIZE, SharedSettings, settings_view};
 pub use tabs::{
     FULL_SCREEN_LEADING, HEADER_LEADING, STRIP_HEIGHT, TAB_HEIGHT, TabBarLayout, TabTarget,
