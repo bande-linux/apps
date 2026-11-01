@@ -35,7 +35,7 @@ fn catalog() -> Catalog {
 
 fn icons() -> Icons {
     Icons::new(|name| {
-        let theme = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/icons/Bande");
+        let theme = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixture/icons");
         let path = match name {
             "dialog-information-symbolic" => theme.join(format!("symbolic/status/{name}.svg")),
             "org.bande.Terminal"

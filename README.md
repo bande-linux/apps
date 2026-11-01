@@ -15,6 +15,7 @@ apt install bande-<name>
 | Terminal | `bande-terminal` | moved from the desktop repo (history kept) |
 | Software | `bande-software` | moved from the desktop repo, with its AppStream catalog as a module |
 | Package Installer | `bande-installer` | moved from the desktop repo; the desktop keeps `.deb` files mapped to it |
+| Activity Monitor | `bande-monitor` | moved from the desktop repo once Force Quit moved into the compositor |
 | Mail | `bande-mail` | |
 | Calendar | `bande-calendar` | |
 
