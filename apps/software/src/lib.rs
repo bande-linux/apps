@@ -1,3 +1,4 @@
+pub mod catalog;
 mod view;
 mod worker;
 
@@ -5,8 +6,9 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use bande_catalog::Component;
 use bande_l10n::Localizer;
+
+use crate::catalog::Component;
 
 pub use view::{Page, Software, WINDOW_SIZE};
 

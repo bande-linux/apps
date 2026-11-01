@@ -5,7 +5,6 @@ use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
-use bande_catalog::{Block, Bundle, Category, Component, search};
 use bande_inbox::Inbox;
 use bande_packages::{Client, Progress};
 use bande_toolkit::ui::{
@@ -15,6 +14,7 @@ use bande_toolkit::ui::{
 use bande_toolkit::{Palette, TextSystem};
 
 use crate::L10N;
+use crate::catalog::{Block, Bundle, Category, Component, search};
 use crate::worker::{self, Job, Message};
 
 pub const WINDOW_SIZE: (u32, u32) = (720, 640);

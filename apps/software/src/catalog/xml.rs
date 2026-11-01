@@ -3,10 +3,10 @@ use std::path::PathBuf;
 use bande_xdg::Locale;
 use roxmltree::{Document, Node, ParsingOptions};
 
-use crate::component::{
+use crate::catalog::component::{
     APPLICATION_KINDS, Block, Bundle, Component, Icon, Release, Screenshot, THUMBNAIL_WIDTH,
 };
-use crate::lang::best;
+use crate::catalog::lang::best;
 
 const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
 

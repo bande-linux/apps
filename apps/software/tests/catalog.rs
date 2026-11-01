@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use bande_catalog::{
+use bande_software::catalog::{
     Block, Bundle, Category, Component, Icon, flatpak_files, flatpak_needs_x11, icon_path, load,
     mark_x11, parse_dep11, read_text, search, system_files, x11_only_packages,
 };

@@ -1,6 +1,6 @@
 use bande_search::{Query, SUBSTRING, fold};
 
-use crate::component::Component;
+use crate::catalog::component::Component;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Field {

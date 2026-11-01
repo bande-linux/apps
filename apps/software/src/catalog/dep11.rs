@@ -4,11 +4,11 @@ use std::path::Path;
 use bande_xdg::Locale;
 use serde::Deserialize;
 
-use crate::component::{
+use crate::catalog::component::{
     APPLICATION_KINDS, Bundle, Component, Icon, Release, Screenshot, THUMBNAIL_WIDTH,
 };
-use crate::lang::best;
-use crate::xml::description_blocks;
+use crate::catalog::lang::best;
+use crate::catalog::xml::description_blocks;
 
 const UNTRANSLATED: &str = "C";
 

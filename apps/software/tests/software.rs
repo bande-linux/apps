@@ -4,8 +4,8 @@ use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Role, TreeId};
-use bande_catalog::{Block, Bundle, Category, Component, Release};
 use bande_packages::Client;
+use bande_software::catalog::{Block, Bundle, Category, Component, Release};
 use bande_software::{Page, Software, WINDOW_SIZE, installed_keys};
 use bande_test_bus::SessionBus;
 use bande_test_bus::packagekit::{FakePackage, FakePackageKit, Script};
