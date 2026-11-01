@@ -1,0 +1,967 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+mod fixture;
+
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+use accesskit::Role;
+use bande_monitor::{
+    Catalog, CpuShare, Graph, Icons, Interface, InterfaceKind, Memory, Monitor, MonitorView,
+    Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab, app_menus, due_redraws,
+};
+use bande_toolkit::ui::{
+    Event, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll, Table, Widget,
+};
+use bande_toolkit::{
+    Appearance, FrameRegions, Image, Item, Paint, Palette, Point, Scheme, Shape, TextSize,
+    TextSystem, framed_scene,
+};
+use fixture::{battery_report, check_golden, entry, process};
+
+const MONITOR_SIZE: (u32, u32) = (860, 420);
+const LIST_TOP: f32 = 48.0 + Table::HEADER_HEIGHT;
+const TITLE: &str = "Activity Monitor";
+
+fn catalog() -> Catalog {
+    let mut terminal = entry("org.bande.Terminal", "Terminal", "bande-term", false);
+    terminal.icon = Some("org.bande.Terminal".to_owned());
+    let mut files = entry("org.bande.Files", "Files", "bande-files", false);
+    files.icon = Some("org.bande.Files".to_owned());
+    let mut settings = entry("org.bande.Settings", "Settings", "bande-settings", false);
+    settings.icon = Some("org.bande.Settings".to_owned());
+    Catalog::new(&[terminal, files, settings])
+}
+
+fn icons() -> Icons {
+    Icons::new(|name| {
+        let theme = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/icons/Bande");
+        let path = match name {
+            "dialog-information-symbolic" => theme.join(format!("symbolic/status/{name}.svg")),
+            "org.bande.Terminal"
+            | "org.bande.Files"
+            | "org.bande.Settings"
+            | "org.bande.ActivityMonitor" => theme.join(format!("scalable/apps/{name}.svg")),
+            _ => return None,
+        };
+        Image::load(&path, 32)
+    })
+}
+
+fn measured(mut process: Process, cpu_percent: f32, megabytes: u64, threads: u32) -> Process {
+    process.cpu_percent = cpu_percent;
+    process.cpu_seconds = f64::from(cpu_percent) * 37.0;
+    process.resident = megabytes * 1_000_000;
+    process.threads = threads;
+    process
+}
+
+fn snapshot(step: usize) -> Snapshot {
+    let wave = (step as f32 * 0.7).sin().abs();
+    Snapshot {
+        seconds: 2.0,
+        cpu: CpuShare {
+            user: 0.1 + 0.3 * wave,
+            system: 0.05 + 0.05 * wave,
+            idle: 0.85 - 0.35 * wave,
+        },
+        cores: (0..4)
+            .map(|core| {
+                let busy = ((step + core * 3) as f32 * 0.5).sin().abs() * (1.0 - core as f32 * 0.2);
+                CpuShare {
+                    user: busy * 0.8,
+                    system: busy * 0.2,
+                    idle: 1.0 - busy,
+                }
+            })
+            .collect(),
+        capacities: vec![1024, 1024, 640, 640],
+        processes: vec![
+            measured(process(500, 1, "/usr/bin/bande-term"), 4.2, 84, 6),
+            measured(process(501, 500, "/bin/bash"), 0.0, 5, 1),
+            measured(process(502, 501, "/usr/bin/cargo"), 96.5, 410, 18),
+            measured(process(600, 1, "/usr/bin/bande-files"), 1.3, 120, 4),
+            measured(process(650, 1, "/usr/bin/bande-settings"), 0.4, 70, 3),
+            measured(
+                process(700, 1, "/usr/lib/systemd/systemd-journald"),
+                0.2,
+                30,
+                1,
+            ),
+            measured(process(710, 1, "/usr/bin/pipewire"), 2.1, 22, 3),
+        ],
+        memory: Memory {
+            total: 16_000_000_000,
+            used: 6_400_000_000,
+            cached: 3_100_000_000,
+            swap_total: 8_000_000_000,
+            swap_used: 120_000_000,
+            app: 4_100_000_000,
+            kernel: 900_000_000,
+            compressed: 450_000_000,
+            pressure: Pressure {
+                some: 12.0,
+                full: 0.0,
+            },
+        },
+        disk: Rates {
+            read_per_second: 4_000_000.0 * f64::from(wave),
+            written_per_second: 1_500_000.0 * f64::from((step as f32 * 0.3).cos().abs()),
+            read_total: 12_000_000_000,
+            written_total: 3_400_000_000,
+        },
+        interfaces: vec![Interface {
+            name: "wlan0".to_owned(),
+            kind: InterfaceKind::WiFi,
+            received_per_second: 2_400_000.0 * f64::from((step as f32 * 0.45).sin().abs()),
+            sent_per_second: 300_000.0 * f64::from(wave),
+            received_total: 8_200_000_000,
+            sent_total: 610_000_000,
+        }],
+        ..Snapshot::default()
+    }
+}
+
+fn key(key: Key) -> Event {
+    Event::Key {
+        key,
+        modifiers: Modifiers::default(),
+    }
+}
+
+fn shifted(key: Key) -> Event {
+    Event::Key {
+        key,
+        modifiers: Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    }
+}
+
+fn render(screen: &mut impl Screen, title: &str, name: &str, size: (u32, u32)) {
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        let name = match scheme {
+            Scheme::Light => name.to_owned(),
+            Scheme::Dark => format!("{name}-dark"),
+        };
+        render_as(screen, title, &name, size, scheme, TextSize::DEFAULT);
+    }
+}
+
+fn render_larger(screen: &mut impl Screen, title: &str, name: &str, size: (u32, u32)) {
+    let larger = TextSize::from_percent(150);
+    render_as(
+        screen,
+        title,
+        &format!("{name}-150"),
+        size,
+        Scheme::Light,
+        larger,
+    );
+    render_as(screen, title, name, size, Scheme::Light, TextSize::DEFAULT);
+}
+
+fn render_as(
+    screen: &mut impl Screen,
+    title: &str,
+    name: &str,
+    size: (u32, u32),
+    scheme: Scheme,
+    text_size: TextSize,
+) {
+    screen.set_appearance(Appearance {
+        scheme,
+        text_size,
+        ..Appearance::default()
+    });
+    render_in(screen, title, name, size, &Palette::for_scheme(scheme));
+}
+
+fn render_in(
+    screen: &mut impl Screen,
+    title: &str,
+    name: &str,
+    size: (u32, u32),
+    palette: &Palette,
+) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut scene = screen.scene(size.0, size.1);
+    while screen.animating() {
+        assert!(Instant::now() < deadline, "the view did not settle");
+        std::thread::sleep(Duration::from_millis(10));
+        scene = screen.scene(size.0, size.1);
+    }
+    let header = screen.header();
+    let regions = header.as_ref().map(|_| FrameRegions::default());
+    check_golden(name, &framed_scene(&scene, title, regions, header, palette));
+}
+
+#[test]
+fn activity_monitor_matches_its_goldens() {
+    let mut view = MonitorView::new(
+        Monitor::new(catalog(), 1000),
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+        icons(),
+    );
+    for step in 0..40 {
+        view.update(snapshot(step));
+    }
+    view.handle(&key(Key::Down));
+    view.handle(&key(Key::Enter));
+    view.handle(&key(Key::Down));
+    assert!(view.set_responding(710, "", false));
+    render(&mut view, TITLE, "monitor-cpu", MONITOR_SIZE);
+    render_larger(&mut view, TITLE, "monitor-cpu", MONITOR_SIZE);
+    view.handle(&command('2'));
+    render(&mut view, TITLE, "monitor-memory", MONITOR_SIZE);
+    view.handle(&command('3'));
+    render(&mut view, TITLE, "monitor-disk", MONITOR_SIZE);
+    view.handle(&command('4'));
+    render(&mut view, TITLE, "monitor-network", MONITOR_SIZE);
+    view.handle(&command('1'));
+    view.menu_action("show-cores");
+    render(&mut view, TITLE, "monitor-cores", (MONITOR_SIZE.0, 600));
+    view.menu_action("show-cores");
+    view.menu_action("filter-mine");
+    render(&mut view, TITLE, "monitor-mine", MONITOR_SIZE);
+    view.menu_action("filter-all");
+    view.handle(&Event::Key {
+        key: Key::Character('e'),
+        modifiers: Modifiers {
+            control: true,
+            ..Modifiers::default()
+        },
+    });
+    render(&mut view, TITLE, "monitor-quit", MONITOR_SIZE);
+}
+
+#[test]
+fn a_search_that_finds_nothing_says_so_and_clear_search_brings_the_rows_back() {
+    let mut view = monitor_view();
+    view.update(snapshot(0));
+    view.handle(&command('f'));
+    for character in "zebra".chars() {
+        view.handle(&key(Key::Character(character)));
+    }
+    render(&mut view, TITLE, "monitor-no-match", MONITOR_SIZE);
+    assert!(shown_rows(&view).is_empty());
+
+    let tree = view.accessibility().expect("an accessibility tree");
+    let clear = tree
+        .nodes
+        .iter()
+        .find(|(_, node)| node.role() == Role::Button && node.label() == Some("Clear Search"))
+        .expect("a Clear Search button")
+        .0;
+    assert!(view.perform(&accesskit::ActionRequest {
+        action: accesskit::Action::Click,
+        target_tree: accesskit::TreeId::ROOT,
+        target_node: clear,
+        data: None,
+    }));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+
+    assert!(shown_rows(&view).contains(&"Terminal".to_owned()));
+}
+
+fn command(character: char) -> Event {
+    Event::Key {
+        key: Key::Character(character),
+        modifiers: Modifiers {
+            control: true,
+            ..Modifiers::default()
+        },
+    }
+}
+
+fn monitor_view() -> MonitorView {
+    let mut view = MonitorView::new(
+        Monitor::new(catalog(), 1000),
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+        icons(),
+    );
+    view.update(snapshot(0));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    view
+}
+
+fn shown_rows(screen: &impl Screen) -> Vec<String> {
+    let tree = screen.accessibility().expect("an accessibility tree");
+    let mut rows = tree
+        .nodes
+        .iter()
+        .filter(|(_, node)| node.role() == Role::Row)
+        .filter_map(|(_, node)| Some((node.row_index()?, node.label()?.to_owned())))
+        .collect::<Vec<_>>();
+    rows.sort();
+    rows.into_iter().map(|(_, label)| label).collect()
+}
+
+fn row_point(index: usize) -> Point {
+    Point::new(
+        300.0,
+        LIST_TOP + index as f32 * ROW_HEIGHT + ROW_HEIGHT / 2.0,
+    )
+}
+
+fn click(view: &mut impl Screen, at: Point, modifiers: Modifiers, count: u8) {
+    let pointer = Pointer::at(at).with_modifiers(modifiers).with_count(count);
+    view.handle(&Event::PointerDown(pointer));
+    view.handle(&Event::PointerUp(pointer));
+}
+
+fn cargo() -> RowKey {
+    RowKey::Process {
+        pid: 502,
+        start_ticks: 502,
+    }
+}
+
+#[test]
+fn the_memory_tab_resamples_at_once_to_show_proportional_memory() {
+    let mut view = monitor_view();
+    assert!(view.handle(&command('2')));
+    assert_eq!(view.monitor.tab(), Tab::Memory);
+    assert!(view.measures_proportional_memory());
+    assert_eq!(view.take_requests(), [Request::Resample]);
+    assert!(view.handle(&command('1')));
+    assert_eq!(view.take_requests(), [Request::Resample]);
+}
+
+#[test]
+fn another_tab_shows_its_own_columns_sorted_by_its_measure_and_keeps_the_selection() {
+    let mut view = monitor_view();
+    view.handle(&key(Key::Down));
+    view.handle(&command('2'));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    let tree = view.accessibility().expect("an accessibility tree");
+    let headers = tree
+        .nodes
+        .iter()
+        .filter(|(_, node)| node.role() == Role::ColumnHeader)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        headers,
+        ["Name", "Memory", "Resident", "Threads", "PID", "User"]
+    );
+    assert_eq!(
+        shown_rows(&view),
+        [
+            "Terminal",
+            "Files",
+            "Settings",
+            "systemd-journald",
+            "pipewire"
+        ]
+    );
+    assert_eq!(
+        view.table().expect("table").selection(),
+        ["app:org.bande.Terminal"]
+    );
+    view.handle(&Event::Key {
+        key: Key::Character('r'),
+        modifiers: Modifiers {
+            control: true,
+            shift: true,
+            ..Modifiers::default()
+        },
+    });
+    assert!(matches!(
+        view.take_requests().as_slice(),
+        [Request::Resample, Request::ShowInFiles(_)]
+    ));
+}
+
+#[test]
+fn the_keyboard_alone_finds_a_process_and_asks_to_inspect_it() {
+    let mut view = monitor_view();
+    view.handle(&command('f'));
+    for character in "pipe".chars() {
+        view.handle(&key(Key::Character(character)));
+    }
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    view.handle(&key(Key::Down));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    view.handle(&command('i'));
+
+    assert!(view.take_requests().contains(&Request::Inspect(710)));
+}
+
+#[test]
+fn ctrl_f_searches_as_you_type_and_escape_clears_the_search() {
+    let mut view = monitor_view();
+    view.handle(&command('f'));
+    for character in "pipe".chars() {
+        view.handle(&key(Key::Character(character)));
+    }
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view), ["pipewire"]);
+    view.handle(&key(Key::Enter));
+    assert_eq!(view.table().expect("table").selection().len(), 1);
+    view.handle(&key(Key::Escape));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view).len(), 5);
+}
+
+#[test]
+fn searching_for_a_process_opens_its_app_and_clearing_the_search_closes_it_again() {
+    let mut view = monitor_view();
+    view.handle(&command('f'));
+    for character in "cargo".chars() {
+        view.handle(&key(Key::Character(character)));
+    }
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view), ["Terminal", "cargo"]);
+    view.handle(&key(Key::Escape));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(
+        shown_rows(&view),
+        [
+            "Terminal",
+            "pipewire",
+            "Files",
+            "Settings",
+            "systemd-journald"
+        ]
+    );
+}
+
+#[test]
+fn the_selection_stays_on_its_process_while_the_numbers_reorder_the_list() {
+    let mut view = monitor_view();
+    click(&mut view, row_point(0), Modifiers::default(), 2);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(
+        shown_rows(&view)[..4],
+        ["Terminal", "cargo", "bande-term", "bash"]
+    );
+    click(&mut view, row_point(1), Modifiers::default(), 1);
+    assert_eq!(view.monitor.selection(), [cargo()]);
+    let mut calmer = snapshot(1);
+    calmer.processes[2].cpu_percent = 0.1;
+    calmer.processes[3].cpu_percent = 50.0;
+    view.update(calmer);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view)[..2], ["Files", "Terminal"]);
+    assert_eq!(view.monitor.selection(), [cargo()]);
+    let table = view.table().expect("table");
+    assert_eq!(table.selection(), ["process:502:502"]);
+    let shown = table.cursor_row().expect("cursor");
+    assert_eq!(shown_rows(&view)[shown], "cargo");
+}
+
+#[test]
+fn header_clicks_sort_numbers_largest_first_and_names_from_a() {
+    let mut view = monitor_view();
+    let header = |x: f32| Point::new(x, 48.0 + Table::HEADER_HEIGHT / 2.0);
+    click(&mut view, header(40.0), Modifiers::default(), 1);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(
+        shown_rows(&view),
+        [
+            "Files",
+            "pipewire",
+            "Settings",
+            "systemd-journald",
+            "Terminal"
+        ]
+    );
+    let threads = 854.0 - 96.0 - 64.0 - 42.0;
+
+    click(&mut view, header(threads), Modifiers::default(), 1);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view)[0], "Terminal");
+    assert_eq!(view.monitor.sort(), (bande_monitor::Column::Threads, true));
+}
+
+#[test]
+fn several_selected_rows_quit_together() {
+    let mut view = monitor_view();
+    view.handle(&key(Key::Down));
+    view.handle(&shifted(Key::Down));
+    let target = view.monitor.stop_target().expect("two apps");
+    assert_eq!(target.count, 2);
+    assert_eq!(target.roots, [(710, 710)]);
+    assert_eq!(
+        target.apps,
+        [("org.bande.Terminal".to_owned(), vec![(500, 500)])]
+    );
+    assert!(view.handle(&Event::Key {
+        key: Key::Character('e'),
+        modifiers: Modifiers {
+            control: true,
+            ..Modifiers::default()
+        },
+    }));
+}
+
+#[test]
+fn the_wheel_scrolls_the_list_under_the_pointer() {
+    let mut view = monitor_view();
+    let mut crowded = snapshot(0);
+    crowded
+        .processes
+        .extend((0..30).map(|index| process(2000 + index, 1, &format!("/usr/bin/daemon{index}"))));
+    view.update(crowded);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert!(view.handle(&Event::Scroll(Scroll {
+        position: row_point(0),
+        delta: Point::new(0.0, 4.0 * ROW_HEIGHT),
+        ..Scroll::default()
+    })));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while view.table().expect("table").scroll_offset() < 4.0 * ROW_HEIGHT - 0.5 {
+        assert!(Instant::now() < deadline, "the list did not scroll");
+        std::thread::sleep(Duration::from_millis(10));
+        view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    }
+}
+
+fn right_click(at: Point) -> Event {
+    let mut pointer = Pointer::at(at);
+    pointer.button = PointerButton::Secondary;
+    Event::PointerDown(pointer)
+}
+
+fn menu_actions(requests: Vec<Request>) -> Vec<(String, bool)> {
+    match requests.as_slice() {
+        [Request::Menu(menu, _)] => menu
+            .items
+            .iter()
+            .filter(|item| !item.separator)
+            .map(|item| (item.action.clone(), item.enabled))
+            .collect(),
+        other => panic!("expected one menu, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_right_click_selects_the_row_and_offers_quit_turning_into_force_quit_with_alt() {
+    let mut view = monitor_view();
+    assert!(view.handle(&right_click(row_point(0))));
+    assert_eq!(view.table().expect("table").selection().len(), 1);
+    let name = shown_rows(&view)[0].clone();
+    assert_eq!(
+        menu_actions(view.take_requests()),
+        [
+            ("quit".to_owned(), true),
+            ("inspect".to_owned(), true),
+            ("show-in-files".to_owned(), true),
+            ("copy-name".to_owned(), true),
+            ("copy-pid".to_owned(), true),
+        ]
+    );
+    view.handle(&right_click(row_point(0)));
+    match view.take_requests().as_slice() {
+        [Request::Menu(menu, _)] => assert_eq!(
+            menu.items[0]
+                .alternate
+                .as_ref()
+                .map(|item| item.action.as_str()),
+            Some("force-quit")
+        ),
+        other => panic!("expected one menu, got {other:?}"),
+    }
+
+    view.menu_action("copy-name");
+    assert_eq!(view.take_requests(), [Request::Copy(name)]);
+    assert!(view.menu_action("force-quit"));
+    view.handle(&key(Key::Escape));
+    view.handle(&key(Key::Menu));
+    assert_eq!(menu_actions(view.take_requests())[0].0, "quit");
+}
+
+#[test]
+fn an_app_that_stopped_responding_is_marked_in_the_list_until_it_answers_again() {
+    let mut view = monitor_view();
+    assert!(view.set_responding(600, "org.bande.Files", false));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert!(shown_rows(&view).contains(&"Files (Not Responding)".to_owned()));
+    assert!(view.set_responding(600, "org.bande.Files", true));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert!(shown_rows(&view).contains(&"Files".to_owned()));
+}
+
+fn column_headers(view: &MonitorView) -> Vec<String> {
+    let tree = view.accessibility().expect("an accessibility tree");
+    tree.nodes
+        .iter()
+        .filter(|(_, node)| node.role() == Role::ColumnHeader)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect()
+}
+
+#[test]
+fn a_right_click_on_the_header_chooses_columns_and_the_choice_is_remembered() {
+    let mut view = monitor_view();
+    assert!(view.handle(&right_click(Point::new(
+        300.0,
+        48.0 + Table::HEADER_HEIGHT / 2.0
+    ))));
+    let shown = menu_actions(view.take_requests());
+    assert_eq!(shown[0], ("column:name".to_owned(), false));
+    assert!(shown.contains(&("column:resident".to_owned(), true)));
+    assert!(view.menu_action("column:user"));
+    assert!(view.menu_action("column:resident"));
+    assert!(view.menu_action("column:cpu"));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(
+        column_headers(&view),
+        ["Name", "CPU Time", "Threads", "PID", "Resident"]
+    );
+    assert_eq!(view.monitor.sort(), (bande_monitor::Column::Name, false));
+    let remembered = match view.take_requests().last() {
+        Some(Request::SaveState(text)) => text.clone(),
+        other => panic!("expected the columns to be saved, got {other:?}"),
+    };
+    let mut again = Monitor::new(catalog(), 1000);
+    again.restore(&remembered);
+    assert_eq!(again.columns(), view.monitor.columns());
+}
+
+#[test]
+fn the_gpu_tab_appears_once_the_system_reports_gpu_use() {
+    let mut view = monitor_view();
+    assert!(!view.handle(&command('5')));
+    let mut busy = snapshot(1);
+    busy.gpu = true;
+    busy.processes[3].gpu = Some(bande_monitor::GpuUse {
+        percent: 30.0,
+        seconds: 4.0,
+        memory: 64_000_000,
+    });
+    view.update(busy);
+    assert!(view.handle(&command('5')));
+    assert_eq!(view.monitor.tab(), Tab::Gpu);
+    assert!(view.measures_gpu());
+    assert_eq!(view.take_requests(), [Request::Resample]);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view)[0], "Files");
+    assert_eq!(
+        column_headers(&view),
+        ["Name", "% GPU", "GPU Time", "GPU Memory", "PID", "User"]
+    );
+}
+
+fn flattened(items: &[Item], clip: Option<Shape>, out: &mut Vec<(Item, Option<Shape>)>) {
+    for item in items {
+        match item {
+            Item::Clip { shape, items } => flattened(items, Some(*shape), out),
+            Item::Translate { items, .. }
+            | Item::Opacity { items, .. }
+            | Item::Scale { items, .. } => flattened(items, clip, out),
+            other => out.push((other.clone(), clip)),
+        }
+    }
+}
+
+fn painted(view: &mut MonitorView, width: u32) -> Vec<(Item, Option<Shape>)> {
+    let scene = view.scene(width, MONITOR_SIZE.1);
+    let mut items = Vec::new();
+    flattened(&scene.items, None, &mut items);
+    items
+}
+
+fn paints_area(items: &[(Item, Option<Shape>)], color: bande_toolkit::Color) -> bool {
+    items
+        .iter()
+        .any(|(item, _)| matches!(item, Item::FillPath { paint: Paint::Solid(paint), .. } if *paint == color))
+}
+
+#[test]
+fn a_narrow_window_keeps_the_graph_and_shows_every_readout_whole() {
+    let mut view = monitor_view();
+    for step in 1..10 {
+        view.update(snapshot(step));
+    }
+    let palette = Palette::for_scheme(Scheme::Light);
+    for tab in ['1', '2'] {
+        view.handle(&command(tab));
+        let items = painted(&mut view, 600);
+        let pressure = items.iter().any(|(item, _)| {
+            matches!(item, Item::Fill { paint: Paint::Solid(paint), .. } if *paint == palette.warning)
+        });
+        assert!(paints_area(&items, palette.accent_soft) || pressure);
+        for (item, clip) in &items {
+            if let (Item::Text { paragraph, .. }, Some(clip)) = (item, clip)
+                && clip.rect.y >= LIST_TOP
+            {
+                assert!(paragraph.width() <= clip.rect.width + 0.5);
+            }
+        }
+    }
+}
+
+#[test]
+fn the_disk_scale_follows_the_peak_of_the_shown_history() {
+    let mut monitor = Monitor::new(catalog(), 1000);
+    let mut busy = snapshot(0);
+    busy.disk.read_per_second = 8_000_000.0;
+    busy.disk.written_per_second = 1_000_000.0;
+    monitor.update(busy);
+    let mut calm = snapshot(1);
+    calm.disk.read_per_second = 2_000_000.0;
+    calm.disk.written_per_second = 0.0;
+    monitor.update(calm);
+    monitor.set_tab(Tab::Disk);
+    assert_eq!(
+        monitor.graph(),
+        Graph::Lines {
+            primary: vec![1.0, 0.25],
+            secondary: Some(vec![0.125, 0.0]),
+            scale: "8 MB/s".to_owned(),
+        }
+    );
+}
+
+#[test]
+fn no_series_is_drawn_in_the_alarm_colour() {
+    let mut view = monitor_view();
+    for step in 1..20 {
+        view.update(snapshot(step));
+    }
+    let palette = Palette::for_scheme(Scheme::Light);
+    for tab in ['1', '3', '4'] {
+        view.handle(&command(tab));
+        let items = painted(&mut view, MONITOR_SIZE.0);
+        assert!(paints_area(&items, palette.accent_soft));
+        assert!(!items.iter().any(|(item, _)| matches!(
+            item,
+            Item::FillPath { paint: Paint::Solid(paint), .. }
+                | Item::StrokePath { paint: Paint::Solid(paint), .. }
+                if *paint == palette.danger
+        )));
+    }
+}
+
+#[test]
+fn the_graph_and_the_readouts_are_in_the_accessibility_tree() {
+    let view = monitor_view();
+    let tree = view.accessibility().expect("an accessibility tree");
+    let graph = tree
+        .nodes
+        .iter()
+        .find(|(_, node)| node.role() == Role::Image)
+        .and_then(|(_, node)| node.label())
+        .map(str::to_owned);
+    let cpu = snapshot(0).cpu;
+    assert_eq!(
+        graph,
+        Some(format!(
+            "CPU {:.1} %, user {:.1} %, system {:.1} %",
+            (cpu.user + cpu.system) * 100.0,
+            cpu.user * 100.0,
+            cpu.system * 100.0
+        ))
+    );
+    let idle = tree
+        .nodes
+        .iter()
+        .find(|(_, node)| node.label() == Some("Idle"))
+        .and_then(|(_, node)| node.value())
+        .map(str::to_owned);
+    assert_eq!(idle, Some(format!("{:.1} %", cpu.idle * 100.0)));
+}
+
+#[test]
+fn the_memory_footer_names_what_holds_memory_and_graphs_the_pressure() {
+    let mut monitor = Monitor::new(catalog(), 1000);
+    monitor.update(snapshot(0));
+    monitor.set_tab(Tab::Memory);
+    assert_eq!(
+        monitor.summary(),
+        [
+            ("Physical Memory", "16 GB"),
+            ("Memory Used", "6.4 GB"),
+            ("App Memory", "4.1 GB"),
+            ("Kernel", "900 MB"),
+            ("Compressed", "450 MB"),
+            ("Cached Files", "3.1 GB"),
+            ("Swap Used", "120 MB"),
+        ]
+        .map(|(label, value)| (label.to_owned(), value.to_owned()))
+    );
+    assert_eq!(
+        monitor.graph(),
+        Graph::Pressure(vec![(0.4, bande_monitor::PressureLevel::Elevated)])
+    );
+    assert_eq!(
+        monitor.graph_description(),
+        "Memory pressure elevated, 40.0 % used"
+    );
+}
+
+#[test]
+fn clicking_the_cpu_graph_shows_every_core_until_escape_and_the_choice_is_remembered() {
+    let mut view = monitor_view();
+    for step in 1..5 {
+        view.update(snapshot(step));
+    }
+    let list_height = |view: &mut MonitorView| {
+        view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+        view.table().expect("table").frame().height
+    };
+    let collapsed = list_height(&mut view);
+    let graph = Point::new(700.0, MONITOR_SIZE.1 as f32 - 50.0);
+    click(&mut view, graph, Modifiers::default(), 1);
+    assert!(view.monitor.cores_shown());
+    let remembered = match view.take_requests().as_slice() {
+        [Request::SaveState(state)] => state.clone(),
+        other => panic!("expected the view to be saved, got {other:?}"),
+    };
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut height = list_height(&mut view);
+    while view.animating() {
+        assert!(Instant::now() < deadline, "the cores did not settle");
+        std::thread::sleep(Duration::from_millis(10));
+        height = list_height(&mut view);
+    }
+    assert!(height < collapsed - 100.0);
+    let mut again = Monitor::new(catalog(), 1000);
+    again.restore(&remembered);
+    assert!(again.cores_shown());
+    assert!(view.handle(&key(Key::Escape)));
+    assert!(!view.monitor.cores_shown());
+}
+
+fn with_root_daemon(step: usize) -> Snapshot {
+    let mut shown = snapshot(step);
+    let mut daemon = process(800, 1, "/usr/sbin/sshd");
+    let mut identity = (*daemon.identity).clone();
+    identity.uid = 0;
+    identity.user = "root".to_owned();
+    daemon.identity = std::rc::Rc::new(identity);
+    shown.processes.push(daemon);
+    shown
+}
+
+#[test]
+fn the_view_filter_keeps_my_processes_or_apps_and_is_remembered() {
+    let mut view = monitor_view();
+    view.update(with_root_daemon(1));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert!(shown_rows(&view).contains(&"sshd".to_owned()));
+
+    let tabs = view.monitor.tabs();
+    let all_menus = view.app_menus();
+    assert!(view.menu_action("filter-mine"));
+    assert_eq!(
+        all_menus,
+        Some(app_menus(&tabs, bande_monitor::Filter::All))
+    );
+    assert_eq!(
+        view.app_menus(),
+        Some(app_menus(&tabs, bande_monitor::Filter::Mine))
+    );
+    assert_ne!(view.app_menus(), all_menus);
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    let mine = shown_rows(&view);
+    assert!(!mine.contains(&"sshd".to_owned()));
+    assert!(mine.contains(&"pipewire".to_owned()));
+
+    assert!(view.menu_action("filter-apps"));
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view), ["Terminal", "Files", "Settings"]);
+    view.handle(&command('f'));
+    for character in "fi".chars() {
+        view.handle(&key(Key::Character(character)));
+    }
+    view.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    assert_eq!(shown_rows(&view), ["Files"]);
+
+    let remembered = match view.take_requests().last() {
+        Some(Request::SaveState(state)) => state.clone(),
+        other => panic!("expected the view to be saved, got {other:?}"),
+    };
+    let mut again = Monitor::new(catalog(), 1000);
+    again.restore(&remembered);
+    assert_eq!(again.filter(), bande_monitor::Filter::Apps);
+}
+
+#[test]
+fn quit_asks_an_app_politely_and_signals_only_a_chosen_process() {
+    let mut view = monitor_view();
+    view.handle(&key(Key::Down));
+    assert_eq!(
+        view.monitor.selection(),
+        [RowKey::Group(bande_monitor::GroupKey::App(
+            "org.bande.Terminal".to_owned()
+        ))]
+    );
+    assert!(view.handle(&Event::Key {
+        key: Key::Character('e'),
+        modifiers: Modifiers {
+            control: true,
+            ..Modifiers::default()
+        },
+    }));
+    view.handle(&key(Key::Enter));
+    assert_eq!(
+        view.take_requests(),
+        [
+            Request::QuitApp {
+                app_id: "org.bande.Terminal".to_owned(),
+                roots: vec![(500, 500)],
+            },
+            Request::Resample,
+        ]
+    );
+
+    view.monitor.set_selection(vec![cargo()]);
+    let target = view.monitor.stop_target().expect("cargo");
+    assert_eq!(target.roots, [(502, 502)]);
+    assert!(target.apps.is_empty());
+}
+
+#[test]
+fn a_tick_between_samples_redraws_only_a_window_whose_own_timer_is_due() {
+    let idle = monitor_view();
+    let mut hovered = monitor_view();
+    hovered.handle(&Event::PointerMove(Pointer::at(Point::new(282.0, 24.0))));
+    hovered.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
+    let tooltip = hovered.deadline().expect("the tooltip waits");
+    assert_eq!(idle.deadline(), None);
+    let screens: Vec<Box<dyn Screen>> = vec![Box::new(idle), Box::new(hovered)];
+    assert_eq!(
+        due_redraws(&screens, tooltip - Duration::from_millis(1)),
+        [false, false]
+    );
+    assert_eq!(due_redraws(&screens, tooltip), [false, true]);
+}
+
+#[test]
+fn dragging_the_footer_edge_up_shows_the_cores_and_down_hides_them() {
+    let mut view = monitor_view();
+    let edge = MONITOR_SIZE.1 as f32 - 6.0 - 112.0;
+    let at = |y: f32| Pointer::at(Point::new(300.0, y));
+    view.handle(&Event::PointerMove(at(edge)));
+    assert_eq!(view.cursor(), bande_toolkit::ui::Cursor::RowResize);
+    assert!(view.handle(&Event::PointerDown(at(edge))));
+    view.handle(&Event::PointerMove(at(edge - 10.0)));
+    assert!(!view.monitor.cores_shown());
+    view.handle(&Event::PointerMove(at(edge - 40.0)));
+    assert!(view.monitor.cores_shown());
+    view.handle(&Event::PointerMove(at(edge - 30.0)));
+    assert!(view.monitor.cores_shown());
+    view.handle(&Event::PointerMove(at(edge - 10.0)));
+    assert!(!view.monitor.cores_shown());
+    assert!(view.handle(&Event::PointerUp(at(edge - 10.0))));
+}
+
+#[test]
+fn the_energy_tab_graphs_the_battery_of_the_last_twelve_hours() {
+    let mut view = monitor_view();
+    for step in 0..40 {
+        view.update(Snapshot {
+            battery: true,
+            power: Some(battery_report()),
+            ..snapshot(step)
+        });
+    }
+    view.handle(&command('3'));
+    render(&mut view, TITLE, "monitor-energy", MONITOR_SIZE);
+}

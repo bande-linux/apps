@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Activity Monitor
+GenericName=System Monitor
+Comment=See which apps use your CPU, memory, disk and network
+Icon=org.bande.ActivityMonitor
+Exec=bande-monitor
+Categories=System;Monitor;
+Keywords=process;task;cpu;memory;kill;force quit;
