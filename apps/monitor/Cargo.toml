@@ -35,6 +35,7 @@ quits any app."""
 assets = [
     ["target/release/bande-monitor", "usr/bin/", "755"],
     ["data/org.bande.ActivityMonitor.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.ActivityMonitor.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.ActivityMonitor.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
 ]
 

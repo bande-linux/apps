@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.ActivityMonitor</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Activity Monitor</name>
+  <summary>See which apps use your CPU, memory, disk and network</summary>
+  <description>
+    <p>Watch processes and their use of the processor, memory, disk and network, and quit apps that stop responding.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.ActivityMonitor.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/desktop</url>
+</component>
