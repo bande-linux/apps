@@ -21,6 +21,9 @@ pub const WINDOW_SIZE: (u32, u32) = (720, 640);
 const SPACING: f32 = 12.0;
 const PADDING: f32 = 24.0;
 const MAX_ROWS: usize = 50;
+const SETTINGS: &str = "bande-settings";
+const SETTINGS_ID: &str = "org.bande.Settings";
+const SOFTWARE_UPDATE_PANE: &str = "software-update";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
@@ -38,6 +41,7 @@ enum Intent {
     Install(usize),
     Open(usize),
     Remove(usize),
+    UpdateAll,
     ConfirmRemoval,
     CancelRemoval,
 }
@@ -99,6 +103,13 @@ fn source(bundle: &Bundle) -> String {
     }
 }
 
+fn open_software_update() {
+    let command = [SETTINGS.to_owned(), SOFTWARE_UPDATE_PANE.to_owned()];
+    if let Err(error) = bande_xdg::spawn_detached(SETTINGS_ID, &command, None, None) {
+        tracing::warn!("cannot open Software Update: {error}");
+    }
+}
+
 fn deb(app: &Component) -> Option<&str> {
     app.bundles.iter().find_map(|bundle| match bundle {
         Bundle::Deb(package) => Some(package.as_str()),
@@ -112,6 +123,7 @@ pub struct Software {
     busy: HashMap<String, (Task, Progress)>,
     failed: HashMap<String, (Task, String)>,
     removal: Option<Removal>,
+    updates: HashSet<String>,
     jobs: Sender<Job>,
     inbox: Inbox<Message>,
     page: Page,
@@ -133,6 +145,9 @@ impl Software {
         text: TextSystem,
     ) -> io::Result<Self> {
         let (jobs, inbox) = worker::start(client, arch.to_owned())?;
+        if jobs.send(Job::Updates).is_err() {
+            tracing::warn!("the software worker stopped");
+        }
         let intents: Rc<RefCell<Vec<Intent>>> = Rc::default();
         let typed = Rc::clone(&intents);
         let search = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
@@ -154,6 +169,7 @@ impl Software {
             busy: HashMap::new(),
             failed: HashMap::new(),
             removal: None,
+            updates: HashSet::new(),
             jobs,
             inbox,
             page: Page::Discover,
@@ -223,6 +239,7 @@ impl Software {
                 Intent::Install(index) => self.install(index),
                 Intent::Open(index) => self.open(index),
                 Intent::Remove(index) => self.plan_removal(index),
+                Intent::UpdateAll => open_software_update(),
                 Intent::ConfirmRemoval => self.remove(),
                 Intent::CancelRemoval => self.removal = None,
             }
@@ -246,6 +263,7 @@ impl Software {
                 self.busy.remove(&key);
                 self.removal = Some(Removal { key, id, also });
             }
+            Message::Updates(names) => self.updates = names.into_iter().collect(),
             Message::Removed(key) => {
                 self.busy.remove(&key);
                 self.installed.remove(&key);
@@ -351,6 +369,10 @@ impl Software {
             }
             if !buttons.is_empty() {
                 widgets.push(boxed(Stack::new(Axis::Horizontal, SPACING, 0.0, buttons)));
+            }
+            if deb(app).is_some_and(|package| self.updates.contains(package)) {
+                widgets.push(boxed(Label::new(&L10N.tr("update-available"))));
+                widgets.push(row(self.button(&L10N.tr("update-all"), Intent::UpdateAll)));
             }
         } else if deb(app).is_some() {
             widgets.push(row(self

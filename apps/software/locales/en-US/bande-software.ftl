@@ -33,3 +33,5 @@ remove-confirm = Remove { $name }?
 remove-also = This also removes { $packages }.
 remove-failed = Couldn’t remove { $name }: { $details }
 needs-x11 = Needs X11: won't open on Bande.
+update-available = An update is available.
+update-all = Update All…

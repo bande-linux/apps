@@ -9,6 +9,7 @@ pub enum Job {
     Install { key: String, package: String },
     PlanRemoval { key: String, package: String },
     Remove { key: String, id: String },
+    Updates,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +22,7 @@ pub enum Message {
         also: Vec<String>,
     },
     Removed(String),
+    Updates(Vec<String>),
     Failed(String, String),
 }
 
@@ -79,6 +81,15 @@ fn run(client: &Client, arch: &str, jobs: &Receiver<Job>, out: &Outbox<Message>)
             Job::PlanRemoval { key, package } => match plan_removal(client, &package) {
                 Ok((id, also)) => Message::RemovalPlanned { key, id, also },
                 Err(error) => Message::Failed(key, error),
+            },
+            Job::Updates => match client.updates() {
+                Ok(updates) => {
+                    Message::Updates(updates.into_iter().map(|package| package.name).collect())
+                }
+                Err(error) => {
+                    tracing::warn!("cannot look for updates: {error}");
+                    continue;
+                }
             },
             Job::Remove { key, id } => {
                 let progress = |progress| {

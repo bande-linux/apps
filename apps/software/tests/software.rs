@@ -387,3 +387,32 @@ fn remove_names_what_else_goes_and_removes_only_after_confirmation() {
     software.show(Page::Installed);
     assert_eq!(listed(software), Vec::<String>::new());
 }
+
+#[test]
+fn an_installed_app_with_a_pending_update_offers_update_all() {
+    let mut opened = open_with(
+        Scheme::Light,
+        Script {
+            updates: vec![FakePackage::new(
+                11,
+                "text-editor;48.4-1;arm64;debian",
+                "",
+                0,
+            )],
+            ..Script::default()
+        },
+    );
+    let software = &mut opened.software;
+    click(software, "Text Editor");
+    until(software, |software| {
+        buttons(software).contains(&"Update All…".to_owned())
+    });
+    assert!(
+        texts(software)
+            .iter()
+            .any(|text| text == "An update is available.")
+    );
+    click(software, "Back");
+    click(software, "GIMP");
+    assert!(!buttons(software).contains(&"Update All…".to_owned()));
+}
