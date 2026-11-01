@@ -31,7 +31,7 @@ apt install bande-<name>
 | `rust-toolchain.toml` | the Rust toolchain for every app, the same as the desktop's |
 | `ci/` | the build, the same in CI and locally |
 | `ci/gate.sh [app...]` | the local merge gate: `ci/check-app.sh`, fmt, clippy `-D warnings` and tests, `--locked`, one `target/` (default: every app and the template) |
-| `ci/check-app.sh <dir>...` | static checks that an app is a `bande-app` app packaged like the others (ids, `.desktop`, metainfo, fonts) |
+| `ci/check-app.sh <dir>...` | static checks that an app is a `bande-app` app packaged like the others (ids, `.desktop`, metainfo, fonts); fails on any problem |
 | `ci/smoke.sh <package>` | checks an installed package: `--version`, its files, `desktop-file-validate`, `appstreamcli validate` |
 | `ci/new-app.sh <dir> <Id> "<Name>"` | a new app in `apps/<dir>` from the template |
 | `ci/release-all.sh` | raises every app's patch version and prints the tags that release them, for a bump that changes `bande-app` behaviour |

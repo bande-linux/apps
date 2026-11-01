@@ -3,8 +3,7 @@
 # is a bande-app app packaged the same way as every other: the package is bande-<name>; the app id
 # in src/main.rs names the .desktop file, its Icon= and the metainfo <id>; Exec= starts the
 # package; StartupNotify=true; Depends has the toolkit's three font packages; src/main.rs calls
-# bande_app::run and nothing in src/ runs its own loop or menu export. Warns for now; fails once
-# every app has moved onto bande-app.
+# bande_app::run and nothing in src/ runs its own loop or menu export. Fails on any problem.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ $# -gt 0 ] || { echo "usage: check-app.sh <dir>..." >&2; exit 2; }
@@ -46,4 +45,5 @@ check() {
 for dir in "$@"; do
     check "$dir"
 done
-[ "$problems" -eq 0 ] && echo "check-app passed: $*" || echo "check-app: $problems problems (warnings until every app is on bande-app)"
+[ "$problems" -eq 0 ] || { echo "check-app: $problems problems" >&2; exit 1; }
+echo "check-app passed: $*"
