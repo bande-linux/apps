@@ -219,7 +219,9 @@ pub fn handle(view: &mut CalendarView, event: &Event) -> bool {
         }
         Event::PointerLeave => {
             view.hover = None;
-            view.ui.handle(event)
+            view.press = None;
+            let dropped = view.drag.take().is_some();
+            view.ui.handle(event) | dropped
         }
         _ => view.ui.handle(event),
     };
