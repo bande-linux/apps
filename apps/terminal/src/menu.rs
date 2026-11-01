@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use bande_app_menu::{Entry, Standard, app_submenu, window_submenu};
+use bande_app_menu::{Entry, Standard, app_submenu_quitting_on, window_submenu};
 use bande_toolkit::ui::{Menu, MenuItem};
 use bande_xdg::path_from_file_uri;
 
@@ -8,89 +8,101 @@ use crate::L10N;
 use crate::keys::Command;
 
 const COMMANDS: [(Command, &str, &str, &str); 21] = [
-    (Command::Copy, "copy", "menu-copy", "Super+C"),
-    (Command::Paste, "paste", "menu-paste", "Super+V"),
+    (Command::Copy, "copy", "menu-copy", "Shift+Ctrl+C"),
+    (Command::Paste, "paste", "menu-paste", "Shift+Ctrl+V"),
     (
         Command::SelectAll,
         "select-all",
         "menu-select-all",
-        "Super+A",
+        "Shift+Ctrl+A",
     ),
     (
         Command::ClearScrollback,
         "clear-scrollback",
         "menu-clear-scrollback",
-        "Super+K",
+        "Shift+Ctrl+K",
     ),
-    (Command::BiggerText, "bigger", "menu-bigger", "Super+="),
-    (Command::SmallerText, "smaller", "menu-smaller", "Super+-"),
+    (Command::BiggerText, "bigger", "menu-bigger", "Ctrl+="),
+    (Command::SmallerText, "smaller", "menu-smaller", "Ctrl+-"),
     (
         Command::DefaultTextSize,
         "default-size",
         "menu-default-size",
-        "Super+0",
+        "Ctrl+0",
     ),
-    (Command::NewTab, "new-tab", "menu-new-tab", "Super+T"),
+    (Command::NewTab, "new-tab", "menu-new-tab", "Shift+Ctrl+T"),
     (
         Command::NewWindow,
         "new-window",
         "menu-new-window",
-        "Super+N",
+        "Shift+Ctrl+N",
     ),
-    (
-        Command::NextTab,
-        "next-tab",
-        "menu-next-tab",
-        "Shift+Super+]",
-    ),
+    (Command::NextTab, "next-tab", "menu-next-tab", "Ctrl+PgDn"),
     (
         Command::PreviousTab,
         "previous-tab",
         "menu-previous-tab",
-        "Shift+Super+[",
+        "Ctrl+PgUp",
     ),
-    (Command::Find, "find", "menu-find", "Super+F"),
-    (Command::FindNext, "find-next", "menu-find-next", "Super+G"),
+    (Command::Find, "find", "menu-find", "Shift+Ctrl+F"),
+    (
+        Command::FindNext,
+        "find-next",
+        "menu-find-next",
+        "Shift+Ctrl+G",
+    ),
     (
         Command::SplitSideBySide,
         "split-side-by-side",
         "menu-split-side-by-side",
-        "Super+D",
+        "Shift+Ctrl+D",
     ),
     (
         Command::SplitStacked,
         "split-stacked",
         "menu-split-stacked",
-        "Shift+Super+D",
+        "Shift+Ctrl+E",
     ),
-    (Command::NextPane, "next-pane", "menu-next-pane", "Super+]"),
+    (
+        Command::NextPane,
+        "next-pane",
+        "menu-next-pane",
+        "Shift+Ctrl+]",
+    ),
     (
         Command::PreviousPane,
         "previous-pane",
         "menu-previous-pane",
-        "Super+[",
+        "Shift+Ctrl+[",
     ),
-    (Command::Settings, "settings", "menu-settings", "Super+,"),
+    (
+        Command::Settings,
+        "settings",
+        "menu-settings",
+        "Shift+Ctrl+,",
+    ),
     (
         Command::PreviousPrompt,
         "previous-prompt",
         "menu-previous-prompt",
-        "Super+Up",
+        "Shift+Ctrl+Up",
     ),
     (
         Command::NextPrompt,
         "next-prompt",
         "menu-next-prompt",
-        "Super+Down",
+        "Shift+Ctrl+Down",
     ),
     (
         Command::FindPrevious,
         "find-previous",
         "menu-find-previous",
-        "Shift+Super+G",
+        "Shift+Ctrl+H",
     ),
 ];
 
+pub const CLOSE_TAB_SHORTCUT: &str = "Shift+Ctrl+W";
+pub const QUIT_SHORTCUT: &str = "Shift+Ctrl+Q";
 const OPEN_LINK: &str = "open-link:";
 const COPY_LINK: &str = "copy-link:";
 const CLOSE_TAB: &str = "close-tab:";
@@ -211,7 +223,7 @@ pub fn terminal_menu(context: &TerminalContext) -> Menu {
         command_item(Command::SplitSideBySide),
         command_item(Command::SplitStacked),
         MenuItem::separator(),
-        item("menu-close-tab", MenuCommand::CloseTab(context.tab)).shortcut("Super+W"),
+        item("menu-close-tab", MenuCommand::CloseTab(context.tab)).shortcut(CLOSE_TAB_SHORTCUT),
     ]);
     Menu::new(items)
 }
@@ -249,12 +261,14 @@ pub fn app_menus() -> Vec<Entry> {
             &MenuCommand::ShowInFiles.action(),
         ),
         Entry::separator(),
-        Entry::item(&L10N.tr("menu-close-tab"), Standard::CloseWindow.action()).shortcut("Super+W"),
+        Entry::item(&L10N.tr("menu-close-tab"), Standard::CloseWindow.action())
+            .shortcut(CLOSE_TAB_SHORTCUT),
     ]);
     vec![
-        app_submenu(
+        app_submenu_quitting_on(
             &L10N.tr("title"),
             command_entries(&[Some(Command::Settings)]),
+            QUIT_SHORTCUT,
         ),
         Entry::submenu(&L10N.tr("menu-shell"), shell),
         Entry::submenu(
@@ -293,4 +307,20 @@ pub fn app_menus() -> Vec<Entry> {
             Some(Command::PreviousPane),
         ])),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use bande_toolkit::ui::parse_shortcut;
+
+    use super::COMMANDS;
+    use crate::keys::shortcut;
+
+    #[test]
+    fn every_menu_shortcut_runs_the_command_beside_it() {
+        for (command, _, _, keys) in COMMANDS {
+            let pressed = parse_shortcut(keys).map(|(key, modifiers)| shortcut(key, modifiers));
+            assert_eq!(pressed, Some(Some(command)), "{keys}");
+        }
+    }
 }

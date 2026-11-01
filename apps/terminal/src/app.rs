@@ -11,15 +11,17 @@ use alacritty_terminal::tty::Shell;
 use bande_app_menu::{AppMenu, Standard};
 use bande_spring::{Decay, State as SpringState};
 use bande_term::{
-    Axis, Banner, BannerAction, CellPoint, Command, Divider, FULL_SCREEN_LEADING, GridSize,
-    HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane,
-    STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings, TabBar,
-    TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed, dropped_text, encode_key,
-    is_openable, is_settings_file, mouse_report, next_font_size, reports_mouse, settings_folder,
-    shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
+    Axis, Banner, BannerAction, CLOSE_TAB_SHORTCUT, CellPoint, Command, Divider,
+    FULL_SCREEN_LEADING, GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton,
+    MouseKind, Notice, Painter, Pane, QUIT_SHORTCUT, STRIP_HEIGHT, SavedWindow, SearchDirection,
+    SelectionKind, Session, Settings, TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext,
+    bracketed, dropped_text, encode_key, is_openable, is_settings_file, mouse_report,
+    next_font_size, reports_mouse, settings_folder, shortcut, tab_menu, terminal_menu,
+    wants_scroll_as_arrows,
 };
 use bande_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
+    shortcut_pressed,
 };
 use bande_toolkit::{
     App, DragAction, DragEvent, FrameRegions, Header, Item, MenuPlacement, Point, Radius, Rect,
@@ -783,6 +785,13 @@ impl TerminalApp {
         if opens_menu(key, modifiers) && !self.banner_focused {
             return self.menu_from_keyboard(window);
         }
+        let pressed = |shortcut: &str| shortcut_pressed(&Event::Key { key, modifiers }, shortcut);
+        if pressed(CLOSE_TAB_SHORTCUT) {
+            return self.menu_action(window, Standard::CloseWindow.action());
+        }
+        if pressed(QUIT_SHORTCUT) {
+            return self.menu_action(window, Standard::Quit.action());
+        }
         let command = shortcut(key, modifiers);
         let edits_find = self.banner_focused && command == Some(Command::SelectAll);
         if let Some(command) = command.filter(|_| !edits_find) {
@@ -1233,7 +1242,7 @@ impl TerminalApp {
     fn hover_link(&mut self, window: &mut Window, modifiers: Modifiers) {
         let at = self.pointer;
         let over_focused = self.pane_at(at) == Some(self.tab().focused);
-        let link = if modifiers.logo && self.gesture == Gesture::Idle && over_focused {
+        let link = if modifiers.control && self.gesture == Gesture::Idle && over_focused {
             self.link_at(at)
         } else {
             None
@@ -1339,7 +1348,7 @@ impl TerminalApp {
             let link = self.link_at(at);
             return self.terminal_menu(window, at, link);
         }
-        if modifiers.logo && pointer.is_primary() {
+        if modifiers.control && pointer.is_primary() {
             if let Some(link) = self.link_at(at) {
                 self.open_link(window, &link.uri);
             }
@@ -1910,7 +1919,6 @@ fn mouse_button(button: PointerButton) -> Option<MouseButton> {
 
 fn asks_for_menu(pointer: &Pointer) -> bool {
     pointer.button == PointerButton::Secondary
-        || (pointer.is_primary() && pointer.modifiers.control)
 }
 
 fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
