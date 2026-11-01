@@ -1,0 +1,40 @@
+[package]
+name = "bande-installer"
+description = "Bande Package Installer: installs and removes .deb files through PackageKit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+tracing.workspace = true
+bande-fs.workspace = true
+bande-l10n.workspace = true
+bande-log.workspace = true
+bande-packages.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+bande-test-bus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "admin"
+depends = "$auto, packagekit, bande-polkit, fonts-inter"
+extended-description = """\
+The package installer of the Bande desktop: opens .deb files from Files or \
+a browser, checks that they fit this computer, shows what else they install \
+or remove, and installs, upgrades or removes them through PackageKit, \
+asking for an administrator password."""
+assets = [
+    ["target/release/bande-installer", "usr/bin/", "755"],
+    ["data/org.bande.Installer.desktop", "usr/share/applications/", "644"],
+]
+
+[lints]
+workspace = true

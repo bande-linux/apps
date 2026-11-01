@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Package Installer
+Comment=Install software packages from files
+Icon=system-software-install
+Exec=bande-installer %f
+NoDisplay=true
+MimeType=application/vnd.debian.binary-package;application/x-deb;
+Categories=System;PackageManager;
