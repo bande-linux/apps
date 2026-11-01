@@ -10,7 +10,7 @@
 5. **Purge code rot**: Delete unused imports, dead functions, unreferenced types, and stale tests in any file you touch. Leave code cleaner than you found it.
 
 ## Factory Verification
-- **No panics**: No `.unwrap()`, `.expect()` or `panic!` in production code (each app denies them in `[lints.clippy]`). Use proper error handling.
+- **No panics**: No `.unwrap()`, `.expect()` or `panic!` in production code (the workspace `[workspace.lints.clippy]` denies them). Use proper error handling.
 - **Build first, test once**: each change only needs to compile: `cargo fmt --all` and `cargo check --locked --all-targets -p bande-<app>` at the workspace root, under `flock ~/bande-linux/kbuild.lock ~/bande-linux/bin/gentle`, with `CARGO_TARGET_DIR` in your worktree. The full gate, `ci/gate.sh` (fmt, clippy `--all-targets -D warnings`, tests, all `--locked`, on a private session bus), runs once on `main` when a batch of work has merged, and `main` fixes whatever it finds then.
 
 ## Desktop crates
