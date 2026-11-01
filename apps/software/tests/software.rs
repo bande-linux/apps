@@ -17,7 +17,7 @@ fn app(id: &str, name: &str, summary: &str, categories: &[&str]) -> Component {
         name: name.to_owned(),
         summary: summary.to_owned(),
         categories: categories.iter().map(|name| (*name).to_owned()).collect(),
-        bundles: vec![Bundle::Deb(name.to_lowercase())],
+        bundles: vec![Bundle::Deb(name.to_lowercase().replace(' ', "-"))],
         ..Component::default()
     }
 }
@@ -330,4 +330,60 @@ fn a_failed_install_says_why_and_offers_install_again() {
         })
     });
     assert!(buttons(software).contains(&"Install".to_owned()));
+}
+
+#[test]
+fn remove_names_what_else_goes_and_removes_only_after_confirmation() {
+    let mut opened = open_with(
+        Scheme::Light,
+        Script {
+            installed: vec![FakePackage::new(
+                1,
+                "text-editor;48.3-1;arm64;installed:debian",
+                "",
+                0,
+            )],
+            changes: vec![
+                FakePackage::new(13, "text-editor;48.3-1;arm64;installed:debian", "", 0),
+                FakePackage::new(13, "gnome-core;1:48+1;all;installed:debian", "", 0),
+            ],
+            ..Script::default()
+        },
+    );
+    let software = &mut opened.software;
+    click(software, "Text Editor");
+    click(software, "Remove");
+    until(software, |software| {
+        texts(software)
+            .iter()
+            .any(|text| text == "This also removes gnome-core.")
+    });
+    let planned = opened.fake.called("RemovePackages");
+    assert_eq!(planned.len(), 1);
+    assert_ne!(planned[0].flags & bande_test_bus::packagekit::SIMULATE, 0);
+    assert_eq!(
+        planned[0].args,
+        ["text-editor;48.3-1;arm64;installed:debian"]
+    );
+
+    click(software, "Cancel");
+    assert!(buttons(software).contains(&"Remove".to_owned()));
+    assert_eq!(opened.fake.called("RemovePackages").len(), 1);
+
+    click(software, "Remove");
+    until(software, |software| {
+        texts(software)
+            .iter()
+            .any(|text| text == "Remove Text Editor?")
+    });
+    click(software, "Remove");
+    until(software, |software| {
+        buttons(software).contains(&"Install".to_owned())
+    });
+    let removals = opened.fake.called("RemovePackages");
+    assert_eq!(removals.len(), 3);
+    assert_ne!(removals[1].flags & bande_test_bus::packagekit::SIMULATE, 0);
+    assert_eq!(removals[2].flags & bande_test_bus::packagekit::SIMULATE, 0);
+    software.show(Page::Installed);
+    assert_eq!(listed(software), Vec::<String>::new());
 }

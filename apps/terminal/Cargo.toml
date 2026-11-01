@@ -38,6 +38,7 @@ appearance."""
 assets = [
     ["target/release/bande-term", "usr/bin/", "755"],
     ["data/org.bande.Terminal.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.Terminal.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Terminal.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
 ]
 
