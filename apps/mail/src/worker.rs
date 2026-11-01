@@ -136,7 +136,7 @@ pub struct Worker {
     commands: Sender<Command>,
     stopping: Arc<AtomicBool>,
     idle: Arc<Mutex<Watch>>,
-    thread: Option<thread::JoinHandle<()>>,
+    running: Option<Receiver<()>>,
 }
 
 impl Worker {
@@ -155,12 +155,14 @@ impl Worker {
             commands: commands.clone(),
             stopping: Arc::clone(&stopping),
             idle: Arc::clone(&idle),
-            thread: None,
+            running: None,
         };
         let id = account.id;
+        let (alive, running) = mpsc::channel::<()>();
         let spawned = thread::Builder::new()
             .name(format!("mail-{id}"))
             .spawn(move || {
+                let _alive = alive;
                 let store = match Store::open(&store) {
                     Ok(store) => store,
                     Err(error) => {
@@ -187,7 +189,7 @@ impl Worker {
                 .run();
             });
         match spawned {
-            Ok(thread) => worker.thread = Some(thread),
+            Ok(_) => worker.running = Some(running),
             Err(error) => tracing::error!("cannot start the mail worker: {error}"),
         }
         worker.send(Command::Sync);
@@ -207,17 +209,15 @@ impl Worker {
     pub fn finish(mut self, deadline: Instant) {
         self.close_idle();
         let _ = self.commands.send(Command::Stop);
-        if let Some(thread) = self.thread.take() {
-            while !thread.is_finished() && Instant::now() < deadline {
-                thread::sleep(Duration::from_millis(20));
-            }
+        if let Some(running) = self.running.take() {
+            let _ = running.recv_timeout(deadline.saturating_duration_since(Instant::now()));
         }
     }
 }
 
 impl Drop for Worker {
     fn drop(&mut self) {
-        if self.thread.is_some() {
+        if self.running.is_some() {
             self.stopping.store(true, Ordering::Relaxed);
         }
         self.close_idle();
