@@ -124,7 +124,6 @@ pub struct MailView {
     pub(crate) now: Option<Timestamp>,
     requests: Vec<Request>,
     setup: Option<SetupSheet>,
-    pressed_ui: bool,
 }
 
 fn keyring_password(email: String, host: String) -> crate::worker::PasswordSource {
@@ -168,7 +167,6 @@ impl MailView {
             now: None,
             requests: Vec::new(),
             setup: None,
-            pressed_ui: false,
         };
         view.insert_toolbar();
         view.ui.set_sheet_top(TOOLBAR_HEIGHT);
@@ -1198,18 +1196,12 @@ impl MailView {
             Event::Key { key, modifiers } => self.key(*key, *modifiers),
             Event::PointerDown(pointer) => {
                 if self.over_control(pointer.position) {
-                    self.pressed_ui = true;
                     return self.ui.handle(event);
                 }
-                self.pressed_ui = false;
                 self.ui.clear_focus();
                 self.click(pointer)
             }
-            Event::PointerUp(_) => {
-                let handled = self.ui.handle(event);
-                self.pressed_ui = false;
-                handled
-            }
+            Event::PointerUp(_) => self.ui.handle(event),
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
                 let ui = self.ui.handle(event);
                 let hover = self.hit(pointer.position);
