@@ -57,10 +57,14 @@ impl Program for Template {
         }
     }
 
-    fn command(&mut self, cx: &mut Cx<Self>, _window: WindowId, command: &str) {
-        if command == NEW_WINDOW
-            && let Err(error) = open_window(cx)
-        {
+    fn command(&mut self, cx: &mut Cx<Self>, _window: Option<WindowId>, command: &str) {
+        if command == NEW_WINDOW {
+            self.reopen(cx);
+        }
+    }
+
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        if let Err(error) = open_window(cx) {
             tracing::warn!("cannot open a window: {error}");
         }
     }

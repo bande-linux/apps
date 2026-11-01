@@ -42,7 +42,8 @@ static INFO: Info = Info {
 };
 
 struct CalendarApp {
-    main: WindowId,
+    main: Option<WindowId>,
+    parked: Option<Pane>,
     worker: Worker,
     zone: TimeZone,
     formats: DateFormats,
@@ -536,12 +537,33 @@ impl View for Pane {
 
 impl CalendarApp {
     fn settle(&mut self, cx: &mut Cx<Self>) {
-        if let Some((window, Pane(view))) = cx.window(self.main) {
+        if let Some((window, Pane(view))) = self.main.and_then(|main| cx.window(main)) {
             self.serve(window, view);
             window.request_redraw();
         }
         cx.refresh_menus();
     }
+
+    fn with_view(&mut self, cx: &mut Cx<Self>, work: impl FnOnce(&mut Self, &mut CalendarView)) {
+        if let Some((_, Pane(view))) = self.main.and_then(|main| cx.window(main)) {
+            return work(self, view);
+        }
+        if let Some(mut pane) = self.parked.take() {
+            work(self, &mut pane.0);
+            self.parked = Some(pane);
+        }
+    }
+}
+
+fn show(
+    cx: &mut Cx<CalendarApp>,
+    title: &str,
+    mut pane: Pane,
+) -> Result<WindowId, bande_toolkit::WindowError> {
+    cx.open(Kind::Main, title, WINDOW_SIZE, |appearance| {
+        pane.0.set_appearance(appearance);
+        pane
+    })
 }
 
 impl Program for CalendarApp {
@@ -564,13 +586,11 @@ impl Program for CalendarApp {
         let directory = std::env::current_dir().unwrap_or_default();
         open_arguments(&mut view, &arguments, &directory);
         let worker = Worker::start()?;
-        let main = cx.open(Kind::Main, &title, WINDOW_SIZE, |appearance| {
-            view.set_appearance(appearance);
-            Pane(view)
-        })?;
+        let main = show(cx, &title, Pane(view))?;
         let started = Instant::now();
         Ok(Self {
-            main,
+            main: Some(main),
+            parked: None,
             worker,
             zone,
             formats,
@@ -590,26 +610,50 @@ impl Program for CalendarApp {
 
     fn menus(&self, cx: &Cx<Self>) -> Menus {
         Menus {
-            menus: cx
-                .view(self.main)
+            menus: self
+                .main
+                .and_then(|main| cx.view(main))
                 .map(|Pane(view)| app_menus(view.mode()))
                 .unwrap_or_default(),
             window: Vec::new(),
         }
     }
 
-    fn command(&mut self, cx: &mut Cx<Self>, _window: WindowId, command: &str) {
-        if let Some((_, Pane(view))) = cx.window(self.main) {
+    fn command(&mut self, cx: &mut Cx<Self>, _window: Option<WindowId>, command: &str) {
+        self.with_view(cx, |_, view| {
             view.menu_action(command);
-        }
+        });
         self.settle(cx);
     }
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
-        if let Some((_, Pane(view))) = cx.window(self.main) {
-            open_arguments(view, &arguments, directory);
-        }
+        self.with_view(cx, |_, view| open_arguments(view, &arguments, directory));
+        self.reopen(cx);
         self.settle(cx);
+    }
+
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        if self.main.is_some() {
+            return;
+        }
+        let Some(pane) = self.parked.take() else {
+            return;
+        };
+        let title = pane.0.title();
+        match show(cx, &title, pane) {
+            Ok(main) => {
+                self.main = Some(main);
+                self.title = title;
+            }
+            Err(error) => tracing::warn!("cannot open Calendar: {error}"),
+        }
+    }
+
+    fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, view: Pane) {
+        if self.main == Some(window) {
+            self.main = None;
+            self.parked = Some(view);
+        }
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, _window: WindowId) {
@@ -621,9 +665,9 @@ impl Program for CalendarApp {
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {
-        if let Some((_, Pane(view))) = cx.window(self.main) {
-            self.replies(view);
-        }
+        self.with_view(cx, |app, view| {
+            app.replies(view);
+        });
         self.settle(cx);
     }
 
@@ -639,21 +683,20 @@ impl Program for CalendarApp {
     }
 
     fn tick(&mut self, cx: &mut Cx<Self>, now: Instant) {
-        let Some((_, Pane(view))) = cx.window(self.main) else {
-            return;
-        };
-        if now >= self.next_clock {
-            view.set_now(Zoned::now().with_time_zone(self.zone.clone()));
-            self.next_clock = now + until_next_minute();
-        }
-        if now >= self.next_alerts || Timestamp::now() >= self.alert_at {
-            self.check_alerts(view);
-        }
-        if now >= self.next_subscriptions {
-            self.sync(view, true);
-        } else if now >= self.next_sync {
-            self.sync(view, false);
-        }
+        self.with_view(cx, |app, view| {
+            if now >= app.next_clock {
+                view.set_now(Zoned::now().with_time_zone(app.zone.clone()));
+                app.next_clock = now + until_next_minute();
+            }
+            if now >= app.next_alerts || Timestamp::now() >= app.alert_at {
+                app.check_alerts(view);
+            }
+            if now >= app.next_subscriptions {
+                app.sync(view, true);
+            } else if now >= app.next_sync {
+                app.sync(view, false);
+            }
+        });
         self.settle(cx);
     }
 }

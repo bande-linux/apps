@@ -160,5 +160,6 @@ Fixed: Software and Package Installer animate again and Software's search gives 
 area (`35c268f`); Calendar reads an opened `.ics` only if it is a regular file up to 64 MiB, so a
 FIFO or huge file cannot hang the running instance (`0225635`); unused `bande-log` dropped from
 Monitor and Terminal (`56bb215`). Not fixed (low): Activity Monitor's search field has no text
-input area (no `text_input_area` on `Screen`); Terminal reloads a settings change once per window;
-closing the main window quits Activity Monitor and Mail (owner decision).
+input area (no `text_input_area` on `Screen`); Terminal reloads a settings change once per window.
+Superseded 2026-11-01: closing the last window no longer quits any app; every app keeps running
+until Quit, as on macOS (owner decision; desktop `NOTES/plans/window-close.md`).

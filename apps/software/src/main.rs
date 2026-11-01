@@ -2,7 +2,7 @@ use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::edit_submenu;
 use bande_packages::{Client, debian_arch};
 use bande_software::{L10N, Software, WINDOW_SIZE, desktop_ids, installed_keys};
@@ -67,7 +67,17 @@ impl View for Pane {
     }
 }
 
-struct Store;
+struct Store {
+    main: Option<WindowId>,
+    parked: Option<Pane>,
+}
+
+fn open_main(cx: &mut Cx<Store>, mut pane: Pane) -> Result<WindowId, bande_toolkit::WindowError> {
+    cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
+        pane.0.ui().set_appearance(appearance);
+        pane
+    })
+}
 
 impl Program for Store {
     type View = Pane;
@@ -76,7 +86,7 @@ impl Program for Store {
         let apps = bande_software::catalog::system_catalog();
         let installed = installed_keys(&apps, &desktop_ids(&bande_xdg::data_dirs()));
         let system = zbus::blocking::Connection::system()?;
-        let mut software = Software::new(
+        let software = Software::new(
             apps,
             installed,
             Client::new(&system),
@@ -84,11 +94,38 @@ impl Program for Store {
             Appearance::default().palette(),
             TextSystem::new(),
         )?;
-        cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
-            software.ui().set_appearance(appearance);
-            Pane(software)
-        })?;
-        Ok(Self)
+        let main = open_main(cx, Pane(software))?;
+        Ok(Self {
+            main: Some(main),
+            parked: None,
+        })
+    }
+
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        let Some(pane) = self.parked.take() else {
+            return;
+        };
+        match open_main(cx, pane) {
+            Ok(main) => self.main = Some(main),
+            Err(error) => tracing::warn!("cannot open Software: {error}"),
+        }
+    }
+
+    fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, view: Pane) {
+        if self.main == Some(window) {
+            self.main = None;
+            self.parked = Some(view);
+        }
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        self.parked.iter().map(|pane| pane.0.fd()).collect()
+    }
+
+    fn source_ready(&mut self, _cx: &mut Cx<Self>, _index: usize) {
+        if let Some(pane) = &mut self.parked {
+            pane.0.pump();
+        }
     }
 
     fn menus(&self, _cx: &Cx<Self>) -> Menus {

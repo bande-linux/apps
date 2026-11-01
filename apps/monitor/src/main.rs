@@ -104,7 +104,8 @@ impl View for Pane {
 }
 
 struct ActivityMonitor {
-    main: WindowId,
+    main: Option<WindowId>,
+    sampling: bool,
     sampler: Sampler,
     snapshot: Snapshot,
     next_sample: Instant,
@@ -230,7 +231,7 @@ impl ActivityMonitor {
                 }
             }
         }
-        if id != self.main && cx.view(id).is_some_and(|pane| pane.0.finished()) {
+        if Some(id) != self.main && cx.view(id).is_some_and(|pane| pane.0.finished()) {
             cx.close(id);
         }
     }
@@ -287,46 +288,57 @@ fn show_in_files(window: &mut Window, path: &Path) {
     }
 }
 
+fn open_main(
+    cx: &mut Cx<ActivityMonitor>,
+    sampler: &mut Sampler,
+    memory: bool,
+) -> Result<(WindowId, Snapshot), bande_app::Error> {
+    let catalog = Catalog::new(&applications(
+        &data_dirs(),
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    ));
+    let mut monitor = Monitor::new(catalog, rustix::process::getuid().as_raw());
+    if let Some(text) = cx
+        .state_file(STATE_FILE)
+        .and_then(|file| std::fs::read_to_string(file).ok())
+    {
+        monitor.restore(&text);
+    }
+    if memory {
+        monitor.set_tab(Tab::Memory);
+    }
+    let mut snapshot = Snapshot::default();
+    let main = cx.open(
+        Kind::Main,
+        &L10N.tr("window-title"),
+        WINDOW_SIZE,
+        |appearance| {
+            let mut screen =
+                MonitorView::new(monitor, appearance.palette(), TextSystem::new(), icons());
+            screen.set_appearance(appearance);
+            snapshot = first_sample(sampler, &mut screen);
+            Pane(Box::new(screen))
+        },
+    )?;
+    if let Some((window, _)) = cx.window(main)
+        && let Err(error) = window.watch_apps()
+    {
+        tracing::debug!("cannot watch apps answer: {error}");
+    }
+    Ok((main, snapshot))
+}
+
 impl Program for ActivityMonitor {
     type View = Pane;
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
-        let catalog = Catalog::new(&applications(
-            &data_dirs(),
-            Locale::from_env().as_ref(),
-            &current_desktops(),
-        ));
         let mut sampler = Sampler::live();
-        let mut monitor = Monitor::new(catalog, rustix::process::getuid().as_raw());
-        if let Some(text) = cx
-            .state_file(STATE_FILE)
-            .and_then(|file| std::fs::read_to_string(file).ok())
-        {
-            monitor.restore(&text);
-        }
-        if arguments.iter().any(|argument| argument == MEMORY_FLAG) {
-            monitor.set_tab(Tab::Memory);
-        }
-        let mut snapshot = Snapshot::default();
-        let main = cx.open(
-            Kind::Main,
-            &L10N.tr("window-title"),
-            WINDOW_SIZE,
-            |appearance| {
-                let mut screen =
-                    MonitorView::new(monitor, appearance.palette(), TextSystem::new(), icons());
-                screen.set_appearance(appearance);
-                snapshot = first_sample(&mut sampler, &mut screen);
-                Pane(Box::new(screen))
-            },
-        )?;
-        if let Some((window, _)) = cx.window(main)
-            && let Err(error) = window.watch_apps()
-        {
-            tracing::debug!("cannot watch apps answer: {error}");
-        }
+        let memory = arguments.iter().any(|argument| argument == MEMORY_FLAG);
+        let (main, snapshot) = open_main(cx, &mut sampler, memory)?;
         Ok(Self {
-            main,
+            main: Some(main),
+            sampling: true,
             sampler,
             snapshot,
             next_sample: Instant::now() + FIRST_INTERVAL,
@@ -337,15 +349,19 @@ impl Program for ActivityMonitor {
 
     fn menus(&self, cx: &Cx<Self>) -> Menus {
         Menus {
-            menus: cx
-                .view(self.main)
+            menus: self
+                .main
+                .and_then(|main| cx.view(main))
                 .and_then(|pane| pane.0.app_menus())
                 .unwrap_or_default(),
             window: Vec::new(),
         }
     }
 
-    fn command(&mut self, cx: &mut Cx<Self>, window: WindowId, command: &str) {
+    fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
+        let Some(window) = window else {
+            return;
+        };
         if let Some((shown, pane)) = cx.window(window)
             && pane.0.menu_action(command)
         {
@@ -356,9 +372,34 @@ impl Program for ActivityMonitor {
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, _directory: &Path) {
         if arguments.iter().any(|argument| argument == MEMORY_FLAG) {
+            if self.main.is_none() {
+                self.reopen(cx);
+            }
             let main = self.main;
             self.command(cx, main, MenuCommand::Show(Tab::Memory).action());
         }
+    }
+
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        if self.main.is_some() {
+            return;
+        }
+        match open_main(cx, &mut self.sampler, false) {
+            Ok((main, snapshot)) => {
+                self.main = Some(main);
+                self.snapshot = snapshot;
+                self.sampling = true;
+                self.next_sample = Instant::now() + FIRST_INTERVAL;
+            }
+            Err(error) => tracing::warn!("cannot open Activity Monitor: {error}"),
+        }
+    }
+
+    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, _view: Pane) {
+        if self.main == Some(window) {
+            self.main = None;
+        }
+        self.sampling = cx.windows().next().is_some();
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
@@ -373,15 +414,8 @@ impl Program for ActivityMonitor {
         cx.refresh_menus();
     }
 
-    fn should_close(&mut self, cx: &mut Cx<Self>, window: WindowId) -> bool {
-        if window == self.main {
-            cx.quit();
-        }
-        true
-    }
-
     fn deadline(&self) -> Option<Instant> {
-        Some(self.next_sample)
+        self.sampling.then_some(self.next_sample)
     }
 
     fn tick(&mut self, cx: &mut Cx<Self>, _now: Instant) {

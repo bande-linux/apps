@@ -67,23 +67,27 @@ impl View for Pane {
 
 struct Packages {
     system: Connection,
+    parked: Vec<Pane>,
+}
+
+fn show(cx: &mut Cx<Packages>, mut pane: Pane) -> Result<WindowId, bande_toolkit::WindowError> {
+    cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
+        pane.0.ui().set_appearance(appearance);
+        pane
+    })
 }
 
 impl Packages {
     fn install(&self, cx: &mut Cx<Self>, file: &Path) -> Result<WindowId, bande_app::Error> {
         let file = std::fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
-        let mut installer = Installer::new(
+        let installer = Installer::new(
             Client::new(&self.system),
             file,
             Machine::current()?,
             Appearance::default().palette(),
             TextSystem::new(),
         )?;
-        let window = cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
-            installer.ui().set_appearance(appearance);
-            Pane(installer)
-        })?;
-        Ok(window)
+        Ok(show(cx, Pane(installer))?)
     }
 }
 
@@ -97,6 +101,7 @@ impl Program for Packages {
             .ok_or("usage: bande-installer FILE.deb")?;
         let packages = Self {
             system: Connection::system()?,
+            parked: Vec::new(),
         };
         packages.install(cx, &file)?;
         Ok(packages)
@@ -117,9 +122,33 @@ impl Program for Packages {
         }
     }
 
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        let Some(pane) = self.parked.pop() else {
+            return;
+        };
+        if let Err(error) = show(cx, pane) {
+            tracing::warn!("cannot show the package: {error}");
+        }
+    }
+
+    fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, view: Pane) {
+        self.parked.retain(|pane| !pane.0.closed());
+        self.parked.push(view);
+    }
+
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
         if cx.view(window).is_some_and(|pane| pane.0.closed()) {
             cx.close(window);
+        }
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        self.parked.iter().map(|pane| pane.0.fd()).collect()
+    }
+
+    fn source_ready(&mut self, _cx: &mut Cx<Self>, index: usize) {
+        if let Some(pane) = self.parked.get_mut(index) {
+            pane.0.pump();
         }
     }
 }

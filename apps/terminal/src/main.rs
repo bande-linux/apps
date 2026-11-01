@@ -11,8 +11,8 @@ use bande_app::{
 };
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_terminal::{
-    COLUMNS, GridSize, L10N, Painter, ROWS, SETTINGS_SIZE, Session, Settings, Terminal, app_menus,
-    claim, left_behind, settings_view, window_file, windows_folder,
+    COLUMNS, Command, GridSize, L10N, MenuCommand, Painter, ROWS, SETTINGS_SIZE, Session, Settings,
+    Terminal, app_menus, claim, left_behind, settings_view, window_file, windows_folder,
 };
 use bande_toolkit::Appearance;
 
@@ -193,7 +193,15 @@ impl Program for Terminals {
         app_menus()
     }
 
-    fn command(&mut self, cx: &mut Cx<Self>, window: WindowId, command: &str) {
+    fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
+        let Some(window) = window else {
+            if let Some(MenuCommand::Run(Command::NewWindow | Command::NewTab)) =
+                MenuCommand::parse(command)
+            {
+                self.reopen(cx);
+            }
+            return;
+        };
         if let Some((shown, view)) = cx.window(window) {
             view.menu_action(shown, command);
             shown.request_redraw();
@@ -203,6 +211,12 @@ impl Program for Terminals {
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
         if let Err(error) = self.open_arguments(cx, arguments, directory) {
+            tracing::warn!("cannot open a window: {error}");
+        }
+    }
+
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        if let Err(error) = self.open_window(cx, vec![self.home.clone()], 0, None) {
             tracing::warn!("cannot open a window: {error}");
         }
     }

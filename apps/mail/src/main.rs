@@ -15,7 +15,8 @@ use bande_mail::ui::{COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Reques
 use bande_notify::Urgency;
 use bande_notify::client::{Request as Notification, notify};
 use bande_toolkit::{
-    Appearance, FrameRegions, MenuPlacement, Rect, Scene, TextSystem, Window, WindowEvent,
+    Appearance, FrameRegions, MenuPlacement, Rect, Scene, TextSystem, Window, WindowError,
+    WindowEvent,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, data_home};
 
@@ -143,7 +144,8 @@ impl View for Pane {
 }
 
 struct Mail {
-    main: WindowId,
+    main: Option<WindowId>,
+    parked: Option<Box<MailView>>,
     apps: Option<Apps>,
     picker: Picker,
 }
@@ -182,11 +184,23 @@ fn announce(summary: String, body: String) {
     }
 }
 
-fn main_view(cx: &mut Cx<Mail>, main: WindowId) -> Option<&mut MailView> {
-    match cx.window(main) {
+fn main_view<'a>(
+    cx: &'a mut Cx<Mail>,
+    main: Option<WindowId>,
+    parked: &'a mut Option<Box<MailView>>,
+) -> Option<&'a mut MailView> {
+    match main.and_then(|main| cx.window(main)) {
         Some((_, Pane::Main(view))) => Some(view),
-        _ => None,
+        _ => parked.as_deref_mut(),
     }
+}
+
+fn show_main(cx: &mut Cx<Mail>, mut view: Box<MailView>) -> Result<WindowId, WindowError> {
+    let title = view.title();
+    cx.open(Kind::Main, &title, WINDOW_SIZE, |appearance| {
+        view.set_appearance(appearance);
+        Pane::Main(view)
+    })
 }
 
 impl Mail {
@@ -196,7 +210,7 @@ impl Mail {
     }
 
     fn open_compose(&mut self, cx: &mut Cx<Self>, outgoing: Outgoing) -> Option<WindowId> {
-        let senders = main_view(cx, self.main)
+        let senders = main_view(cx, self.main, &mut self.parked)
             .map(|view| {
                 view.accounts()
                     .iter()
@@ -222,11 +236,10 @@ impl Mail {
 
     fn open_argument(&mut self, cx: &mut Cx<Self>, argument: &str) {
         if let Some(draft) = from_mailto(argument) {
-            if let Some(view) = main_view(cx, self.main) {
+            if let Some(view) = main_view(cx, self.main, &mut self.parked) {
                 view.compose(draft);
             }
-            let main = self.main;
-            self.serve(cx, main);
+            self.serve_main(cx);
         }
     }
 
@@ -341,7 +354,8 @@ impl Mail {
             }
         }
         if let Some(outgoing) = sent {
-            let delivered = main_view(cx, self.main).is_some_and(|main| main.send(outgoing));
+            let delivered =
+                main_view(cx, self.main, &mut self.parked).is_some_and(|main| main.send(outgoing));
             if !delivered {
                 tracing::warn!("no account sends from this address");
             }
@@ -351,6 +365,33 @@ impl Mail {
             cx.close(window);
         } else {
             refresh(cx, window);
+        }
+    }
+
+    fn serve_main(&mut self, cx: &mut Cx<Self>) {
+        if let Some(main) = self.main {
+            return self.serve(cx, main);
+        }
+        let requests = self
+            .parked
+            .as_mut()
+            .map(|view| view.take_requests())
+            .unwrap_or_default();
+        for request in requests {
+            match request {
+                Request::Compose(outgoing) => {
+                    self.open_compose(cx, *outgoing);
+                }
+                Request::Notify { summary, body } => announce(summary, body),
+                Request::NotSent { error, outgoing } => {
+                    if let Some(opened) = self.open_compose(cx, *outgoing)
+                        && let Some((_, Pane::Compose(view))) = cx.window(opened)
+                    {
+                        view.show_error(&error);
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -394,24 +435,25 @@ impl Mail {
         refresh(cx, window);
     }
 
-    fn keep_draft(&self, cx: &mut Cx<Self>, window: WindowId) {
+    fn keep_draft(&mut self, cx: &mut Cx<Self>, window: WindowId) {
         let unsent = match cx.window(window) {
             Some((_, Pane::Compose(view))) => view.unsent(),
             _ => None,
         };
         if let Some(outgoing) = unsent
-            && !main_view(cx, self.main).is_some_and(|main| main.save_draft(outgoing))
+            && !main_view(cx, self.main, &mut self.parked)
+                .is_some_and(|main| main.save_draft(outgoing))
         {
             tracing::warn!("no account keeps drafts for this address");
         }
     }
 
-    fn finish(&self, cx: &mut Cx<Self>) {
+    fn finish(&mut self, cx: &mut Cx<Self>) {
         let windows: Vec<WindowId> = cx.windows().collect();
         for window in windows {
             self.keep_draft(cx, window);
         }
-        if let Some(view) = main_view(cx, self.main) {
+        if let Some(view) = main_view(cx, self.main, &mut self.parked) {
             view.finish();
         }
     }
@@ -439,14 +481,11 @@ impl Program for Mail {
             Appearance::default().palette(),
             TextSystem::new(),
         )?;
-        let title = view.title();
-        let main = cx.open(Kind::Main, &title, WINDOW_SIZE, |appearance| {
-            view.set_appearance(appearance);
-            view.start();
-            Pane::Main(Box::new(view))
-        })?;
+        view.start();
+        let main = show_main(cx, Box::new(view))?;
         let mut mail = Self {
-            main,
+            main: Some(main),
+            parked: None,
             apps: None,
             picker: Picker::new()?,
         };
@@ -459,7 +498,7 @@ impl Program for Mail {
 
     fn menus(&self, cx: &Cx<Self>) -> Menus {
         Menus {
-            menus: match cx.view(self.main) {
+            menus: match self.main.and_then(|main| cx.view(main)) {
                 Some(Pane::Main(view)) => menus::app_menus(view),
                 _ => Vec::new(),
             },
@@ -467,20 +506,21 @@ impl Program for Mail {
         }
     }
 
-    fn command(&mut self, cx: &mut Cx<Self>, window: WindowId, command: &str) {
-        let handled = match cx.window(window) {
+    fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
+        let handled = match window.and_then(|window| cx.window(window)) {
             Some((_, Pane::Main(view))) => view.menu_action(command),
             Some((_, Pane::Compose(view))) => view.menu_action(command),
             None => false,
         };
         if !handled && window != self.main {
-            if let Some(view) = main_view(cx, self.main) {
+            if let Some(view) = main_view(cx, self.main, &mut self.parked) {
                 view.menu_action(command);
             }
-            let main = self.main;
-            self.serve(cx, main);
+            self.serve_main(cx);
         }
-        self.serve(cx, window);
+        if let Some(window) = window {
+            self.serve(cx, window);
+        }
     }
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, _directory: &Path) {
@@ -494,13 +534,32 @@ impl Program for Mail {
     }
 
     fn should_close(&mut self, cx: &mut Cx<Self>, window: WindowId) -> bool {
-        if window == self.main {
-            self.finish(cx);
-            cx.quit();
-        } else {
+        if Some(window) != self.main {
             self.keep_draft(cx, window);
         }
         true
+    }
+
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        let Some(view) = self.parked.take() else {
+            return;
+        };
+        match show_main(cx, view) {
+            Ok(main) => {
+                self.main = Some(main);
+                self.serve(cx, main);
+            }
+            Err(error) => tracing::warn!("cannot open the viewer: {error}"),
+        }
+    }
+
+    fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, view: Pane) {
+        if let Pane::Main(view) = view
+            && self.main == Some(window)
+        {
+            self.main = None;
+            self.parked = Some(view);
+        }
     }
 
     fn should_quit(&mut self, cx: &mut Cx<Self>) -> bool {
@@ -509,10 +568,20 @@ impl Program for Mail {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.picker.fd()]
+        let mut sources = vec![self.picker.fd()];
+        if let Some(view) = &self.parked {
+            sources.extend(view.fds());
+        }
+        sources
     }
 
-    fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {
+    fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
+        if index > 0 {
+            if let Some(view) = &mut self.parked {
+                view.engine_ready();
+            }
+            return self.serve_main(cx);
+        }
         for (token, picked) in self.picker.take() {
             self.attach(cx, token, picked);
         }
