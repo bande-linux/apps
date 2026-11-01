@@ -17,7 +17,7 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
         .map(|account| Entry::item(&account.email, &format!("remove-account:{}", account.id)))
         .collect::<Vec<_>>();
     vec![
-        app_submenu(&L10N.tr("app-name"), Vec::new()),
+        app_submenu(&L10N.tr("app-name"), env!("CARGO_PKG_VERSION"), Vec::new()),
         Entry::submenu(
             &L10N.tr("menu-file"),
             vec![

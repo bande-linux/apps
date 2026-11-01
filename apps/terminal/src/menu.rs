@@ -262,6 +262,7 @@ pub fn app_menus() -> Vec<Entry> {
     vec![
         app_submenu_quitting_on(
             &L10N.tr("title"),
+            env!("CARGO_PKG_VERSION"),
             vec![settings().shortcut(SETTINGS_SHORTCUT)],
             QUIT_SHORTCUT,
         ),

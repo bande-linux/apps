@@ -93,7 +93,7 @@ fn app_menus(mode: Mode) -> Vec<Entry> {
         entry("find", "find").shortcut("Ctrl+F"),
     ]);
     vec![
-        app_submenu(&L10N.tr("app-name"), Vec::new()),
+        app_submenu(&L10N.tr("app-name"), env!("CARGO_PKG_VERSION"), Vec::new()),
         Entry::submenu(
             &L10N.tr("menu-file"),
             vec![
