@@ -2,90 +2,95 @@ use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 use std::time::Instant;
 
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View};
+use bande_app_menu::edit_submenu;
 use bande_packages::{Client, debian_arch};
 use bande_software::{L10N, Software, WINDOW_SIZE, desktop_ids, installed_keys};
-use bande_toolkit::{App, Role, Scene, TextSystem, Window, WindowEvent};
+use bande_toolkit::{Appearance, Scene, TextSystem, Window, WindowEvent};
 
-const APP_ID: &str = "org.bande.Software";
+static INFO: Info = Info {
+    id: "org.bande.Software",
+    package: env!("CARGO_PKG_NAME"),
+    version: env!("CARGO_PKG_VERSION"),
+    name: || L10N.tr("title"),
+    keys: Keys::Standard,
+    settings: None,
+};
 
-struct Running {
-    software: Software,
-}
+struct Pane(Software);
 
-impl App for Running {
+impl View for Pane {
     fn scene(&mut self, window: &mut Window) -> Scene {
-        let (width, height) = window.size();
-        self.software.ui().scene(width, height)
+        View::scene(self.0.ui(), window)
     }
 
-    fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        let ui = self.software.ui();
-        match event {
-            WindowEvent::Input(input) => {
-                ui.handle(&input);
-            }
-            WindowEvent::Accessibility(request) => {
-                ui.perform(&request);
-            }
-            WindowEvent::AppearanceChanged(appearance) => ui.set_appearance(appearance),
-            _ => return,
-        }
-        self.software.pump();
-        window.request_redraw();
+    fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        let handled = View::event(self.0.ui(), window, event);
+        self.0.pump() || handled
+    }
+
+    fn set_appearance(&mut self, appearance: Appearance) {
+        self.0.ui().set_appearance(appearance);
+    }
+
+    fn set_active(&mut self, active: bool) {
+        self.0.ui().set_window_active(active);
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.software.fd()]
+        vec![self.0.fd()]
     }
 
-    fn source_ready(&mut self, window: &mut Window, _index: usize) {
-        self.software.pump();
-        window.request_redraw();
+    fn source_ready(&mut self, _window: &mut Window, _index: usize) -> bool {
+        self.0.pump();
+        true
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.software.deadline()
+        self.0.deadline()
     }
 
-    fn tick(&mut self, window: &mut Window, _now: Instant) {
-        window.request_redraw();
+    fn tick(&mut self, _window: &mut Window, _now: Instant) -> bool {
+        true
     }
 
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
-        Some(self.software.accessibility())
+        Some(self.0.accessibility())
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
-    let appearance = window.appearance();
-    let apps = bande_software::catalog::system_catalog();
-    let installed = installed_keys(&apps, &desktop_ids(&bande_xdg::data_dirs()));
-    let system = zbus::blocking::Connection::system()?;
-    let mut software = Software::new(
-        apps,
-        installed,
-        Client::new(&system),
-        debian_arch(),
-        appearance.palette(),
-        TextSystem::new(),
-    )?;
-    software.ui().set_appearance(appearance);
-    bande_toolkit::run(&mut window, &mut Running { software })?;
-    Ok(())
+struct Store;
+
+impl Program for Store {
+    type View = Pane;
+
+    fn start(cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        let apps = bande_software::catalog::system_catalog();
+        let installed = installed_keys(&apps, &desktop_ids(&bande_xdg::data_dirs()));
+        let system = zbus::blocking::Connection::system()?;
+        let mut software = Software::new(
+            apps,
+            installed,
+            Client::new(&system),
+            debian_arch(),
+            Appearance::default().palette(),
+            TextSystem::new(),
+        )?;
+        cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
+            software.ui().set_appearance(appearance);
+            Pane(software)
+        })?;
+        Ok(Self)
+    }
+
+    fn menus(&self, _cx: &Cx<Self>) -> Menus {
+        Menus {
+            menus: vec![edit_submenu(Vec::new())],
+            window: Vec::new(),
+        }
+    }
 }
 
 fn main() -> ExitCode {
-    if std::env::args().nth(1).as_deref() == Some("--version") {
-        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-        return ExitCode::SUCCESS;
-    }
-    bande_log::init("bande-software");
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            tracing::error!("{error}");
-            ExitCode::FAILURE
-        }
-    }
+    bande_app::run::<Store>(&INFO)
 }

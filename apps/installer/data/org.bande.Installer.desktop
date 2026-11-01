@@ -4,6 +4,7 @@ Name=Package Installer
 Comment=Install software packages from files
 Icon=org.bande.Installer
 Exec=bande-installer %f
+StartupNotify=true
 NoDisplay=true
 MimeType=application/vnd.debian.binary-package;application/x-deb;
 Categories=System;PackageManager;

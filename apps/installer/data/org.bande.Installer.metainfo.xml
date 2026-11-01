@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Installer</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Package Installer</name>
+  <summary>Install software packages from files</summary>
+  <description>
+    <p>Opens .deb files from Files or a browser, checks that they fit this computer, shows what else they install or remove, and installs, upgrades or removes them through PackageKit.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Installer.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+</component>

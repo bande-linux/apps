@@ -1,102 +1,125 @@
 use std::os::fd::BorrowedFd;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
+use bande_app_menu::edit_submenu;
 use bande_installer::{Installer, L10N, Machine, WINDOW_SIZE};
 use bande_packages::Client;
-use bande_toolkit::{App, Role, Scene, TextSystem, Window, WindowEvent};
+use bande_toolkit::{Appearance, Scene, TextSystem, Window, WindowEvent};
+use zbus::blocking::Connection;
 
-const APP_ID: &str = "org.bande.Installer";
+static INFO: Info = Info {
+    id: "org.bande.Installer",
+    package: env!("CARGO_PKG_NAME"),
+    version: env!("CARGO_PKG_VERSION"),
+    name: || L10N.tr("title"),
+    keys: Keys::Standard,
+    settings: None,
+};
 
-struct Running {
-    installer: Installer,
-}
+struct Pane(Installer);
 
-impl Running {
-    fn settle(&mut self, window: &mut Window) {
-        self.installer.pump();
-        if self.installer.closed() {
-            window.close();
-        }
-        window.request_redraw();
-    }
-}
-
-impl App for Running {
+impl View for Pane {
     fn scene(&mut self, window: &mut Window) -> Scene {
-        let (width, height) = window.size();
-        self.installer.ui().scene(width, height)
+        View::scene(self.0.ui(), window)
     }
 
-    fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        let ui = self.installer.ui();
-        match event {
-            WindowEvent::Input(input) => {
-                ui.handle(&input);
-            }
-            WindowEvent::Accessibility(request) => {
-                ui.perform(&request);
-            }
-            WindowEvent::AppearanceChanged(appearance) => ui.set_appearance(appearance),
-            _ => return,
-        }
-        self.settle(window);
+    fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        let handled = View::event(self.0.ui(), window, event);
+        self.0.pump() || handled
+    }
+
+    fn set_appearance(&mut self, appearance: Appearance) {
+        self.0.ui().set_appearance(appearance);
+    }
+
+    fn set_active(&mut self, active: bool) {
+        self.0.ui().set_window_active(active);
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.installer.fd()]
+        vec![self.0.fd()]
     }
 
-    fn source_ready(&mut self, window: &mut Window, _index: usize) {
-        self.settle(window);
+    fn source_ready(&mut self, _window: &mut Window, _index: usize) -> bool {
+        self.0.pump();
+        true
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.installer.deadline()
+        self.0.deadline()
     }
 
-    fn tick(&mut self, window: &mut Window, _now: Instant) {
-        window.request_redraw();
+    fn tick(&mut self, _window: &mut Window, _now: Instant) -> bool {
+        true
     }
 
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
-        Some(self.installer.accessibility())
+        Some(self.0.accessibility())
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let path = std::env::args_os()
-        .nth(1)
-        .map(PathBuf::from)
-        .ok_or("usage: bande-installer FILE.deb")?;
-    let path = std::fs::canonicalize(&path).unwrap_or(path);
-    let system = zbus::blocking::Connection::system()?;
-    let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
-    let appearance = window.appearance();
-    let mut installer = Installer::new(
-        Client::new(&system),
-        path,
-        Machine::current()?,
-        appearance.palette(),
-        TextSystem::new(),
-    )?;
-    installer.ui().set_appearance(appearance);
-    bande_toolkit::run(&mut window, &mut Running { installer })?;
-    Ok(())
+struct Packages {
+    system: Connection,
+}
+
+impl Packages {
+    fn install(&self, cx: &mut Cx<Self>, file: &Path) -> Result<WindowId, bande_app::Error> {
+        let file = std::fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
+        let mut installer = Installer::new(
+            Client::new(&self.system),
+            file,
+            Machine::current()?,
+            Appearance::default().palette(),
+            TextSystem::new(),
+        )?;
+        let window = cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
+            installer.ui().set_appearance(appearance);
+            Pane(installer)
+        })?;
+        Ok(window)
+    }
+}
+
+impl Program for Packages {
+    type View = Pane;
+
+    fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        let file = arguments
+            .first()
+            .map(PathBuf::from)
+            .ok_or("usage: bande-installer FILE.deb")?;
+        let packages = Self {
+            system: Connection::system()?,
+        };
+        packages.install(cx, &file)?;
+        Ok(packages)
+    }
+
+    fn menus(&self, _cx: &Cx<Self>) -> Menus {
+        Menus {
+            menus: vec![edit_submenu(Vec::new())],
+            window: Vec::new(),
+        }
+    }
+
+    fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
+        for file in arguments {
+            if let Err(error) = self.install(cx, &directory.join(file)) {
+                tracing::warn!("cannot open the package: {error}");
+            }
+        }
+    }
+
+    fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
+        if cx.view(window).is_some_and(|pane| pane.0.closed()) {
+            cx.close(window);
+        }
+    }
 }
 
 fn main() -> ExitCode {
-    if std::env::args().nth(1).as_deref() == Some("--version") {
-        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-        return ExitCode::SUCCESS;
-    }
-    bande_log::init("bande-installer");
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            tracing::error!("{error}");
-            ExitCode::FAILURE
-        }
-    }
+    bande_app::run::<Packages>(&INFO)
 }

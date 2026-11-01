@@ -512,10 +512,11 @@ name = "bande-installer"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-app",
+ "bande-app-menu",
  "bande-fs",
  "bande-golden",
  "bande-l10n",
- "bande-log",
  "bande-packages",
  "bande-test-bus",
  "bande-toolkit",
@@ -672,10 +673,11 @@ name = "bande-software"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-app",
+ "bande-app-menu",
  "bande-golden",
  "bande-inbox",
  "bande-l10n",
- "bande-log",
  "bande-packages",
  "bande-search",
  "bande-test-bus",

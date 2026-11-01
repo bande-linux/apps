@@ -10,6 +10,8 @@ publish = false
 
 [dependencies]
 accesskit.workspace = true
+bande-app.workspace = true
+bande-app-menu.workspace = true
 flate2.workspace = true
 roxmltree.workspace = true
 serde.workspace = true
@@ -18,7 +20,6 @@ tracing.workspace = true
 zbus.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
-bande-log.workspace = true
 bande-packages.workspace = true
 bande-search.workspace = true
 bande-toolkit.workspace = true
@@ -36,7 +37,7 @@ workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "admin"
-depends = "$auto, appstream, packagekit, fonts-inter"
+depends = "$auto, appstream, packagekit, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 recommends = "bande-polkit"
 extended-description = """\
 The app store of the Bande desktop: browse and search the apps Debian and \
