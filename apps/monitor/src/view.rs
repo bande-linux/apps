@@ -192,7 +192,7 @@ pub trait Screen {
     fn set_focused(&mut self, focused: bool);
     fn handle(&mut self, event: &Event) -> bool;
     fn update(&mut self, snapshot: Snapshot);
-    fn measures_proportional_memory(&self) -> bool;
+    fn measures_footprint(&self) -> bool;
     fn take_requests(&mut self) -> Vec<Request>;
     fn menu_action(&mut self, action: &str) -> bool;
     fn menu_closed(&mut self) -> bool;

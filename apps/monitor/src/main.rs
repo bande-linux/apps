@@ -128,9 +128,7 @@ impl ActivityMonitor {
     fn sample(&mut self, cx: &mut Cx<Self>) {
         let windows: Vec<WindowId> = cx.windows().collect();
         self.sampler
-            .measure_proportional_memory(measured(cx, &windows, |screen| {
-                screen.measures_proportional_memory()
-            }));
+            .measure_footprint(measured(cx, &windows, |screen| screen.measures_footprint()));
         self.sampler
             .measure_disk(measured(cx, &windows, |screen| screen.measures_disk()));
         self.sampler

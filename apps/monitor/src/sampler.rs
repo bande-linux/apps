@@ -10,7 +10,7 @@ use crate::inhibitors::SleepBlocker;
 use crate::power::BatteryReport;
 use crate::proc::{
     DrmUse, IoBytes, Stat, display_name, parse_cgroup_unit, parse_cmdline, parse_drm_fdinfo,
-    parse_io, parse_kilobytes, parse_passwd, parse_stat, parse_switches, parse_uid,
+    parse_io, parse_passwd, parse_stat, parse_switches, parse_uid,
 };
 use crate::system::{
     DiskCounters, InterfaceKind, Memory, Transferred, read_disks, read_interfaces, read_memory,
@@ -38,7 +38,7 @@ pub struct Process {
     pub cpu_percent: f32,
     pub cpu_seconds: f64,
     pub threads: u32,
-    pub proportional: Option<u64>,
+    pub footprint: Option<u64>,
     pub resident: u64,
     pub disk: Option<Rates>,
     pub gpu: Option<GpuUse>,
@@ -151,7 +151,7 @@ pub struct Sampler {
     users: HashMap<u32, String>,
     known: HashMap<u32, Known>,
     previous: Option<Previous>,
-    proportional: bool,
+    footprint: bool,
     disk: bool,
     gpu: bool,
     gpu_seen: bool,
@@ -214,7 +214,7 @@ impl Sampler {
             users,
             known: HashMap::new(),
             previous: None,
-            proportional: false,
+            footprint: false,
             disk: false,
             gpu: false,
             gpu_seen: false,
@@ -235,8 +235,8 @@ impl Sampler {
         )
     }
 
-    pub fn measure_proportional_memory(&mut self, measure: bool) {
-        self.proportional = measure;
+    pub fn measure_footprint(&mut self, measure: bool) {
+        self.footprint = measure;
     }
 
     pub fn measure_disk(&mut self, measure: bool) {
@@ -344,11 +344,11 @@ impl Sampler {
         let io = (self.disk && reads_io)
             .then(|| self.read(&folder.join("io")).ok().and_then(parse_io))
             .flatten();
-        let proportional = (self.proportional && reads_rollup)
+        let footprint = (self.footprint && reads_rollup)
             .then(|| {
                 self.read(&folder.join("smaps_rollup"))
                     .ok()
-                    .and_then(|rollup| parse_kilobytes(rollup, "Pss"))
+                    .and_then(bande_status::memory::footprint)
             })
             .flatten();
         let switches = (self.wakeups && !kernel_thread)
@@ -381,7 +381,7 @@ impl Sampler {
         known.cpu_ticks = stat.cpu_ticks;
         known.io = io;
         known.reads_io &= !self.disk || io.is_some();
-        known.reads_rollup &= !self.proportional || proportional.is_some();
+        known.reads_rollup &= !self.footprint || footprint.is_some();
         Some(Process {
             pid,
             ppid: stat.ppid,
@@ -390,7 +390,7 @@ impl Sampler {
             cpu_percent: cpu_percent as f32,
             cpu_seconds: stat.cpu_ticks as f64 / ticks_per_second,
             threads: stat.threads,
-            proportional,
+            footprint,
             resident,
             disk,
             gpu,
