@@ -1270,6 +1270,24 @@ impl TerminalWindow {
         }
     }
 
+    fn end_gesture(&mut self, window: &mut Window) {
+        match std::mem::replace(&mut self.gesture, Gesture::Idle) {
+            Gesture::Reporting(button) => {
+                self.report_mouse(
+                    MouseKind::Release(button),
+                    self.pointer,
+                    Modifiers::default(),
+                );
+            }
+            Gesture::Selecting => {
+                self.session().terminal.finish_selection();
+                self.offer_primary(window);
+                window.request_redraw();
+            }
+            Gesture::Banner | Gesture::Divider(_) | Gesture::Tab(_) | Gesture::Idle => {}
+        }
+    }
+
     fn release(&mut self, window: &mut Window, pointer: Pointer) {
         let at = pointer.position;
         match std::mem::replace(&mut self.gesture, Gesture::Idle) {
@@ -1642,6 +1660,7 @@ impl View for TerminalWindow {
             }
             WindowEvent::Input(Event::PointerUp(pointer)) => self.release(window, pointer),
             WindowEvent::Input(Event::PointerLeave) => {
+                self.end_gesture(window);
                 if self.hover.take().is_some() || self.link.take().is_some() {
                     window.request_redraw();
                 }
