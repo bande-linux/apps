@@ -141,7 +141,11 @@ impl Window {
             if done(self) {
                 return;
             }
-            assert!(Instant::now() < deadline, "never got there: {:?}", self.texts());
+            assert!(
+                Instant::now() < deadline,
+                "never got there: {:?}",
+                self.texts()
+            );
             std::thread::sleep(Duration::from_millis(20));
         }
     }
@@ -262,13 +266,11 @@ fn a_refused_password_returns_to_the_preview_and_a_lock_says_to_wait() {
         "arm64",
     );
     window.see("Also installs 2 packages");
-    window
-        .fake
-        .script(|script| {
-            script
-                .failures
-                .insert("InstallFiles".to_owned(), (48, "Not authorized".to_owned()));
-        });
+    window.fake.script(|script| {
+        script
+            .failures
+            .insert("InstallFiles".to_owned(), (48, "Not authorized".to_owned()));
+    });
     window.click("Install");
     window.until(|window| window.fake.called("InstallFiles").len() == 2);
     window.see("Also installs 2 packages");
@@ -301,7 +303,12 @@ fn missing_dependencies_block_the_install_with_their_names() {
     );
     window.see("Can't install: it needs packages that aren't available");
     assert!(window.shows("Needs libnope"));
-    assert!(window.texts().iter().all(|(role, text)| *role != Role::Button || text != "Install"));
+    assert!(
+        window
+            .texts()
+            .iter()
+            .all(|(role, text)| *role != Role::Button || text != "Install")
+    );
 }
 
 #[test]
@@ -365,7 +372,10 @@ fn the_shipped_defaults_open_a_deb_in_the_installer_though_it_hides_from_menus()
     let applications = data.path().join("applications");
     std::fs::create_dir_all(&applications).expect("applications");
     std::fs::copy(
-        concat!(env!("CARGO_MANIFEST_DIR"), "/data/org.bande.Installer.desktop"),
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/data/org.bande.Installer.desktop"
+        ),
         applications.join("org.bande.Installer.desktop"),
     )
     .expect("desktop file");
@@ -383,7 +393,8 @@ fn the_shipped_defaults_open_a_deb_in_the_installer_though_it_hides_from_menus()
     let apps = bande_xdg::MimeApps::load(&paths);
     let deb = ["application/vnd.debian.binary-package".to_owned()];
     assert_eq!(
-        apps.default_for(&deb, &found).map(|entry| entry.id.as_str()),
+        apps.default_for(&deb, &found)
+            .map(|entry| entry.id.as_str()),
         Some("org.bande.Installer.desktop")
     );
 }

@@ -1,7 +1,7 @@
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -55,29 +55,32 @@ impl Messages {
     }
 }
 
-fn run(client: &Client, path: &PathBuf, machine: &Machine, jobs: Receiver<Job>, out: &Messages) {
+fn run(client: &Client, path: &Path, machine: &Machine, jobs: Receiver<Job>, out: &Messages) {
     let mut deb: Option<Deb> = None;
     let progress = |progress: Progress| {
         out.send(Message::Progress(progress));
     };
     for job in jobs {
-        let message = match (&job, &deb) {
-            (Job::Inspect, _) => {
-                let (read, state) = flow::inspect(client, path, machine);
-                deb.clone_from(&read);
-                out.send(Message::Read(read));
-                Message::State(state)
+        if let Job::Inspect = job {
+            let (read, state) = flow::inspect(client, path, machine);
+            deb.clone_from(&read);
+            if !out.send(Message::Read(read)) || !out.send(Message::State(state)) {
+                break;
             }
-            (Job::Install, Some(_)) => match flow::install(client, path, &progress) {
-                Outcome::Done(state) => Message::State(state),
-                Outcome::Back => Message::Back,
-            },
-            (Job::AskRemove, Some(deb)) => Message::State(flow::removal(client, deb)),
-            (Job::Remove, Some(deb)) => match flow::remove(client, deb, &progress) {
-                Outcome::Done(state) => Message::State(state),
-                Outcome::Back => Message::Back,
-            },
-            (_, None) => continue,
+            continue;
+        }
+        let Some(known) = deb.as_ref() else {
+            continue;
+        };
+        let outcome = match job {
+            Job::Inspect => continue,
+            Job::Install => flow::install(client, path, &progress),
+            Job::AskRemove => Outcome::Done(flow::removal(client, known)),
+            Job::Remove => flow::remove(client, known, &progress),
+        };
+        let message = match outcome {
+            Outcome::Done(state) => Message::State(state),
+            Outcome::Back => Message::Back,
         };
         if !out.send(message) {
             break;

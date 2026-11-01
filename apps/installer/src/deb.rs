@@ -51,6 +51,7 @@ fn description(lines: &[&str]) -> (String, String) {
     let body = lines
         .iter()
         .skip(1)
+        .copied()
         .map(|line| line.strip_prefix(' ').unwrap_or(line))
         .map(|line| if line == "." { "" } else { line })
         .collect::<Vec<_>>()

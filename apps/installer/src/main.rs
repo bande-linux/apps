@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use bande_installer::{Installer, L10N, Machine, WINDOW_SIZE};
 use bande_packages::Client;
-use bande_toolkit::{App, Rect, Role, Scene, TextSystem, Window, WindowEvent};
+use bande_toolkit::{App, Role, Scene, TextSystem, Window, WindowEvent};
 
 const APP_ID: &str = "org.bande.Installer";
 
@@ -62,10 +62,6 @@ impl App for Running {
 
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
         Some(self.installer.accessibility())
-    }
-
-    fn text_input_area(&self) -> Option<Rect> {
-        None
     }
 }
 

@@ -7,8 +7,8 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
-pub use deb::{Deb, Machine, compare, missing_requirements, read};
-pub use flow::{Action, Preview, Problem, State, apps};
+pub use deb::{Deb, Machine, missing_requirements, read};
+pub use flow::{Action, Preview, Problem, State};
 pub use view::{Installer, WINDOW_SIZE};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-installer.ftl");
