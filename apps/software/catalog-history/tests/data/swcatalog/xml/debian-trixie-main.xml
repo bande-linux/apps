@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<components version="1.0" origin="debian-trixie-main">
+  <component type="desktop-application">
+    <id>org.gnome.Calculator</id>
+    <pkgname>gnome-calculator</pkgname>
+    <name>Calculator</name>
+    <summary>Perform arithmetic, scientific or financial calculations</summary>
+    <icon type="stock">org.gnome.Calculator</icon>
+    <launchable type="desktop-id">org.gnome.Calculator.desktop</launchable>
+  </component>
+  <component type="console-application">
+    <id>org.gnu.bc</id>
+    <pkgname>bc</pkgname>
+    <name>bc</name>
+    <summary>An arbitrary precision calculator language</summary>
+  </component>
+</components>
