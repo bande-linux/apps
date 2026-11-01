@@ -217,7 +217,7 @@ fn a_new_package_previews_its_extras_then_installs_and_offers_its_app() {
         "arm64",
     );
     window.see("Also installs 2 packages");
-    assert!(window.shows("Installs version 1.2-1"));
+    assert!(window.shows("Version 1.2-1"));
     assert!(window.shows("doesn't come from your software sources"));
     window.click("Install");
     window.see("“tool” is installed.");
