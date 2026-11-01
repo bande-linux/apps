@@ -109,7 +109,7 @@ impl ActivityMonitor {
                 self.close(index);
                 return;
             }
-            None => {
+            Some(Standard::Settings) | None => {
                 if self.screens[index].menu_action(action) {
                     window.request_redraw();
                 }
