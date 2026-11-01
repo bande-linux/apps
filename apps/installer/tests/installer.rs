@@ -9,7 +9,7 @@ use bande_installer::{Installer, Machine, State, WINDOW_SIZE, missing_requiremen
 use bande_packages::Client;
 use bande_test_bus::SessionBus;
 use bande_test_bus::packagekit::{FakePackage, FakePackageKit, SIMULATE, Script};
-use bande_toolkit::{Palette, Scheme, TextSystem};
+use bande_toolkit::{CpuRenderer, Palette, Scheme, TextSystem, WINDOW_HEADER_HEIGHT, framed_scene};
 
 const WAIT: Duration = Duration::from_secs(10);
 
@@ -92,6 +92,10 @@ struct Window {
 
 impl Window {
     fn open(script: Script, version: &str, arch: &str) -> Self {
+        Self::open_in(script, version, arch, Scheme::Light)
+    }
+
+    fn open_in(script: Script, version: &str, arch: &str, scheme: Scheme) -> Self {
         let dir = tempfile::tempdir().expect("tempdir");
         let deb = build_deb(dir.path(), "tool", version, arch);
         let bus = SessionBus::start().expect("dbus-daemon");
@@ -101,7 +105,7 @@ impl Window {
             Client::new(&system),
             deb,
             arm64(),
-            Palette::for_scheme(Scheme::Light),
+            Palette::for_scheme(scheme),
             TextSystem::new(),
         )
         .expect("installer");
@@ -397,4 +401,56 @@ fn the_shipped_defaults_open_a_deb_in_the_installer_though_it_hides_from_menus()
             .map(|entry| entry.id.as_str()),
         Some("org.bande.Installer.desktop")
     );
+}
+
+#[test]
+fn the_preview_and_a_refusal_match_their_goldens() {
+    let shots: [(&str, Scheme, &str, &str); 3] = [
+        (
+            "ready-light",
+            Scheme::Light,
+            "arm64",
+            "Also installs 2 packages",
+        ),
+        (
+            "ready-dark",
+            Scheme::Dark,
+            "arm64",
+            "Also installs 2 packages",
+        ),
+        (
+            "wrong-architecture-light",
+            Scheme::Light,
+            "amd64",
+            "is built for",
+        ),
+    ];
+    for (name, scheme, arch, wait_for) in shots {
+        let mut window = Window::open_in(
+            Script {
+                changes: changes(),
+                ..Script::default()
+            },
+            "1.2-1",
+            arch,
+            scheme,
+        );
+        window.see(wait_for);
+        let content = window
+            .installer
+            .ui()
+            .scene(WINDOW_SIZE.0, WINDOW_SIZE.1 - WINDOW_HEADER_HEIGHT);
+        let scene = framed_scene(
+            &content,
+            "Package Installer",
+            None,
+            None,
+            &Palette::for_scheme(scheme),
+        );
+        let mut rgba = vec![0; WINDOW_SIZE.0 as usize * WINDOW_SIZE.1 as usize * 4];
+        CpuRenderer::new()
+            .render_into(&scene, 1.0, &mut rgba)
+            .expect("frame");
+        bande_golden::assert_golden_rgba!(name, WINDOW_SIZE, rgba);
+    }
 }
