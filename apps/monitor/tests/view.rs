@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use accesskit::Role;
 use bande_monitor::{
     Catalog, CpuShare, Graph, Icons, Interface, InterfaceKind, Memory, Monitor, MonitorView,
-    Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab, app_menus, due_redraws,
+    Pressure, Process, Rates, Request, RowKey, Screen, Snapshot, Tab, app_menus,
 };
 use bande_toolkit::ui::{
     Event, Key, Modifiers, Pointer, PointerButton, ROW_HEIGHT, Scroll, Table, Widget,
@@ -918,19 +918,13 @@ fn quit_asks_an_app_politely_and_signals_only_a_chosen_process() {
 }
 
 #[test]
-fn a_tick_between_samples_redraws_only_a_window_whose_own_timer_is_due() {
+fn only_a_hovered_view_waits_for_a_tooltip_between_samples() {
     let idle = monitor_view();
     let mut hovered = monitor_view();
     hovered.handle(&Event::PointerMove(Pointer::at(Point::new(282.0, 24.0))));
     hovered.scene(MONITOR_SIZE.0, MONITOR_SIZE.1);
-    let tooltip = hovered.deadline().expect("the tooltip waits");
+    assert!(hovered.deadline().is_some());
     assert_eq!(idle.deadline(), None);
-    let screens: Vec<Box<dyn Screen>> = vec![Box::new(idle), Box::new(hovered)];
-    assert_eq!(
-        due_redraws(&screens, tooltip - Duration::from_millis(1)),
-        [false, false]
-    );
-    assert_eq!(due_redraws(&screens, tooltip), [false, true]);
 }
 
 #[test]

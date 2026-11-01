@@ -321,6 +321,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
+name = "bande-app"
+version = "0.1.0"
+source = "git+https://github.com/bande-linux/desktop?rev=49ab65b01b58d5d86278beb5d9bc9abd7e97dd86#49ab65b01b58d5d86278beb5d9bc9abd7e97dd86"
+dependencies = [
+ "accesskit",
+ "bande-app-menu",
+ "bande-bus",
+ "bande-inbox",
+ "bande-log",
+ "bande-toolkit",
+ "bande-xdg",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
 name = "bande-app-menu"
 version = "0.1.0"
 source = "git+https://github.com/bande-linux/desktop?rev=49ab65b01b58d5d86278beb5d9bc9abd7e97dd86#49ab65b01b58d5d86278beb5d9bc9abd7e97dd86"
@@ -437,6 +453,7 @@ name = "bande-monitor"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-app",
  "bande-app-menu",
  "bande-golden",
  "bande-l10n",

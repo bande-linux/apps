@@ -128,7 +128,6 @@ menu-quit-process = Quit Process…
 menu-force-quit-process = Force Quit Process…
 menu-find = Find
 menu-inspect = Inspect
-menu-edit = Edit
 menu-view = View
 menu-show-cores = Show CPU Cores
 filter-all = All Processes

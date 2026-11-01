@@ -13,6 +13,7 @@ accesskit = "=0.25.2"
 rustix = { version = "=1.1.6", features = ["event", "param", "process"] }
 tracing = "=0.1.44"
 zbus = "=5.19.0"
+bande-app = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
 bande-app-menu = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
 bande-l10n = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
 bande-log = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
@@ -43,7 +44,7 @@ strip = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "misc"
-depends = "$auto, fonts-inter"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 extended-description = """\
 The activity monitor of the Bande desktop: lists running apps with their \
 processes and shows CPU, memory, disk and network use, and quits or force \

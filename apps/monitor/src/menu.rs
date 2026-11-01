@@ -1,4 +1,4 @@
-use bande_app_menu::{Entry, app_submenu, close_window, window_submenu};
+use bande_app_menu::{Entry, edit_submenu};
 use bande_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
@@ -132,21 +132,12 @@ pub fn app_menus(tabs: &[Tab], shown: Filter) -> Vec<Entry> {
         entry("menu-show-in-files", MenuCommand::ShowInFiles).shortcut("Shift+Ctrl+R"),
     ]);
     vec![
-        app_submenu(
-            &L10N.tr("window-title"),
-            env!("CARGO_PKG_VERSION"),
-            Vec::new(),
-        ),
-        Entry::submenu(
-            &L10N.tr("menu-edit"),
-            vec![
-                entry("menu-copy-name", MenuCommand::CopyName),
-                entry("menu-copy-pid", MenuCommand::CopyPid),
-                Entry::separator(),
-                entry("menu-find", MenuCommand::Find).shortcut("Ctrl+F"),
-            ],
-        ),
+        edit_submenu(vec![
+            entry("menu-copy-name", MenuCommand::CopyName),
+            entry("menu-copy-pid", MenuCommand::CopyPid),
+            Entry::separator(),
+            entry("menu-find", MenuCommand::Find).shortcut("Ctrl+F"),
+        ]),
         Entry::submenu(&L10N.tr("menu-view"), view),
-        window_submenu(vec![close_window()]),
     ]
 }

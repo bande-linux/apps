@@ -36,7 +36,7 @@ pub use power::{BATTERY_HISTORY, BatteryReport, battery_reader};
 pub use sampler::{GpuUse, Identity, Interface, Operations, Process, Rates, Sampler, Snapshot};
 pub use signal::{SignalError, Stop, stop};
 pub use system::{InterfaceKind, Memory, Pressure, PressureLevel};
-pub use view::{Icons, Request, Screen, due_redraws};
+pub use view::{Icons, Request, Screen};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-monitor.ftl");
 
