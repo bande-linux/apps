@@ -75,7 +75,7 @@ cargo test
 
 - `src/**` unit tests: parsing, folding, recurrence edge cases (DST changes, the spring gap,
   leap days, `BYSETPOS`, week numbers), time zones, overrides, edits, alerts.
-- `tests/caldav.rs` runs against a real Radicale started by the test (`apt install radicale`; it
+- `tests/caldav.rs` runs against a real Radicale started by the test (`apt install python3-radicale`; it
   runs `python3 -m radicale`): discovery, two devices syncing creates, edits and deletes, 412
   conflicts, invalid sync tokens, colours, creating, renaming and deleting calendars.
 - `tests/legacy.rs` runs against a small in-test server without sync tokens, for the ctag/etag

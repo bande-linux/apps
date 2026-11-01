@@ -53,7 +53,7 @@ impl Radicale {
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()
-                .expect("radicale (apt install radicale) to start");
+                .expect("radicale (apt install python3-radicale) to start");
             let deadline = Instant::now() + Duration::from_secs(20);
             while TcpStream::connect(("127.0.0.1", port)).is_err()
                 && child.try_wait().ok().flatten().is_none()
@@ -70,7 +70,7 @@ impl Radicale {
                 };
             }
         }
-        panic!("radicale did not start on a free port");
+        panic!("radicale (apt install python3-radicale) did not start on a free port");
     }
 
     pub fn client(&self) -> Client {
