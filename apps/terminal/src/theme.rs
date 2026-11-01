@@ -87,7 +87,7 @@ pub struct Theme {
 pub fn ansi_colors(palette: &Palette) -> [Color; 16] {
     let scheme = palette.scheme;
     let normal = [
-        palette.danger,
+        palette.danger_text,
         Accent::Moss.color(scheme),
         Accent::Amber.color(scheme),
         Accent::Ultramarine.color(scheme),
@@ -118,7 +118,7 @@ impl Theme {
         let palette = profile.appearance(system).palette();
         let chrome = system.palette();
         let (foreground, background) = match profile {
-            Profile::Midnight => (palette.ink2, palette.chassis),
+            Profile::Midnight => (palette.ink2, palette.deep),
             Profile::Contrast => match palette.scheme {
                 Scheme::Light => (palette.ink, palette.overlay),
                 Scheme::Dark => (palette.ink, palette.chassis),
@@ -134,10 +134,7 @@ impl Theme {
             inactive_selection: palette.well,
             match_highlight: palette.warning.with_opacity(MATCH_OPACITY),
             current_match: palette.warning,
-            on_current_match: match palette.scheme {
-                Scheme::Light => palette.ink,
-                Scheme::Dark => palette.chassis,
-            },
+            on_current_match: palette.deep,
             link: palette.accent_text,
             palette,
             chrome,
