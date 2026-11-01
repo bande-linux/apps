@@ -2,44 +2,33 @@
 name = "bande-terminal"
 description = "Bande terminal: a PTY terminal on the Bande toolkit"
 version = "0.1.0"
-edition = "2024"
-license = "MIT OR Apache-2.0"
-rust-version = "1.95"
-repository = "https://github.com/bande-linux/apps"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
 publish = false
 
 [dependencies]
-accesskit = "=0.25.2"
-alacritty_terminal = { version = "=0.26.0", default-features = false }
-tracing = "=0.1.44"
-zbus = "=5.19.0"
-bande-app-menu = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-app-settings = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-design = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-l10n = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-log = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-notify = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-spring = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+accesskit.workspace = true
+alacritty_terminal.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+bande-app-menu.workspace = true
+bande-app-settings.workspace = true
+bande-design.workspace = true
+bande-l10n.workspace = true
+bande-log.workspace = true
+bande-notify.workspace = true
+bande-spring.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
 
 [dev-dependencies]
-tempfile = "=3.27.0"
-bande-golden = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+tempfile.workspace = true
+bande-golden.workspace = true
 
-[lints.clippy]
-unwrap_used = "deny"
-expect_used = "deny"
-panic = "deny"
-
-[profile.dev]
-debug = 0
-incremental = false
-
-[profile.release]
-lto = "thin"
-codegen-units = 4
-strip = true
+[lints]
+workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"

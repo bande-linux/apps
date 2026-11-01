@@ -1,7 +1,82 @@
-fn main() {
-    if std::env::args().nth(1).as_deref() == Some("--version") {
-        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-        return;
+use std::process::ExitCode;
+use std::sync::LazyLock;
+
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
+use bande_app_menu::Entry;
+use bande_l10n::Localizer;
+use bande_toolkit::TextSystem;
+use bande_toolkit::ui::{Axis, Context, Label, Stack, Ui, Widget};
+
+const ENGLISH: &str = include_str!("../locales/en-US/bande-template.ftl");
+static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+
+static INFO: Info = Info {
+    id: "org.bande.Template",
+    package: env!("CARGO_PKG_NAME"),
+    version: env!("CARGO_PKG_VERSION"),
+    name: || L10N.tr("app-name"),
+    keys: Keys::Standard,
+    settings: None,
+};
+
+const NEW_WINDOW: &str = "new-window";
+const WINDOW_SIZE: (u32, u32) = (480, 320);
+
+struct Template;
+
+fn open_window(cx: &mut Cx<Template>) -> Result<WindowId, bande_toolkit::WindowError> {
+    cx.open(
+        Kind::Main,
+        &L10N.tr("app-name"),
+        WINDOW_SIZE,
+        |appearance| {
+            let hello: Box<dyn Widget> = Box::new(Label::new(&L10N.tr("hello")));
+            let mut ui = Ui::new(
+                Box::new(Stack::new(Axis::Vertical, 0.0, 24.0, vec![hello])),
+                Context::new(TextSystem::new(), appearance.palette()),
+            );
+            ui.set_appearance(appearance);
+            ui
+        },
+    )
+}
+
+impl Program for Template {
+    type View = Ui;
+
+    fn start(cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        open_window(cx)?;
+        Ok(Self)
     }
-    println!("Hello from a Bande app");
+
+    fn menus(&self, _cx: &Cx<Self>) -> Menus {
+        let new_window = Entry::item(&L10N.tr("new-window"), NEW_WINDOW).shortcut("Ctrl+N");
+        Menus {
+            menus: vec![Entry::submenu(&L10N.tr("menu-file"), vec![new_window])],
+            window: Vec::new(),
+        }
+    }
+
+    fn command(&mut self, cx: &mut Cx<Self>, _window: WindowId, command: &str) {
+        if command == NEW_WINDOW
+            && let Err(error) = open_window(cx)
+        {
+            tracing::warn!("cannot open a window: {error}");
+        }
+    }
+}
+
+fn main() -> ExitCode {
+    bande_app::run::<Template>(&INFO)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_message_id_used_in_code_is_in_the_english_file() {
+        assert_eq!(
+            bande_l10n::missing_ids(super::ENGLISH, &[include_str!("main.rs")]),
+            Vec::<&str>::new()
+        );
+    }
 }

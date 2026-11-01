@@ -23,22 +23,32 @@ apt install bande-<name>
 
 | Path | What it is |
 |---|---|
-| `apps/<name>/` | one app: its own crate and `Cargo.lock`, packaged as `bande-<name>` |
-| `apps/<name>/build-depends` | optional: Debian packages the build needs, one per line |
-| `apps/<name>/smoke.sh` | optional: runs after the package is installed, and must exit 0 |
-| `template/` | a starting point; never built or published |
+| `Cargo.toml`, `Cargo.lock` | one Cargo workspace: every app, the template, one lock, one desktop pin, shared lints and the release profile (the desktop's `dist`: fat LTO, one codegen unit, `panic = "abort"`) |
+| `apps/<name>/` | one app on `bande-app`, packaged as `bande-<name>` |
+| `apps/<name>/build-depends` | optional: Debian packages the build needs beyond what every app needs, one per line |
+| `apps/<name>/smoke.sh` | optional: extra checks after `ci/smoke.sh`, once the package is installed; must exit 0 |
+| `template/` | the starting point for a new app: a real, gated `bande-app` app, never published |
 | `rust-toolchain.toml` | the Rust toolchain for every app, the same as the desktop's |
 | `ci/` | the build, the same in CI and locally |
-| `ci/gate.sh [app...]` | the local merge gate: fmt, clippy `-D warnings` and tests, `--locked`, one shared `target/` |
+| `ci/gate.sh [app...]` | the local merge gate: `ci/check-app.sh`, fmt, clippy `-D warnings` and tests, `--locked`, one `target/` (default: every app and the template) |
+| `ci/check-app.sh <dir>...` | static checks that an app is a `bande-app` app packaged like the others (ids, `.desktop`, metainfo, fonts) |
+| `ci/smoke.sh <package>` | checks an installed package: `--version`, its files, `desktop-file-validate`, `appstreamcli validate` |
+| `ci/new-app.sh <dir> <Id> "<Name>"` | a new app in `apps/<dir>` from the template |
+| `ci/release-all.sh` | raises every app's patch version and prints the tags that release them, for a bump that changes `bande-app` behaviour |
 | `ci/bump-desktop.sh [REV]` | pins every app to one `bande-linux/desktop` commit (default: main) and runs the gate |
-| `ci/with-desktop.sh <desktop> <cargo args>` | runs cargo in every app against a desktop checkout instead of the pin |
+| `ci/with-desktop.sh <desktop> <cargo args>` | runs cargo on the workspace against a desktop checkout instead of the pin |
 
 ## Adding an app
 
-1. Copy `template/` to `apps/<name>/`.
-2. Set `name = "bande-<name>"` in its `Cargo.toml`, fill in `[package.metadata.deb]` (keep
-   `depends = "$auto"`), and run `cargo generate-lockfile`.
-3. Check that it compiles, then merge to `main`; `ci/gate.sh` runs once on `main` for the batch.
+```
+ci/new-app.sh mail-merge MailMerge "Mail Merge"
+```
+
+makes `apps/mail-merge/` (package `bande-mail-merge`, app id `org.bande.MailMerge`) from the
+template and prints the rest: the theme icon in the desktop's `data/icons/src/apps.py`, the
+table above, and `default-apps` for a default app. Check that it compiles
+(`cargo check --locked -p bande-mail-merge`), then merge to `main`; `ci/gate.sh` runs once on
+`main` for the batch.
 
 ## How it's built and published
 
@@ -51,7 +61,7 @@ git tag mail-v0.1.0 && git push origin mail-v0.1.0
 
 The tag builds that one app for arm64 and amd64 on GitHub's runners in `debian:testing`:
 `cargo fmt --check`, clippy with `-D warnings`, the tests, then the `.deb`, installed with apt into
-the container and checked with its `smoke.sh`. A tag whose commit isn't on `main`, or whose
+the container and checked with `ci/smoke.sh` and the app's own `smoke.sh`, if any. A tag whose commit isn't on `main`, or whose
 version doesn't match `Cargo.toml`, fails. A green run uploads `bande-debs-arm64` and
 `bande-debs-amd64`; the archive's scheduled publish picks them up within 30 minutes, taking only
 the package named after the tagged app and never a name the desktop publishes.

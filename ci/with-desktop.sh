@@ -1,8 +1,8 @@
 #!/bin/bash
-# with-desktop.sh <desktop checkout> <cargo args...>: runs `cargo <args>` in every app with each
+# with-desktop.sh <desktop checkout> <cargo args...>: runs `cargo <args>` on the workspace with each
 # bande-linux/desktop crate it uses patched to that checkout, to try a desktop branch on the apps
-# before it merges, e.g. `ci/with-desktop.sh ~/bande-linux/wt/desktop-x check --all-targets`.
-# Each Cargo.lock is put back afterwards. Same lock, gentle and target dir as ci/gate.sh.
+# before it merges, e.g. `ci/with-desktop.sh ~/bande-linux/wt/desktop-x check --workspace
+# --all-targets`. Cargo.lock is put back afterwards. Same lock, gentle and target dir as ci/gate.sh.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 desktop=$(realpath "${1:?usage: with-desktop.sh <desktop checkout> <cargo args...>}")
@@ -16,18 +16,15 @@ gentle=$HOME/bande-linux/bin/gentle
 [ -x "$gentle" ] || gentle=env
 crates=$(cargo metadata -q --no-deps --format-version 1 --manifest-path "$desktop/Cargo.toml" |
     jq -r '.packages[] | "\(.name) \(.manifest_path | rtrimstr("/Cargo.toml"))"')
-scratch=$(mktemp -d)
-trap 'for lock in "$scratch"/*.lock; do [ -e "$lock" ] && cp "$lock" "$root/apps/$(basename "$lock" .lock)/Cargo.lock"; done; rm -rf "$scratch"' EXIT
-for manifest in "$root"/apps/*/Cargo.toml; do
-    dir=$(dirname "$manifest") app=$(basename "$(dirname "$manifest")")
-    grep -q "$source" "$manifest" || continue
-    cp "$dir/Cargo.lock" "$scratch/$app.lock"
-    patches=()
-    for name in $(awk -v source="git+$source" '/^name = / { name = $3 } /^source = / && index($3, "\"" source) == 1 { gsub(/"/, "", name); print name }' "$dir/Cargo.lock"); do
-        path=$(awk -v name="$name" '$1 == name { print $2 }' <<< "$crates")
-        [ -n "$path" ] || { echo "with-desktop: $desktop has no crate $name" >&2; exit 1; }
-        patches+=(--config "patch.\"$source\".$name.path=\"$path\"")
-    done
-    echo "== $app: cargo $*"
-    (cd "$dir" && flock "$HOME/bande-linux/kbuild.lock" "$gentle" cargo "${patches[@]}" "$@")
+saved=$(mktemp)
+cp "$root/Cargo.lock" "$saved"
+trap 'cp "$saved" "$root/Cargo.lock"; rm -f "$saved"' EXIT
+patches=()
+for name in $(awk -v source="git+$source" '/^name = / { name = $3 } /^source = / && index($3, "\"" source) == 1 { gsub(/"/, "", name); print name }' "$root/Cargo.lock"); do
+    path=$(awk -v name="$name" '$1 == name { print $2 }' <<< "$crates")
+    [ -n "$path" ] || { echo "with-desktop: $desktop has no crate $name" >&2; exit 1; }
+    patches+=(--config "patch.\"$source\".$name.path=\"$path\"")
 done
+echo "== cargo $*"
+cd "$root"
+flock "$HOME/bande-linux/kbuild.lock" "$gentle" cargo "${patches[@]}" "$@"

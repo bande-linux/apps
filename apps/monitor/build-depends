@@ -1,7 +1,0 @@
-libxkbcommon-dev
-libfontconfig1
-libwayland-client0
-dbus-daemon
-fonts-inter
-fonts-manrope
-fonts-jetbrains-mono

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Template
+Comment=A starting point for a Bande app
+Icon=org.bande.Template
+Exec=bande-template %U
+StartupNotify=true
+Categories=Utility;

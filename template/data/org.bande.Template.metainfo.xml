@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Template</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Template</name>
+  <summary>A starting point for a Bande app</summary>
+  <description>
+    <p>A window that says hello, with the menus, keys and single instance every Bande app has.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Template.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+</component>

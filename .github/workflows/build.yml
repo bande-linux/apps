@@ -65,8 +65,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/${{ matrix.app }}
-          key: ${{ matrix.arch }}
+          key: ${{ matrix.app }}-${{ matrix.arch }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build, check, install and smoke-test
         run: |

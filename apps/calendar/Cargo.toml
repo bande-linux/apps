@@ -1,47 +1,38 @@
 [package]
 name = "bande-calendar"
 version = "0.1.0"
-edition = "2024"
-license = "MIT OR Apache-2.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
 description = "Bande Calendar: CalDAV, local and subscribed calendars"
 publish = false
 
 [dependencies]
-accesskit = "=0.25.2"
-base64 = "=0.22.1"
-jiff = "=0.2.38"
-roxmltree = "=0.21.2"
-rustix = { version = "=1.1.6", features = ["event", "pipe"] }
-serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = "=1.0.154"
-tracing = "=0.1.44"
-ureq = { version = "=3.5.0", features = ["platform-verifier"] }
-zbus = "=5.19.0"
-bande-app-menu = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-design = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-datetime = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-l10n = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-log = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
-bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+accesskit.workspace = true
+base64.workspace = true
+jiff.workspace = true
+roxmltree.workspace = true
+rustix = { workspace = true, features = ["event", "pipe"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+ureq.workspace = true
+zbus.workspace = true
+bande-app-menu.workspace = true
+bande-design.workspace = true
+bande-datetime.workspace = true
+bande-l10n.workspace = true
+bande-log.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
 
 [dev-dependencies]
-tempfile = "=3.27.0"
-bande-golden = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+tempfile.workspace = true
+bande-golden.workspace = true
 
-[lints.clippy]
-unwrap_used = "deny"
-expect_used = "deny"
-panic = "deny"
-
-[profile.dev]
-debug = 0
-incremental = false
-
-[profile.release]
-lto = "thin"
-codegen-units = 4
-strip = true
+[lints]
+workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"

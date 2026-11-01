@@ -1,0 +1,66 @@
+[workspace]
+resolver = "3"
+members = ["apps/*", "template"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.95"
+repository = "https://github.com/bande-linux/apps"
+
+[workspace.dependencies]
+accesskit = "=0.25.2"
+alacritty_terminal = { version = "=0.26.0", default-features = false }
+base64 = "=0.22.1"
+data-encoding = "2.11"
+flate2 = "=1.1.10"
+html5ever = "0.40"
+image = { version = "=0.25.10", default-features = false, features = ["gif", "jpeg", "png"] }
+jiff = "=0.2.38"
+mailparse = "0.18"
+native-tls = "0.2.18"
+roxmltree = "=0.21.2"
+rusqlite = "0.41"
+rustix = "=1.1.6"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+serde_yaml_ng = "=0.10.0"
+tempfile = "=3.27.0"
+tracing = "=0.1.44"
+ureq = { version = "=3.5.0", features = ["platform-verifier"] }
+zbus = "=5.19.0"
+zeroize = "=1.8.1"
+bande-app = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-app-menu = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-app-settings = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-datetime = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-design = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-fs = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-golden = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-inbox = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-l10n = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-log = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-notify = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-packages = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-search = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-spring = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-status = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-test-bus = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "49ab65b01b58d5d86278beb5d9bc9abd7e97dd86" }
+
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

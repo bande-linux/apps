@@ -1,7 +1,7 @@
 #!/bin/bash
-# gate.sh [app...]: the local merge gate for the named apps (default: every app): cargo fmt
-# --check, clippy --all-targets -D warnings and the tests, all --locked, on a private session bus.
-# One shared target dir (./target), no incremental, no debug info. It takes
+# gate.sh [app...]: the local merge gate for the named apps (default: every app and the template):
+# ci/check-app.sh, cargo fmt --check, clippy --all-targets -D warnings and the tests, all --locked,
+# on a private session bus. One workspace target dir (./target), no incremental, no debug info. It takes
 # ~/bande-linux/kbuild.lock (one heavy build at a time) and runs under ~/bande-linux/bin/gentle;
 # while ~/bande-linux/kbuild.reserve exists it waits, so a queued long build isn't starved.
 set -euo pipefail
@@ -9,13 +9,20 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 [ ! -f ~/.cargo/env ] || . ~/.cargo/env
 if [ $# -eq 0 ]; then
-    mapfile -t apps < <(find apps -mindepth 2 -maxdepth 2 -name Cargo.toml -printf '%h\n' | xargs -rn1 basename | sort)
+    mapfile -t dirs < <(find apps -mindepth 2 -maxdepth 2 -name Cargo.toml -printf '%h\n' | sort)
+    dirs+=(template)
 else
-    apps=("$@")
+    dirs=()
+    for app in "$@"; do
+        [ -f "apps/$app/Cargo.toml" ] || { echo "gate: no app apps/$app" >&2; exit 1; }
+        dirs+=("apps/$app")
+    done
 fi
-for app in "${apps[@]}"; do
-    [ -f "apps/$app/Cargo.toml" ] || { echo "gate: no app apps/$app" >&2; exit 1; }
+packages=()
+for dir in "${dirs[@]}"; do
+    packages+=(-p "bande-$(basename "$dir")")
 done
+ci/check-app.sh "${dirs[@]}"
 free=$(df --output=avail -BG "$root" | tail -1 | tr -dc 0-9)
 need=12; [ -d target ] && need=4
 [ "$free" -ge $need ] || { echo "gate: only ${free}G free, refusing to build" >&2; exit 3; }
@@ -34,11 +41,9 @@ done
 exec flock "$lock" bash -c '
 set -euo pipefail
 gentle=$1 root=$2; shift 2
-for app in "$@"; do
-    cd "$root/apps/$app"
-    echo "== $app fmt"; cargo fmt --check
-    echo "== $app clippy"; "$gentle" cargo clippy --locked --all-targets -q -- -D warnings
-    echo "== $app test"; "$gentle" dbus-run-session --config-file="$root/ci/test-bus.conf" -- cargo test --locked -q
-done
+cd "$root"
+echo "== fmt"; cargo fmt --all --check
+echo "== clippy"; "$gentle" cargo clippy --locked --all-targets -q "$@" -- -D warnings
+echo "== test"; "$gentle" dbus-run-session --config-file="$root/ci/test-bus.conf" -- cargo test --locked -q "$@"
 echo "== gate passed: $*"
-' gate "$gentle" "$root" "${apps[@]}"
+' gate "$gentle" "$root" "${packages[@]}"
