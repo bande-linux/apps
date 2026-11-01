@@ -242,7 +242,7 @@ impl MonitorView {
 
     fn sync(&mut self) {
         let mut ids = HashMap::new();
-        let alarm = self.palette.danger;
+        let alarm = self.palette.danger_text;
         let rows = self.monitor.rows();
         let table_rows = rows
             .iter()
@@ -907,7 +907,7 @@ fn paint_battery(
         painter.items.push(Item::StrokePath {
             path,
             width: SERIES_WIDTH,
-            paint: palette.accent.into(),
+            paint: palette.accent_text.into(),
         });
     }
     for (from, to) in charging {
@@ -927,7 +927,7 @@ fn pressure_color(level: PressureLevel, palette: Palette) -> Color {
     match level {
         PressureLevel::Normal => palette.success,
         PressureLevel::Elevated => palette.warning,
-        PressureLevel::Critical => palette.danger,
+        PressureLevel::Critical => palette.danger_text,
     }
 }
 
@@ -983,7 +983,7 @@ fn paint_graph(monitor: &Monitor, palette: Palette, painter: &mut Painter, frame
                 &mut graph,
                 &primary,
                 plot,
-                palette.accent,
+                palette.accent_text,
                 Some(palette.accent_soft),
             );
             if let Some(secondary) = &secondary {
@@ -1209,7 +1209,7 @@ fn paint_cores(monitor: &Monitor, palette: Palette, area: Rect, painter: &mut Pa
                     &mut strip,
                     &history,
                     frame,
-                    palette.accent,
+                    palette.accent_text,
                     Some(palette.accent_soft),
                 );
                 strip.text_in(

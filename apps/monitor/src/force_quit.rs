@@ -100,7 +100,7 @@ impl ForceQuitView {
 
     fn sync(&mut self) {
         let mut ids = HashMap::new();
-        let alarm = self.palette.danger;
+        let alarm = self.palette.danger_text;
         let rows = self
             .apps
             .rows()
