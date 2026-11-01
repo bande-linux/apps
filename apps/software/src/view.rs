@@ -83,6 +83,7 @@ pub struct Software {
     intents: Rc<RefCell<Vec<Intent>>>,
     ui: Ui,
     content: WidgetId,
+    picker: WidgetId,
 }
 
 impl Software {
@@ -97,27 +98,15 @@ impl Software {
         let search = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
             typed.borrow_mut().push(Intent::Search(query.to_owned()));
         });
-        let chosen = Rc::clone(&intents);
-        let pages = sections();
-        let names: Vec<String> = pages.iter().map(|page| section_name(*page)).collect();
-        let picker = PopUpButton::new(&L10N.tr("section"), &names, 0, move |index| {
-            if let Some(page) = pages.get(index) {
-                chosen.borrow_mut().push(Intent::Show(*page));
-            }
-        });
         let content = Stack::new(Axis::Vertical, 0.0, 0.0, vec![boxed(Label::new(""))]);
         let id = content.id();
-        let header = Stack::new(
-            Axis::Horizontal,
-            SPACING,
-            0.0,
-            vec![boxed(picker), boxed(search)],
-        );
+        let picker = Stack::new(Axis::Horizontal, 0.0, 0.0, vec![boxed(Label::new(""))]);
+        let picker_id = picker.id();
         let page = Stack::new(
             Axis::Vertical,
             SPACING,
             PADDING,
-            vec![boxed(header), boxed(content)],
+            vec![boxed(search), boxed(picker), boxed(content)],
         );
         let mut software = Self {
             apps: apps.into_iter().filter(|app| !app.needs_x11).collect(),
@@ -128,6 +117,7 @@ impl Software {
             intents,
             ui: Ui::new(Box::new(ScrollView::new(page)), Context::new(text, palette)),
             content: id,
+            picker: picker_id,
         };
         software.rebuild();
         software
@@ -251,7 +241,12 @@ impl Software {
 
     fn details(&self, app: &Component) -> Widgets {
         let mut widgets = vec![
-            boxed(self.button(&L10N.tr("back"), Intent::Back)),
+            boxed(Stack::new(
+                Axis::Horizontal,
+                0.0,
+                0.0,
+                vec![boxed(self.button(&L10N.tr("back"), Intent::Back))],
+            )),
             boxed(Label::heading(&app.name)),
         ];
         if let Some(developer) = &app.developer {
@@ -294,6 +289,21 @@ impl Software {
         widgets
     }
 
+    fn section_picker(&self) -> PopUpButton {
+        let pages = sections();
+        let names: Vec<String> = pages.iter().map(|page| section_name(*page)).collect();
+        let selected = pages
+            .iter()
+            .position(|page| *page == self.section)
+            .unwrap_or_default();
+        let intents = Rc::clone(&self.intents);
+        PopUpButton::new(&L10N.tr("section"), &names, selected, move |index| {
+            if let Some(page) = pages.get(index) {
+                intents.borrow_mut().push(Intent::Show(*page));
+            }
+        })
+    }
+
     fn rebuild(&mut self) {
         let widgets = match self.page {
             Page::App(index) => match self.apps.get(index) {
@@ -303,10 +313,13 @@ impl Software {
             Page::Discover | Page::Category(_) | Page::Installed => self.list(),
         };
         let page = boxed(Stack::new(Axis::Vertical, SPACING, 0.0, widgets));
-        if let Some(content) = self.ui.widget(self.content)
-            && let Some(slot) = content.children_mut().first_mut()
-        {
-            *slot = page;
+        let picker = boxed(self.section_picker());
+        for (id, widget) in [(self.content, page), (self.picker, picker)] {
+            if let Some(holder) = self.ui.widget(id)
+                && let Some(slot) = holder.children_mut().first_mut()
+            {
+                *slot = widget;
+            }
         }
     }
 }
