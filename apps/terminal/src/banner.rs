@@ -273,7 +273,7 @@ impl Banner {
             self.ui.handle(&Event::Key {
                 key: Key::Character('a'),
                 modifiers: Modifiers {
-                    logo: true,
+                    control: true,
                     ..Modifiers::default()
                 },
             });

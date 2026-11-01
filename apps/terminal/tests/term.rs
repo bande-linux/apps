@@ -72,6 +72,7 @@ fn control_sends_signals_and_super_is_kept_for_the_app() {
     let normal = TermMode::empty();
     assert_eq!(keys(Key::Character('c'), control(), normal), [0x03]);
     assert_eq!(keys(Key::Character('d'), control(), normal), [0x04]);
+    assert_eq!(keys(Key::Character('w'), control(), normal), [0x17]);
     assert_eq!(keys(Key::Character('z'), control(), normal), [0x1a]);
     assert_eq!(keys(Key::Character('['), control(), normal), [0x1b]);
     assert_eq!(keys(Key::Space, control(), normal), [0x00]);
@@ -84,32 +85,48 @@ fn control_sends_signals_and_super_is_kept_for_the_app() {
     assert_eq!(encode_key(Key::Character('v'), logo, normal), None);
 }
 
-fn logo(shift: bool) -> Modifiers {
+fn ctrl(shift: bool) -> Modifiers {
     Modifiers {
-        logo: true,
+        control: true,
         shift,
         ..Modifiers::default()
     }
 }
 
 #[test]
-fn super_chords_are_app_commands_whatever_the_shift_state_of_plus() {
+fn shift_ctrl_chords_are_app_commands_and_plain_ctrl_letters_stay_with_the_shell() {
     let bigger = Some(Command::BiggerText);
-    assert_eq!(shortcut(Key::Character('='), logo(false)), bigger);
-    assert_eq!(shortcut(Key::Character('+'), logo(true)), bigger);
+    assert_eq!(shortcut(Key::Character('='), ctrl(false)), bigger);
+    assert_eq!(shortcut(Key::Character('+'), ctrl(true)), bigger);
     assert_eq!(
-        shortcut(Key::Character('-'), logo(false)),
+        shortcut(Key::Character('-'), ctrl(false)),
         Some(Command::SmallerText)
     );
     assert_eq!(
-        shortcut(Key::Character('0'), logo(false)),
+        shortcut(Key::Character('0'), ctrl(false)),
         Some(Command::DefaultTextSize)
     );
     assert_eq!(
-        shortcut(Key::Character('C'), logo(false)),
+        shortcut(Key::Character('C'), ctrl(true)),
         Some(Command::Copy)
     );
-    assert_eq!(shortcut(Key::Character('c'), control()), None);
+    assert_eq!(shortcut(Key::PageDown, ctrl(false)), Some(Command::NextTab));
+    let alt = Modifiers {
+        alt: true,
+        ..Modifiers::default()
+    };
+    assert_eq!(
+        shortcut(Key::Character('3'), alt),
+        Some(Command::SelectTab(2))
+    );
+    for letter in ['c', 'v', 'w', 't', 'f'] {
+        assert_eq!(shortcut(Key::Character(letter), ctrl(false)), None);
+    }
+    let logo = Modifiers {
+        logo: true,
+        ..Modifiers::default()
+    };
+    assert_eq!(shortcut(Key::Character('c'), logo), None);
 }
 
 #[test]
@@ -994,12 +1011,9 @@ fn split_panes_match_their_goldens() {
 }
 
 #[test]
-fn super_up_and_down_jump_between_the_commands_typed_at_the_prompt() {
-    assert_eq!(
-        shortcut(Key::Up, logo(false)),
-        Some(Command::PreviousPrompt)
-    );
-    assert_eq!(shortcut(Key::Down, logo(false)), Some(Command::NextPrompt));
+fn shift_ctrl_up_and_down_jump_between_the_commands_typed_at_the_prompt() {
+    assert_eq!(shortcut(Key::Up, ctrl(true)), Some(Command::PreviousPrompt));
+    assert_eq!(shortcut(Key::Down, ctrl(true)), Some(Command::NextPrompt));
     let mut terminal = terminal(20, 3);
     for command in ["one", "two"] {
         terminal.feed(format!("$ {command}").as_bytes());

@@ -260,37 +260,54 @@ pub enum Command {
 }
 
 pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
-    if !modifiers.logo || modifiers.control || modifiers.alt {
+    let Modifiers {
+        shift,
+        alt,
+        control,
+        logo,
+    } = modifiers;
+    if logo {
+        return None;
+    }
+    if alt && !control && !shift {
+        return match key {
+            Key::Character('9') => Some(Command::LastTab),
+            Key::Character(digit @ '1'..='8') => {
+                Some(Command::SelectTab(usize::from(digit as u8 - b'1')))
+            }
+            _ => None,
+        };
+    }
+    if !control || alt {
         return None;
     }
     let character = match key {
+        Key::PageUp if !shift => return Some(Command::PreviousTab),
+        Key::PageDown if !shift => return Some(Command::NextTab),
+        Key::Up if shift => return Some(Command::PreviousPrompt),
+        Key::Down if shift => return Some(Command::NextPrompt),
         Key::Character(character) => character,
-        Key::Up if !modifiers.shift => return Some(Command::PreviousPrompt),
-        Key::Down if !modifiers.shift => return Some(Command::NextPrompt),
         _ => return None,
     };
-    let command = match (character.to_ascii_lowercase(), modifiers.shift) {
-        ('c', false) => Command::Copy,
-        ('v', false) => Command::Paste,
-        ('a', false) => Command::SelectAll,
-        ('k', false) => Command::ClearScrollback,
+    let command = match (character.to_ascii_lowercase(), shift) {
         ('=' | '+', _) => Command::BiggerText,
         ('-', false) => Command::SmallerText,
         ('0', false) => Command::DefaultTextSize,
-        ('f', false) => Command::Find,
-        ('g', false) => Command::FindNext,
-        ('g', true) => Command::FindPrevious,
-        ('t', false) => Command::NewTab,
-        ('d', false) => Command::SplitSideBySide,
-        ('d', true) => Command::SplitStacked,
-        (']', false) => Command::NextPane,
-        ('[', false) => Command::PreviousPane,
-        (',', false) => Command::Settings,
-        ('n', false) => Command::NewWindow,
-        ('9', false) => Command::LastTab,
-        (digit @ '1'..='8', false) => Command::SelectTab(usize::from(digit as u8 - b'1')),
-        ('}' | ']', true) => Command::NextTab,
-        ('{' | '[', true) => Command::PreviousTab,
+        (_, false) => return None,
+        ('c', true) => Command::Copy,
+        ('v', true) => Command::Paste,
+        ('a', true) => Command::SelectAll,
+        ('k', true) => Command::ClearScrollback,
+        ('f', true) => Command::Find,
+        ('g', true) => Command::FindNext,
+        ('h', true) => Command::FindPrevious,
+        ('t', true) => Command::NewTab,
+        ('n', true) => Command::NewWindow,
+        ('d', true) => Command::SplitSideBySide,
+        ('e', true) => Command::SplitStacked,
+        (']' | '}', true) => Command::NextPane,
+        ('[' | '{', true) => Command::PreviousPane,
+        (',' | '<', true) => Command::Settings,
         _ => return None,
     };
     Some(command)
