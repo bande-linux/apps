@@ -265,7 +265,8 @@ fn freedesktop_categories_map_to_store_categories() {
 fn a_dep11_file_with_a_syntax_error_is_read_up_to_the_error_and_no_further() {
     let (sender, parsed) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let yaml = "---\nFile: DEP-11\n---\nType: desktop-application\nID: a\nName: [\n---\nID: b\n";
+        let yaml =
+            "---\nFile: DEP-11\n---\nType: desktop-application\nID: a\nName: [\n---\nID: b\n";
         let _ = sender.send(parse_dep11(yaml, Path::new("/icons"), None).len());
     });
     assert!(
