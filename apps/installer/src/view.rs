@@ -60,7 +60,7 @@ fn status_line(status: Status) -> String {
 }
 
 fn row(children: Widgets) -> Box<dyn Widget> {
-    boxed(Stack::new(Axis::Horizontal, SPACING, 0.0, children))
+    boxed(Stack::new(Axis::Horizontal, SPACING, 0.0, children).trailing())
 }
 
 fn disclosure(title: &str, text: &str) -> Box<dyn Widget> {
@@ -251,25 +251,23 @@ impl Installer {
         let Some(deb) = &self.deb else {
             return Vec::new();
         };
-        let mut widgets = vec![boxed(Label::new(&match &preview.action {
-            Action::Install => {
-                L10N.tr_args("new-install", [("version", deb.version.clone().into())])
-            }
-            Action::Upgrade(from) => L10N.tr_args(
-                "upgrade-from",
-                [
-                    ("from", from.clone().into()),
-                    ("to", deb.version.clone().into()),
-                ],
-            ),
-            Action::Downgrade(from) => L10N.tr_args(
-                "downgrade-from",
-                [
-                    ("from", from.clone().into()),
-                    ("to", deb.version.clone().into()),
-                ],
-            ),
-        }))];
+        let change = match &preview.action {
+            Action::Install => None,
+            Action::Upgrade(from) => Some(("upgrade-from", from)),
+            Action::Downgrade(from) => Some(("downgrade-from", from)),
+        };
+        let mut widgets: Widgets = change
+            .map(|(id, from)| {
+                boxed(Label::new(&L10N.tr_args(
+                    id,
+                    [
+                        ("from", from.clone().into()),
+                        ("to", deb.version.clone().into()),
+                    ],
+                )))
+            })
+            .into_iter()
+            .collect();
         if let Action::Downgrade(from) = &preview.action {
             widgets.push(boxed(Label::new(
                 &L10N.tr_args("downgrade-caution", [("from", from.clone().into())]),

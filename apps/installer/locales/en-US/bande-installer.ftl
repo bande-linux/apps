@@ -10,7 +10,6 @@ arch-armhf = 32-bit ARM (armhf)
 arch-i386 = older 32-bit Intel and AMD computers (i386)
 version-size = Version { $version } · { $size }
 present = Version { $version } is installed.
-new-install = Installs version { $version }
 upgrade-from = Upgrades from { $from } to { $to }
 downgrade-from = Downgrades from { $from } to { $to }
 downgrade-caution = This is older than the installed version { $from }.

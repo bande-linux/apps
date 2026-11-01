@@ -181,11 +181,13 @@ impl Widget for BannerView {
     }
 }
 
-fn action_button(model: &Shared, title: &str, action: BannerAction) -> Box<dyn Widget> {
+fn action(model: &Shared, title: &str, action: BannerAction) -> Button {
     let model = model.clone();
-    Box::new(Button::new(title, move || {
-        model.borrow_mut().actions.push(action)
-    }))
+    Button::new(title, move || model.borrow_mut().actions.push(action))
+}
+
+fn action_button(model: &Shared, title: &str, action_taken: BannerAction) -> Box<dyn Widget> {
+    Box::new(action(model, title, action_taken))
 }
 
 pub struct Banner {
@@ -257,7 +259,8 @@ impl Banner {
             height: BANNER_HEIGHT,
         }));
         let cancel = action_button(&model, &L10N.tr("cancel"), BannerAction::Dismiss);
-        let confirm = action_button(&model, confirm, BannerAction::Confirm);
+        let confirm: Box<dyn Widget> =
+            Box::new(action(&model, confirm, BannerAction::Confirm).primary());
         let focus = confirm.id();
         Self::new(appearance, text, model, 0, vec![cancel, confirm], focus)
     }
