@@ -225,10 +225,10 @@ pub fn sync_calendar(client: &Client, calendar: &Calendar) -> Result<Outcome, Er
     Ok(outcome)
 }
 
-pub fn subscription_outcome(info: &CalendarInfo, data: &str) -> Outcome {
-    let objects = CalendarObject::parse(data).unwrap_or_default();
+pub fn subscription_outcome(info: &CalendarInfo, data: &str) -> Option<Outcome> {
+    let objects = CalendarObject::parse(data).ok()?;
     let stamp = Timestamp::now();
-    Outcome {
+    Some(Outcome {
         calendar: info.id.clone(),
         ctag: None,
         sync_token: None,
@@ -243,7 +243,7 @@ pub fn subscription_outcome(info: &CalendarInfo, data: &str) -> Outcome {
             .collect(),
         removed: Vec::new(),
         conflicts: Vec::new(),
-    }
+    })
 }
 
 pub fn apply(library: &mut Library, outcome: Outcome, replace_all: bool) -> Vec<String> {

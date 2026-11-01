@@ -98,7 +98,9 @@ impl Moment {
     pub fn add(&self, duration: &Duration) -> Self {
         match self {
             Self::Date(date) => Self::Date(
-                date.checked_add(Span::new().days(duration.whole_days()))
+                Span::new()
+                    .try_days(duration.whole_days())
+                    .and_then(|span| date.checked_add(span))
                     .unwrap_or(*date),
             ),
             Self::Floating(at) => Self::Floating(at.checked_add(duration.span()).unwrap_or(*at)),
@@ -220,6 +222,8 @@ pub fn format_wall(at: DateTime) -> String {
     )
 }
 
+const MAX_DURATION_DAYS: i64 = 100 * 366;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Duration {
     pub negative: bool,
@@ -257,7 +261,7 @@ impl Duration {
     }
 
     pub fn total_seconds(&self) -> i64 {
-        let seconds = self.days * 86_400 + self.seconds;
+        let seconds = self.days.saturating_mul(86_400).saturating_add(self.seconds);
         match self.negative {
             true => -seconds,
             false => seconds,
@@ -267,8 +271,9 @@ impl Duration {
     pub fn span(&self) -> Span {
         let sign = if self.negative { -1 } else { 1 };
         Span::new()
-            .days(sign * self.days)
-            .seconds(sign * self.seconds)
+            .try_days(sign * self.days)
+            .and_then(|span| span.try_seconds(sign * self.seconds))
+            .unwrap_or_default()
     }
 
     pub fn parse(text: &str) -> Option<Self> {
@@ -292,18 +297,24 @@ impl Duration {
                 unit => {
                     let value: i64 = number.parse().ok()?;
                     number.clear();
-                    match (unit, in_time) {
-                        ('W', false) => duration.days += value * 7,
-                        ('D', false) => duration.days += value,
-                        ('H', true) => duration.seconds += value * 3600,
-                        ('M', true) => duration.seconds += value * 60,
-                        ('S', true) => duration.seconds += value,
+                    let (total, scale) = match (unit, in_time) {
+                        ('W', false) => (&mut duration.days, 7),
+                        ('D', false) => (&mut duration.days, 1),
+                        ('H', true) => (&mut duration.seconds, 3600),
+                        ('M', true) => (&mut duration.seconds, 60),
+                        ('S', true) => (&mut duration.seconds, 1),
                         _ => return None,
-                    }
+                    };
+                    *total = value
+                        .checked_mul(scale)
+                        .and_then(|value| total.checked_add(value))?;
                 }
             }
         }
-        number.is_empty().then_some(duration)
+        (number.is_empty()
+            && duration.days <= MAX_DURATION_DAYS
+            && duration.seconds <= MAX_DURATION_DAYS * 86_400)
+            .then_some(duration)
     }
 
     pub fn to_text(&self) -> String {
@@ -353,6 +364,9 @@ mod tests {
         assert_eq!(Duration::parse("-PT15M").unwrap().total_seconds(), -900);
         assert_eq!(Duration::parse("P1W").unwrap().whole_days(), 7);
         assert_eq!(Duration::parse("PT5X"), None);
+        assert_eq!(Duration::parse("P99999999D"), None);
+        assert_eq!(Duration::parse("PT9223372036854775807H"), None);
+        assert_eq!(Duration::parse("P36600D").unwrap().whole_days(), 36_600);
     }
 
     #[test]

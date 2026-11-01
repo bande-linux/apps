@@ -21,6 +21,7 @@ pub enum Error {
     PreconditionFailed,
     Xml(String),
     NotFound(String),
+    Insecure(String),
 }
 
 impl std::fmt::Display for Error {
@@ -32,6 +33,7 @@ impl std::fmt::Display for Error {
             Self::PreconditionFailed => write!(f, "the event changed on the server"),
             Self::Xml(error) => write!(f, "the server's answer is not valid: {error}"),
             Self::NotFound(what) => write!(f, "no calendar server found for {what}"),
+            Self::Insecure(url) => write!(f, "{url} is not encrypted, so the password is not sent"),
         }
     }
 }
@@ -95,6 +97,9 @@ impl Http {
         let network = |error: &dyn std::fmt::Display| Error::Network(error.to_string());
         let mut builder = ureq::http::Request::builder().method(method).uri(url);
         if let Some(authorization) = &self.authorization {
+            if !url.starts_with("https://") && !loopback(url) {
+                return Err(Error::Insecure(origin(url).to_owned()));
+            }
             builder = builder.header("Authorization", authorization);
         }
         for (name, value) in headers {
@@ -130,7 +135,7 @@ impl Http {
             .with_config()
             .limit(BODY_LIMIT)
             .read_to_string()
-            .unwrap_or_default();
+            .map_err(|error| network(&error))?;
         if status == 401 {
             return Err(Error::Unauthorized);
         }
@@ -141,6 +146,15 @@ impl Http {
             location,
         })
     }
+}
+
+fn loopback(url: &str) -> bool {
+    let host = origin(url).split_once("://").map_or("", |(_, host)| host);
+    let host = match host.strip_prefix('[') {
+        Some(bracketed) => bracketed.split(']').next().unwrap_or(""),
+        None => host.split(':').next().unwrap_or(""),
+    };
+    matches!(host, "localhost" | "127.0.0.1" | "::1")
 }
 
 pub fn origin(url: &str) -> &str {
@@ -200,6 +214,23 @@ pub fn percent_decode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_loopback_is_trusted_without_tls() {
+        assert!(loopback("http://localhost:5232/jane/"));
+        assert!(loopback("http://127.0.0.1/"));
+        assert!(loopback("http://[::1]:8080/x"));
+        assert!(!loopback("http://localhost.evil.example/"));
+        assert!(!loopback("http://dav.example.com/"));
+        let http = Http::new(Some(&Credentials {
+            user: "jane".to_owned(),
+            password: "secret".to_owned(),
+        }));
+        assert_eq!(
+            http.send("PROPFIND", "http://dav.example.com/cal/", &[], None).err(),
+            Some(Error::Insecure("http://dav.example.com".to_owned()))
+        );
+    }
 
     #[test]
     fn joins_hrefs_like_a_browser() {

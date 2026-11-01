@@ -320,6 +320,9 @@ pub struct Occurrence {
 impl CalendarObject {
     pub fn parse(text: &str) -> Result<Vec<Self>, ParseError> {
         let roots = lines::parse(text)?;
+        if !roots.iter().any(|root| root.name == "VCALENDAR") {
+            return Err(ParseError::Empty);
+        }
         let mut objects = Vec::new();
         for root in roots.into_iter().filter(|root| root.name == "VCALENDAR") {
             let zones = Zones::from_calendar(&root);

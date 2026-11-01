@@ -79,6 +79,7 @@ const WEEKDAYS: [(&str, Weekday); 7] = [
 ];
 
 const MAX_PERIODS: usize = 50_000;
+const MAX_CANDIDATES: usize = 10_000;
 
 pub fn weekday_code(weekday: Weekday) -> &'static str {
     WEEKDAYS
@@ -94,11 +95,22 @@ fn parse_weekday(code: &str) -> Option<Weekday> {
         .map(|(_, weekday)| *weekday)
 }
 
-fn numbers<T: std::str::FromStr>(value: &str) -> Option<Vec<T>> {
+fn unique<T: PartialEq>(values: Vec<T>) -> Vec<T> {
+    let mut kept = Vec::new();
+    for value in values {
+        if !kept.contains(&value) {
+            kept.push(value);
+        }
+    }
+    kept
+}
+
+fn numbers<T: std::str::FromStr + PartialEq>(value: &str) -> Option<Vec<T>> {
     value
         .split(',')
         .map(|part| part.trim().trim_start_matches('+').parse().ok())
-        .collect()
+        .collect::<Option<_>>()
+        .map(unique)
 }
 
 fn join<T: ToString>(values: &[T]) -> String {
@@ -149,12 +161,12 @@ impl Rule {
                 "BYSETPOS" => rule.by_set_pos = numbers(value)?,
                 "WKST" => rule.week_start = parse_weekday(value)?,
                 "BYDAY" => {
-                    rule.by_day = value
+                    rule.by_day = unique(value
                         .split(',')
                         .map(|day| {
                             let day = day.trim();
                             let split = day.len().checked_sub(2)?;
-                            let (ordinal, code) = day.split_at(split);
+                            let (ordinal, code) = (day.get(..split)?, day.get(split..)?);
                             Some(DaySpec {
                                 ordinal: match ordinal {
                                     "" => None,
@@ -163,7 +175,7 @@ impl Rule {
                                 weekday: parse_weekday(code)?,
                             })
                         })
-                        .collect::<Option<_>>()?;
+                        .collect::<Option<Vec<_>>>()?);
                 }
                 _ => {}
             }
@@ -285,8 +297,10 @@ impl Rule {
     }
 
     fn period_anchor(&self, first: DateTime, period: usize) -> Option<DateTime> {
-        let steps = i64::try_from(period).ok()? * i64::from(self.interval);
-        let span: Span = match self.frequency {
+        let steps = i64::try_from(period)
+            .ok()?
+            .checked_mul(i64::from(self.interval))?;
+        let span = match self.frequency {
             Frequency::Yearly => {
                 return first
                     .date()
@@ -295,7 +309,7 @@ impl Rule {
                     .month(1)
                     .build()
                     .ok()?
-                    .checked_add(steps.years())
+                    .checked_add(Span::new().try_years(steps).ok()?)
                     .ok()
                     .map(|date| date.to_datetime(Time::midnight()));
             }
@@ -303,7 +317,7 @@ impl Rule {
                 return first
                     .date()
                     .first_of_month()
-                    .checked_add(steps.months())
+                    .checked_add(Span::new().try_months(steps).ok()?)
                     .ok()
                     .map(|date| date.to_datetime(Time::midnight()));
             }
@@ -311,17 +325,18 @@ impl Rule {
                 let back = i64::from(days_since(first.date().weekday(), self.week_start));
                 return first
                     .date()
-                    .checked_sub(back.days())
+                    .checked_sub(Span::new().try_days(back).ok()?)
                     .ok()?
-                    .checked_add((steps * 7).days())
+                    .checked_add(Span::new().try_weeks(steps).ok()?)
                     .ok()
                     .map(|date| date.to_datetime(Time::midnight()));
             }
-            Frequency::Daily => steps.days(),
-            Frequency::Hourly => steps.hours(),
-            Frequency::Minutely => steps.minutes(),
-            Frequency::Secondly => steps.seconds(),
-        };
+            Frequency::Daily => Span::new().try_days(steps),
+            Frequency::Hourly => Span::new().try_hours(steps),
+            Frequency::Minutely => Span::new().try_minutes(steps),
+            Frequency::Secondly => Span::new().try_seconds(steps),
+        }
+        .ok()?;
         let base = match self.frequency {
             Frequency::Daily => first.date().to_datetime(Time::midnight()),
             _ => first,
@@ -531,6 +546,7 @@ impl Rule {
                 self.period_days(first, anchor)
                     .into_iter()
                     .flat_map(|day| times.iter().map(move |time| day.to_datetime(*time)))
+                    .take(MAX_CANDIDATES)
                     .collect()
             }
         }
@@ -630,6 +646,26 @@ mod tests {
         ] {
             assert_eq!(Rule::parse(text, &zones).unwrap().to_text(), text);
         }
+    }
+
+    #[test]
+    fn hostile_rules_end_without_panicking_or_blowing_up() {
+        assert_eq!(
+            expand("20261102T100000", None, "FREQ=YEARLY;INTERVAL=20000", 10),
+            ["20261102T100000"]
+        );
+        assert_eq!(
+            expand("20261102T100000", None, "FREQ=DAILY;INTERVAL=4294967295", 10),
+            ["20261102T100000"]
+        );
+        assert_eq!(Rule::parse("FREQ=WEEKLY;BYDAY=€", &Zones::default()), None);
+        let every_second = (0..60).map(|n| n.to_string()).collect::<Vec<_>>().join(",");
+        let every_hour = (0..24).map(|n| n.to_string()).collect::<Vec<_>>().join(",");
+        let rule = format!(
+            "FREQ=YEARLY;BYHOUR={every_hour},{every_hour};BYMINUTE={every_second};BYSECOND={every_second}"
+        );
+        assert_eq!(Rule::parse(&rule, &Zones::default()).unwrap().by_hour.len(), 24);
+        assert!(!expand("20261102T100000", None, &rule, 3).is_empty());
     }
 
     #[test]

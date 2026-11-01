@@ -75,18 +75,12 @@ pub fn candidates(
     }
     let mut found = Vec::new();
     let domain = host.split(['/', ':']).next().unwrap_or(host);
-    for (service, scheme) in [("_caldavs._tcp", "https"), ("_caldav._tcp", "http")] {
-        for record in lookup(&format!("{service}.{domain}")) {
-            let default_port = if scheme == "https" { 443 } else { 80 };
-            let port = match record.port == default_port {
-                true => String::new(),
-                false => format!(":{}", record.port),
-            };
-            found.push(format!(
-                "{scheme}://{}{port}/.well-known/caldav",
-                record.target
-            ));
-        }
+    for record in lookup(&format!("_caldavs._tcp.{domain}")) {
+        let port = match record.port {
+            443 => String::new(),
+            port => format!(":{port}"),
+        };
+        found.push(format!("https://{}{port}/.well-known/caldav", record.target));
     }
     found.push(format!("https://{host}/.well-known/caldav"));
     found.push(format!("https://{host}/"));

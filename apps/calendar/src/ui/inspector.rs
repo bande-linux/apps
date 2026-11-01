@@ -48,7 +48,7 @@ pub fn parse_time(text: &str) -> Option<Time> {
         ),
         None if body.len() > 2 => {
             let split = body.len() - 2;
-            (body[..split].parse().ok()?, body[split..].parse().ok()?)
+            (body.get(..split)?.parse().ok()?, body.get(split..)?.parse().ok()?)
         }
         None => (body.parse().ok()?, 0),
     };
@@ -467,6 +467,8 @@ mod tests {
         assert_eq!(parse_time("12am"), Some(time(0, 0, 0, 0)));
         assert_eq!(parse_time("13pm"), None);
         assert_eq!(parse_time("25:00"), None);
+        assert_eq!(parse_time("12€"), None);
+        assert_eq!(parse_time("10ä"), None);
     }
 
     #[test]

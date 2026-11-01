@@ -102,3 +102,4 @@ calendar-account = account:
 create = Create
 rename = Rename
 untitled = Untitled
+not-a-calendar = { $url } is not a calendar.

@@ -9,9 +9,10 @@ views. Packaged as `bande-calendar`.
 ## What it does
 
 - **Accounts.** CalDAV (RFC 4791) with discovery: a full URL, a host name or just an e-mail
-  address. It tries `_caldavs._tcp` / `_caldav._tcp` DNS SRV records, `/.well-known/caldav`, then
+  address. It tries `_caldavs._tcp` DNS SRV records, `/.well-known/caldav`, then
   `current-user-principal` → `calendar-home-set` → the calendars in the home set. Passwords go to
-  the Secret Service (gnome-keyring), never to disk. Several accounts, plus a local calendar.
+  the Secret Service (gnome-keyring), never to disk, and are sent only over HTTPS (or to this
+  computer, for a local server). Several accounts, plus a local calendar.
 - **Subscriptions.** `webcal:` / `webcals:` links and plain `https:` `.ics` URLs, read-only,
   refreshed hourly; the name and colour come from `X-WR-CALNAME` and `X-APPLE-CALENDAR-COLOR`.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
@@ -43,9 +44,9 @@ views. Packaged as `bande-calendar`.
   webcal://…` offers to subscribe. The desktop file registers `text/calendar` and the `webcal`
   schemes.
 
-Shortcuts: Super+1…4 for the views, Super+T today, Left/Right previous/next, Super+N new event,
-Alt+Super+N new calendar,
-Super+F search, Super+R refresh, Delete to delete, Enter to open the selected event.
+Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Left/Right previous/next, Ctrl+N new event,
+Alt+Ctrl+N new calendar, Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the
+selected event, Ctrl+W close and Ctrl+Q quit.
 
 ## Layout
 

@@ -1,4 +1,5 @@
-use std::io::Read;
+use std::io::{Read, Write};
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 use jiff::Timestamp;
@@ -153,11 +154,40 @@ pub fn new_uid() -> String {
 
 fn write_atomically(file: &Path, text: &str) -> std::io::Result<()> {
     if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(parent)?;
     }
-    let staging = file.with_extension("new");
-    std::fs::write(&staging, text)?;
+    let staging = file.with_extension(format!("{}.new", std::process::id()));
+    let mut staged = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&staging)?;
+    staged.write_all(text.as_bytes())?;
+    staged.sync_all()?;
     std::fs::rename(&staging, file)
+}
+
+fn read_or_set_aside<T: serde::de::DeserializeOwned>(file: &Path) -> Option<T> {
+    let text = std::fs::read_to_string(file).ok()?;
+    match serde_json::from_str(&text) {
+        Ok(value) => Some(value),
+        Err(error) => {
+            let aside = file.with_extension("broken");
+            tracing::warn!(
+                "cannot read {}: {error}; keeping it as {}",
+                file.display(),
+                aside.display()
+            );
+            if let Err(error) = std::fs::rename(file, &aside) {
+                tracing::warn!("cannot keep {}: {error}", aside.display());
+            }
+            None
+        }
+    }
 }
 
 pub fn href_for(calendar: &CalendarInfo, uid: &str) -> String {
@@ -191,10 +221,8 @@ fn calendar_file(dir: &Path, id: &str) -> PathBuf {
 
 impl Library {
     pub fn load(dir: PathBuf) -> Self {
-        let accounts: Vec<Account> = std::fs::read_to_string(dir.join(ACCOUNTS_FILE))
-            .ok()
-            .and_then(|text| serde_json::from_str(&text).ok())
-            .unwrap_or_default();
+        let accounts: Vec<Account> =
+            read_or_set_aside(&dir.join(ACCOUNTS_FILE)).unwrap_or_default();
         let mut calendars: Vec<Calendar> = std::fs::read_dir(dir.join(CALENDARS_DIR))
             .into_iter()
             .flatten()
@@ -205,14 +233,7 @@ impl Library {
                     .extension()
                     .is_some_and(|extension| extension == "json")
             })
-            .filter_map(|entry| {
-                let text = std::fs::read_to_string(entry.path()).ok()?;
-                serde_json::from_str::<Calendar>(&text)
-                    .map_err(|error| {
-                        tracing::warn!("cannot read {}: {error}", entry.path().display())
-                    })
-                    .ok()
-            })
+            .filter_map(|entry| read_or_set_aside::<Calendar>(&entry.path()))
             .collect();
         for calendar in &mut calendars {
             for stored in &mut calendar.objects {
