@@ -11,14 +11,14 @@
 
 ## Factory Verification
 - **No panics**: No `.unwrap()`, `.expect()` or `panic!` in production code (each app denies them in `[lints.clippy]`). Use proper error handling.
-- **Strict gate**: `ci/gate.sh <app>...` for every app you touched (fmt, clippy `--all-targets -D warnings`, tests, all `--locked`, on a private session bus) must pass before merging. It takes the shared build lock and runs under `gentle` with one shared `target/`.
+- **Build first, test once**: each change only needs to compile: `cargo fmt` and `cargo check --locked --all-targets` in the app, under `flock ~/bande-linux/kbuild.lock ~/bande-linux/bin/gentle`, with `CARGO_TARGET_DIR` in your worktree. The full gate, `ci/gate.sh` (fmt, clippy `--all-targets -D warnings`, tests, all `--locked`, on a private session bus), runs once on `main` when a batch of work has merged, and `main` fixes whatever it finds then.
 
 ## Desktop crates
-- The `bande-*` crates come from `bande-linux/desktop` as git dependencies, every app at the same `rev`. Change the pin only with `ci/bump-desktop.sh [REV]`, which re-locks and runs the gate on every app.
+- The `bande-*` crates come from `bande-linux/desktop` as git dependencies, every app at the same `rev`. Change the pin only with `ci/bump-desktop.sh [REV]`, which re-locks and runs the gate on every app (`BUMP_NO_GATE=1` re-locks only). `ci/with-desktop.sh <desktop checkout> check --all-targets` tries a desktop branch on every app before it merges.
 - A toolkit or library change lands in the desktop repo first; the apps pick it up with a bump. Never fork or vendor a desktop crate here.
 - App shortcuts use Ctrl (`Ctrl+N`, `Shift+Ctrl+N`); Super is reserved for the system.
 
 ## Workflow
-- Trunk-based: `main` is always green. Work on a short branch from `main`; merge when `ci/gate.sh` passes for the apps it touches (fast-forward if possible, otherwise a merge commit). Never force-push, never merge red.
+- Trunk-based: `main` always builds. Work on a short branch from `main`; merge when it compiles (fast-forward if possible, otherwise a merge commit). Never force-push.
 - CI runs only for a release tag `<app>-vX.Y.Z` on `main` (see README). Never push tags or dispatch workflows unless the owner asks.
 - Commit messages: one brief line saying what the commit does. No body, no trailers (no `Co-Authored-By`, no session links), nothing special.
