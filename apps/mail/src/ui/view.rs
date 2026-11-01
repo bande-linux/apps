@@ -28,7 +28,7 @@ use crate::net::Network;
 use crate::secrets::Keyring;
 use crate::settings::MailSettings;
 use crate::setup::{Outcome, Request as SetupRequest, check};
-use crate::store::{Account, AccountId, Mailbox, MessageId, Store, Summary};
+use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, Store, Summary};
 use crate::ui::format::full_date;
 use crate::ui::reader::{Layout, Reading, Remote};
 use crate::ui::setup_sheet::{AccountSheet, Action, Field, Mode, Shared, SheetState};
@@ -582,16 +582,45 @@ impl MailView {
     }
 
     pub fn move_selected(&mut self, role: Role) {
+        let target = self
+            .selected_summary()
+            .and_then(|summary| self.mailbox_with_role(summary.account, role));
+        if let Some(target) = target {
+            self.move_selected_to(&target);
+        }
+    }
+
+    pub fn move_targets(&self) -> Vec<(String, MailboxId)> {
+        let Some(summary) = self.selected_summary() else {
+            return Vec::new();
+        };
+        self.accounts
+            .iter()
+            .filter(|(account, _)| account.id == summary.account)
+            .flat_map(|(_, mailboxes)| mailboxes)
+            .filter(|mailbox| mailbox.selectable && mailbox.id != summary.mailbox)
+            .map(|mailbox| {
+                let name = match mailbox.delimiter {
+                    Some(delimiter) => mailbox.path.replace(delimiter, " / "),
+                    None => mailbox.path.clone(),
+                };
+                let name = match mailbox.role {
+                    Some(Role::Inbox) => L10N.tr("mailbox-inbox"),
+                    _ => name,
+                };
+                (name, mailbox.id)
+            })
+            .collect()
+    }
+
+    fn move_selected_to(&mut self, target: &Mailbox) {
         let Some(summary) = self.selected_summary() else {
             return;
         };
-        let Some(target) = self.mailbox_with_role(summary.account, role) else {
-            return;
-        };
-        if target.id == summary.mailbox {
+        if target.id == summary.mailbox || target.account != summary.account {
             return;
         }
-        match self.store.move_messages(&[summary.id], &target) {
+        match self.store.move_messages(&[summary.id], target) {
             Ok(accounts) => self.flush(&accounts),
             Err(error) => tracing::warn!("cannot move the message: {error}"),
         }
@@ -1501,6 +1530,15 @@ impl MailView {
             MenuItem::new(&L10N.tr("action-archive"), "archive")
                 .enabled(self.can_move_to(Role::Archive)),
             MenuItem::new(&L10N.tr("action-junk"), "junk").enabled(self.can_move_to(Role::Junk)),
+            MenuItem::submenu(
+                &L10N.tr("menu-move-to"),
+                Menu::new(
+                    self.move_targets()
+                        .into_iter()
+                        .map(|(name, id)| MenuItem::new(&name, &format!("move-to:{id}")))
+                        .collect(),
+                ),
+            ),
             MenuItem::new(&L10N.tr("action-delete"), "delete"),
         ])
     }
@@ -1520,6 +1558,21 @@ impl MailView {
             "get-mail" => self.get_mail(),
             "add-account" => self.present_setup(Mode::Add),
             "find" => self.ui.set_focus(self.toolbar.search),
+            action if action.starts_with("move-to:") => {
+                let target = action
+                    .strip_prefix("move-to:")
+                    .and_then(|id| id.parse::<MailboxId>().ok())
+                    .and_then(|id| {
+                        self.accounts
+                            .iter()
+                            .flat_map(|(_, mailboxes)| mailboxes)
+                            .find(|mailbox| mailbox.id == id)
+                            .cloned()
+                    });
+                if let Some(target) = target {
+                    self.move_selected_to(&target);
+                }
+            }
             action if action.starts_with("attachment-") => {
                 let parsed = action
                     .split_once(':')

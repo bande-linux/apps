@@ -1,6 +1,6 @@
 use bande_app_menu::{Entry, edit_submenu};
 use bande_mail::L10N;
-use bande_mail::ui::SHORTCUTS;
+use bande_mail::ui::{MailView, SHORTCUTS};
 
 fn item(message: &str, action: &str) -> Entry {
     let entry = Entry::item(&L10N.tr(message), action);
@@ -10,7 +10,12 @@ fn item(message: &str, action: &str) -> Entry {
     }
 }
 
-pub fn app_menus() -> Vec<Entry> {
+pub fn app_menus(view: &MailView) -> Vec<Entry> {
+    let targets = view
+        .move_targets()
+        .into_iter()
+        .map(|(name, id)| Entry::item(&name, &format!("move-to:{id}")))
+        .collect::<Vec<_>>();
     vec![
         Entry::submenu(
             &L10N.tr("menu-file"),
@@ -45,6 +50,7 @@ pub fn app_menus() -> Vec<Entry> {
                 Entry::separator(),
                 item("action-archive", "archive"),
                 item("action-junk", "junk"),
+                Entry::submenu(&L10N.tr("menu-move-to"), targets),
                 item("action-delete", "delete"),
             ],
         ),

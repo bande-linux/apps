@@ -32,7 +32,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Feature | Bande Mail |
 |---|---|
 | Unified inbox, smart mailboxes | Have: Inbox, Flagged, Drafts, Sent, Archive, Junk, Trash across accounts |
-| Mailboxes and folders | Have: read all folders; missing create, rename, delete, move between folders |
+| Mailboxes and folders | Have: read all folders, Move To any mailbox of the account (message and Message menus); missing create, rename, delete |
 | Flags | One flag; no colours |
 | Search | Local, over sender, recipients, subject and text; no server search or tokens |
 | Threads | Missing |
@@ -49,7 +49,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 2. Multiple selection, drag to mailbox, Undo for delete/move.
 3. Conversations (threads) in the list and the reader.
 4. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses passwords.
-5. Mailbox management: new, rename, delete, move to any mailbox.
+5. Mailbox management: new, rename, delete; drag messages to a mailbox.
 6. Sort order, flag colours (Mark All as Read is in the Mailbox menu).
 7. Rules (move/flag/mark by sender, subject, account).
 8. Rich text compose and spelling (both need desktop services first).
