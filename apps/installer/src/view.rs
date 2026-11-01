@@ -125,6 +125,10 @@ impl Installer {
         self.ui.deadline()
     }
 
+    pub fn animating(&self) -> bool {
+        self.ui.is_animating()
+    }
+
     pub fn accessibility(&self) -> accesskit::TreeUpdate {
         self.ui.accessibility()
     }

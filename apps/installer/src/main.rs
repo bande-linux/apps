@@ -56,6 +56,10 @@ impl View for Pane {
         true
     }
 
+    fn animating(&self) -> bool {
+        self.0.animating()
+    }
+
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
         Some(self.0.accessibility())
     }

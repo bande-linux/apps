@@ -11,7 +11,7 @@ use bande_toolkit::ui::{
     Axis, Button, Context, Label, PopUpButton, ProgressBar, ScrollView, SearchField, Stack, Ui,
     Widget, WidgetId,
 };
-use bande_toolkit::{Palette, TextSystem};
+use bande_toolkit::{Palette, Rect, TextSystem};
 
 use crate::L10N;
 use crate::catalog::{Block, Bundle, Category, Component, search};
@@ -203,6 +203,14 @@ impl Software {
 
     pub fn deadline(&self) -> Option<std::time::Instant> {
         self.ui.deadline()
+    }
+
+    pub fn animating(&self) -> bool {
+        self.ui.is_animating()
+    }
+
+    pub fn text_input_area(&self) -> Option<Rect> {
+        self.ui.text_input_area()
     }
 
     pub fn accessibility(&self) -> accesskit::TreeUpdate {

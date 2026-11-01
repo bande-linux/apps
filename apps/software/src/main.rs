@@ -6,7 +6,7 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View};
 use bande_app_menu::edit_submenu;
 use bande_packages::{Client, debian_arch};
 use bande_software::{L10N, Software, WINDOW_SIZE, desktop_ids, installed_keys};
-use bande_toolkit::{Appearance, Scene, TextSystem, Window, WindowEvent};
+use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 
 static INFO: Info = Info {
     id: "org.bande.Software",
@@ -52,6 +52,14 @@ impl View for Pane {
 
     fn tick(&mut self, _window: &mut Window, _now: Instant) -> bool {
         true
+    }
+
+    fn animating(&self) -> bool {
+        self.0.animating()
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        self.0.text_input_area()
     }
 
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
