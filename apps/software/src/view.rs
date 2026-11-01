@@ -475,22 +475,25 @@ impl Software {
                 ),
             }))];
         }
-        let mut widgets: Widgets = vec![boxed(Label::heading(&section_name(self.section)))];
-        widgets.extend(listed.iter().take(MAX_ROWS).filter_map(|index| {
-            let app = self.apps.get(*index)?;
-            Some(boxed(Stack::new(
-                Axis::Vertical,
-                2.0,
-                0.0,
-                vec![
-                    boxed(
-                        self.button(&app.name, Intent::Show(Page::App(*index)))
-                            .quiet(),
-                    ),
-                    boxed(Label::new(&app.summary)),
-                ],
-            )))
-        }));
+        let mut widgets: Widgets = listed
+            .iter()
+            .take(MAX_ROWS)
+            .filter_map(|index| {
+                let app = self.apps.get(*index)?;
+                Some(boxed(Stack::new(
+                    Axis::Vertical,
+                    0.0,
+                    0.0,
+                    vec![
+                        boxed(
+                            self.button(&app.name, Intent::Show(Page::App(*index)))
+                                .link(),
+                        ),
+                        boxed(Label::new(&app.summary).secondary()),
+                    ],
+                )))
+            })
+            .collect();
         if listed.len() > MAX_ROWS {
             widgets.push(boxed(Label::new(&L10N.tr_args(
                 "more-results",
