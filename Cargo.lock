@@ -552,11 +552,11 @@ name = "bande-mail"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-app",
  "bande-app-menu",
  "bande-fs",
  "bande-golden",
  "bande-l10n",
- "bande-log",
  "bande-notify",
  "bande-test-bus",
  "bande-toolkit",

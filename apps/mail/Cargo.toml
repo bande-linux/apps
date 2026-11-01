@@ -10,10 +10,10 @@ publish = false
 
 [dependencies]
 accesskit.workspace = true
+bande-app.workspace = true
 bande-app-menu.workspace = true
 bande-fs.workspace = true
 bande-l10n.workspace = true
-bande-log.workspace = true
 bande-notify.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
@@ -43,7 +43,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "mail"
 priority = "optional"
-depends = "$auto, fonts-inter"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 recommends = "gnome-keyring"
 extended-description = """\
 Mail for the Bande desktop, in three panes as in macOS Mail: mailboxes \
@@ -53,5 +53,6 @@ with IMAP IDLE and keeps passwords in the Secret Service."""
 assets = [
     ["target/release/bande-mail", "usr/bin/", "755"],
     ["data/org.bande.Mail.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.Mail.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Mail.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
 ]

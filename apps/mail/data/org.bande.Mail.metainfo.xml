@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Mail</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Mail</name>
+  <summary>Read and send mail from all your accounts</summary>
+  <description>
+    <p>IMAP and SMTP accounts in one window, with search, drafts, attachments and notifications for new mail.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Mail.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+</component>

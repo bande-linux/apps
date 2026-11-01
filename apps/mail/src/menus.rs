@@ -1,4 +1,4 @@
-use bande_app_menu::{Entry, app_submenu, close_window, window_submenu};
+use bande_app_menu::{Entry, edit_submenu};
 use bande_mail::L10N;
 use bande_mail::ui::{MailView, SHORTCUTS};
 
@@ -17,7 +17,6 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
         .map(|account| Entry::item(&account.email, &format!("remove-account:{}", account.id)))
         .collect::<Vec<_>>();
     vec![
-        app_submenu(&L10N.tr("app-name"), env!("CARGO_PKG_VERSION"), Vec::new()),
         Entry::submenu(
             &L10N.tr("menu-file"),
             vec![
@@ -28,10 +27,9 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
                 Entry::submenu(&L10N.tr("menu-remove-account"), accounts),
                 Entry::separator(),
                 item("menu-find", "find"),
-                Entry::separator(),
-                close_window(),
             ],
         ),
+        edit_submenu(Vec::new()),
         Entry::submenu(
             &L10N.tr("menu-message"),
             vec![
@@ -49,6 +47,5 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
                 item("action-delete", "delete"),
             ],
         ),
-        window_submenu(Vec::new()),
     ]
 }
