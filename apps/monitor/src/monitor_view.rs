@@ -966,7 +966,13 @@ fn paint_graph(monitor: &Monitor, palette: Palette, painter: &mut Painter, frame
             palette.hairline,
         );
     }
-    let plot = Rect::new(frame.x, frame.y + 1.0, frame.width, frame.height - 1.0);
+    let headroom = GRAPH_PAD + GRAPH_LABEL;
+    let plot = Rect::new(
+        frame.x,
+        frame.y + headroom,
+        frame.width,
+        (frame.height - headroom).max(1.0),
+    );
     let graph_kind = monitor.graph();
     let is_scale = matches!(graph_kind, Graph::Lines { .. });
     let span = match graph_kind {
