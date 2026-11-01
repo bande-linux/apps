@@ -54,8 +54,7 @@ apt install bande-mail
 - **New mail.** A second connection IDLEs on the Inbox; servers without IDLE are polled every
   five minutes. New unread mail shows a notification through `org.freedesktop.Notifications`.
 - **Integration.** `org.bande.Mail.desktop` registers Mail for `mailto:` links (choose it in
-  Settings → Default Apps). A second `bande-mail mailto:…` hands the link to the running Mail
-  over D-Bus (`org.bande.Mail`).
+  Settings → Default Apps). A second `bande-mail mailto:…` hands the link to the running Mail.
 
 ## Robustness
 
@@ -69,7 +68,7 @@ their usual English names.
 ## Building and testing
 
 ```
-cargo test
+ci/gate.sh mail
 ```
 
 `tests/send.rs` starts Debian's `dovecot` as the current user on a free loopback port, with a
@@ -78,9 +77,9 @@ goes out once, without injected headers or its Bcc, and is kept in Sent. It skip
 `/usr/sbin/dovecot` is not installed. It also checks that a `mailto:` link cannot add Bcc
 recipients or attachments. The repo's whole test list is in `NOTES/tests.md`.
 
-The toolkit and the desktop libraries (`bande-*` crates) come from
-[bande-linux/desktop](https://github.com/bande-linux/desktop), pinned to one commit in
-`Cargo.toml`; move the `rev` forward to pick up desktop changes.
+Mail is a `bande-app` app; the `bande-*` crates come from
+[bande-linux/desktop](https://github.com/bande-linux/desktop) at the workspace's one pin
+(`ci/bump-desktop.sh`, see `../../README.md`).
 
 ## Dependencies
 

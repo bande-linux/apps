@@ -61,9 +61,8 @@ selected event, Ctrl+W close and Ctrl+Q quit.
 | `src/ui/` | the window: toolbar, sidebar, the four views, inspector, account sheet, input |
 | `src/main.rs` | the app: window, menus, sync timers, alerts, files and links |
 
-It uses the desktop's toolkit, design tokens and theme (light/dark, accent, text size), like
-Files and Settings. The desktop crates come from `bande-linux/desktop`, pinned to a commit in
-`Cargo.toml`; move the `rev` forward to pick up toolkit changes.
+It is a `bande-app` app on the desktop's toolkit, design tokens and theme, like Files and
+Settings; the desktop pin is shared by the workspace (see `../../README.md`).
 
 ## Tests
 
@@ -78,4 +77,3 @@ whole test list and the reason for each is in `NOTES/tests.md`.
   an app password.
 - Editing the time zone of an event; custom repeat rules (they are kept and shown as Custom,
   but not edited).
-- One window per launch: opening an `.ics` file while Calendar runs opens a second window.
