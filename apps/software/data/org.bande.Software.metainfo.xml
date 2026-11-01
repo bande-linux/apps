@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Software</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Software</name>
+  <summary>Find and install apps</summary>
+  <description>
+    <p>Browse and search the apps Debian and Flathub offer, read about them before installing, and keep apps that need X11 out of the way.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Software.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/desktop</url>
+</component>

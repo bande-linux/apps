@@ -1,0 +1,74 @@
+title = Terminal
+find-bar = Find
+find-placeholder = Find
+find-previous = Previous
+find-next = Next
+find-done = Done
+find-not-found = Not found
+cancel = Cancel
+close = Close
+quit = Quit
+confirm-close-tab = Close this tab? { $program } is still running in it.
+menu-copy = Copy
+menu-paste = Paste
+menu-select-all = Select All
+menu-clear-scrollback = Clear Scrollback
+menu-bigger = Bigger
+menu-smaller = Smaller
+menu-default-size = Default Size
+menu-new-tab = New Tab
+menu-new-window = New Window
+menu-next-tab = Show Next Tab
+menu-previous-tab = Show Previous Tab
+menu-find = Find…
+menu-find-next = Find Next
+menu-find-previous = Find Previous
+menu-previous-prompt = Jump to Previous Command
+menu-next-prompt = Jump to Next Command
+menu-open-link = Open Link
+menu-copy-link = Copy Link
+menu-open = Open
+menu-copy-path = Copy Path
+menu-show-in-files = Show in Files
+menu-close-tab = Close Tab
+menu-close-other-tabs = Close Other Tabs
+confirm-close-other-tabs = Close the other tabs? { $count ->
+    [one] A program is still running in one of them.
+   *[other] Programs are still running in { $count } of them.
+}
+menu-shell = Shell
+menu-edit = Edit
+menu-view = View
+confirm-quit = Quit Terminal? { $count ->
+    [one] A program is still running in one tab.
+   *[other] Programs are still running in { $count } tabs.
+}
+menu-split-side-by-side = Split Side by Side
+menu-split-stacked = Split Top and Bottom
+menu-next-pane = Select Next Pane
+menu-previous-pane = Select Previous Pane
+new-tab = New Tab
+tabs = Tabs
+confirm-close-pane = Close this pane? { $program } is still running in it.
+command-finished = { $command } finished
+command-failed = { $command } failed with exit code { $code }
+profile-datum = Datum
+profile-paper = Paper
+profile-ink = Ink
+profile-midnight = Midnight
+profile-contrast = High Contrast
+cursor-block = Block
+cursor-bar = Bar
+cursor-underline = Underline
+settings-title = Terminal Settings
+settings-appearance = Appearance
+settings-profile = Profile
+settings-preview-sample = ~/bande $ cargo build --release
+settings-font-size = Text size
+settings-points = { $size } pt
+settings-cursor = Cursor
+settings-bell = Bell
+settings-flash = Flash the window
+settings-badge = Show a badge in the bar
+settings-notifications = Notifications
+settings-notify = Notify when long commands finish

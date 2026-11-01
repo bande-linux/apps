@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Terminal
+GenericName=Terminal Emulator
+Comment=Use the command line
+Icon=org.bande.Terminal
+Exec=bande-term
+Categories=System;TerminalEmulator;
+Keywords=shell;prompt;command;commandline;cmd;
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=bande-term
