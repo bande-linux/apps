@@ -35,6 +35,7 @@ asking for an administrator password."""
 assets = [
     ["target/release/bande-installer", "usr/bin/", "755"],
     ["data/org.bande.Installer.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.Installer.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
 ]
 
 [lints]
