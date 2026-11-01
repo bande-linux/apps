@@ -227,7 +227,8 @@ mod tests {
             password: "secret".to_owned(),
         }));
         assert_eq!(
-            http.send("PROPFIND", "http://dav.example.com/cal/", &[], None).err(),
+            http.send("PROPFIND", "http://dav.example.com/cal/", &[], None)
+                .err(),
             Some(Error::Insecure("http://dav.example.com".to_owned()))
         );
     }

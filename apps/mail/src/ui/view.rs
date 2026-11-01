@@ -772,7 +772,8 @@ impl MailView {
         };
         let user_dirs = bande_xdg::config_home()
             .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
-        let folder = bande_xdg::user_dir(&home, user_dirs.as_deref(), bande_xdg::UserDir::Downloads);
+        let folder =
+            bande_xdg::user_dir(&home, user_dirs.as_deref(), bande_xdg::UserDir::Downloads);
         let name = attachment
             .name
             .replace(['/', '\\', '\0'], "_")

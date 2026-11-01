@@ -80,7 +80,10 @@ pub fn candidates(
             443 => String::new(),
             port => format!(":{port}"),
         };
-        found.push(format!("https://{}{port}/.well-known/caldav", record.target));
+        found.push(format!(
+            "https://{}{port}/.well-known/caldav",
+            record.target
+        ));
     }
     found.push(format!("https://{host}/.well-known/caldav"));
     found.push(format!("https://{host}/"));

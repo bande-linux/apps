@@ -48,7 +48,10 @@ pub fn parse_time(text: &str) -> Option<Time> {
         ),
         None if body.len() > 2 => {
             let split = body.len() - 2;
-            (body.get(..split)?.parse().ok()?, body.get(split..)?.parse().ok()?)
+            (
+                body.get(..split)?.parse().ok()?,
+                body.get(split..)?.parse().ok()?,
+            )
         }
         None => (body.parse().ok()?, 0),
     };

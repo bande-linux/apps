@@ -261,7 +261,10 @@ impl Duration {
     }
 
     pub fn total_seconds(&self) -> i64 {
-        let seconds = self.days.saturating_mul(86_400).saturating_add(self.seconds);
+        let seconds = self
+            .days
+            .saturating_mul(86_400)
+            .saturating_add(self.seconds);
         match self.negative {
             true => -seconds,
             false => seconds,

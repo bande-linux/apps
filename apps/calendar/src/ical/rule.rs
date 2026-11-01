@@ -161,21 +161,23 @@ impl Rule {
                 "BYSETPOS" => rule.by_set_pos = numbers(value)?,
                 "WKST" => rule.week_start = parse_weekday(value)?,
                 "BYDAY" => {
-                    rule.by_day = unique(value
-                        .split(',')
-                        .map(|day| {
-                            let day = day.trim();
-                            let split = day.len().checked_sub(2)?;
-                            let (ordinal, code) = (day.get(..split)?, day.get(split..)?);
-                            Some(DaySpec {
-                                ordinal: match ordinal {
-                                    "" => None,
-                                    text => Some(text.trim_start_matches('+').parse().ok()?),
-                                },
-                                weekday: parse_weekday(code)?,
+                    rule.by_day = unique(
+                        value
+                            .split(',')
+                            .map(|day| {
+                                let day = day.trim();
+                                let split = day.len().checked_sub(2)?;
+                                let (ordinal, code) = (day.get(..split)?, day.get(split..)?);
+                                Some(DaySpec {
+                                    ordinal: match ordinal {
+                                        "" => None,
+                                        text => Some(text.trim_start_matches('+').parse().ok()?),
+                                    },
+                                    weekday: parse_weekday(code)?,
+                                })
                             })
-                        })
-                        .collect::<Option<Vec<_>>>()?);
+                            .collect::<Option<Vec<_>>>()?,
+                    );
                 }
                 _ => {}
             }
@@ -655,7 +657,12 @@ mod tests {
             ["20261102T100000"]
         );
         assert_eq!(
-            expand("20261102T100000", None, "FREQ=DAILY;INTERVAL=4294967295", 10),
+            expand(
+                "20261102T100000",
+                None,
+                "FREQ=DAILY;INTERVAL=4294967295",
+                10
+            ),
             ["20261102T100000"]
         );
         assert_eq!(Rule::parse("FREQ=WEEKLY;BYDAY=€", &Zones::default()), None);
@@ -664,7 +671,10 @@ mod tests {
         let rule = format!(
             "FREQ=YEARLY;BYHOUR={every_hour},{every_hour};BYMINUTE={every_second};BYSECOND={every_second}"
         );
-        assert_eq!(Rule::parse(&rule, &Zones::default()).unwrap().by_hour.len(), 24);
+        assert_eq!(
+            Rule::parse(&rule, &Zones::default()).unwrap().by_hour.len(),
+            24
+        );
         assert!(!expand("20261102T100000", None, &rule, 3).is_empty());
     }
 
