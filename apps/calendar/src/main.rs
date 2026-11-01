@@ -49,7 +49,7 @@ struct CalendarApp {
     formats: DateFormats,
     next_sync: Instant,
     next_subscriptions: Instant,
-    next_clock: Instant,
+    next_clock: Option<Instant>,
     next_alerts: Instant,
     alert_at: Timestamp,
     alerts_checked: Timestamp,
@@ -502,6 +502,7 @@ impl View for Pane {
             WindowEvent::MenuAction(action) => self.0.menu_action(&action),
             WindowEvent::MenuClosed => self.0.menu_closed(),
             WindowEvent::Pasted(text) => self.0.pasted(&text),
+            WindowEvent::ToplevelChanged(state) => !state.suspended,
             _ => false,
         }
     }
@@ -536,6 +537,21 @@ impl View for Pane {
 }
 
 impl CalendarApp {
+    fn follow_clock(&mut self, cx: &mut Cx<Self>) {
+        let on_screen = self
+            .main
+            .and_then(|main| cx.window(main))
+            .is_some_and(|(shown, _)| !shown.toplevel_state().suspended);
+        if !on_screen {
+            self.next_clock = None;
+        } else if self.next_clock.is_none() {
+            self.with_view(cx, |app, view| {
+                view.set_now(Zoned::now().with_time_zone(app.zone.clone()));
+            });
+            self.next_clock = Some(Instant::now() + until_next_minute());
+        }
+    }
+
     fn settle(&mut self, cx: &mut Cx<Self>) {
         if let Some((window, Pane(view))) = self.main.and_then(|main| cx.window(main)) {
             self.serve(window, view);
@@ -596,7 +612,7 @@ impl Program for CalendarApp {
             formats,
             next_sync: started,
             next_subscriptions: started,
-            next_clock: started + until_next_minute(),
+            next_clock: Some(started + until_next_minute()),
             next_alerts: started,
             alert_at: Timestamp::now(),
             alerts_checked: Timestamp::now(),
@@ -644,6 +660,7 @@ impl Program for CalendarApp {
             Ok(main) => {
                 self.main = Some(main);
                 self.title = title;
+                self.follow_clock(cx);
             }
             Err(error) => tracing::warn!("cannot open Calendar: {error}"),
         }
@@ -653,10 +670,12 @@ impl Program for CalendarApp {
         if self.main == Some(window) {
             self.main = None;
             self.parked = Some(view);
+            self.next_clock = None;
         }
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, _window: WindowId) {
+        self.follow_clock(cx);
         self.settle(cx);
     }
 
@@ -672,21 +691,17 @@ impl Program for CalendarApp {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        [
-            self.next_sync,
-            self.next_subscriptions,
-            self.next_clock,
-            self.next_alerts,
-        ]
-        .into_iter()
-        .min()
+        [self.next_sync, self.next_subscriptions, self.next_alerts]
+            .into_iter()
+            .chain(self.next_clock)
+            .min()
     }
 
     fn tick(&mut self, cx: &mut Cx<Self>, now: Instant) {
         self.with_view(cx, |app, view| {
-            if now >= app.next_clock {
+            if app.next_clock.is_some_and(|at| now >= at) {
                 view.set_now(Zoned::now().with_time_zone(app.zone.clone()));
-                app.next_clock = now + until_next_minute();
+                app.next_clock = Some(now + until_next_minute());
             }
             if now >= app.next_alerts || Timestamp::now() >= app.alert_at {
                 app.check_alerts(view);
@@ -697,6 +712,7 @@ impl Program for CalendarApp {
                 app.sync(view, false);
             }
         });
+        self.follow_clock(cx);
         self.settle(cx);
     }
 }
