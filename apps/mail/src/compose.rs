@@ -138,7 +138,6 @@ pub fn from_mailto(url: &str) -> Option<Draft> {
         match key.to_ascii_lowercase().as_str() {
             "to" => draft.to.extend(parse_addresses(&value)),
             "cc" => draft.cc.extend(parse_addresses(&value)),
-            "bcc" => draft.bcc.extend(parse_addresses(&value)),
             "subject" => draft.subject = value.split_whitespace().collect::<Vec<_>>().join(" "),
             "body" => draft.body = value.replace("\r\n", "\n"),
             "in-reply-to" => draft.in_reply_to = Some(value),
@@ -171,18 +170,19 @@ fn encoded_words(text: &str) -> String {
 }
 
 fn header_address(address: &Address) -> String {
-    let name = address.name.trim();
+    let printable = |text: &str| -> String {
+        text.chars()
+            .filter(|character| !character.is_control())
+            .collect()
+    };
+    let (name, email) = (printable(address.name.trim()), printable(&address.email));
     if name.is_empty() {
-        return format!("<{}>", address.email);
+        return format!("<{email}>");
     }
     if !name.is_ascii() {
-        return format!("{} <{}>", encoded_words(name), address.email);
+        return format!("{} <{email}>", encoded_words(&name));
     }
-    Address {
-        name: name.to_owned(),
-        email: address.email.clone(),
-    }
-    .full()
+    Address { name, email }.full()
 }
 
 fn address_header(name: &str, addresses: &[Address]) -> Option<String> {
@@ -348,7 +348,10 @@ mod tests {
         let draft = Draft {
             from: person("Jörg", "jorg@example.de"),
             to: vec![person("Ann Lee", "ann@example.com")],
-            cc: vec![person("", "cc@example.com")],
+            cc: vec![
+                person("", "cc@example.com"),
+                person("Eve\r\nBcc: spy@example.net", "eve@example.com"),
+            ],
             bcc: vec![person("", "hidden@example.com")],
             subject: "Grüße\r\nInjected: header".to_owned(),
             body: "Line one = equal\n.dot first\ntrailing space \n".to_owned() + &"x".repeat(200),
@@ -367,11 +370,18 @@ mod tests {
         let text = String::from_utf8_lossy(&raw);
         assert!(!text.contains("hidden@example.com"));
         assert!(!text.contains("\r\nInjected:"));
+        assert!(!text.contains("\r\nBcc:"));
         assert!(text.lines().all(|line| line.len() <= 998));
         let parsed = Content::parse(&raw);
         assert_eq!(parsed.envelope.subject, "Grüße Injected: header");
         assert_eq!(parsed.envelope.from, [person("Jörg", "jorg@example.de")]);
-        assert_eq!(parsed.envelope.cc, [person("", "cc@example.com")]);
+        assert_eq!(
+            parsed.envelope.cc,
+            [
+                person("", "cc@example.com"),
+                person("EveBcc: spy@example.net", "eve@example.com")
+            ]
+        );
         assert_eq!(parsed.envelope.date, Some(1_793_089_800));
         assert_eq!(parsed.envelope.references, ["<r@x>", "<p@x>"]);
         assert_eq!(
@@ -384,14 +394,19 @@ mod tests {
         assert_eq!(parsed.attachments, draft.attachments);
         assert_eq!(
             draft.recipients(),
-            ["ann@example.com", "cc@example.com", "hidden@example.com"]
+            [
+                "ann@example.com",
+                "cc@example.com",
+                "eve@example.com",
+                "hidden@example.com"
+            ]
         );
     }
 
     #[test]
     fn mailto_links_fill_a_draft() {
         let draft = from_mailto(
-            "mailto:ann@example.com,bob@example.com?subject=Hello%20there&cc=cat%40example.org&body=Line%201%0D%0ALine%202&attach=/etc/passwd",
+            "mailto:ann@example.com,bob@example.com?subject=Hello%20there&cc=cat%40example.org&body=Line%201%0D%0ALine%202&attach=/etc/passwd&bcc=spy%40example.net",
         );
         let Some(draft) = draft else {
             unreachable!("a mailto link")
@@ -401,6 +416,7 @@ mod tests {
             [person("", "ann@example.com"), person("", "bob@example.com")]
         );
         assert_eq!(draft.cc, [person("", "cat@example.org")]);
+        assert!(draft.bcc.is_empty());
         assert_eq!(draft.subject, "Hello there");
         assert_eq!(draft.body, "Line 1\nLine 2");
         assert!(draft.attachments.is_empty());

@@ -1,6 +1,7 @@
 use image::imageops::FilterType;
 
 pub const MAX_WIDTH: u32 = 1600;
+pub const MAX_HEIGHT: u32 = 4800;
 const MAX_PIXELS: u64 = 40_000_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,12 +20,8 @@ pub fn decode(bytes: &[u8]) -> Option<Picture> {
         return None;
     }
     let mut decoded = image::load_from_memory(bytes).ok()?;
-    if decoded.width() > MAX_WIDTH {
-        let height = (u64::from(decoded.height()) * u64::from(MAX_WIDTH)
-            / u64::from(decoded.width()))
-        .max(1);
-        decoded =
-            decoded.resize_exact(MAX_WIDTH, u32::try_from(height).ok()?, FilterType::Triangle);
+    if decoded.width() > MAX_WIDTH || decoded.height() > MAX_HEIGHT {
+        decoded = decoded.resize(MAX_WIDTH, MAX_HEIGHT, FilterType::Triangle);
     }
     let rgba = decoded.to_rgba8();
     Some(Picture {
@@ -66,6 +63,11 @@ mod tests {
         assert_eq!(
             wide.map(|picture| (picture.width, picture.height)),
             Some((MAX_WIDTH, 50))
+        );
+        let tall = decode(&png(100, 9600));
+        assert_eq!(
+            tall.map(|picture| (picture.width, picture.height)),
+            Some((50, MAX_HEIGHT))
         );
     }
 

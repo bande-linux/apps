@@ -224,7 +224,7 @@ impl Session {
     fn read_raw(&mut self) -> Result<Vec<u8>> {
         let mut raw = self.link.read_line(MAX_LINE)?;
         while let Some(length) = literal_length(&raw) {
-            if raw.len() + length > MAX_RESPONSE {
+            if length > MAX_RESPONSE.saturating_sub(raw.len()) {
                 return Err(Error::Protocol(format!(
                     "a response larger than {MAX_RESPONSE} bytes"
                 )));

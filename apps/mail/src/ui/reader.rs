@@ -30,6 +30,7 @@ const SYMBOL_SIZE: f32 = 16.0;
 const SYMBOL_PIXELS: u32 = 32;
 const BOLD: f32 = 700.0;
 const MAX_REMOTE: usize = 20;
+const MAX_INLINE_PIXELS: u64 = 24_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Remote {
@@ -53,16 +54,30 @@ fn image_of(picture: Picture) -> Option<Image> {
 impl Reading {
     pub fn new(content: Content, downloaded: bool) -> Self {
         let document = content.document(false);
-        let pictures = document
+        let mut pictures = HashMap::new();
+        let mut pixels = 0u64;
+        for source in document
             .blocks
             .iter()
             .filter_map(|block| block.image.as_deref())
-            .filter_map(|source| {
-                let part = content.inline_part(source)?;
-                let image = decode(&part.data).and_then(image_of)?;
-                Some((source.to_owned(), image))
-            })
-            .collect();
+        {
+            if pictures.len() >= MAX_REMOTE || pixels >= MAX_INLINE_PIXELS {
+                break;
+            }
+            if pictures.contains_key(source) {
+                continue;
+            }
+            let Some(picture) = content
+                .inline_part(source)
+                .and_then(|part| decode(&part.data))
+            else {
+                continue;
+            };
+            pixels += u64::from(picture.width) * u64::from(picture.height);
+            if let Some(image) = image_of(picture) {
+                pictures.insert(source.to_owned(), image);
+            }
+        }
         Self {
             content,
             document,

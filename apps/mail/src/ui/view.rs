@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::io::Write;
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -7,7 +8,7 @@ use std::time::Instant;
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
     Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
-    Pointer, PointerButton, ScrollState, Ui, Widget, WidgetId,
+    Pointer, PointerButton, ScrollState, Ui, Widget, WidgetId, shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
@@ -34,6 +35,20 @@ use crate::ui::symbols::Symbols;
 use crate::ui::toolbar::{Signal, Signals, Toolbar};
 use crate::worker::{Command, Event as MailEvent, Mailroom, Status, Worker};
 
+pub const SHORTCUTS: [(&str, &str); 12] = [
+    ("compose", "Ctrl+N"),
+    ("get-mail", "Shift+Ctrl+N"),
+    ("find", "Ctrl+F"),
+    ("reply", "Ctrl+R"),
+    ("reply-all", "Shift+Ctrl+R"),
+    ("forward", "Shift+Ctrl+F"),
+    ("toggle-read", "Shift+Ctrl+U"),
+    ("toggle-flag", "Shift+Ctrl+L"),
+    ("archive", "Shift+Ctrl+A"),
+    ("junk", "Shift+Ctrl+J"),
+    ("delete", "Delete"),
+    ("send", "Shift+Ctrl+D"),
+];
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 pub const LIST_WIDTH: f32 = 340.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
@@ -221,6 +236,10 @@ impl MailView {
         self.palette = appearance.palette();
         self.ui.set_appearance(appearance);
         self.layout = None;
+    }
+
+    pub fn set_window_active(&mut self, active: bool) -> bool {
+        self.ui.set_window_active(active)
     }
 
     pub fn set_palette(&mut self, palette: Palette) {
@@ -748,12 +767,12 @@ impl MailView {
         else {
             return;
         };
-        let folder = std::env::var_os("XDG_DOWNLOAD_DIR")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Downloads")));
-        let Some(folder) = folder else {
+        let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
             return;
         };
+        let user_dirs = bande_xdg::config_home()
+            .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
+        let folder = bande_xdg::user_dir(&home, user_dirs.as_deref(), bande_xdg::UserDir::Downloads);
         let name = attachment
             .name
             .replace(['/', '\\', '\0'], "_")
@@ -770,14 +789,22 @@ impl MailView {
             _ => (name.clone(), String::new()),
         };
         let saved = std::fs::create_dir_all(&folder).and_then(|()| {
-            (0..1000)
-                .map(|copy| match copy {
+            for copy in 0..1000 {
+                let path = match copy {
                     0 => folder.join(&name),
                     copy => folder.join(format!("{stem} {}{extension}", copy + 1)),
-                })
-                .find(|path| !path.exists())
-                .ok_or_else(|| std::io::Error::other("no free file name"))
-                .and_then(|path| std::fs::write(&path, &attachment.data).map(|()| path))
+                };
+                match std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&path)
+                {
+                    Ok(mut file) => return file.write_all(&attachment.data).map(|()| path),
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    Err(error) => return Err(error),
+                }
+            }
+            Err(std::io::Error::other("no free file name"))
         });
         match saved {
             Ok(path) => self.requests.push(Request::OpenAttachment(path)),
@@ -788,6 +815,7 @@ impl MailView {
     pub fn engine_ready(&mut self) -> bool {
         let events = self.mailroom.take();
         let mut changed = false;
+        let mut stale = false;
         for event in events {
             changed = true;
             match event {
@@ -795,9 +823,9 @@ impl MailView {
                     self.statuses.retain(|(known, _)| *known != account);
                     self.statuses.push((account, status));
                 }
-                MailEvent::Changed(_) => self.reload(),
+                MailEvent::Changed(_) => stale = true,
                 MailEvent::Arrived(_, ids) => {
-                    self.reload();
+                    stale = true;
                     self.notify(&ids);
                 }
                 MailEvent::Body(id) => {
@@ -806,7 +834,7 @@ impl MailView {
                     {
                         self.load_reading(&summary);
                     }
-                    self.reload();
+                    stale = true;
                 }
                 MailEvent::LoginFailed(account, _) => {
                     if self.setup.is_none()
@@ -836,6 +864,9 @@ impl MailView {
                     }
                 }
             }
+        }
+        if stale {
+            self.reload();
         }
         changed
     }
@@ -1211,56 +1242,27 @@ impl MailView {
             }
             return self.ui.handle(&Event::Key { key, modifiers });
         }
-        let command = modifiers.logo || modifiers.control;
-        match (key, command, modifiers.shift) {
-            (Key::Up, false, _) => self.step(-1),
-            (Key::Down, false, _) => self.step(1),
-            (Key::Backspace | Key::Delete, _, _) => {
+        let event = Event::Key { key, modifiers };
+        if let Some((action, _)) = SHORTCUTS
+            .iter()
+            .find(|(_, shortcut)| shortcut_pressed(&event, shortcut))
+        {
+            return self.menu_action(action);
+        }
+        let plain = !modifiers.control && !modifiers.logo;
+        match key {
+            Key::Up if plain => self.step(-1),
+            Key::Down if plain => self.step(1),
+            Key::Backspace | Key::Delete => {
                 self.delete_selected();
                 true
             }
-            (Key::Space, false, _) => self.page_reader(),
-            (Key::Enter, false, _) => {
+            Key::Space if plain => self.page_reader(),
+            Key::Enter if plain => {
                 self.continue_draft();
                 true
             }
-            (Key::Character('n'), true, false) => {
-                self.compose(Draft::default());
-                true
-            }
-            (Key::Character('N'), true, true) | (Key::Character('n'), true, true) => {
-                self.get_mail();
-                true
-            }
-            (Key::Character('r') | Key::Character('R'), true, shift) => {
-                self.respond(shift);
-                true
-            }
-            (Key::Character('f') | Key::Character('F'), true, true) => {
-                self.forward_selected();
-                true
-            }
-            (Key::Character('f'), true, false) => {
-                self.ui.set_focus(self.toolbar.search);
-                true
-            }
-            (Key::Character('l') | Key::Character('L'), true, true) => {
-                self.toggle_flag();
-                true
-            }
-            (Key::Character('u') | Key::Character('U'), true, true) => {
-                self.toggle_read();
-                true
-            }
-            (Key::Character('a') | Key::Character('A'), true, true) => {
-                self.move_selected(Role::Archive);
-                true
-            }
-            (Key::Character('j') | Key::Character('J'), true, true) => {
-                self.move_selected(Role::Junk);
-                true
-            }
-            _ => self.ui.handle(&Event::Key { key, modifiers }),
+            _ => self.ui.handle(&event),
         }
     }
 

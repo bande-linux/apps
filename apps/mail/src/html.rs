@@ -63,6 +63,7 @@ impl Document {
 }
 
 const SAFE_SCHEMES: [&str; 3] = ["http://", "https://", "mailto:"];
+const MAX_LIST_INDENT: usize = 8;
 
 fn safe_link(href: &str) -> Option<String> {
     let href = href.trim();
@@ -237,12 +238,14 @@ impl Builder {
                 self.start_block(BlockKind::Item);
                 let marker = match self.lists.last_mut() {
                     Some(Some(number)) => {
-                        *number += 1;
-                        format!("{}. ", *number - 1)
+                        let marker = format!("{number}. ");
+                        *number = number.saturating_add(1);
+                        marker
                     }
                     _ => "• ".to_owned(),
                 };
-                let indent = "    ".repeat(self.lists.len().saturating_sub(1));
+                let depth = self.lists.len().saturating_sub(1).min(MAX_LIST_INDENT);
+                let indent = "    ".repeat(depth);
                 self.block().text.push_str(&format!("{indent}{marker}"));
             }
             "td" | "th" => {
@@ -483,6 +486,14 @@ mod tests {
                 (BlockKind::Rule, 0, ""),
             ]
         );
+    }
+
+    #[test]
+    fn deeply_nested_lists_stay_small() {
+        let html = format!("{}<li>deep</li>", "<ul>".repeat(100_000));
+        let document = render_html(&html);
+        let item = document.blocks.last().map(|block| block.text.as_str());
+        assert_eq!(item, Some(format!("{}• deep", "    ".repeat(8)).as_str()));
     }
 
     #[test]

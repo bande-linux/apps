@@ -114,11 +114,28 @@ impl Mailroom {
 
 pub type PasswordSource = Box<dyn FnMut() -> Result<Option<String>> + Send>;
 
+#[derive(Default)]
+struct Watch {
+    closer: Option<Closer>,
+    thread: Option<thread::Thread>,
+}
+
+impl Watch {
+    fn interrupt(&self) {
+        if let Some(closer) = &self.closer {
+            closer.close();
+        }
+        if let Some(thread) = &self.thread {
+            thread.unpark();
+        }
+    }
+}
+
 pub struct Worker {
     pub account: AccountId,
     commands: Sender<Command>,
     stopping: Arc<AtomicBool>,
-    idle: Arc<Mutex<Option<Closer>>>,
+    idle: Arc<Mutex<Watch>>,
     thread: Option<thread::JoinHandle<()>>,
 }
 
@@ -132,7 +149,7 @@ impl Worker {
     ) -> Self {
         let (commands, received) = mpsc::channel();
         let stopping = Arc::new(AtomicBool::new(false));
-        let idle = Arc::new(Mutex::new(None));
+        let idle = Arc::new(Mutex::new(Watch::default()));
         let mut worker = Self {
             account: account.id,
             commands: commands.clone(),
@@ -163,8 +180,9 @@ impl Worker {
                     sender: commands,
                     stopping,
                     idle,
-                    idling: false,
+                    idling: Arc::new(AtomicBool::new(false)),
                     retry: FIRST_RETRY,
+                    signed_out: false,
                 }
                 .run();
             });
@@ -181,10 +199,8 @@ impl Worker {
     }
 
     fn close_idle(&self) {
-        if let Ok(idle) = self.idle.lock()
-            && let Some(closer) = idle.as_ref()
-        {
-            closer.close();
+        if let Ok(idle) = self.idle.lock() {
+            idle.interrupt();
         }
     }
 
@@ -220,9 +236,10 @@ struct Runner {
     commands: Receiver<Command>,
     sender: Sender<Command>,
     stopping: Arc<AtomicBool>,
-    idle: Arc<Mutex<Option<Closer>>>,
-    idling: bool,
+    idle: Arc<Mutex<Watch>>,
+    idling: Arc<AtomicBool>,
     retry: Duration,
+    signed_out: bool,
 }
 
 fn connect(account: &Account, password: &str, network: &Network) -> Result<Session> {
@@ -254,7 +271,7 @@ impl Runner {
             self.status(Status::Connecting);
             let password = self.password()?;
             let session = connect(&self.account, &password, &self.network)?;
-            if session.has("IDLE") && !self.idling {
+            if session.has("IDLE") && !self.idling.load(Ordering::Relaxed) {
                 self.start_idle(password);
             }
             self.session = Some(session);
@@ -274,7 +291,8 @@ impl Runner {
         let Ok(Some(inbox)) = self.store.mailbox_with_role(self.account.id, Role::Inbox) else {
             return;
         };
-        self.idling = true;
+        self.idling.store(true, Ordering::Relaxed);
+        let idling = Arc::clone(&self.idling);
         let idle = Idle {
             account: self.account.clone(),
             password,
@@ -286,15 +304,25 @@ impl Runner {
         };
         let spawned = thread::Builder::new()
             .name(format!("mail-idle-{}", self.account.id))
-            .spawn(move || idle.run());
+            .spawn(move || {
+                idle.run();
+                idling.store(false, Ordering::Relaxed);
+            });
         if let Err(error) = spawned {
             tracing::warn!("cannot watch for new mail: {error}");
-            self.idling = false;
+            self.idling.store(false, Ordering::Relaxed);
         }
     }
 
     fn next_command(&mut self) -> Option<Command> {
-        let wait = match (self.session.is_some(), self.idling) {
+        if self.signed_out {
+            self.signed_out = false;
+            return match self.commands.recv() {
+                Ok(Command::Stop) | Err(_) => None,
+                Ok(command) => Some(command),
+            };
+        }
+        let wait = match (self.session.is_some(), self.idling.load(Ordering::Relaxed)) {
             (false, _) => self.retry,
             (true, false) => POLL_INTERVAL,
             (true, true) => FULL_SYNC_INTERVAL,
@@ -325,6 +353,9 @@ impl Runner {
             if let Command::Password(password) = command {
                 self.password = Some(password);
                 self.session = None;
+                if let Ok(idle) = self.idle.lock() {
+                    idle.interrupt();
+                }
                 command = Command::Sync;
             }
             self.attempt(&command);
@@ -336,7 +367,10 @@ impl Runner {
 
     fn attempt(&mut self, command: &Command) {
         let mut result = self.execute(command);
-        if matches!(&result, Err(error) if error.is_connection()) && self.session.is_some() {
+        if matches!(&result, Err(error) if error.is_connection())
+            && self.session.is_some()
+            && !matches!(command, Command::Send(_))
+        {
             self.session = None;
             result = self.execute(command);
         }
@@ -359,6 +393,7 @@ impl Runner {
             Error::Login(text) => {
                 self.password = None;
                 self.session = None;
+                self.signed_out = true;
                 self.status(Status::Offline);
                 self.emit(Event::LoginFailed(self.account.id, text));
             }
@@ -369,6 +404,7 @@ impl Runner {
                 self.emit(Event::Failed(self.account.id, error.to_string()));
             }
             error => {
+                self.signed_out = matches!(error, Error::Secret(_));
                 self.status(Status::Ready);
                 self.emit(Event::Failed(self.account.id, error.to_string()));
             }
@@ -467,7 +503,7 @@ impl Runner {
                 other => other?,
             }
         }
-        if !self.idling
+        if !self.idling.load(Ordering::Relaxed)
             && let Some(password) = self.password.clone()
             && self
                 .session
@@ -548,11 +584,32 @@ impl Runner {
             },
         )?;
         self.emit(Event::Sent(self.account.id));
+        let mut kept = self.file_sent(&raw, answering, replaces);
+        if matches!(&kept, Err(error) if error.is_connection()) {
+            self.session = None;
+            kept = self.file_sent(&raw, answering, replaces);
+        }
+        if let Err(error) = kept {
+            tracing::warn!("{}: sent, but cannot file it: {error}", self.account.email);
+            if error.is_connection() {
+                self.session = None;
+            }
+        }
+        Ok(())
+    }
+
+    fn file_sent(
+        &mut self,
+        raw: &[u8],
+        answering: Option<MessageId>,
+        replaces: Option<MessageId>,
+    ) -> Result<()> {
         let sent = self.store.mailbox_with_role(self.account.id, Role::Sent)?;
         if let Some(sent) = sent.filter(|_| !saves_sent_mail(&self.account.imap.host)) {
-            let session = self.session()?;
-            if let Err(error) = session.append(&sent.path, &[Flag::Seen], &raw) {
-                tracing::warn!("cannot keep a copy in {}: {error}", sent.path);
+            match self.session()?.append(&sent.path, &[Flag::Seen], raw) {
+                Err(error) if error.is_connection() => return Err(error),
+                Err(error) => tracing::warn!("cannot keep a copy in {}: {error}", sent.path),
+                Ok(()) => {}
             }
         }
         if let Some(original) = answering {
@@ -582,25 +639,30 @@ struct Idle {
     inbox: Mailbox,
     commands: Sender<Command>,
     stopping: Arc<AtomicBool>,
-    closer: Arc<Mutex<Option<Closer>>>,
+    closer: Arc<Mutex<Watch>>,
 }
 
 impl Idle {
     fn pause(&self, length: Duration) {
         let until = Instant::now() + length;
-        while Instant::now() < until && !self.stopping.load(Ordering::Relaxed) {
-            thread::sleep(Duration::from_millis(250));
+        while let Some(left) = until.checked_duration_since(Instant::now())
+            && !self.stopping.load(Ordering::Relaxed)
+        {
+            thread::park_timeout(left);
         }
     }
 
     fn run(self) {
+        if let Ok(mut watch) = self.closer.lock() {
+            watch.thread = Some(thread::current());
+        }
         let mut retry = FIRST_RETRY;
         while !self.stopping.load(Ordering::Relaxed) {
             let watched =
                 connect(&self.account, &self.password, &self.network).and_then(|mut session| {
                     session.select(&self.inbox.path)?;
-                    if let Ok(mut closer) = self.closer.lock() {
-                        *closer = session.closer().ok();
+                    if let Ok(mut watch) = self.closer.lock() {
+                        watch.closer = session.closer().ok();
                     }
                     if self.stopping.load(Ordering::Relaxed) {
                         return Ok(());

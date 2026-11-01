@@ -1,3 +1,4 @@
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::Path;
 use std::time::Duration;
 
@@ -223,11 +224,27 @@ fn joined(uids: &[u32]) -> String {
         .join(",")
 }
 
+fn scope_filter(scope: &Scope) -> (&'static str, Box<dyn rusqlite::ToSql>) {
+    match scope {
+        Scope::Mailbox(id) => ("m.mailbox = ?1", Box::new(*id)),
+        Scope::AllOf(role) => ("b.role = ?1", Box::new(role.name())),
+        Scope::Flagged => ("m.flagged = ?1", Box::new(true)),
+    }
+}
+
 impl Store {
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(parent)?;
         }
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .mode(0o600)
+            .open(path)?;
         let connection = Connection::open(path)?;
         connection.busy_timeout(Duration::from_secs(10))?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
@@ -522,11 +539,7 @@ impl Store {
     }
 
     pub fn summaries(&self, scope: &Scope, search: &str) -> Result<Vec<Summary>> {
-        let (filter, scope_value): (&str, Box<dyn rusqlite::ToSql>) = match scope {
-            Scope::Mailbox(id) => ("m.mailbox = ?1", Box::new(*id)),
-            Scope::AllOf(role) => ("b.role = ?1", Box::new(role.name())),
-            Scope::Flagged => ("m.flagged = ?1", Box::new(true)),
-        };
+        let (filter, scope_value) = scope_filter(scope);
         let searching = !search.trim().is_empty();
         let search_filter = match searching {
             true => {
@@ -717,11 +730,14 @@ impl Store {
     }
 
     pub fn unread(&self, scope: &Scope) -> Result<usize> {
+        let (filter, scope_value) = scope_filter(scope);
+        let query = format!(
+            "SELECT COUNT(*) FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
+             WHERE {filter} AND m.deleted = 0 AND m.seen = 0"
+        );
         Ok(self
-            .summaries(scope, "")?
-            .iter()
-            .filter(|summary| !summary.flags.seen)
-            .count())
+            .connection
+            .query_row(&query, [scope_value], |row| row.get(0))?)
     }
 }
 
