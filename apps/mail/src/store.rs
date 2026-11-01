@@ -735,9 +735,10 @@ impl Store {
             "SELECT COUNT(*) FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
              WHERE {filter} AND m.deleted = 0 AND m.seen = 0"
         );
-        Ok(self
+        let count: i64 = self
             .connection
-            .query_row(&query, [scope_value], |row| row.get(0))?)
+            .query_row(&query, [scope_value], |row| row.get(0))?;
+        Ok(usize::try_from(count).unwrap_or_default())
     }
 }
 
