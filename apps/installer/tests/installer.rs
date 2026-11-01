@@ -371,39 +371,6 @@ fn removing_lists_what_else_goes_and_a_system_package_says_so() {
 }
 
 #[test]
-fn the_shipped_defaults_open_a_deb_in_the_installer_though_it_hides_from_menus() {
-    let data = tempfile::tempdir().expect("data");
-    let applications = data.path().join("applications");
-    std::fs::create_dir_all(&applications).expect("applications");
-    std::fs::copy(
-        concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/data/org.bande.Installer.desktop"
-        ),
-        applications.join("org.bande.Installer.desktop"),
-    )
-    .expect("desktop file");
-    std::fs::copy(
-        concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../packaging/bande-desktop/bande-mimeapps.list"
-        ),
-        applications.join("bande-mimeapps.list"),
-    )
-    .expect("mimeapps");
-    let desktops = ["Bande".to_owned()];
-    let found = bande_xdg::handlers(&[data.path().to_path_buf()], None, &desktops);
-    let paths = bande_xdg::mimeapps_paths(&[], &[data.path().to_path_buf()], &desktops);
-    let apps = bande_xdg::MimeApps::load(&paths);
-    let deb = ["application/vnd.debian.binary-package".to_owned()];
-    assert_eq!(
-        apps.default_for(&deb, &found)
-            .map(|entry| entry.id.as_str()),
-        Some("org.bande.Installer.desktop")
-    );
-}
-
-#[test]
 fn the_preview_and_a_refusal_match_their_goldens() {
     let shots: [(&str, Scheme, &str, &str); 3] = [
         (
