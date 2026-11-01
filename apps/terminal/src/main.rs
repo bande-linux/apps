@@ -11,8 +11,9 @@ use bande_app::{
 };
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_terminal::{
-    COLUMNS, Command, GridSize, L10N, MenuCommand, Painter, ROWS, SETTINGS_SIZE, Session, Settings,
-    Terminal, app_menus, claim, left_behind, settings_view, window_file, windows_folder,
+    CLOSE_WINDOW, COLUMNS, Command, GridSize, L10N, MenuCommand, Painter, ROWS, SETTINGS_SIZE,
+    Session, Settings, Terminal, app_menus, claim, left_behind, settings_view, window_file,
+    windows_folder,
 };
 use bande_toolkit::Appearance;
 
@@ -189,8 +190,8 @@ impl Program for Terminals {
         Ok(terminals)
     }
 
-    fn menus(&self, _cx: &Cx<Self>) -> Menus {
-        app_menus()
+    fn menus(&self, cx: &Cx<Self>) -> Menus {
+        app_menus(cx.windows().next().is_some())
     }
 
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
@@ -202,6 +203,12 @@ impl Program for Terminals {
             }
             return;
         };
+        if command == CLOSE_WINDOW {
+            if self.should_close(cx, window) {
+                cx.close(window);
+            }
+            return;
+        }
         if let Some((shown, view)) = cx.window(window) {
             view.menu_action(shown, command);
             shown.request_redraw();

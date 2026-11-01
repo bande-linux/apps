@@ -21,7 +21,7 @@ pub use keys::{
     Command, MouseButton, MouseKind, bracketed, dropped_text, encode_key, mouse_report,
     next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
 };
-pub use menu::{MenuCommand, TerminalContext, app_menus, tab_menu, terminal_menu};
+pub use menu::{CLOSE_WINDOW, MenuCommand, TerminalContext, app_menus, tab_menu, terminal_menu};
 pub use panes::{Axis, Divider, Layout, Side};
 pub use process::{Report, Reports};
 pub use render::{DEFAULT_FONT_SIZE, Painter, Pane, TabBar};

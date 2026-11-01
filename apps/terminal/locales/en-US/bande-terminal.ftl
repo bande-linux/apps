@@ -39,6 +39,11 @@ confirm-close-other-tabs = Close the other tabs? { $count ->
 menu-shell = Shell
 menu-edit = Edit
 menu-view = View
+confirm-close-window = Close this window? { $count ->
+    [one] A program is still running in one tab.
+   *[other] Programs are still running in { $count } tabs.
+}
+menu-close-window = Close Window
 confirm-quit = Quit Terminal? { $count ->
     [one] A program is still running in one tab.
    *[other] Programs are still running in { $count } tabs.

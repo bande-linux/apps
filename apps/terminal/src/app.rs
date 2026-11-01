@@ -65,6 +65,7 @@ enum Pending {
     CloseTab(u32),
     ClosePane(u32),
     CloseOtherTabs(u32),
+    CloseWindow,
     Quit,
 }
 
@@ -625,9 +626,10 @@ impl TerminalWindow {
         let appearance = window.appearance();
         let button = match pending {
             Pending::Quit => L10N.tr("quit"),
-            Pending::CloseTab(_) | Pending::ClosePane(_) | Pending::CloseOtherTabs(_) => {
-                L10N.tr("close")
-            }
+            Pending::CloseTab(_)
+            | Pending::ClosePane(_)
+            | Pending::CloseOtherTabs(_)
+            | Pending::CloseWindow => L10N.tr("close"),
         };
         let text = self.painter.text_system().sharing_fonts();
         self.banner = Some(Banner::confirm(appearance, text, message, &button));
@@ -653,6 +655,11 @@ impl TerminalWindow {
                 }
             }
             Some(Pending::CloseOtherTabs(keep)) => self.remove_other_tabs(window, keep),
+            Some(Pending::CloseWindow) => {
+                while !self.tabs.is_empty() {
+                    self.close_tab(window, 0);
+                }
+            }
             Some(Pending::Quit) => self.asks.push(Ask::Quit),
             None => {}
         }
@@ -736,7 +743,7 @@ impl TerminalWindow {
         let stale = match self.pending {
             Some(Pending::CloseTab(id) | Pending::CloseOtherTabs(id)) => id == closed.id,
             Some(Pending::ClosePane(id)) => closed.session(id).is_some(),
-            Some(Pending::Quit) | None => false,
+            Some(Pending::CloseWindow | Pending::Quit) | None => false,
         };
         if stale {
             self.close_banner();
@@ -884,11 +891,13 @@ impl TerminalWindow {
     }
 
     pub fn close_by_button(&mut self, window: &mut Window) -> bool {
-        if self.tabs.len() == 1 && self.tabs[0].running_program().is_none() {
+        let busy = self.busy_tabs();
+        if busy == 0 {
             self.forget_window();
             return true;
         }
-        self.request_close_tab(window, self.active);
+        let message = L10N.tr_args("confirm-close-window", [("count", busy.into())]);
+        self.ask(window, &message, Pending::CloseWindow);
         self.settle(window);
         false
     }

@@ -102,6 +102,7 @@ const COPY_LINK: &str = "copy-link:";
 const CLOSE_TAB: &str = "close-tab:";
 const CLOSE_OTHER_TABS: &str = "close-other-tabs:";
 const SHOW_IN_FILES: &str = "show-in-files";
+pub const CLOSE_WINDOW: &str = "close-window";
 const REVEAL: &str = "reveal:";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -247,12 +248,16 @@ fn command_entries(commands: &[Option<Command>]) -> Vec<Entry> {
         .collect()
 }
 
-pub fn app_menus() -> Menus {
+pub fn app_menus(windowed: bool) -> Menus {
     let mut shell = command_entries(&[Some(Command::NewWindow), Some(Command::NewTab), None]);
-    shell.push(Entry::item(
-        &L10N.tr("menu-show-in-files"),
-        &MenuCommand::ShowInFiles.action(),
-    ));
+    shell.extend([
+        Entry::item(
+            &L10N.tr("menu-show-in-files"),
+            &MenuCommand::ShowInFiles.action(),
+        ),
+        Entry::separator(),
+        Entry::item(&L10N.tr("menu-close-window"), CLOSE_WINDOW).enabled(windowed),
+    ]);
     Menus {
         menus: vec![
             Entry::submenu(&L10N.tr("menu-shell"), shell),
