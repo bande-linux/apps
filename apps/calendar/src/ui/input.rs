@@ -251,6 +251,9 @@ fn scroll_by(view: &mut CalendarView, at: Point, step: f32, wheel: bool) -> bool
 }
 
 fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Event) -> bool {
+    if modifiers.logo {
+        return false;
+    }
     let editing = view.ui.focus().is_some();
     if editing {
         match key {
@@ -275,7 +278,7 @@ fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Eve
             _ => {}
         }
     }
-    let command = modifiers.control && !modifiers.logo;
+    let command = modifiers.control;
     match key {
         Key::Character(character) if command => match character.to_ascii_lowercase() {
             't' => menu_command(view, ACTION_TODAY),

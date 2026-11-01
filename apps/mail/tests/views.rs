@@ -309,6 +309,16 @@ fn archiving_moves_the_message_and_selects_the_next() {
     view.handle(&Event::Key {
         key: Key::Character('A'),
         modifiers: Modifiers {
+            logo: true,
+            shift: true,
+            ..Modifiers::default()
+        },
+    });
+    assert_eq!(view.selected(), Some(first));
+    assert_eq!(view.messages().len(), 4);
+    view.handle(&Event::Key {
+        key: Key::Character('A'),
+        modifiers: Modifiers {
             control: true,
             shift: true,
             ..Modifiers::default()

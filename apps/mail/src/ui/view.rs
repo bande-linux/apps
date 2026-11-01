@@ -1236,6 +1236,9 @@ impl MailView {
     }
 
     fn key(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        if modifiers.logo {
+            return false;
+        }
         if self.search_focused() {
             if key == Key::Escape {
                 self.ui.clear_focus();
@@ -1250,7 +1253,7 @@ impl MailView {
         {
             return self.menu_action(action);
         }
-        let plain = !modifiers.control && !modifiers.logo;
+        let plain = !modifiers.control;
         match key {
             Key::Up if plain => self.step(-1),
             Key::Down if plain => self.step(1),
