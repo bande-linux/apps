@@ -45,12 +45,7 @@ impl SavedWindow {
     }
 
     pub fn save(&self, file: &Path) -> io::Result<()> {
-        if let Some(folder) = file.parent() {
-            fs::create_dir_all(folder)?;
-        }
-        let staging = file.with_extension("new");
-        fs::write(&staging, self.to_text())?;
-        fs::rename(staging, file)
+        bande_xdg::replace_file(file, &self.to_text())
     }
 }
 
@@ -58,8 +53,16 @@ pub fn windows_folder() -> Option<PathBuf> {
     bande_xdg::state_home().map(|state| state.join("bande/terminal-windows"))
 }
 
-pub fn window_file(folder: &Path, pid: u32) -> PathBuf {
-    folder.join(format!("{pid}.{EXTENSION}"))
+pub fn window_file(folder: &Path, pid: u32, window: u32) -> PathBuf {
+    folder.join(format!("{pid}-{window}.{EXTENSION}"))
+}
+
+fn owner(file: &Path) -> Option<u32> {
+    let stem = file.file_stem()?.to_str()?;
+    stem.split_once('-')
+        .map_or(stem, |(pid, _)| pid)
+        .parse()
+        .ok()
 }
 
 pub fn left_behind(folder: &Path, running: impl Fn(u32) -> bool) -> Vec<PathBuf> {
@@ -73,12 +76,7 @@ pub fn left_behind(folder: &Path, running: impl Fn(u32) -> bool) -> Vec<PathBuf>
             path.extension()
                 .is_some_and(|extension| extension == EXTENSION)
         })
-        .filter(|path| {
-            path.file_stem()
-                .and_then(|stem| stem.to_str())
-                .and_then(|stem| stem.parse().ok())
-                .is_none_or(|pid| !running(pid))
-        })
+        .filter(|path| owner(path).is_none_or(|pid| !running(pid)))
         .collect();
     files.sort();
     files

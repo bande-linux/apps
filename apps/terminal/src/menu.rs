@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use bande_app_menu::{Entry, Standard, app_submenu_quitting_on, settings, window_submenu};
+use bande_app::Menus;
+use bande_app_menu::Entry;
 use bande_toolkit::ui::{Menu, MenuItem};
 use bande_xdg::path_from_file_uri;
 
@@ -95,9 +96,9 @@ const COMMANDS: [(Command, &str, &str, &str); 20] = [
     ),
 ];
 
-pub const CLOSE_TAB_SHORTCUT: &str = "Shift+Ctrl+W";
-pub const QUIT_SHORTCUT: &str = "Shift+Ctrl+Q";
-pub const SETTINGS_SHORTCUT: &str = "Shift+Ctrl+,";
+const CLOSE_TAB_SHORTCUT: &str = "Shift+Ctrl+W";
+#[cfg(test)]
+const SETTINGS_SHORTCUT: &str = "Shift+Ctrl+,";
 const OPEN_LINK: &str = "open-link:";
 const COPY_LINK: &str = "copy-link:";
 const CLOSE_TAB: &str = "close-tab:";
@@ -248,61 +249,52 @@ fn command_entries(commands: &[Option<Command>]) -> Vec<Entry> {
         .collect()
 }
 
-pub fn app_menus() -> Vec<Entry> {
+pub fn app_menus() -> Menus {
     let mut shell = command_entries(&[Some(Command::NewWindow), Some(Command::NewTab), None]);
-    shell.extend([
-        Entry::item(
-            &L10N.tr("menu-show-in-files"),
-            &MenuCommand::ShowInFiles.action(),
-        ),
-        Entry::separator(),
-        Entry::item(&L10N.tr("menu-close-tab"), Standard::CloseWindow.action())
-            .shortcut(CLOSE_TAB_SHORTCUT),
-    ]);
-    vec![
-        app_submenu_quitting_on(
-            &L10N.tr("title"),
-            env!("CARGO_PKG_VERSION"),
-            vec![settings().shortcut(SETTINGS_SHORTCUT)],
-            QUIT_SHORTCUT,
-        ),
-        Entry::submenu(&L10N.tr("menu-shell"), shell),
-        Entry::submenu(
-            &L10N.tr("menu-edit"),
-            command_entries(&[
-                Some(Command::Copy),
-                Some(Command::Paste),
-                Some(Command::SelectAll),
-                None,
-                Some(Command::ClearScrollback),
-                None,
-                Some(Command::Find),
-                Some(Command::FindNext),
-                Some(Command::FindPrevious),
-                None,
-                Some(Command::PreviousPrompt),
-                Some(Command::NextPrompt),
-            ]),
-        ),
-        Entry::submenu(
-            &L10N.tr("menu-view"),
-            command_entries(&[
-                Some(Command::BiggerText),
-                Some(Command::SmallerText),
-                Some(Command::DefaultTextSize),
-                None,
-                Some(Command::SplitSideBySide),
-                Some(Command::SplitStacked),
-            ]),
-        ),
-        window_submenu(command_entries(&[
+    shell.push(Entry::item(
+        &L10N.tr("menu-show-in-files"),
+        &MenuCommand::ShowInFiles.action(),
+    ));
+    Menus {
+        menus: vec![
+            Entry::submenu(&L10N.tr("menu-shell"), shell),
+            Entry::submenu(
+                &L10N.tr("menu-edit"),
+                command_entries(&[
+                    Some(Command::Copy),
+                    Some(Command::Paste),
+                    Some(Command::SelectAll),
+                    None,
+                    Some(Command::ClearScrollback),
+                    None,
+                    Some(Command::Find),
+                    Some(Command::FindNext),
+                    Some(Command::FindPrevious),
+                    None,
+                    Some(Command::PreviousPrompt),
+                    Some(Command::NextPrompt),
+                ]),
+            ),
+            Entry::submenu(
+                &L10N.tr("menu-view"),
+                command_entries(&[
+                    Some(Command::BiggerText),
+                    Some(Command::SmallerText),
+                    Some(Command::DefaultTextSize),
+                    None,
+                    Some(Command::SplitSideBySide),
+                    Some(Command::SplitStacked),
+                ]),
+            ),
+        ],
+        window: command_entries(&[
             Some(Command::NextTab),
             Some(Command::PreviousTab),
             None,
             Some(Command::NextPane),
             Some(Command::PreviousPane),
-        ])),
-    ]
+        ]),
+    }
 }
 
 #[cfg(test)]

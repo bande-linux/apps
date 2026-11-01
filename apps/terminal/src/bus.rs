@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -11,13 +12,14 @@ const LAUNCHER_INTERFACE: &str = "com.canonical.Unity.LauncherEntry";
 const LAUNCHER_PATH: &str = "/org/bande/Terminal";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Outgoing {
+enum Outgoing {
     Badge(u32),
     Notify { summary: String, body: String },
 }
 
 pub struct Bus {
     sender: Option<Sender<Outgoing>>,
+    badges: RefCell<HashMap<u32, u32>>,
 }
 
 impl Bus {
@@ -31,10 +33,31 @@ impl Bus {
         }
         Self {
             sender: started.ok().map(|_| sender),
+            badges: RefCell::new(HashMap::new()),
         }
     }
 
-    pub fn send(&self, outgoing: Outgoing) {
+    pub fn set_badge(&self, window: u32, count: u32) {
+        let total = {
+            let mut badges = self.badges.borrow_mut();
+            let before: u32 = badges.values().sum();
+            match count {
+                0 => badges.remove(&window),
+                count => badges.insert(window, count),
+            };
+            let total: u32 = badges.values().sum();
+            (total != before).then_some(total)
+        };
+        if let Some(total) = total {
+            self.send(Outgoing::Badge(total));
+        }
+    }
+
+    pub fn notify(&self, summary: String, body: String) {
+        self.send(Outgoing::Notify { summary, body });
+    }
+
+    fn send(&self, outgoing: Outgoing) {
         if let Some(sender) = &self.sender
             && sender.send(outgoing).is_err()
         {

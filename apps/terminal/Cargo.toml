@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 accesskit.workspace = true
+bande-app.workspace = true
 alacritty_terminal.workspace = true
 tracing.workspace = true
 zbus.workspace = true

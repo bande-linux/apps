@@ -743,6 +743,7 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "alacritty_terminal",
+ "bande-app",
  "bande-app-menu",
  "bande-app-settings",
  "bande-design",
