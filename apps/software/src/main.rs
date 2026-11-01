@@ -1,6 +1,8 @@
+use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 use std::time::Instant;
 
+use bande_packages::{Client, debian_arch};
 use bande_software::{L10N, Software, WINDOW_SIZE, desktop_ids, installed_keys};
 use bande_toolkit::{App, Role, Scene, TextSystem, Window, WindowEvent};
 
@@ -32,6 +34,15 @@ impl App for Running {
         window.request_redraw();
     }
 
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        vec![self.software.fd()]
+    }
+
+    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+        self.software.pump();
+        window.request_redraw();
+    }
+
     fn deadline(&self) -> Option<Instant> {
         self.software.deadline()
     }
@@ -50,7 +61,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let appearance = window.appearance();
     let apps = bande_catalog::system_catalog();
     let installed = installed_keys(&apps, &desktop_ids(&bande_xdg::data_dirs()));
-    let mut software = Software::new(apps, installed, appearance.palette(), TextSystem::new());
+    let system = zbus::blocking::Connection::system()?;
+    let mut software = Software::new(
+        apps,
+        installed,
+        Client::new(&system),
+        debian_arch(),
+        appearance.palette(),
+        TextSystem::new(),
+    )?;
     software.ui().set_appearance(appearance);
     bande_toolkit::run(&mut window, &mut Running { software })?;
     Ok(())

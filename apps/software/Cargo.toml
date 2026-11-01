@@ -11,18 +11,22 @@ repository.workspace = true
 accesskit.workspace = true
 tracing.workspace = true
 bande-catalog.workspace = true
+bande-inbox.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
+bande-packages.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 bande-golden.workspace = true
+bande-test-bus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "admin"
-depends = "$auto, appstream, fonts-inter"
+depends = "$auto, appstream, packagekit, bande-polkit, fonts-inter"
 extended-description = """\
 The app store of the Bande desktop: browse and search the apps Debian and \
 Flathub describe with AppStream, read about them before installing, and \

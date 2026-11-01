@@ -1,10 +1,14 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::HashSet;
+use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Role, TreeId};
 use bande_catalog::{Block, Bundle, Category, Component, Release};
+use bande_packages::Client;
 use bande_software::{Page, Software, WINDOW_SIZE, installed_keys};
+use bande_test_bus::SessionBus;
+use bande_test_bus::packagekit::{FakePackage, FakePackageKit, Script};
 use bande_toolkit::{CpuRenderer, Palette, Scheme, TextSystem, WINDOW_HEADER_HEIGHT, framed_scene};
 
 fn app(id: &str, name: &str, summary: &str, categories: &[&str]) -> Component {
@@ -31,6 +35,7 @@ fn catalogue() -> Vec<Component> {
         Block::Paragraph("Calculator solves mathematical equations.".to_owned()),
         Block::List(vec!["Basic".to_owned(), "Advanced".to_owned()]),
     ];
+    calculator.launchable = Some("org.gnome.Calculator.desktop".to_owned());
     calculator.releases = vec![Release {
         version: "48.1".to_owned(),
         timestamp: None,
@@ -70,14 +75,35 @@ fn catalogue() -> Vec<Component> {
     ]
 }
 
-fn open(scheme: Scheme) -> Software {
+struct Opened {
+    software: Software,
+    fake: FakePackageKit,
+    _bus: SessionBus,
+}
+
+fn open_with(scheme: Scheme, script: Script) -> Opened {
+    let bus = SessionBus::start().expect("dbus-daemon");
+    let fake = FakePackageKit::start(&bus, script).expect("fake PackageKit");
+    let system = bus.connect().expect("connection");
     let installed = HashSet::from(["org.gnome.TextEditor".to_owned()]);
-    Software::new(
+    let software = Software::new(
         catalogue(),
         installed,
+        Client::new(&system),
+        "arm64",
         Palette::for_scheme(scheme),
         TextSystem::new(),
     )
+    .expect("software");
+    Opened {
+        software,
+        fake,
+        _bus: bus,
+    }
+}
+
+fn open(scheme: Scheme) -> Opened {
+    open_with(scheme, Script::default())
 }
 
 fn nodes(software: &mut Software) -> Vec<(accesskit::NodeId, accesskit::Node)> {
@@ -149,23 +175,21 @@ fn listed(software: &mut Software) -> Vec<String> {
 
 #[test]
 fn discover_lists_apps_by_name_and_hides_x11_ones() {
-    let mut software = open(Scheme::Light);
-    assert_eq!(listed(&mut software), APPS);
-    assert!(
-        !texts(&mut software)
-            .iter()
-            .any(|text| text.contains("XTerm"))
-    );
+    let mut opened = open(Scheme::Light);
+    let software = &mut opened.software;
+    assert_eq!(listed(software), APPS);
+    assert!(!texts(software).iter().any(|text| text.contains("XTerm")));
 }
 
 #[test]
 fn typing_filters_the_list_in_rank_order() {
-    let mut software = open(Scheme::Light);
-    type_search(&mut software, "edit");
-    assert_eq!(listed(&mut software), ["Text Editor", "GIMP"]);
-    type_search(&mut software, "nothing like this");
+    let mut opened = open(Scheme::Light);
+    let software = &mut opened.software;
+    type_search(software, "edit");
+    assert_eq!(listed(software), ["Text Editor", "GIMP"]);
+    type_search(software, "nothing like this");
     assert!(
-        texts(&mut software)
+        texts(software)
             .iter()
             .any(|text| text.contains("No apps match"))
     );
@@ -173,10 +197,11 @@ fn typing_filters_the_list_in_rank_order() {
 
 #[test]
 fn an_app_page_shows_its_details_and_back_returns_to_the_list() {
-    let mut software = open(Scheme::Light);
-    click(&mut software, "Calculator");
+    let mut opened = open(Scheme::Light);
+    let software = &mut opened.software;
+    click(software, "Calculator");
     assert_eq!(software.page(), Page::App(0));
-    let shown = texts(&mut software);
+    let shown = texts(software);
     for expected in [
         "by The GNOME Project",
         "Calculator solves mathematical equations.",
@@ -190,21 +215,21 @@ fn an_app_page_shows_its_details_and_back_returns_to_the_list() {
             "{expected} missing from {shown:?}"
         );
     }
-    click(&mut software, "Back");
+    click(software, "Back");
     assert_eq!(software.page(), Page::Discover);
 }
 
 #[test]
 fn the_installed_section_lists_installed_apps() {
-    let mut software = open(Scheme::Light);
+    let mut opened = open(Scheme::Light);
+    let software = &mut opened.software;
     software.show(Page::Installed);
-    assert_eq!(listed(&mut software), ["Text Editor"]);
+    assert_eq!(listed(software), ["Text Editor"]);
 }
 
 #[test]
 fn installed_apps_match_desktop_entries_by_launchable_or_id() {
-    let mut apps = catalogue();
-    apps[0].launchable = Some("org.gnome.Calculator.desktop".to_owned());
+    let apps = catalogue();
     let desktop_ids = HashSet::from([
         "org.gnome.Calculator.desktop".to_owned(),
         "org.gimp.GIMP.desktop".to_owned(),
@@ -217,10 +242,11 @@ fn installed_apps_match_desktop_entries_by_launchable_or_id() {
 
 #[test]
 fn the_utilities_page_matches_its_golden() {
-    let mut software = open(Scheme::Light);
+    let mut opened = open(Scheme::Light);
+    let software = &mut opened.software;
     software.show(Page::Category(Category::Utilities));
     assert_eq!(
-        listed(&mut software),
+        listed(software),
         ["Calculator", "Characters", "Text Editor"]
     );
     let content = software
@@ -239,4 +265,68 @@ fn the_utilities_page_matches_its_golden() {
         .render_into(&scene, 1.0, &mut rgba)
         .expect("frame");
     bande_golden::assert_golden_rgba!("utilities-light", size, rgba);
+}
+
+fn until(software: &mut Software, done: impl Fn(&mut Software) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        software.pump();
+        if done(software) {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "never got there: {:?}",
+            texts(software)
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn calculator_packages() -> Vec<FakePackage> {
+    vec![
+        FakePackage::new(2, "gnome-calculator;48.1-1;amd64;debian", "", 0),
+        FakePackage::new(2, "gnome-calculator;48.1-1;arm64;debian", "", 0),
+    ]
+}
+
+#[test]
+fn install_resolves_the_native_package_and_ends_with_open() {
+    let mut opened = open_with(
+        Scheme::Light,
+        Script {
+            available: calculator_packages(),
+            ..Script::default()
+        },
+    );
+    let software = &mut opened.software;
+    click(software, "Calculator");
+    click(software, "Install");
+    until(software, |software| {
+        buttons(software).contains(&"Open".to_owned())
+    });
+    let installs = opened.fake.called("InstallPackages");
+    assert_eq!(installs.len(), 1);
+    assert_eq!(installs[0].args, ["gnome-calculator;48.1-1;arm64;debian"]);
+}
+
+#[test]
+fn a_failed_install_says_why_and_offers_install_again() {
+    let mut opened = open_with(
+        Scheme::Light,
+        Script {
+            available: calculator_packages(),
+            failures: [("InstallPackages".to_owned(), (4, "no network".to_owned()))].into(),
+            ..Script::default()
+        },
+    );
+    let software = &mut opened.software;
+    click(software, "Calculator");
+    click(software, "Install");
+    until(software, |software| {
+        texts(software).iter().any(|text| {
+            text.starts_with("Couldn’t install Calculator") && text.contains("no network")
+        })
+    });
+    assert!(buttons(software).contains(&"Install".to_owned()));
 }

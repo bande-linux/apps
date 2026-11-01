@@ -1,14 +1,21 @@
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::io;
+use std::os::fd::BorrowedFd;
 use std::rc::Rc;
+use std::sync::mpsc::Sender;
 
 use bande_catalog::{Block, Bundle, Category, Component, search};
+use bande_inbox::Inbox;
+use bande_packages::{Client, Progress};
 use bande_toolkit::ui::{
-    Axis, Button, Context, Label, PopUpButton, ScrollView, SearchField, Stack, Ui, Widget, WidgetId,
+    Axis, Button, Context, Label, PopUpButton, ProgressBar, ScrollView, SearchField, Stack, Ui,
+    Widget, WidgetId,
 };
 use bande_toolkit::{Palette, TextSystem};
 
 use crate::L10N;
+use crate::worker::{self, Job, Message};
 
 pub const WINDOW_SIZE: (u32, u32) = (720, 640);
 const SPACING: f32 = 12.0;
@@ -28,6 +35,8 @@ enum Intent {
     Show(Page),
     Search(String),
     Back,
+    Install(usize),
+    Open(usize),
 }
 
 type Widgets = Vec<Box<dyn Widget>>;
@@ -74,9 +83,20 @@ fn source(bundle: &Bundle) -> String {
     }
 }
 
+fn deb(app: &Component) -> Option<&str> {
+    app.bundles.iter().find_map(|bundle| match bundle {
+        Bundle::Deb(package) => Some(package.as_str()),
+        Bundle::Flatpak { .. } => None,
+    })
+}
+
 pub struct Software {
     apps: Vec<Component>,
     installed: HashSet<String>,
+    installing: HashMap<String, Progress>,
+    failed: HashMap<String, String>,
+    jobs: Sender<Job>,
+    inbox: Inbox<Message>,
     page: Page,
     section: Page,
     query: String,
@@ -90,9 +110,12 @@ impl Software {
     pub fn new(
         apps: Vec<Component>,
         installed: HashSet<String>,
+        client: Client,
+        arch: &str,
         palette: Palette,
         text: TextSystem,
-    ) -> Self {
+    ) -> io::Result<Self> {
+        let (jobs, inbox) = worker::start(client, arch.to_owned())?;
         let intents: Rc<RefCell<Vec<Intent>>> = Rc::default();
         let typed = Rc::clone(&intents);
         let search = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
@@ -111,6 +134,10 @@ impl Software {
         let mut software = Self {
             apps: apps.into_iter().filter(|app| !app.needs_x11).collect(),
             installed,
+            installing: HashMap::new(),
+            failed: HashMap::new(),
+            jobs,
+            inbox,
             page: Page::Discover,
             section: Page::Discover,
             query: String::new(),
@@ -120,7 +147,11 @@ impl Software {
             picker: picker_id,
         };
         software.rebuild();
-        software
+        Ok(software)
+    }
+
+    pub fn fd(&self) -> BorrowedFd<'_> {
+        self.inbox.fd()
     }
 
     pub fn ui(&mut self) -> &mut Ui {
@@ -145,9 +176,13 @@ impl Software {
     }
 
     pub fn pump(&mut self) -> bool {
+        let messages = self.inbox.drain();
         let intents: Vec<Intent> = self.intents.borrow_mut().drain(..).collect();
-        if intents.is_empty() {
+        if messages.is_empty() && intents.is_empty() {
             return false;
+        }
+        for message in messages {
+            self.receive(message);
         }
         for intent in intents {
             match intent {
@@ -161,10 +196,100 @@ impl Software {
                     self.page = self.section;
                 }
                 Intent::Back => self.page = self.section,
+                Intent::Install(index) => self.install(index),
+                Intent::Open(index) => self.open(index),
             }
         }
         self.rebuild();
         true
+    }
+
+    fn receive(&mut self, message: Message) {
+        match message {
+            Message::Progress(key, progress) => {
+                self.installing.insert(key, progress);
+            }
+            Message::Installed(key) => {
+                self.installing.remove(&key);
+                self.installed.insert(key);
+            }
+            Message::Failed(key, details) => {
+                self.installing.remove(&key);
+                self.failed.insert(key, details);
+            }
+        }
+    }
+
+    fn install(&mut self, index: usize) {
+        let Some(app) = self.apps.get(index) else {
+            return;
+        };
+        let Some(package) = deb(app) else {
+            return;
+        };
+        let key = app.key().to_owned();
+        self.failed.remove(&key);
+        self.installing.insert(key.clone(), Progress::default());
+        let job = Job::Install {
+            key,
+            package: package.to_owned(),
+        };
+        if self.jobs.send(job).is_err() {
+            tracing::warn!("the software worker stopped");
+        }
+    }
+
+    fn open(&self, index: usize) {
+        let Some(launchable) = self.apps.get(index).and_then(|app| app.launchable.clone()) else {
+            return;
+        };
+        let entries = bande_xdg::applications(
+            &bande_xdg::data_dirs(),
+            None,
+            &bande_xdg::current_desktops(),
+        );
+        let entry = entries.iter().find(|entry| {
+            entry.path.file_name().and_then(|name| name.to_str()) == Some(launchable.as_str())
+        });
+        if let Some(entry) = entry
+            && let Err(error) = bande_xdg::launch(entry, None)
+        {
+            tracing::warn!("cannot open {}: {error}", entry.name);
+        }
+    }
+
+    fn actions(&self, index: usize, app: &Component) -> Widgets {
+        let key = app.key();
+        let row =
+            |button: Button| boxed(Stack::new(Axis::Horizontal, 0.0, 0.0, vec![boxed(button)]));
+        let mut widgets: Widgets = Vec::new();
+        if let Some(progress) = self.installing.get(key) {
+            let status = L10N.tr("installing");
+            widgets.push(boxed(ProgressBar::new(
+                &status,
+                progress.percent.map(|percent| percent as f32 / 100.0),
+            )));
+        } else if self.installed.contains(key) {
+            if app.launchable.is_some() {
+                widgets.push(row(self
+                    .button(&L10N.tr("open"), Intent::Open(index))
+                    .primary()));
+            }
+        } else if deb(app).is_some() {
+            widgets.push(row(self
+                .button(&L10N.tr("install"), Intent::Install(index))
+                .primary()));
+        }
+        if let Some(details) = self.failed.get(key) {
+            widgets.push(boxed(Label::new(&L10N.tr_args(
+                "install-failed",
+                [
+                    ("name", app.name.clone().into()),
+                    ("details", details.clone().into()),
+                ],
+            ))));
+        }
+        widgets
     }
 
     fn button(&self, title: &str, intent: Intent) -> Button {
@@ -239,7 +364,7 @@ impl Software {
         widgets
     }
 
-    fn details(&self, app: &Component) -> Widgets {
+    fn details(&self, index: usize, app: &Component) -> Widgets {
         let mut widgets = vec![
             boxed(Stack::new(
                 Axis::Horizontal,
@@ -249,6 +374,7 @@ impl Software {
             )),
             boxed(Label::heading(&app.name)),
         ];
+        widgets.extend(self.actions(index, app));
         if let Some(developer) = &app.developer {
             widgets.push(boxed(Label::new(
                 &L10N.tr_args("by-developer", [("developer", developer.clone().into())]),
@@ -307,7 +433,7 @@ impl Software {
     fn rebuild(&mut self) {
         let widgets = match self.page {
             Page::App(index) => match self.apps.get(index) {
-                Some(app) => self.details(app),
+                Some(app) => self.details(index, app),
                 None => self.list(),
             },
             Page::Discover | Page::Category(_) | Page::Installed => self.list(),

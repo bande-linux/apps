@@ -1,4 +1,5 @@
 mod view;
+mod worker;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
