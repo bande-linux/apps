@@ -152,3 +152,13 @@ re-issued every 25 min; the list paints only visible rows; the UI has no timers 
   from this repo).
 - Then the release itself: version is already 0.1.0 in both; tag on main, CI builds and the
   archive publishes.
+
+## Component review 2026-11-01 evening: apps
+
+After the move onto bande-app (full list in the desktop's `NOTES/plans/release-review.md`).
+Fixed: Software and Package Installer animate again and Software's search gives a text input
+area (`35c268f`); Calendar reads an opened `.ics` only if it is a regular file up to 64 MiB, so a
+FIFO or huge file cannot hang the running instance (`0225635`); unused `bande-log` dropped from
+Monitor and Terminal (`56bb215`). Not fixed (low): Activity Monitor's search field has no text
+input area (no `text_input_area` on `Screen`); Terminal reloads a settings change once per window;
+closing the main window quits Activity Monitor and Mail (owner decision).
