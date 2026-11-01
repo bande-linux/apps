@@ -17,13 +17,15 @@ apt install bande-<name>
 | `template/` | a starting point; never built or published |
 | `rust-toolchain.toml` | the Rust toolchain for every app, the same as the desktop's |
 | `ci/` | the build, the same in CI and locally |
+| `ci/gate.sh [app...]` | the local merge gate: fmt, clippy `-D warnings` and tests, `--locked`, one shared `target/` |
+| `ci/bump-desktop.sh [REV]` | pins every app to one `bande-linux/desktop` commit (default: main) and runs the gate |
 
 ## Adding an app
 
 1. Copy `template/` to `apps/<name>/`.
 2. Set `name = "bande-<name>"` in its `Cargo.toml`, fill in `[package.metadata.deb]` (keep
    `depends = "$auto"`), and run `cargo generate-lockfile`.
-3. Push to `main`.
+3. Run `ci/gate.sh <name>`, then merge to `main`.
 
 ## How it's built and published
 
