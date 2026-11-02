@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=Clock
+GenericName=Clock
+Comment=Alarms, timers, a stopwatch and the time around the world
+Icon=org.bande.Clock
+Exec=bande-clock %U
+Categories=Utility;Clock;
+Keywords=alarm;timer;stopwatch;world;time;zone;countdown;
+StartupNotify=true
+Actions=new-alarm;new-timer;
+
+[Desktop Action new-alarm]
+Name=New Alarm
+Exec=bande-clock --new-alarm
+
+[Desktop Action new-timer]
+Name=New Timer
+Exec=bande-clock --new-timer

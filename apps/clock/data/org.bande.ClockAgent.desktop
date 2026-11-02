@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Clock Alarms
+Comment=Rings Clock's alarms and timers when Clock is closed
+Exec=bande-clock --background
+TryExec=bande-clock
+Icon=org.bande.Clock
+NoDisplay=true
+OnlyShowIn=Bande;

@@ -57,7 +57,7 @@ impl Images {
         {
             return Some(uploaded.clone());
         }
-        let uploaded = Image::from_rgba(image.width, image.height, image.rgba.to_vec())?;
+        let uploaded = Image::shared(image.width, image.height, Arc::clone(&image.premultiplied))?;
         self.uploaded.push((Arc::clone(image), uploaded.clone()));
         Some(uploaded)
     }
