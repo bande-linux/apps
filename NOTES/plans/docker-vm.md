@@ -447,8 +447,30 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 - **highmem:** left at QEMU's default. The guest under TCG saw 4 vCPUs (`CPU part 0x051`, `max`)
   and booted UEFI from qcow2 vars. Under KVM, QEMU clamps the high regions to the host IPA
   size by itself, which is unconfirmed until a KVM run.
-- **Still open for the first KVM run:** time to SSH, guest `dmesg` for the PMU, arch timer and
-  vGIC, and whether `-cpu host` with E/P migration shows any fault.
+- **First KVM run (2026-11-02, bande-vm's own argv, QEMU run through `sg kvm` because the
+  lingering user manager predates the owner's `kvm` group):**
+  - Time to SSH: **21.9 s** on the first boot with cloud-init, **16.5 s** warm (4 vCPU, 4 GiB,
+    Debian 13). The guest's kernel + userspace take 7.1 s (`systemd-analyze`), so ~9 s go to
+    QEMU, AAVMF and GRUB before the kernel. The ≤ 8 s target is not met; the next step is to
+    time the firmware and try a shorter UEFI path (boot order, GRUB timeout, direct kernel).
+  - Guest `dmesg`: PMU `armv8_pmuv3_0` with 2 counters (KVM's spoofed PMUv3); `arch_timer`
+    virtual timer at 24 MHz; GICv3 with ITS, a redistributor per vCPU; PSCI 1.3; vCPUs report
+    MIDR `0x611f0320` (Blizzard, the E-core where they were initialised). One
+    `hrtimer: interrupt took 12 ms` at boot, nothing else.
+  - E/P migration: with 4 busy guest vCPUs, the vCPU threads were moved between CPUs 0–3 and
+    4–7 every 0.5 s for 60 s (116 moves): no new guest messages, no fault, and the guest clock
+    stayed within SSH latency of the host's. No pinning needed.
+  - highmem: QEMU drops the high PCIe window for the M2's IPA size by itself; the guest has only
+    the 32-bit window `0x10000000–0x3efeffff` and RAM above 4 GiB (`0x47ff0000–0x13fffffff`).
+    Fine for virtio; large BARs (virtio-gpu blobs at V3) will need a check.
+- **passt and AppArmor:** Debian's `passt` profile only lets it write under `/tmp`, `/var/tmp`
+  and `$HOME`, so a socket in `$XDG_RUNTIME_DIR` fails with `EACCES` (the spike used an
+  unconfined copy). bande-vm keeps passt's socket and pid file in a private
+  `/tmp/velox-<uid>/<id>` (0700, owner checked).
+- **KVM in the user manager:** the VM's QEMU runs under `user@<uid>.service`, so it has the
+  manager's groups, not the app's. Readiness checks the manager's groups (and the seat ACL) and
+  shows "Log out and back in to finish" when only the session or `/etc/group` has `kvm`; with
+  lingering on, only a restart refreshes the manager.
 
 ## Milestones (each mergeable on its own; desktop items merge there first and arrive with a bump)
 
