@@ -11,6 +11,7 @@ use super::panel::{Arrow, Line, Panel, Width};
 use super::{L10N, Signal, Signals, sender};
 use crate::edit::{Alert, Details, EndRepeat, Repeat};
 use crate::ical::Event;
+use crate::invite::{Answer, Invitee, invitees, my_answer, parse_addresses};
 use crate::store::Found;
 
 const WIDTH: f32 = 320.0;
@@ -28,6 +29,7 @@ pub struct Inspector {
     texts: [String; 4],
     end_kind: usize,
     end_text: String,
+    invite_text: String,
     calendars: Vec<usize>,
     calendar_choice: usize,
     original_calendar: usize,
@@ -124,6 +126,48 @@ pub(crate) fn alert_title(alert: Alert) -> String {
     }
 }
 
+fn answer_title(answer: Answer) -> String {
+    L10N.tr(match answer {
+        Answer::Accepted => "answer-accept",
+        Answer::Tentative => "answer-maybe",
+        Answer::Declined => "answer-decline",
+        Answer::Pending => "answer-pending",
+    })
+}
+
+fn invitee_lines(panel: &mut Panel, invited: &[Invitee]) {
+    if invited.is_empty() {
+        return;
+    }
+    let text = invited
+        .iter()
+        .map(|invitee| {
+            let name = match invitee.name.is_empty() {
+                true => invitee.address.clone(),
+                false => invitee.name.clone(),
+            };
+            let status = match invitee.organizer {
+                true => L10N.tr("invitee-organizer"),
+                false => L10N.tr(match invitee.answer {
+                    Answer::Accepted => "invitee-accepted",
+                    Answer::Tentative => "invitee-tentative",
+                    Answer::Declined => "invitee-declined",
+                    Answer::Pending => "invitee-pending",
+                }),
+            };
+            format!("{name} · {status}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let shown = invited.len().min(8);
+    let label = panel.add(Label::new(&text));
+    panel.line(Line::new(
+        Some(&L10N.tr("invitees")),
+        vec![(label, Width::Fill)],
+        18.0 * shown as f32,
+    ));
+}
+
 fn end_of(end: EndRepeat) -> (usize, String) {
     match end {
         EndRepeat::Never => (0, String::new()),
@@ -146,6 +190,7 @@ fn details_of(found: &Found, event: &Event, local: &TimeZone) -> Details {
         repeat: Repeat::of(event.rule.as_ref()),
         end_repeat: EndRepeat::of(event.rule.as_ref(), &event.start, local),
         alert: Alert::of(&event.alarms, all_day),
+        invitees: Vec::new(),
     }
 }
 
@@ -158,6 +203,7 @@ fn with_current<T: PartialEq + Copy>(choices: &[T], current: T) -> Vec<T> {
 }
 
 impl Inspector {
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         signals: &Signals,
         found: Found,
@@ -166,7 +212,14 @@ impl Inspector {
         calendars: Vec<(usize, String)>,
         anchor: Option<Rect>,
         local: &TimeZone,
+        me: Option<&str>,
     ) -> (Panel, Self) {
+        let invited = invitees(event);
+        let answered = me.and_then(|me| my_answer(event, me));
+        let organizing = me.is_some()
+            && invited.first().is_none_or(|first| {
+                first.organizer && me.is_some_and(|me| first.address.eq_ignore_ascii_case(me))
+            });
         let details = details_of(&found, event, local);
         let (end_kind, end_text) = end_of(details.end_repeat);
         let last_day = match details.all_day {
@@ -212,6 +265,7 @@ impl Inspector {
                     18.0 * details.notes.lines().count().clamp(1, 6) as f32,
                 ));
             }
+            invitee_lines(&mut panel, &invited);
             let note = panel.add(Label::new(&L10N.tr("read-only")));
             panel.line(Line::new(None, vec![(note, Width::Fill)], 18.0).separated());
         } else {
@@ -324,6 +378,35 @@ impl Inspector {
                 vec![(alert, Width::Fill)],
                 ROW,
             ));
+            invitee_lines(&mut panel, &invited);
+            if let Some(answered) = answered {
+                let buttons: Vec<_> = Answer::CHOICES
+                    .iter()
+                    .enumerate()
+                    .map(|(index, choice)| {
+                        let send = sender(signals);
+                        let button = Button::new(&answer_title(*choice), move || {
+                            send(Signal::Answer(index))
+                        });
+                        let button = match *choice == answered {
+                            true => button.primary(),
+                            false => button,
+                        };
+                        (panel.add(button), Width::Fill)
+                    })
+                    .collect();
+                panel.line(Line::new(Some(&L10N.tr("my-answer")), buttons, ROW));
+            } else if organizing {
+                let send = sender(signals);
+                let field = panel.add(TextField::new(&L10N.tr("add-invitees"), "", move |text| {
+                    send(Signal::Invitees(text.to_owned()))
+                }));
+                panel.line(Line::new(
+                    Some(&L10N.tr("invitees")),
+                    vec![(field, Width::Fill)],
+                    ROW,
+                ));
+            }
             let send = sender(signals);
             let names: Vec<&str> = calendars.iter().map(|(_, name)| name.as_str()).collect();
             let selected = calendars
@@ -374,6 +457,7 @@ impl Inspector {
             texts,
             end_kind,
             end_text,
+            invite_text: String::new(),
             calendars: calendars.into_iter().map(|(index, _)| index).collect(),
             calendar_choice: selected,
             repeats,
@@ -441,6 +525,7 @@ impl Inspector {
             Signal::Calendar(index) => self.calendar_choice = *index,
             Signal::EndRepeatKind(index) => self.end_kind = *index,
             Signal::EndRepeatText(text) => self.end_text = text.clone(),
+            Signal::Invitees(text) => self.invite_text = text.clone(),
             _ => {}
         }
     }
@@ -498,6 +583,7 @@ impl Inspector {
             start,
             end,
             end_repeat,
+            invitees: parse_addresses(&self.invite_text),
             ..self.details.clone()
         };
         (details != self.original || self.calendar_choice != self.original_calendar)
