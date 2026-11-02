@@ -1069,7 +1069,7 @@ impl CalendarView {
             &self.zone,
         );
         if let Some(me) = self.me(found.calendar) {
-            crate::invite::revise(&mut moved, &me);
+            crate::invite::revise(object, &mut moved, &me);
         }
         self.library.put_object(found.calendar, moved);
         self.requests.push(Request::Changed);
@@ -1095,7 +1095,7 @@ impl CalendarView {
         );
         let mut edited = edited;
         if let Some(me) = self.me(found.calendar) {
-            crate::invite::revise(&mut edited, &me);
+            crate::invite::revise(object, &mut edited, &me);
             if let Some(master) = edited.master_mut() {
                 crate::invite::invite(master, &me, &details.invitees);
             }
