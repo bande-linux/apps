@@ -20,7 +20,9 @@ apt install bande-<name>
 | Calendar | `bande-calendar` |
 
 Every app is a `bande-app` app: like on macOS, it keeps running after its last window closes and
-reopens a window when activated, until Quit (Ctrl+Q).
+reopens a window when activated, until Quit (Ctrl+Q). Without a window its menus stay full:
+items that act on a window's content are disabled, the rest work and open the window they need,
+and the Window menu names the main window (Message Viewer, Calendar, Activity Monitor).
 
 ## Layout
 
