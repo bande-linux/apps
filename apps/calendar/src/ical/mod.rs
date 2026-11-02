@@ -7,7 +7,7 @@ mod value;
 
 pub use event::{Alarm, CalendarObject, Event, Occurrence, Trigger};
 pub use file::{export, read_file};
-pub use lines::ParseError;
+pub use lines::{ParseError, Property};
 pub use rule::{DaySpec, Frequency, Rule};
 pub use tz::Zones;
 pub use value::{Duration, InstanceKey, Moment};
