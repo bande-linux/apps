@@ -14,11 +14,13 @@ use bande_toolkit::ui::{
 use bande_toolkit::{Palette, TextSystem};
 
 use crate::L10N;
-use crate::deb::{Deb, Machine};
+use crate::deb::{Deb, Identity, Machine};
 use crate::flow::{Action, Preview, Problem, State};
+use crate::icon::Icon;
 use crate::worker::{self, Feed, Job, Message};
 
 pub const WINDOW_SIZE: (u32, u32) = (520, 480);
+const ICON_SIZE: f32 = 64.0;
 const SPACING: f32 = 12.0;
 const PADDING: f32 = 24.0;
 
@@ -70,6 +72,7 @@ fn disclosure(title: &str, text: &str) -> Box<dyn Widget> {
 
 pub struct Installer {
     deb: Option<Deb>,
+    identity: Option<Identity>,
     state: State,
     ready: Option<State>,
     jobs: Sender<Job>,
@@ -99,6 +102,7 @@ impl Installer {
         );
         let mut installer = Self {
             deb: None,
+            identity: None,
             state: State::Reading,
             ready: None,
             jobs,
@@ -151,6 +155,7 @@ impl Installer {
     fn receive(&mut self, message: Message) {
         match message {
             Message::Read(deb) => self.deb = deb,
+            Message::Identity(identity) => self.identity = identity,
             Message::State(state) => {
                 if matches!(state, State::Ready(_) | State::Present) {
                     self.ready = Some(state.clone());
@@ -236,20 +241,43 @@ impl Installer {
         let Some(deb) = &self.deb else {
             return Vec::new();
         };
-        let mut widgets = vec![
-            boxed(Label::heading(&deb.name)),
-            boxed(Label::new(&L10N.tr_args(
-                "version-size",
-                [
-                    ("version", deb.version.clone().into()),
-                    ("size", format_size(deb.installed_size).into()),
-                ],
-            ))),
-        ];
+        let facts = L10N.tr_args(
+            "version-size",
+            [
+                ("version", deb.version.clone().into()),
+                ("size", format_size(deb.installed_size).into()),
+            ],
+        );
+        let mut titles: Widgets = match &self.identity {
+            Some(identity) => vec![
+                boxed(Label::heading(&identity.name)),
+                boxed(Label::new(&L10N.tr_args(
+                    "package-facts",
+                    [
+                        ("package", deb.name.clone().into()),
+                        ("facts", facts.into()),
+                    ],
+                ))),
+            ],
+            None => vec![boxed(Label::heading(&deb.name)), boxed(Label::new(&facts))],
+        };
         if !deb.summary.is_empty() {
-            widgets.push(boxed(Label::new(&deb.summary)));
+            titles.push(boxed(Label::new(&deb.summary).secondary()));
         }
-        widgets
+        let titles = boxed(Stack::new(Axis::Vertical, 4.0, 0.0, titles));
+        match self
+            .identity
+            .as_ref()
+            .and_then(|identity| identity.icon.clone())
+        {
+            Some(icon) => vec![boxed(Stack::new(
+                Axis::Horizontal,
+                SPACING,
+                0.0,
+                vec![boxed(Icon::new(icon, ICON_SIZE)), titles],
+            ))],
+            None => vec![titles],
+        }
     }
 
     fn preview(&self, preview: &Preview) -> Widgets {

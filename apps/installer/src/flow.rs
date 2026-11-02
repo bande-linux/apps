@@ -126,19 +126,17 @@ pub fn installed(client: &Client, deb: &Deb) -> Result<Option<Package>, Error> {
         .find(|package| package.arch == deb.arch || deb.arch == "all"))
 }
 
-pub fn inspect(client: &Client, path: &Path, machine: &Machine) -> (Option<Deb>, State) {
-    let Some(deb) = deb::read(path) else {
-        return (None, State::Invalid);
+pub fn inspect(client: &Client, path: &Path, machine: &Machine, deb: Option<&Deb>) -> State {
+    let Some(deb) = deb else {
+        return State::Invalid;
     };
     if !machine.fits(&deb.arch) {
-        let state = State::WrongArchitecture {
+        return State::WrongArchitecture {
             arch: deb.arch.clone(),
             native: machine.native.clone(),
         };
-        return (Some(deb), state);
     }
-    let state = preview(client, path, &deb);
-    (Some(deb), state)
+    preview(client, path, deb)
 }
 
 pub fn preview(client: &Client, path: &Path, deb: &Deb) -> State {
