@@ -35,6 +35,9 @@ const APP_ID: &str = "org.bande.Calendar";
 const NEW_EVENT: &str = "new-event";
 const NEW_EVENT_FLAG: &str = "--new-event";
 const SHOW_CALENDAR: &str = "show-calendar";
+const REFRESH: &str = "refresh";
+const IMPORT: &str = "import";
+const EXPORT: &str = "export";
 const WINDOW_SIZE: (u32, u32) = (1120, 740);
 const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
@@ -206,10 +209,10 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
                 Entry::separator(),
                 entry("new-calendar", "new-calendar").shortcut("Alt+Ctrl+N"),
                 entry("add-account", "add-account"),
-                entry("refresh", "refresh").shortcut("Ctrl+R"),
+                entry("refresh", REFRESH).shortcut("Ctrl+R"),
                 Entry::separator(),
-                entry("import-menu", "import"),
-                entry("export", "export"),
+                entry("import-menu", IMPORT),
+                entry("export", EXPORT),
             ],
         ),
         edit_submenu(Vec::new()),
@@ -584,16 +587,20 @@ impl CalendarApp {
         changed
     }
 
-    fn serve(&mut self, window: &mut Window, view: &mut CalendarView) {
+    fn serve(&mut self, mut window: Option<&mut Window>, view: &mut CalendarView) {
         for request in view.take_requests() {
             match request {
                 Request::Menu(menu, at) => {
-                    if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
+                    if let Some(window) = window.as_deref_mut()
+                        && let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at))
+                    {
                         tracing::warn!("cannot show the menu: {error}");
                     }
                 }
                 Request::Clipboard(request) => {
-                    if let Err(error) = window.serve_clipboard(request) {
+                    if let Some(window) = window.as_deref_mut()
+                        && let Err(error) = window.serve_clipboard(request)
+                    {
                         tracing::warn!("cannot use the clipboard: {error}");
                     }
                 }
@@ -617,8 +624,6 @@ impl CalendarApp {
                     self.check_alerts(view);
                     view.refresh_search();
                 }
-                Request::Refresh => self.sync(view, Refresh::All),
-                Request::Import => choose(self.chosen.outbox(), None),
                 Request::SetPassword {
                     account,
                     user,
@@ -652,7 +657,9 @@ impl CalendarApp {
             }
         }
         let title = view.title();
-        if title != self.title {
+        if let Some(window) = window
+            && title != self.title
+        {
             window.set_title(&title);
             self.title = title;
         }
@@ -777,8 +784,11 @@ impl CalendarApp {
 
     fn settle(&mut self, cx: &mut Cx<Self>) {
         if let Some((window, Pane(view))) = self.main.and_then(|main| cx.window(main)) {
-            self.serve(window, view);
+            self.serve(Some(&mut *window), view);
             window.request_redraw();
+        } else if let Some(mut pane) = self.parked.take() {
+            self.serve(None, &mut pane.0);
+            self.parked = Some(pane);
         }
         self.with_view(cx, |app, view| app.rearm(view));
         cx.refresh_menus();
@@ -958,20 +968,28 @@ impl Program for CalendarApp {
     }
 
     fn command(&mut self, cx: &mut Cx<Self>, _window: Option<WindowId>, command: &str) {
-        if self.main.is_none() {
-            self.reopen(cx);
-        } else if command == SHOW_CALENDAR {
-            self.raise(cx);
+        match command {
+            REFRESH => self.with_view(cx, |app, view| app.sync(view, Refresh::All)),
+            IMPORT => choose(self.chosen.outbox(), None),
+            _ => {
+                if self.main.is_none() && command != EXPORT {
+                    self.reopen(cx);
+                } else if command == SHOW_CALENDAR {
+                    self.raise(cx);
+                }
+                self.with_view(cx, |_, view| {
+                    view.menu_action(command);
+                });
+            }
         }
-        self.with_view(cx, |_, view| {
-            view.menu_action(command);
-        });
         self.settle(cx);
     }
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
         let (new_event, arguments) = new_event_asked(arguments);
-        self.with_view(cx, |_, view| open_arguments(view, &arguments, directory));
+        self.with_view(cx, |_, view| {
+            open_arguments(view, &arguments, directory);
+        });
         self.reopen(cx);
         self.settle(cx);
         if new_event {
@@ -1041,15 +1059,23 @@ impl Program for CalendarApp {
             }
             3 => {
                 for chosen in self.chosen.drain() {
-                    self.raise(cx);
+                    let mut shown = false;
                     self.with_view(cx, |_, view| match chosen {
-                        Chosen::Open(path) => open_arguments(
-                            view,
-                            &[path.to_string_lossy().into_owned()],
-                            Path::new("/"),
-                        ),
-                        Chosen::Failed(error) => view.set_status(Some(error)),
+                        Chosen::Open(path) => {
+                            shown = open_arguments(
+                                view,
+                                &[path.to_string_lossy().into_owned()],
+                                Path::new("/"),
+                            );
+                        }
+                        Chosen::Failed(error) => {
+                            view.set_status(Some(error));
+                            shown = true;
+                        }
                     });
+                    if shown {
+                        self.raise(cx);
+                    }
                 }
             }
             4 => {
@@ -1098,11 +1124,13 @@ fn new_event_asked(arguments: Vec<String>) -> (bool, Vec<String>) {
     (!flags.is_empty(), arguments)
 }
 
-fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Path) {
+fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Path) -> bool {
+    let mut offered = false;
     for argument in arguments {
         let lower = argument.to_ascii_lowercase();
         if lower.starts_with("webcal://") || lower.starts_with("webcals://") {
             view.offer_subscription(argument);
+            offered = true;
             continue;
         }
         let path =
@@ -1116,13 +1144,14 @@ fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Pat
                 if let Some(first) = objects.first().and_then(|object| object.events.first()) {
                     view.go_to(first.start.date());
                 }
-                view.offer_import(objects, &name);
+                offered |= view.offer_import(objects, &name);
             }
             Ok(Ok(_)) => tracing::warn!("{} has no events", path.display()),
             Ok(Err(error)) => tracing::warn!("cannot read {}: {error}", path.display()),
             Err(error) => tracing::warn!("cannot open {}: {error}", path.display()),
         }
     }
+    offered
 }
 
 fn main() -> ExitCode {

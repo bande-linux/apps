@@ -22,11 +22,9 @@ pub const ACTION_PREVIOUS: &str = "previous";
 pub const ACTION_NEXT: &str = "next";
 pub const ACTION_NEW_EVENT: &str = "new-event";
 pub const ACTION_FIND: &str = "find";
-pub const ACTION_REFRESH: &str = "refresh";
 pub const ACTION_ADD_ACCOUNT: &str = "add-account";
 pub const ACTION_DELETE: &str = "delete";
 pub const ACTION_MODE: &str = "mode-";
-pub const ACTION_IMPORT: &str = "import";
 pub const ACTION_EXPORT: &str = "export";
 const ACTION_EXPORT_CALENDAR: &str = "calendar-export:";
 const ACTION_ZONE: &str = "zone:";
@@ -130,8 +128,6 @@ pub fn menu_command(view: &mut CalendarView, action: &str) -> bool {
         ACTION_NEXT => signal(view, Signal::Next),
         ACTION_NEW_EVENT => signal(view, Signal::NewEvent),
         ACTION_ADD_ACCOUNT => signal(view, Signal::AddAccount),
-        ACTION_REFRESH => view.requests.push(Request::Refresh),
-        ACTION_IMPORT => view.requests.push(Request::Import),
         ACTION_EXPORT => view.export_calendar(None),
         other if other.starts_with(ACTION_ZONE) => {
             let name = &other[ACTION_ZONE.len()..];
@@ -314,7 +310,6 @@ fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Eve
             'n' if modifiers.alt => menu_command(view, ACTION_NEW_CALENDAR),
             'n' => menu_command(view, ACTION_NEW_EVENT),
             'f' => menu_command(view, ACTION_FIND),
-            'r' => menu_command(view, ACTION_REFRESH),
             digit @ '1'..='4' => {
                 menu_command(view, &format!("{ACTION_MODE}{}", digit as u32 - '1' as u32))
             }

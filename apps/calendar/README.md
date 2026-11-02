@@ -66,7 +66,9 @@ views. Packaged as `bande-calendar`.
 - **Files and links.** `bande-calendar file.ics` or File ▸ Import… offers to add its events;
   File ▸ Export… (or Export… on a calendar's menu) saves a calendar as one `.ics` file, through
   the desktop's file chooser portal; `bande-calendar webcal://…` offers to subscribe. The
-  desktop file registers `text/calendar` and the `webcal` schemes.
+  desktop file registers `text/calendar` and the `webcal` schemes. With the window closed,
+  Refresh Calendars syncs in the background and Import… and Export… show only the file chooser;
+  the window opens when there is something to confirm, as on macOS.
 
 Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Left/Right previous/next, Ctrl+N new event,
 Alt+Ctrl+N new calendar, Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the
