@@ -1,16 +1,13 @@
 name: build
-run-name: "${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || inputs.tag && format('Dry run of {0}', inputs.tag) || format('Test build of {0}', inputs.apps) }}"
+run-name: "${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || format('Unpublished build of {0}', inputs.apps) }}"
 
 on:
   push:
     tags: ['*-v[0-9]+.[0-9]+.[0-9]+']
   workflow_dispatch:
     inputs:
-      tag:
-        description: Dry-run this release tag (<app>-vX.Y.Z) on this commit, built exactly as its push would be (never published)
-        default: ''
       apps:
-        description: Without a tag, apps to test-build, by directory name, space-separated, or "all" (never published)
+        description: Apps to build, by directory name, space-separated, or "all" (never published)
         default: all
 
 concurrency:
@@ -19,9 +16,6 @@ concurrency:
 
 permissions:
   contents: read
-
-env:
-  RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
 
 jobs:
   plan:
@@ -37,7 +31,7 @@ jobs:
         env:
           NAMES: ${{ inputs.apps }}
         run: |
-          apps=$(ci/changed-apps.sh "$RELEASE_TAG" "$NAMES")
+          apps=$(ci/changed-apps.sh "$GITHUB_REF_TYPE" "$GITHUB_REF_NAME" "$NAMES")
           echo "Building: $apps"
           echo "apps=$apps" >> "$GITHUB_OUTPUT"
 
