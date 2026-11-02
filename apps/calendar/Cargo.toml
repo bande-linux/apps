@@ -14,15 +14,17 @@ bande-app.workspace = true
 base64.workspace = true
 jiff.workspace = true
 roxmltree.workspace = true
-rustix = { workspace = true, features = ["fs"] }
+rustix = { workspace = true, features = ["fs", "time"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 ureq.workspace = true
 zbus.workspace = true
 bande-app-menu.workspace = true
+bande-app-settings.workspace = true
 bande-design.workspace = true
 bande-datetime.workspace = true
+bande-inbox.workspace = true
 bande-l10n.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true

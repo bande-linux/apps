@@ -693,7 +693,14 @@ fn create(view: &mut CalendarView, start: DateTime, end: DateTime, all_day: bool
         return;
     };
     view.drag = None;
-    let object = new_event(start, end, all_day, "", &view.zone);
+    let mut object = new_event(start, end, all_day, "", &view.zone);
+    let alert = match all_day {
+        true => view.settings.all_day_alert,
+        false => view.settings.timed_alert,
+    };
+    if let Some(event) = object.events.first_mut() {
+        event.alarms = alert.alarms(&[]);
+    }
     let Some(event) = object.events.first() else {
         return;
     };

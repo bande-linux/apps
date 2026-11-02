@@ -4,7 +4,7 @@ use jiff::Timestamp;
 
 use crate::caldav::{Client, Error, Precondition, Resource, same_resource};
 use crate::ical::CalendarObject;
-use crate::store::{Calendar, CalendarInfo, Library, Pending, Stored};
+use crate::store::{Calendar, CalendarInfo, Library, Pending, Stored, href_for, new_uid};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Upsert {
@@ -22,6 +22,7 @@ pub struct Outcome {
     pub upserts: Vec<Upsert>,
     pub removed: Vec<String>,
     pub conflicts: Vec<String>,
+    pub copies: Vec<Upsert>,
 }
 
 fn summary(data: &str) -> String {
@@ -37,8 +38,30 @@ fn summary(data: &str) -> String {
         .unwrap_or_default()
 }
 
-fn conflict_copy(client: &Client, stored: &Stored, outcome: &mut Outcome) -> Result<(), Error> {
+fn kept_copy(info: &CalendarInfo, data: &str) -> Option<Upsert> {
+    let mut object = CalendarObject::parse(data).ok()?.into_iter().next()?;
+    let uid = new_uid();
+    for event in &mut object.events {
+        event.uid = uid.clone();
+    }
+    Some(Upsert {
+        href: href_for(info, &uid),
+        etag: None,
+        data: object.to_ics(Timestamp::now()),
+        pushed: None,
+    })
+}
+
+fn conflict_copy(
+    client: &Client,
+    info: &CalendarInfo,
+    stored: &Stored,
+    outcome: &mut Outcome,
+) -> Result<(), Error> {
     outcome.conflicts.push(summary(&stored.data));
+    if stored.pending == Some(Pending::Update) {
+        outcome.copies.extend(kept_copy(info, &stored.data));
+    }
     match client.get(&stored.href) {
         Ok(Resource { etag, data, .. }) => outcome.upserts.push(Upsert {
             href: stored.href.clone(),
@@ -93,7 +116,9 @@ fn push(client: &Client, calendar: &Calendar, outcome: &mut Outcome) -> Result<(
                 pushed: Some(stored.data.clone()),
             }),
             Ok(None) => outcome.removed.push(stored.href.clone()),
-            Err(Error::PreconditionFailed) => conflict_copy(client, stored, outcome)?,
+            Err(Error::PreconditionFailed) => {
+                conflict_copy(client, &calendar.info, stored, outcome)?
+            }
             Err(error) => return Err(error),
         }
     }
@@ -176,6 +201,7 @@ pub fn sync_calendar(client: &Client, calendar: &Calendar) -> Result<Outcome, Er
         upserts: Vec::new(),
         removed: Vec::new(),
         conflicts: Vec::new(),
+        copies: Vec::new(),
     };
     push(client, calendar, &mut outcome)?;
     let known = known_etags(calendar, &outcome);
@@ -243,6 +269,7 @@ pub fn subscription_outcome(info: &CalendarInfo, data: &str) -> Option<Outcome> 
             .collect(),
         removed: Vec::new(),
         conflicts: Vec::new(),
+        copies: Vec::new(),
     })
 }
 
@@ -281,6 +308,12 @@ pub fn apply(library: &mut Library, outcome: Outcome, replace_all: bool) -> Vec<
                 .push(Stored::new(upsert.href, upsert.etag, upsert.data, None)),
         }
     }
+    calendar.objects.extend(
+        outcome
+            .copies
+            .into_iter()
+            .map(|copy| Stored::new(copy.href, None, copy.data, Some(Pending::Create))),
+    );
     library.save(index);
     outcome.conflicts
 }
