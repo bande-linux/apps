@@ -88,8 +88,10 @@ Settings; the desktop pin is shared by the workspace (see `../../README.md`).
 ## Tests
 
 `tests/untrusted.rs` opens a hostile `.ics` file without panicking, refuses a FIFO or a file over
-64 MiB, and never sends a password over plain HTTP to anything but this computer. The repo's
-whole test list and the reason for each is in `NOTES/tests.md`.
+64 MiB, and never sends a password over plain HTTP to anything but this computer.
+`tests/time_zone.rs` moves a repeating event to another zone and checks that its times,
+exceptions and end follow. The repo's whole test list and the reason for each is in
+`NOTES/tests.md`.
 
 ## Not done yet
 
