@@ -21,7 +21,7 @@ apt install bande-<name>
 | Browser | `bande-browser` (the engine is `bande-linux/web`, pinned by `ci/bump-web.sh`) |
 | Velox | `bande-velox` (containers of Docker Engine or Podman, and virtual machines on QEMU) |
 | Calculator | `bande-calculator` (Basic, Scientific and Programmer, paper tape, RPN) |
-| Preview | `bande-preview` (images; the default image viewer) |
+| Preview | `bande-preview` (images and PDF documents, the default viewer of both; PDFs render in a child process) |
 | Clock | `bande-clock` (alarms, timers, a stopwatch and a world clock; rings with its window closed) |
 | TextEdit | `bande-textedit` (plain and rich text, Markdown and HTML; the desktop maps `text/plain` to it) |
 | Disk Utility | `bande-disks` (disks, volumes and disk images through UDisks2; replaces gnome-disk-utility) |

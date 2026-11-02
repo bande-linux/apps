@@ -4,9 +4,10 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Preview</name>
-  <summary>View images</summary>
+  <summary>View images and PDF documents</summary>
   <description>
     <p>Opens PNG, JPEG, GIF, WebP and SVG pictures from Files, zooms, pans, rotates and flips them, steps through a folder, plays animations and slideshows, copies them and shows their size, dimensions and camera details.</p>
+    <p>PDF documents scroll continuously with page thumbnails and their table of contents; their text can be selected, copied and searched, and locked documents open with their password.</p>
   </description>
   <developer id="org.bande">
     <name>Bande</name>
@@ -19,5 +20,6 @@
     <mediatype>image/gif</mediatype>
     <mediatype>image/webp</mediatype>
     <mediatype>image/svg+xml</mediatype>
+    <mediatype>application/pdf</mediatype>
   </provides>
 </component>

@@ -2,9 +2,13 @@ use std::path::Path;
 
 use accesskit::{Node, NodeId, Role};
 use bande_toolkit::ui::{Context, Parts, Size, Ui, Widget, WidgetId};
-use bande_toolkit::{Appearance, Item, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem};
+use bande_toolkit::{
+    Appearance, Item, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem,
+    WINDOW_HEADER_HEIGHT,
+};
 
 use crate::decode::{Decoded, Kind};
+use crate::pdf::protocol::Opened;
 use crate::{L10N, tr_with};
 
 const MARGIN: f32 = 18.0;
@@ -81,6 +85,35 @@ pub fn picture_rows(decoded: &Decoded) -> Vec<Row> {
     rows
 }
 
+pub fn document_rows(opened: &Opened) -> Vec<Row> {
+    let mut rows = vec![
+        (L10N.tr("info-kind"), kind_name(Kind::Pdf)),
+        (L10N.tr("info-pages"), opened.pages.len().to_string()),
+    ];
+    if let Some((width, height)) = opened.pages.first() {
+        rows.push((
+            L10N.tr("info-page-size"),
+            tr_with(
+                "page-size",
+                &[
+                    ("width", format!("{width:.0}")),
+                    ("height", format!("{height:.0}")),
+                ],
+            ),
+        ));
+    }
+    if !opened.version.is_empty() {
+        rows.push((L10N.tr("info-version"), opened.version.clone()));
+    }
+    rows.extend(
+        opened
+            .details
+            .iter()
+            .map(|(key, value)| (L10N.tr(&format!("info-{key}")), value.clone())),
+    );
+    rows
+}
+
 pub struct InfoPanel {
     id: WidgetId,
     frame: Rect,
@@ -110,7 +143,7 @@ impl InfoPanel {
         let value_width = (self.frame.width - 2.0 * MARGIN - LABEL_WIDTH - COLUMN_GAP).max(40.0);
         let label_style = TextStyle::new(12.0, cx.palette.ink2);
         let value_style = TextStyle::new(12.0, cx.palette.ink);
-        let mut y = self.frame.y + MARGIN;
+        let mut y = self.frame.y + WINDOW_HEADER_HEIGHT as f32 + MARGIN / 2.0;
         for section in &self.sections {
             for (label, value) in section {
                 let label =
