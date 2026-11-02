@@ -53,7 +53,8 @@ apt install bande-mail
   Delete (Delete or Backspace), Junk (Shift+Ctrl+J), Reply (Ctrl+R), Reply All (Shift+Ctrl+R),
   Forward (Shift+Ctrl+F), Flag (Shift+Ctrl+L), Mark as Read or Unread (Shift+Ctrl+U), Send
   (Shift+Ctrl+D), Close Window (Ctrl+W), Quit (Ctrl+Q) and Search (Ctrl+F), which searches
-  sender, recipients, subject and text. Mailbox → Mark All as Read marks the shown mailbox read, and Message → Move To files the
+  sender, recipients, subject and text. View sorts the list by date, sender or subject, either
+  way. Mailbox → Mark All as Read marks the shown mailbox read, and Message → Move To files the
   message in any mailbox of its account. Ctrl+click, Shift+click, Shift+Up/Down and Select All
   (Ctrl+A) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then
   act on all of them, and dragging them onto a mailbox in the sidebar moves them. Undo (Ctrl+Z)

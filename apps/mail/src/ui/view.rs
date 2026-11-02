@@ -27,7 +27,7 @@ use crate::imap::{Flag, Role};
 use crate::message::{Content, Envelope};
 use crate::net::Network;
 use crate::secrets::Keyring;
-use crate::settings::MailSettings;
+use crate::settings::{MailSettings, SortBy};
 use crate::setup::{Outcome, Request as SetupRequest, check};
 use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary};
 use crate::ui::format::full_date;
@@ -37,6 +37,7 @@ use crate::ui::sidebar::{Place, Row, rows};
 use crate::ui::symbols::Symbols;
 use crate::ui::toolbar::{Signal, Signals, Toolbar};
 use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status, Worker};
+use bande_app_settings::{Stored, settings_folder};
 
 pub const SHORTCUTS: [(&str, &str); 12] = [
     ("compose", "Ctrl+N"),
@@ -299,6 +300,10 @@ impl MailView {
         ));
     }
 
+    pub fn settings(&self) -> &MailSettings {
+        &self.settings
+    }
+
     pub fn set_settings(&mut self, settings: MailSettings) {
         let regroup = settings.conversations != self.settings.conversations;
         let reread = (settings.plain_text, settings.fixed_width)
@@ -314,6 +319,15 @@ impl MailView {
         {
             self.load_reading(&summary);
         }
+    }
+
+    fn keep_settings(&mut self) {
+        if let Some(folder) = settings_folder()
+            && let Err(error) = self.settings.save(&folder)
+        {
+            tracing::warn!("cannot save the settings: {error}");
+        }
+        self.reload();
     }
 
     pub fn toggle_conversation(&mut self, id: MessageId) -> bool {
@@ -533,10 +547,18 @@ impl MailView {
         if !exists {
             self.place = Place::All(Role::Inbox);
         }
-        let all = self
+        let mut all = self
             .store
             .summaries(&self.place.scope(), &self.search)
             .unwrap_or_default();
+        match self.settings.sort {
+            SortBy::Date => {}
+            SortBy::From => all.sort_by_cached_key(|summary| summary.sender.shown().to_lowercase()),
+            SortBy::Subject => all.sort_by_cached_key(|summary| summary.subject.to_lowercase()),
+        }
+        if self.settings.ascending {
+            all.reverse();
+        }
         self.messages = match self.settings.conversations {
             true => self.conversations.group(all),
             false => {
@@ -2267,6 +2289,19 @@ impl MailView {
             "toggle-read" => self.toggle_read(),
             "toggle-flag" => self.toggle_flag(),
             "mark-all-read" => self.mark_all_read(),
+            "sort-ascending" | "sort-descending" => {
+                self.settings.ascending = action == "sort-ascending";
+                self.keep_settings();
+            }
+            action if action.starts_with("sort-") => {
+                if let Some(sort) = SortBy::ALL
+                    .into_iter()
+                    .find(|sort| action.strip_prefix("sort-") == Some(sort.name()))
+                {
+                    self.settings.sort = sort;
+                    self.keep_settings();
+                }
+            }
             "archive" => self.move_selected(Role::Archive),
             "junk" => self.move_selected(Role::Junk),
             "delete" => self.delete_selected(),

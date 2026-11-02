@@ -981,7 +981,19 @@ impl View for SettingsView {
 
     fn set_active(&mut self, active: bool) {
         self.ui.set_window_active(active);
-        if active && self.load_accounts() {
+        if !active {
+            return;
+        }
+        let stored = self
+            .folder
+            .as_deref()
+            .map(MailSettings::load)
+            .unwrap_or_default();
+        let changed = stored != self.state.borrow().settings;
+        if changed {
+            self.state.borrow_mut().settings = stored;
+        }
+        if self.load_accounts() || changed {
             self.rebuild();
         }
     }

@@ -48,7 +48,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 1. Redo; dragging messages out to other apps.
 2. Conversations: show the whole conversation in the reader and include replies from Sent; group by subject when References are missing.
 3. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses passwords.
-4. Sort order, flag colours (Mark All as Read is in the Mailbox menu).
+4. Flag colours; sorting by size or unread first.
 5. Rules with several conditions, editing a rule, running rules on a mailbox by hand.
 6. Rich text compose and spelling (both need desktop services first).
 7. A Password field in Settings → Accounts.
