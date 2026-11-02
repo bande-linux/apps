@@ -1,0 +1,69 @@
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+
+use crate::{Error, Result};
+
+pub const MANIFEST_VERSION: u32 = 1;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Forward {
+    pub host: u16,
+    pub guest: u16,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Manifest {
+    pub version: u32,
+    pub id: String,
+    pub name: String,
+    pub os: String,
+    pub created: u64,
+    pub cpus: u32,
+    pub memory_mib: u64,
+    pub disk_gib: u64,
+    pub base_image: String,
+    pub mac: String,
+    pub forwards: Vec<Forward>,
+}
+
+#[derive(Deserialize)]
+struct Versioned {
+    version: u32,
+}
+
+impl Manifest {
+    pub fn load(path: &Path) -> Result<Self> {
+        let bytes = fs::read(path)?;
+        let Versioned { version } = serde_json::from_slice(&bytes)?;
+        if version != MANIFEST_VERSION {
+            return Err(Error::Version(version));
+        }
+        Ok(serde_json::from_slice(&bytes)?)
+    }
+
+    pub fn save(&self, path: &Path) -> Result<()> {
+        let staging = path.with_extension("json.new");
+        let mut file = File::create(&staging)?;
+        file.write_all(&serde_json::to_vec_pretty(self)?)?;
+        persist(&file, &staging, path)
+    }
+
+    pub fn ssh_port(&self) -> Option<u16> {
+        self.forwards
+            .iter()
+            .find(|forward| forward.guest == 22)
+            .map(|forward| forward.host)
+    }
+}
+
+pub(crate) fn persist(file: &File, staging: &Path, path: &Path) -> Result<()> {
+    file.sync_all()?;
+    fs::rename(staging, path)?;
+    if let Some(folder) = path.parent() {
+        File::open(folder)?.sync_all()?;
+    }
+    Ok(())
+}

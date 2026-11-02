@@ -34,7 +34,7 @@ and the Window menu names the main window (Message Viewer, Calendar, Activity Mo
 | `apps/<name>/` | one app on `bande-app`, packaged as `bande-<name>` |
 | `apps/<name>/build-depends` | optional: Debian packages the build needs beyond what every app needs, one per line |
 | `apps/<name>/smoke.sh` | optional: extra checks after `ci/smoke.sh`, once the package is installed; must exit 0 |
-| `libs/<name>/` | code shared by apps, the crate `bande-<name>` (`bande-keyring`: passwords in the Secret Service) |
+| `libs/<name>/` | code shared by apps, the crate `bande-<name>` (`bande-keyring`: passwords in the Secret Service; `bande-vm`: QEMU virtual machines in systemd user units) |
 | `template/` | the starting point for a new app: a real, gated `bande-app` app, never published |
 | `rust-toolchain.toml` | the Rust toolchain for every app, the same as the desktop's |
 | `ci/` | the build, the same in CI and locally |
