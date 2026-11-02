@@ -87,8 +87,7 @@ selected event, Ctrl+W close and Ctrl+Q quit.
 | `src/alerts.rs` | which alarms fall due |
 | `src/settings.rs` | the settings and the messages the Settings window sends the app |
 | `src/wake.rs` | the wall-clock timer for alerts, the clock and refreshes |
-| `src/secrets.rs` | the Secret Service |
-| `src/worker.rs` | the network thread the window talks to |
+| `src/worker.rs` | the network thread the window talks to; passwords through `bande-keyring` |
 | `src/ui/` | the window: toolbar, sidebar, the four views, inspector, account sheet, input, Settings |
 | `src/main.rs` | the app: window, menus, sync timers, alerts, files and links |
 
