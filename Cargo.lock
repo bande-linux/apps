@@ -840,16 +840,19 @@ dependencies = [
  "accesskit",
  "bande-app",
  "bande-app-menu",
+ "bande-fs",
  "bande-l10n",
  "bande-toolkit",
  "bande-watch",
  "bande-xdg",
  "httparse",
+ "jiff",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "tracing",
+ "zbus",
 ]
 
 [[package]]

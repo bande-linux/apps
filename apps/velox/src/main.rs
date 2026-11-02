@@ -9,7 +9,7 @@ use bande_app_menu::Entry;
 use bande_toolkit::{
     Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
-use bande_velox::{Action, Informer, L10N, Request, SIDEBAR_WIDTH, VeloxView};
+use bande_velox::{Action, Informer, L10N, Request, SIDEBAR_WIDTH, Section, VeloxView};
 use bande_xdg::{Apps, config_dirs, data_dirs};
 
 const APP_ID: &str = "org.bande.Velox";
@@ -18,6 +18,7 @@ const START: &str = "start";
 const STOP: &str = "stop";
 const FIND: &str = "find";
 const SHOW_MAIN: &str = "show-main";
+const VIEW_KEYS: [&str; 5] = ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5"];
 
 static INFO: Info = Info {
     id: APP_ID,
@@ -46,6 +47,8 @@ impl Pane {
                 Request::Act(engine, action, ids) => self.informer.act(engine, action, ids),
                 Request::Relist(engine) => self.informer.relist(engine),
                 Request::OpenLink(link) => self.open_link(window, link),
+                Request::Task(engine, api, task) => self.informer.run(engine, api, task),
+                Request::Watch(engine, ids) => self.informer.watch("overview", &engine, ids),
             }
         }
     }
@@ -74,6 +77,7 @@ impl Pane {
             START => self.view.act(Action::Start),
             STOP => self.view.act(Action::Stop),
             FIND => self.view.focus_filter(),
+            _ if self.view.command(command) => {}
             _ => return false,
         }
         self.serve(window);
@@ -93,6 +97,7 @@ impl View for Pane {
         });
         self.view.set_full_screen(full_screen);
         let scene = View::scene(self.view.ui(), window);
+        window.set_title(&self.view.title());
         window.set_header(self.view.header());
         scene
     }
@@ -194,19 +199,32 @@ impl Program for Velox {
             .and_then(|main| cx.view(main))
             .map(|pane| &pane.view);
         let can = |action| view.is_some_and(|view| view.can(action));
+        let ready = view.is_some_and(VeloxView::ready);
+        let mut sections: Vec<Entry> = Section::ALL
+            .into_iter()
+            .zip(VIEW_KEYS)
+            .map(|(section, key)| {
+                Entry::item(&section.title(), section.command())
+                    .shortcut(key)
+                    .radio(view.is_some_and(|view| view.section() == section))
+            })
+            .collect();
+        sections.push(Entry::separator());
+        sections.push(Entry::item(&L10N.tr("find"), FIND).shortcut("Ctrl+F"));
+        let pane = view.and_then(VeloxView::resource_menu).unwrap_or_else(|| {
+            Entry::submenu(
+                &L10N.tr("menu-container"),
+                vec![
+                    Entry::item(&L10N.tr("action-start"), START).enabled(can(Action::Start)),
+                    Entry::item(&L10N.tr("action-stop"), STOP).enabled(can(Action::Stop)),
+                ],
+            )
+        });
         Menus {
             menus: vec![
-                Entry::submenu(
-                    &L10N.tr("menu-view"),
-                    vec![Entry::item(&L10N.tr("find"), FIND).shortcut("Ctrl+F")],
-                ),
-                Entry::submenu(
-                    &L10N.tr("menu-container"),
-                    vec![
-                        Entry::item(&L10N.tr("action-start"), START).enabled(can(Action::Start)),
-                        Entry::item(&L10N.tr("action-stop"), STOP).enabled(can(Action::Stop)),
-                    ],
-                ),
+                Entry::submenu(&L10N.tr("menu-file"), bande_velox::file_menu(ready)),
+                Entry::submenu(&L10N.tr("menu-view"), sections),
+                pane,
             ],
             window: vec![Entry::item(&L10N.tr("app-name"), SHOW_MAIN)],
         }

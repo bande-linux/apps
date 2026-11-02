@@ -7,13 +7,13 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
-use super::http::{self, Body};
+use super::http::{self, Body, Upload};
 
 const COMPOSE_PROJECT: &str = "com.docker.compose.project";
 const MIN_API: (u32, u32) = (1, 41);
 const PODMAN_COMPONENT: &str = "Podman Engine";
 const ROOTLESS_OPTION: &str = "name=rootless";
-const CONTAINER_EVENTS: &str = "/events?filters=%7B%22type%22%3A%5B%22container%22%5D%7D";
+const EVENTS: &str = "/events?filters=%7B%22type%22%3A%5B%22container%22%2C%22image%22%2C%22volume%22%2C%22network%22%5D%7D";
 
 #[derive(Debug)]
 pub enum Error {
@@ -55,8 +55,41 @@ pub struct Port {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "PascalCase")]
+pub struct Mount {
+    #[serde(rename = "Type", default)]
+    pub kind: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub destination: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Endpoint {
+    #[serde(rename = "NetworkID", default)]
+    pub network_id: String,
+    #[serde(rename = "IPAddress", default)]
+    pub ip_address: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct NetworkSettings {
+    #[serde(default)]
+    pub networks: Option<HashMap<String, Endpoint>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub struct Container {
     pub id: String,
+    #[serde(rename = "ImageID", default)]
+    pub image_id: String,
+    #[serde(default)]
+    pub mounts: Option<Vec<Mount>>,
+    #[serde(default)]
+    pub network_settings: Option<NetworkSettings>,
     #[serde(default)]
     pub names: Vec<String>,
     #[serde(default)]
@@ -115,6 +148,7 @@ pub enum Flavor {
 pub struct EngineInfo {
     pub flavor: Flavor,
     pub version: String,
+    pub api: String,
     pub rootless: bool,
     pub supported: bool,
     pub socket: PathBuf,
@@ -150,6 +184,8 @@ struct ErrorBody {
 
 #[derive(Debug, Deserialize)]
 pub struct Event {
+    #[serde(rename = "Type", default)]
+    pub kind: String,
     #[serde(rename = "Action", default)]
     pub action: String,
     #[serde(rename = "Actor")]
@@ -160,12 +196,14 @@ pub struct Event {
 pub struct Actor {
     #[serde(rename = "ID")]
     pub id: String,
+    #[serde(rename = "Attributes", default)]
+    pub attributes: HashMap<String, String>,
 }
 
-fn api_supported(version: &str) -> bool {
+pub(super) fn api_at_least(version: &str, wanted: (u32, u32)) -> bool {
     let mut parts = version.split('.').map(|part| part.parse::<u32>().ok());
     match (parts.next().flatten(), parts.next().flatten()) {
-        (Some(major), Some(minor)) => (major, minor) >= MIN_API,
+        (Some(major), Some(minor)) => (major, minor) >= wanted,
         _ => false,
     }
 }
@@ -187,7 +225,16 @@ impl Engine {
     }
 
     fn call(&self, method: &str, path: &str) -> Result<Body<UnixStream>, Error> {
-        let response = http::exchange(UnixStream::connect(&self.socket)?, method, path)?;
+        self.request(method, path, None)
+    }
+
+    pub(super) fn request(
+        &self,
+        method: &str,
+        path: &str,
+        upload: Option<Upload<'_>>,
+    ) -> Result<Body<UnixStream>, Error> {
+        let response = http::send(UnixStream::connect(&self.socket)?, method, path, upload)?;
         let mut body = response.body;
         if (200..300).contains(&response.status) || response.status == 304 {
             return Ok(body);
@@ -200,7 +247,7 @@ impl Engine {
         Err(Error::Status(response.status, message))
     }
 
-    fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, Error> {
+    pub(super) fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, Error> {
         let mut bytes = Vec::new();
         self.call("GET", path)?.read_to_end(&mut bytes)?;
         Ok(serde_json::from_slice(&bytes)?)
@@ -220,12 +267,13 @@ impl Engine {
                 None => Flavor::Docker,
             },
             version: podman.map_or(version.version, |podman| podman.version.clone()),
+            api: version.api_version.clone(),
             rootless: info
                 .security_options
                 .iter()
                 .flatten()
                 .any(|option| option == ROOTLESS_OPTION),
-            supported: api_supported(&version.api_version),
+            supported: api_at_least(&version.api_version, MIN_API),
             socket: self.socket.clone(),
         })
     }
@@ -262,16 +310,17 @@ impl Engine {
         self.act(id, "stop")
     }
 
-    pub fn events(&self) -> Result<(UnixStream, Body<UnixStream>), Error> {
+    pub(super) fn stream(&self, path: &str) -> Result<(UnixStream, Body<UnixStream>), Error> {
         let stream = UnixStream::connect(&self.socket)?;
         let handle = stream.try_clone()?;
-        let response = http::exchange(stream, "GET", CONTAINER_EVENTS)?;
+        let response = http::exchange(stream, "GET", path)?;
         match response.status {
             200 => Ok((handle, response.body)),
-            status => Err(Error::Status(
-                status,
-                "the engine refused /events".to_owned(),
-            )),
+            status => Err(Error::Status(status, format!("the engine refused {path}"))),
         }
+    }
+
+    pub fn events(&self) -> Result<(UnixStream, Body<UnixStream>), Error> {
+        self.stream(EVENTS)
     }
 }

@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::collections::{BTreeSet, HashMap};
 use std::io::{self, Read, Write};
 use std::net::Shutdown;
 use std::os::fd::{AsFd, BorrowedFd};
@@ -11,11 +13,14 @@ use std::time::Duration;
 use bande_watch::{Changes, FolderWatch};
 
 use super::client::{Container, Engine, EngineInfo, Event};
+use super::jobs::{self, Task};
+use super::resources::{DiskUsage, Image, Network, Pulling, Sample, Volume};
 use super::socket;
 use crate::readiness::{self, Probe, Readiness};
 
 const REMOVED: &str = "destroy";
 const IGNORED_PREFIX: &str = "exec_";
+const CONTAINER_ATTRIBUTE: &str = "container";
 const RETRY: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +41,14 @@ pub enum Update {
         action: Action,
         message: String,
     },
+    Images(Vec<Image>),
+    Volumes(Vec<Volume>),
+    Networks(Vec<Network>),
+    Usage(DiskUsage),
+    Pulling(String, Pulling),
+    Chosen(PathBuf),
+    Finished(Task, Result<u64, String>),
+    Stats(String, Sample),
 }
 
 #[derive(Clone)]
@@ -52,6 +65,26 @@ impl Updates {
 
 type Stream = Arc<Mutex<Option<UnixStream>>>;
 
+#[derive(Default)]
+struct Watch {
+    stream: Stream,
+    stopped: Arc<AtomicBool>,
+    ended: Arc<AtomicBool>,
+}
+
+impl Drop for Watch {
+    fn drop(&mut self) {
+        self.stopped.store(true, Ordering::SeqCst);
+        shut(&self.stream);
+    }
+}
+
+#[derive(Default)]
+struct Watches {
+    owners: HashMap<&'static str, BTreeSet<String>>,
+    streams: HashMap<String, Watch>,
+}
+
 pub struct Informer {
     updates: Receiver<Update>,
     wake: UnixStream,
@@ -59,6 +92,7 @@ pub struct Informer {
     recheck: Sender<()>,
     stopped: Arc<AtomicBool>,
     events: Stream,
+    watches: RefCell<Watches>,
     _watch: Option<FolderWatch>,
 }
 
@@ -78,6 +112,11 @@ fn follow(engine: &Engine, events: &Stream, stopped: &AtomicBool, out: &Updates)
     if !out.send(Update::Listed(listed)) {
         return Ok(());
     }
+    for kind in [Kind::Images, Kind::Volumes, Kind::Networks] {
+        if !relist(engine, kind, out) {
+            return Ok(());
+        }
+    }
     for event in serde_json::Deserializer::from_reader(body).into_iter::<Event>() {
         let event = event.map_err(io::Error::other)?;
         let Some(actor) = event.actor else {
@@ -86,18 +125,59 @@ fn follow(engine: &Engine, events: &Stream, stopped: &AtomicBool, out: &Updates)
         if event.action.starts_with(IGNORED_PREFIX) {
             continue;
         }
-        let update = match event.action.as_str() {
-            REMOVED => Update::Removed(actor.id),
-            _ => match engine.container(&actor.id).map_err(io::Error::other)? {
-                Some(container) => Update::Changed(container),
-                None => Update::Removed(actor.id),
-            },
+        let container = match (event.kind.as_str(), event.action.as_str()) {
+            ("image", "push" | "save") | ("volume", "mount" | "unmount") => continue,
+            ("image", _) => Err(Kind::Images),
+            ("volume", _) => Err(Kind::Volumes),
+            ("network", "connect" | "disconnect") => {
+                match actor.attributes.get(CONTAINER_ATTRIBUTE) {
+                    Some(id) => Ok(id.clone()),
+                    None => continue,
+                }
+            }
+            ("network", _) => Err(Kind::Networks),
+            (_, REMOVED) => {
+                if !out.send(Update::Removed(actor.id)) {
+                    return Ok(());
+                }
+                continue;
+            }
+            _ => Ok(actor.id),
         };
-        if !out.send(update) {
+        let sent = match container {
+            Ok(id) => out.send(match engine.container(&id).map_err(io::Error::other)? {
+                Some(container) => Update::Changed(container),
+                None => Update::Removed(id),
+            }),
+            Err(kind) => relist(engine, kind, out),
+        };
+        if !sent {
             return Ok(());
         }
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Kind {
+    Images,
+    Volumes,
+    Networks,
+}
+
+fn relist(engine: &Engine, kind: Kind, out: &Updates) -> bool {
+    let listed = match kind {
+        Kind::Images => engine.images().map(Update::Images),
+        Kind::Volumes => engine.volumes().map(Update::Volumes),
+        Kind::Networks => engine.networks().map(Update::Networks),
+    };
+    match listed {
+        Ok(update) => out.send(update),
+        Err(error) => {
+            tracing::info!("cannot list the {kind:?}: {error}");
+            true
+        }
+    }
 }
 
 fn run(
@@ -172,6 +252,7 @@ impl Informer {
             recheck,
             stopped,
             events,
+            watches: RefCell::default(),
             _watch: watch,
         })
     }
@@ -223,6 +304,67 @@ impl Informer {
         if let Err(error) = spawned {
             tracing::warn!("cannot reach the engine: {error}");
         }
+    }
+}
+
+impl Informer {
+    pub fn run(&self, engine: Engine, api: String, task: Task) {
+        let out = self.sender.clone();
+        let spawned = std::thread::Builder::new()
+            .name("velox-task".to_owned())
+            .spawn(move || jobs::perform(&engine, &api, task, |update| out.send(update)));
+        if let Err(error) = spawned {
+            tracing::warn!("cannot reach the engine: {error}");
+        }
+    }
+
+    pub fn watch(&self, owner: &'static str, engine: &Engine, ids: Vec<String>) {
+        let mut watches = self.watches.borrow_mut();
+        let Watches { owners, streams } = &mut *watches;
+        match ids.is_empty() {
+            true => owners.remove(owner),
+            false => owners.insert(owner, ids.into_iter().collect()),
+        };
+        let wanted: BTreeSet<&String> = owners.values().flatten().collect();
+        streams.retain(|id, watch| wanted.contains(id) && !watch.ended.load(Ordering::SeqCst));
+        for id in wanted {
+            if !streams.contains_key(id) {
+                streams.insert(id.clone(), self.stream_stats(engine.clone(), id.clone()));
+            }
+        }
+    }
+
+    fn stream_stats(&self, engine: Engine, id: String) -> Watch {
+        let watch = Watch::default();
+        let out = self.sender.clone();
+        let (stream, stopped, ended) = (
+            Arc::clone(&watch.stream),
+            Arc::clone(&watch.stopped),
+            Arc::clone(&watch.ended),
+        );
+        let spawned = std::thread::Builder::new()
+            .name("velox-stats".to_owned())
+            .spawn(move || {
+                match engine.stats(&id) {
+                    Ok((handle, samples)) => {
+                        *stream.lock().unwrap_or_else(PoisonError::into_inner) = Some(handle);
+                        for sample in samples {
+                            if stopped.load(Ordering::SeqCst)
+                                || !out.send(Update::Stats(id.clone(), sample))
+                            {
+                                break;
+                            }
+                        }
+                    }
+                    Err(error) => tracing::info!("cannot follow the stats of {id}: {error}"),
+                }
+                ended.store(true, Ordering::SeqCst);
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot reach the engine: {error}");
+            watch.ended.store(true, Ordering::SeqCst);
+        }
+        watch
     }
 }
 

@@ -1,6 +1,11 @@
 mod engine;
+mod images;
+mod networks;
+mod overview;
 mod readiness;
+mod resources;
 mod ui;
+mod volumes;
 
 use std::sync::LazyLock;
 
@@ -8,7 +13,8 @@ use bande_l10n::Localizer;
 
 pub use engine::{Action, Informer, Update};
 pub use readiness::Readiness;
-pub use ui::{Request, SIDEBAR_WIDTH, VeloxView};
+pub use resources::file_menu;
+pub use ui::{Request, SIDEBAR_WIDTH, Section, VeloxView};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-velox.ftl");
 

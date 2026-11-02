@@ -23,15 +23,40 @@ fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.to_owned())
 }
 
-pub fn exchange<S: Read + Write>(
+pub struct Upload<'a> {
+    pub kind: &'a str,
+    pub length: u64,
+    pub data: &'a mut dyn Read,
+}
+
+pub fn exchange<S: Read + Write>(stream: S, method: &str, path: &str) -> io::Result<Response<S>> {
+    send(stream, method, path, None)
+}
+
+pub fn send<S: Read + Write>(
     mut stream: S,
     method: &str,
     path: &str,
+    upload: Option<Upload<'_>>,
 ) -> io::Result<Response<S>> {
     write!(
         stream,
-        "{method} {path} HTTP/1.1\r\nHost: docker\r\nUser-Agent: Velox\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        "{method} {path} HTTP/1.1\r\nHost: docker\r\nUser-Agent: Velox\r\nConnection: close\r\n"
     )?;
+    match upload {
+        Some(upload) => {
+            write!(
+                stream,
+                "Content-Type: {}\r\nContent-Length: {}\r\n\r\n",
+                upload.kind, upload.length
+            )?;
+            let copied = io::copy(&mut Read::take(upload.data, upload.length), &mut stream)?;
+            if copied != upload.length {
+                return Err(io::ErrorKind::UnexpectedEof.into());
+            }
+        }
+        None => write!(stream, "Content-Length: 0\r\n\r\n")?,
+    }
     stream.flush()?;
     read_response(stream)
 }
