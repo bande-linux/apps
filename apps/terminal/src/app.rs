@@ -154,6 +154,7 @@ pub struct TerminalWindow {
     asks: Vec<Ask>,
     blink_from: Instant,
     blink_phase: u32,
+    alt_click: Option<(usize, usize)>,
 }
 
 pub struct Opened {
@@ -208,6 +209,7 @@ impl TerminalWindow {
             asks: Vec::new(),
             blink_from: Instant::now(),
             blink_phase: 0,
+            alt_click: None,
         };
         for tab in &mut app.tabs {
             for session in &mut tab.sessions {
@@ -1350,8 +1352,14 @@ impl TerminalWindow {
                 self.report_mouse(MouseKind::Release(button), at, pointer.modifiers);
             }
             Gesture::Selecting if pointer.is_primary() => {
-                self.session().terminal.finish_selection();
-                self.offer_primary(window);
+                let cell = self.cell_at(at);
+                if self.alt_click.take() == Some((cell.column, cell.line)) {
+                    self.session().terminal.clear_selection();
+                    self.move_cursor_to(cell.column, cell.line);
+                } else {
+                    self.session().terminal.finish_selection();
+                    self.offer_primary(window);
+                }
                 window.request_redraw();
             }
             Gesture::Tab(target) if self.tab_target(at) == Some(target) => match target {
@@ -1453,6 +1461,7 @@ impl TerminalWindow {
         }
         let cell = self.cell_at(at);
         self.gesture = Gesture::Selecting;
+        self.alt_click = (modifiers.alt && pointer.count == 1).then_some((cell.column, cell.line));
         let terminal = &mut self.session().terminal;
         if modifiers.shift && terminal.has_selection() {
             terminal.extend_selection(cell);
@@ -1461,6 +1470,24 @@ impl TerminalWindow {
             terminal.start_selection(cell, kind);
         }
         window.request_redraw();
+    }
+
+    fn move_cursor_to(&mut self, column: usize, line: usize) {
+        let mode = self.mode();
+        if mode.contains(TermMode::ALT_SCREEN) {
+            return;
+        }
+        let Some((from, on)) = self.session().terminal.cursor_cell() else {
+            return;
+        };
+        if on != line || from == column {
+            return;
+        }
+        let key = if column > from { Key::Right } else { Key::Left };
+        let Some(step) = encode_key(key, Modifiers::default(), mode) else {
+            return;
+        };
+        self.send(&step.repeat(column.abs_diff(from)));
     }
 
     fn in_banner(&self, at: Point) -> bool {

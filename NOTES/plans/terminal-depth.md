@@ -32,6 +32,7 @@ is what is left. Delete this plan when the list is done.
 | Drag and drop files | Have: shell-quoted paths |
 | Title from OSC 0/2, current folder from OSC 7 | Have |
 | Marks and jump between commands | Have Jump to Previous/Next Command (Shift+Ctrl+Up/Down) |
+| Option-click moves the cursor | Have Alt+click on the prompt line (arrow keys sent to the shell); Alt+drag still selects a block |
 | Window restore | Have: windows and tab folders come back after a restart |
 | Big output | Fast: `seq 1 2000000` finishes in 1.2 s (release build, headless); tabs (`\t`) used to draw as missing-glyph boxes, fixed |
 
@@ -42,6 +43,6 @@ is what is left. Delete this plan when the list is done.
 2. Font family choice (any installed monospace font).
 3. Drag tabs to reorder and out into a new window.
 4. Edit Title for a tab, and a per-tab profile badge.
-5. Alt+click to move the shell cursor; triple-click selects a command's output.
+5. Select a whole command's output (macOS: triple-click on output with marks).
 6. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
    password).
