@@ -377,6 +377,25 @@ impl SettingsView {
                         |settings, on| settings.conversations = on,
                     ),
                 ),
+                heading("settings-message"),
+                row(
+                    "settings-plain-text",
+                    toggle(
+                        &self.state,
+                        &L10N.tr("settings-plain-text"),
+                        settings.plain_text,
+                        |settings, on| settings.plain_text = on,
+                    ),
+                ),
+                row(
+                    "settings-fixed-width",
+                    toggle(
+                        &self.state,
+                        &L10N.tr("settings-fixed-width"),
+                        settings.fixed_width,
+                        |settings, on| settings.fixed_width = on,
+                    ),
+                ),
                 heading("settings-privacy"),
                 row(
                     "settings-load-remote",

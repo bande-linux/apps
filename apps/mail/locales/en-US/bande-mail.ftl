@@ -143,6 +143,9 @@ settings-preview-lines = { $lines ->
    *[other] { $lines } lines
 }
 settings-conversations = Organize by conversation
+settings-message = Messages
+settings-plain-text = Show plain text when a message has it
+settings-fixed-width = Use a fixed-width font for plain text
 settings-privacy = Privacy
 settings-load-remote = Load remote content in messages
 settings-load-remote-note = Remote pictures can tell the sender when and where you read a message. When this is off, a message shows Load Remote Content instead.

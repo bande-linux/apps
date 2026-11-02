@@ -16,7 +16,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Accounts | OAuth sign-in | Missing: Gmail and Outlook need app passwords |
 | Accounts | Enable/disable an account, change its password | Have "Use this account"; the password is changed in the sheet that appears when the server refuses it |
 | Junk | Junk filtering | Server-side only; Move to Junk files a message |
-| Fonts & Colors | Message font and size, fixed-width plain text | Missing (follows the desktop text size) |
+| Fonts & Colors | Message font and size, fixed-width plain text | Fixed-width plain text and "show plain text" in Viewing; sizes follow the desktop text size |
 | Viewing | Remote content off by default | Have: blocked until Load Remote Content, or always loaded when turned on in Viewing |
 | Viewing | Privacy protection (hide IP) | Partly: remote pictures only over HTTPS, capped; no proxy, so loading reveals the IP |
 | Viewing | List preview lines | Have: None to 5 lines |
@@ -41,11 +41,11 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Drafts | Kept in Drafts when a message window closes or Mail quits; a local copy is saved while typing and reopens after a crash or an offline quit |
 | Notifications | Have, Inbox only |
 | Offline | Have: full offline store, queued changes |
-| Selection | Ctrl+click and Shift+click select several messages for delete, archive, junk, move, flag and read; Shift+Up/Down and Select All; Undo puts the last move or delete back; drag onto a sidebar mailbox moves |
+| Selection | Ctrl+click and Shift+click select several messages for delete, archive, junk, move, flag and read; Shift+Up/Down and Select All; Undo puts moves and deletes back, 20 steps; drag onto a sidebar mailbox moves |
 
 ## Remaining, ranked by how much users rely on it
 
-1. Redo and more than one level of Undo; dragging messages out to other apps.
+1. Redo; dragging messages out to other apps.
 2. Conversations: show the whole conversation in the reader and include replies from Sent; group by subject when References are missing.
 3. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses passwords.
 4. Sort order, flag colours (Mark All as Read is in the Mailbox menu).
@@ -53,5 +53,5 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 6. Rich text compose and spelling (both need desktop services first).
 7. A Password field in Settings → Accounts.
 8. Per-sender "always load remote content"; a privacy proxy for remote pictures.
-9. Message font and size, fixed-width plain text.
+9. A message font choice apart from the desktop text size.
 10. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).

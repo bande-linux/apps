@@ -14,6 +14,8 @@ pub struct MailSettings {
     pub load_remote: bool,
     pub preview_lines: u8,
     pub conversations: bool,
+    pub plain_text: bool,
+    pub fixed_width: bool,
     pub quote: bool,
     pub send_from: String,
 }
@@ -26,6 +28,8 @@ impl Default for MailSettings {
             load_remote: false,
             preview_lines: 2,
             conversations: true,
+            plain_text: false,
+            fixed_width: false,
             quote: true,
             send_from: String::new(),
         }
@@ -52,6 +56,10 @@ impl Stored for MailSettings {
                 "conversations" => {
                     settings.conversations = flag(value).unwrap_or(settings.conversations);
                 }
+                "plain-text" => settings.plain_text = flag(value).unwrap_or(settings.plain_text),
+                "fixed-width" => {
+                    settings.fixed_width = flag(value).unwrap_or(settings.fixed_width);
+                }
                 "quote" => settings.quote = flag(value).unwrap_or(settings.quote),
                 "send-from" => settings.send_from = value.to_owned(),
                 _ => {}
@@ -62,12 +70,14 @@ impl Stored for MailSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nquote = {}\nsend-from = {}\n",
+            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\n",
             self.notify,
             self.sound,
             self.load_remote,
             self.preview_lines,
             self.conversations,
+            self.plain_text,
+            self.fixed_width,
             self.quote,
             self.send_from.trim(),
         )
