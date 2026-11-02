@@ -98,7 +98,7 @@ fn repeat_title(repeat: Repeat) -> String {
     })
 }
 
-fn alert_title(alert: Alert) -> String {
+pub(crate) fn alert_title(alert: Alert) -> String {
     match alert {
         Alert::None => L10N.tr("alert-none"),
         Alert::Custom => L10N.tr("alert-custom"),

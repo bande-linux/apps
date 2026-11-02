@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 
-use bande_datetime::{DateFormats, Month};
+use bande_datetime::Month;
 use bande_toolkit::{Color, Point, Radius, Rect, Scheme, Shape, TextAlign, TextRole, TextStyle};
 use jiff::Timestamp;
 use jiff::ToSpan;
-use jiff::civil::{Date, DateTime, Time};
+use jiff::civil::{Date, DateTime, Time, Weekday};
 
 use super::geometry::{
     self, DAY_HEADER, GUTTER, Slot, TimeGrid, arrange, at_minutes, minutes_of, month_cell,
@@ -25,16 +25,16 @@ const YEAR_ROWS: usize = 3;
 
 type ViewPainter<'a> = Painter<'a, Hit>;
 
-pub fn period(mode: Mode, focus: Date, formats: &DateFormats) -> (Date, Date) {
+pub fn period(mode: Mode, focus: Date, first_weekday: Weekday) -> (Date, Date) {
     match mode {
         Mode::Day => (focus, focus.saturating_add(1.day())),
         Mode::Week => {
-            let back = i64::from(focus.weekday().since(formats.first_weekday()));
+            let back = i64::from(focus.weekday().since(first_weekday));
             let first = focus.saturating_sub(back.days());
             (first, first.saturating_add(7.days()))
         }
         Mode::Month => {
-            let month = Month::containing(focus, formats.first_weekday());
+            let month = Month::containing(focus, first_weekday);
             let first = month.weeks.first().map_or(focus, |week| week.days[0]);
             (
                 first,
@@ -70,7 +70,7 @@ fn content_area(model: &ViewModel) -> Rect {
 pub fn time_grid(
     mode: Mode,
     focus: Date,
-    formats: &DateFormats,
+    first_weekday: Weekday,
     area: Rect,
     scroll: f32,
     all_day_rows: usize,
@@ -82,7 +82,7 @@ pub fn time_grid(
     };
     Some(TimeGrid {
         area,
-        first: period(mode, focus, formats).0,
+        first: period(mode, focus, first_weekday).0,
         days,
         all_day_rows,
         scroll,
@@ -149,7 +149,7 @@ fn read_only(model: &ViewModel, found: &Found) -> bool {
 
 pub fn view(model: &ViewModel, painter: &mut ViewPainter) -> (Vec<Found>, Option<TimeGrid>) {
     let area = content_area(model);
-    let (first, last) = period(model.mode, model.focus, model.formats);
+    let (first, last) = period(model.mode, model.focus, model.first_weekday);
     let shown = model
         .library
         .occurrences(instant(first, model), instant(last, model), model.zone);
@@ -207,9 +207,22 @@ fn preview_of(model: &ViewModel, found: &Found) -> Option<(DateTime, DateTime, b
     }
 }
 
+fn week_number(days: &[Date]) -> Option<i8> {
+    days.get(3).map(|day| day.iso_week_date().week())
+}
+
 fn day_header(model: &ViewModel, grid: &TimeGrid, painter: &mut ViewPainter) {
     let palette = model.palette;
     let today = model.now.date();
+    let days: Vec<Date> = (0..grid.days).map(|index| grid.day(index)).collect();
+    if let Some(week) = week_number(&days).filter(|_| model.week_numbers && grid.days == 7) {
+        painter.label(
+            &L10N.tr_args("week-number", [("week", week.into())]),
+            TextStyle::role(TextRole::Callout, palette.ink3).tabular(),
+            Rect::new(grid.area.x, grid.area.y, GUTTER - 8.0, DAY_HEADER),
+            TextAlign::End,
+        );
+    }
     for index in 0..grid.days {
         let day = grid.day(index);
         let column = grid.column(index);
@@ -339,7 +352,7 @@ fn paint_week(
     let base = time_grid(
         model.mode,
         model.focus,
-        model.formats,
+        model.first_weekday,
         area,
         model.scroll,
         1,
@@ -473,6 +486,18 @@ fn paint_hours(model: &ViewModel, grid: &TimeGrid, shown: &[Found], painter: &mu
             0.0,
             palette.accent_soft.with_opacity(0.35),
         );
+    }
+    let (work_start, work_end) = model.work_hours;
+    for (from, to) in [(0, i32::from(work_start)), (i32::from(work_end), 24)] {
+        if to > from {
+            let top = grid.y_for_minutes(from * 60);
+            let bottom = grid.y_for_minutes(to * 60);
+            painter.fill(
+                Rect::new(hours.x, top, hours.width, bottom - top),
+                0.0,
+                palette.well.with_opacity(0.45),
+            );
+        }
     }
     for hour in 0..=24 {
         let y = grid.y_for_minutes(hour * 60).round() + 0.5;
@@ -651,7 +676,7 @@ fn paint_hours(model: &ViewModel, grid: &TimeGrid, shown: &[Found], painter: &mu
 
 fn paint_month(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut ViewPainter) {
     let palette = model.palette;
-    let month = Month::containing(model.focus, model.formats.first_weekday());
+    let month = Month::containing(model.focus, model.first_weekday);
     let weeks = month.weeks.len();
     let today = model.now.date();
     if let Some(week) = month.weeks.first() {
@@ -708,6 +733,15 @@ fn paint_month(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut Vie
                 .collect::<Vec<_>>(),
         );
         let mut used = [0usize; 7];
+        if let Some(number) = week_number(&week.days).filter(|_| model.week_numbers) {
+            let cell = month_cell(area, MONTH_HEADER, weeks, week_index, 0);
+            painter.label(
+                &number.to_string(),
+                TextStyle::role(TextRole::Callout, palette.ink3).tabular(),
+                Rect::new(cell.x + 8.0, cell.y + 3.0, 28.0, 22.0),
+                TextAlign::Start,
+            );
+        }
         for (day_index, day) in week.days.iter().enumerate() {
             let cell = month_cell(area, MONTH_HEADER, weeks, week_index, day_index);
             painter.line(
@@ -883,7 +917,7 @@ fn paint_month(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut Vie
 
 fn paint_year(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut ViewPainter) {
     let palette = model.palette;
-    let year_start = period(Mode::Year, model.focus, model.formats).0;
+    let year_start = period(Mode::Year, model.focus, model.first_weekday).0;
     let busy: HashSet<Date> = shown
         .iter()
         .flat_map(|found| {
@@ -924,7 +958,7 @@ fn paint_year(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut View
             TextAlign::Start,
         );
         painter.hit(title_rect, Hit::YearMonth(first));
-        let month = Month::containing(first, model.formats.first_weekday());
+        let month = Month::containing(first, model.first_weekday);
         let cell_width = frame.width / 7.0;
         let cell_height = ((frame.height - 48.0) / 6.0).min(cell_width);
         if let Some(week) = month.weeks.first() {

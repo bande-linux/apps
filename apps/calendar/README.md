@@ -12,12 +12,13 @@ views. Packaged as `bande-calendar`.
   the Secret Service (gnome-keyring), never to disk, and are sent only over HTTPS (or to this
   computer, for a local server). Several accounts, plus a local calendar.
 - **Subscriptions.** `webcal:` / `webcals:` links and plain `https:` `.ics` URLs, read-only,
-  refreshed hourly; the name and colour come from `X-WR-CALNAME` and `X-APPLE-CALENDAR-COLOR`.
+  refreshed on a wall-clock deadline kept across restarts (every 5 minutes to every week, or
+  never); the name and colour come from `X-WR-CALNAME` and `X-APPLE-CALENDAR-COLOR`.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
   without a network and pushes changes later. Sync is incremental with `sync-token`
   (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
-  `If-None-Match: *`, edits and deletes `If-Match`; a 412 keeps the server's copy and says so
-  in the sidebar.
+  `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
+  version stays and the local edit is kept beside it as a new event, and the sidebar says so.
 - **iCalendar.** Its own parser and writer: line folding, escaping, unknown properties and
   components kept on round trip, `RRULE` (every frequency and `BY*` part, `COUNT`, `UNTIL`,
   `BYSETPOS`, week numbers), `EXDATE`, `RDATE`, `RECURRENCE-ID` overrides, all-day events,
@@ -37,7 +38,13 @@ views. Packaged as `bande-calendar`.
   notes. Changing a recurring event asks whether it is for this event only (an override) or
   all events.
 - **Search** over title, location and notes, nearest occurrence first.
-- **Alerts** through `org.freedesktop.Notifications`.
+- **Alerts** through `org.freedesktop.Notifications`, also while the window is closed. Alerts,
+  the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
+  suspend or a clock change.
+- **Settings** (Calendar ▸ Settings…): default calendar, start of the week, the hours the day
+  starts and ends (the rest is shaded, and the week opens at the start), week numbers, default
+  alerts for new events and all-day events, how often accounts and subscriptions refresh, and
+  adding and removing accounts. Stored in `~/.config/bande/calendar.conf`.
 - **Files and links.** `bande-calendar file.ics` offers to add its events; `bande-calendar
   webcal://…` offers to subscribe. The desktop file registers `text/calendar` and the `webcal`
   schemes.
@@ -56,9 +63,11 @@ selected event, Ctrl+W close and Ctrl+Q quit.
 | `src/sync.rs` | push pending changes, pull with sync-token or ctag/etag, apply the outcome |
 | `src/edit.rs` | the edits the UI makes: create, move a series or one occurrence, delete, details |
 | `src/alerts.rs` | which alarms fall due |
+| `src/settings.rs` | the settings and the messages the Settings window sends the app |
+| `src/wake.rs` | the wall-clock timer for alerts, the clock and refreshes |
 | `src/secrets.rs` | the Secret Service |
 | `src/worker.rs` | the network thread the window talks to |
-| `src/ui/` | the window: toolbar, sidebar, the four views, inspector, account sheet, input |
+| `src/ui/` | the window: toolbar, sidebar, the four views, inspector, account sheet, input, Settings |
 | `src/main.rs` | the app: window, menus, sync timers, alerts, files and links |
 
 It is a `bande-app` app on the desktop's toolkit, design tokens and theme, like Files and
