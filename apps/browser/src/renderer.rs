@@ -171,6 +171,7 @@ fn clear(fd: &OwnedFd) {
 }
 
 const MAX_STYLESHEETS: usize = 64;
+const MAX_IMAGES: usize = 256;
 
 struct Shown {
     load: LoadId,
@@ -179,10 +180,9 @@ struct Shown {
 }
 
 struct Styling {
-    load: LoadId,
-    url: Url,
-    page: Page,
+    shown: Shown,
     fetches: Vec<(FetchId, String)>,
+    arrived: Vec<(String, Vec<u8>)>,
     attempted: Vec<String>,
 }
 
@@ -191,6 +191,9 @@ struct Tab {
     shown: Option<Shown>,
     pending: Option<(LoadId, FetchId, Url)>,
     styling: Option<Styling>,
+    images: Vec<(FetchId, String)>,
+    images_arrived: Vec<(String, Vec<u8>)>,
+    images_attempted: usize,
     viewport: Option<Viewport>,
     resized: bool,
     hover: Option<(LoadId, f32, f32)>,
@@ -203,7 +206,8 @@ impl Tab {
             .styling
             .iter()
             .flat_map(|styling| styling.fetches.iter().map(|(fetch, _)| *fetch));
-        document.into_iter().chain(sheets)
+        let images = self.images.iter().map(|(fetch, _)| *fetch);
+        document.into_iter().chain(sheets).chain(images)
     }
 
     fn set_viewport(&mut self, viewport: Viewport) {
@@ -212,6 +216,26 @@ impl Tab {
             .is_none_or(|current| current.width != viewport.width);
         self.viewport = Some(viewport);
     }
+}
+
+fn body(result: Result<Response, FetchError>) -> Vec<u8> {
+    match result {
+        Ok(response) if (200..300).contains(&response.status) => response.body,
+        _ => Vec::new(),
+    }
+}
+
+fn borrowed(arrived: &[(String, Vec<u8>)]) -> Vec<(&str, &[u8])> {
+    arrived
+        .iter()
+        .map(|(href, bytes)| (href.as_str(), bytes.as_slice()))
+        .collect()
+}
+
+fn resolved(base: &Url, href: &str) -> Option<Url> {
+    base.join(href.trim())
+        .ok()
+        .filter(|url| matches!(url.scheme(), "http" | "https"))
 }
 
 struct Thread {
@@ -243,6 +267,11 @@ impl Thread {
             for (fetch, result) in self.fetcher.completed() {
                 self.fetched(fetch, result, &mut fonts);
             }
+            let views: Vec<ViewId> = self.tabs.keys().copied().collect();
+            for view in views {
+                self.style(view, &mut fonts);
+                self.add_images(view, &mut fonts);
+            }
             self.relayout(&mut fonts);
         }
     }
@@ -265,6 +294,8 @@ impl Thread {
         let fetches: Vec<FetchId> = tab.fetches().collect();
         tab.pending = None;
         tab.styling = None;
+        tab.images.clear();
+        tab.images_arrived.clear();
         for fetch in fetches {
             self.fetcher.cancel(fetch);
         }
@@ -324,6 +355,11 @@ impl Thread {
         let Some(tab) = self.tabs.get_mut(&view) else {
             return;
         };
+        if let Some(index) = tab.images.iter().position(|(pending, _)| *pending == fetch) {
+            let (_, source) = tab.images.swap_remove(index);
+            tab.images_arrived.push((source, body(result)));
+            return;
+        }
         if let Some(styling) = &mut tab.styling
             && let Some(index) = styling
                 .fetches
@@ -331,12 +367,8 @@ impl Thread {
                 .position(|(pending, _)| *pending == fetch)
         {
             let (_, href) = styling.fetches.swap_remove(index);
-            let bytes = match &result {
-                Ok(response) if (200..300).contains(&response.status) => response.body.as_slice(),
-                _ => &[],
-            };
-            styling.page.add_stylesheet(&href, bytes, fonts);
-            return self.style(view);
+            styling.arrived.push((href, body(result)));
+            return;
         }
         let Some((load, _, requested)) = tab.pending.take() else {
             return;
@@ -372,17 +404,20 @@ impl Thread {
             height: 1.0,
         });
         tab.resized = false;
+        tab.images_attempted = 0;
         tab.styling = Some(Styling {
-            load,
-            url: response.url,
-            page: Page::with_viewport(document, viewport, fonts),
+            shown: Shown {
+                load,
+                url: response.url,
+                page: Page::with_viewport(document, viewport, fonts),
+            },
             fetches: Vec::new(),
+            arrived: Vec::new(),
             attempted: Vec::new(),
         });
-        self.style(view);
     }
 
-    fn style(&mut self, view: ViewId) {
+    fn style(&mut self, view: ViewId, fonts: &mut Fonts) {
         let Some(styling) = self
             .tabs
             .get_mut(&view)
@@ -390,42 +425,91 @@ impl Thread {
         else {
             return;
         };
-        for href in styling.page.stylesheet_links() {
+        if !styling.fetches.is_empty() {
+            return;
+        }
+        if !styling.arrived.is_empty() {
+            let arrived = std::mem::take(&mut styling.arrived);
+            styling
+                .shown
+                .page
+                .add_stylesheets(&borrowed(&arrived), fonts);
+        }
+        for href in styling.shown.page.stylesheet_links() {
             if styling.attempted.contains(&href) || styling.attempted.len() >= MAX_STYLESHEETS {
                 continue;
             }
-            let Some(url) = styling
-                .url
-                .join(href.trim())
-                .ok()
-                .filter(|url| matches!(url.scheme(), "http" | "https"))
-            else {
-                continue;
-            };
             styling.attempted.push(href.clone());
-            styling.fetches.push((self.fetcher.fetch(url), href));
+            match resolved(&styling.shown.url, &href) {
+                Some(url) => styling.fetches.push((self.fetcher.fetch(url), href)),
+                None => styling.arrived.push((href, Vec::new())),
+            }
         }
-        if !styling.fetches.is_empty() {
+        if !styling.fetches.is_empty() || !styling.arrived.is_empty() {
             return;
         }
         let Some(tab) = self.tabs.get_mut(&view) else {
             return;
         };
-        let Some(Styling {
-            load, url, page, ..
-        }) = tab.styling.take()
-        else {
+        let Some(Styling { shown, .. }) = tab.styling.take() else {
             return;
         };
         let frame = Frame {
-            title: page.title().filter(|title| !title.is_empty()),
-            list: Arc::clone(&page.display_list),
-            links: Arc::new(links(&page, &url)),
-            fragment: url.fragment().and_then(|name| page.fragment_y(name)),
-            url: url.clone(),
+            title: shown.page.title().filter(|title| !title.is_empty()),
+            list: Arc::clone(&shown.page.display_list),
+            links: Arc::new(links(&shown.page, &shown.url)),
+            fragment: shown
+                .url
+                .fragment()
+                .and_then(|name| shown.page.fragment_y(name)),
+            url: shown.url.clone(),
         };
-        tab.shown = Some(Shown { load, url, page });
+        let load = shown.load;
+        tab.shown = Some(shown);
+        self.request_images(view);
         self.send(view, load, Outcome::Frame(frame));
+    }
+
+    fn request_images(&mut self, view: ViewId) {
+        let Some(tab) = self.tabs.get_mut(&view) else {
+            return;
+        };
+        let Some(shown) = &tab.shown else {
+            return;
+        };
+        let requested: Vec<String> = tab
+            .images
+            .iter()
+            .map(|(_, source)| source.clone())
+            .collect();
+        for source in shown.page.image_links() {
+            if requested.contains(&source) || tab.images_attempted >= MAX_IMAGES {
+                continue;
+            }
+            tab.images_attempted += 1;
+            match resolved(&shown.url, &source) {
+                Some(url) => tab.images.push((self.fetcher.fetch(url), source)),
+                None => tab.images_arrived.push((source, Vec::new())),
+            }
+        }
+    }
+
+    fn add_images(&mut self, view: ViewId, fonts: &mut Fonts) {
+        let Some(tab) = self.tabs.get_mut(&view) else {
+            return;
+        };
+        if tab.images_arrived.is_empty() {
+            return;
+        }
+        let arrived = std::mem::take(&mut tab.images_arrived);
+        let Some(shown) = &mut tab.shown else {
+            return;
+        };
+        shown.page.add_images(&borrowed(&arrived), fonts);
+        let list = Arc::clone(&shown.page.display_list);
+        let links = Arc::new(links(&shown.page, &shown.url));
+        let load = shown.load;
+        self.send(view, load, Outcome::Relaid(list, links));
     }
 
     fn relayout(&mut self, fonts: &mut Fonts) {

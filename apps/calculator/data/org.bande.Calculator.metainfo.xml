@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Calculator</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Calculator</name>
+  <summary>Basic, scientific and programmer calculations with a paper tape</summary>
+  <description>
+    <p>Calculate with exact decimal arithmetic in Basic, Scientific and Programmer modes, keep a paper tape of every calculation, and use Reverse Polish Notation if you prefer it.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Calculator.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+</component>

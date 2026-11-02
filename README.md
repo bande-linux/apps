@@ -20,12 +20,14 @@ apt install bande-<name>
 | Calendar | `bande-calendar` |
 | Browser | `bande-browser` (the engine is `bande-linux/web`, pinned by `ci/bump-web.sh`) |
 | Velox | `bande-velox` (containers of Docker Engine or Podman, and virtual machines on QEMU) |
+| Calculator | `bande-calculator` (Basic, Scientific and Programmer, paper tape, RPN) |
+| Preview | `bande-preview` (images; the default image viewer) |
 | Clock | `bande-clock` (alarms, timers, a stopwatch and a world clock; rings with its window closed) |
 
 Every app is a `bande-app` app: like on macOS, it keeps running after its last window closes and
 reopens a window when activated, until Quit (Ctrl+Q). Without a window its menus stay full:
 items that act on a window's content are disabled, the rest work and open the window they need,
-and the Window menu names the main window (Message Viewer, Calendar, Activity Monitor).
+and the Window menu names the main window (Message Viewer, Calendar, Activity Monitor, Calculator).
 
 ## Layout
 

@@ -1,6 +1,7 @@
 mod address;
 mod page;
 mod renderer;
+mod tiles;
 mod view;
 
 use std::os::fd::BorrowedFd;
