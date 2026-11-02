@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
@@ -61,6 +62,23 @@ pub enum Pending {
     Delete,
 }
 
+type Expansion = (Timestamp, Timestamp, TimeZone, Vec<Occurrence>);
+
+#[derive(Debug, Default)]
+pub struct Expanded(RefCell<Option<Expansion>>);
+
+impl Clone for Expanded {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for Expanded {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Stored {
     pub href: String,
@@ -69,6 +87,8 @@ pub struct Stored {
     pub pending: Option<Pending>,
     #[serde(skip)]
     pub parsed: Option<CalendarObject>,
+    #[serde(skip)]
+    expanded: Expanded,
 }
 
 impl Stored {
@@ -80,11 +100,35 @@ impl Stored {
             data,
             pending,
             parsed,
+            expanded: Expanded::default(),
         }
     }
 
     fn reparse(&mut self) {
-        self.parsed = parse_one(&self.data);
+        self.set_parsed(parse_one(&self.data));
+    }
+
+    fn set_parsed(&mut self, parsed: Option<CalendarObject>) {
+        self.parsed = parsed;
+        self.expanded = Expanded::default();
+    }
+
+    fn occurrences(&self, from: Timestamp, to: Timestamp, local: &TimeZone) -> Vec<Occurrence> {
+        let Some(object) = &self.parsed else {
+            return Vec::new();
+        };
+        let Ok(mut memo) = self.expanded.0.try_borrow_mut() else {
+            return object.occurrences(from, to, local);
+        };
+        if let Some((start, end, zone, found)) = memo.as_ref()
+            && (*start, *end) == (from, to)
+            && zone == local
+        {
+            return found.clone();
+        }
+        let found = object.occurrences(from, to, local);
+        *memo = Some((from, to, local.clone(), found.clone()));
+        found
     }
 }
 
@@ -118,6 +162,27 @@ impl Calendar {
                     .as_ref()
                     .is_some_and(|object| object.uid() == uid)
         })
+    }
+
+    pub fn for_sync(&self) -> Self {
+        Self {
+            info: self.info.clone(),
+            objects: self
+                .objects
+                .iter()
+                .map(|stored| Stored {
+                    href: stored.href.clone(),
+                    etag: stored.etag.clone(),
+                    data: match stored.pending {
+                        Some(_) => stored.data.clone(),
+                        None => String::new(),
+                    },
+                    pending: stored.pending,
+                    parsed: None,
+                    expanded: Expanded::default(),
+                })
+                .collect(),
+        }
     }
 
     pub fn has_pending(&self) -> bool {
@@ -465,11 +530,8 @@ impl Library {
                 if stored.pending == Some(Pending::Delete) {
                     continue;
                 }
-                let Some(object) = &stored.parsed else {
-                    continue;
-                };
                 found.extend(
-                    object
+                    stored
                         .occurrences(from, to, local)
                         .into_iter()
                         .map(|occurrence| Found {
@@ -575,14 +637,14 @@ impl Library {
                     (false, _) => Some(Pending::Update),
                 };
                 stored.data = data;
-                stored.parsed = Some(object);
+                stored.set_parsed(Some(object));
                 index
             }
             None => {
                 let href = href_for(&info, object.uid());
                 let pending = (!local).then_some(Pending::Create);
                 let mut stored = Stored::new(href, None, data, pending);
-                stored.parsed = Some(object);
+                stored.set_parsed(Some(object));
                 target.objects.push(stored);
                 target.objects.len() - 1
             }
