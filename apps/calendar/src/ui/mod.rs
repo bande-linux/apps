@@ -957,7 +957,7 @@ impl CalendarView {
         let Some(object) = self.library.object(found.calendar, found.object) else {
             return;
         };
-        let moved = crate::edit::reschedule(
+        let mut moved = crate::edit::reschedule(
             object,
             found.occurrence.event,
             found.occurrence.key,
@@ -967,6 +967,9 @@ impl CalendarView {
             scope,
             &self.zone,
         );
+        if let Some(me) = self.me(found.calendar) {
+            crate::invite::revise(&mut moved, &me);
+        }
         self.library.put_object(found.calendar, moved);
         self.requests.push(Request::Changed);
     }
@@ -990,10 +993,11 @@ impl CalendarView {
             &self.zone,
         );
         let mut edited = edited;
-        if let Some(me) = self.me(found.calendar)
-            && let Some(master) = edited.master_mut()
-        {
-            crate::invite::invite(master, &me, &details.invitees);
+        if let Some(me) = self.me(found.calendar) {
+            crate::invite::revise(&mut edited, &me);
+            if let Some(master) = edited.master_mut() {
+                crate::invite::invite(master, &me, &details.invitees);
+            }
         }
         let uid = edited.uid().to_owned();
         let target = calendar.filter(|target| *target != found.calendar);

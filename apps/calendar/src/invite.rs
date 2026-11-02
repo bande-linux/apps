@@ -154,3 +154,15 @@ pub fn invite(event: &mut Event, me: &str, addresses: &[String]) {
         );
     }
 }
+
+pub fn revise(object: &mut CalendarObject, me: &str) {
+    for event in &mut object.events {
+        let organizing = event
+            .component
+            .property("ORGANIZER")
+            .is_some_and(|organizer| same(organizer, me));
+        if organizing && event.component.property("ATTENDEE").is_some() {
+            event.sequence += 1;
+        }
+    }
+}
