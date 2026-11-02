@@ -21,8 +21,8 @@ views. Packaged as `bande-calendar`.
   for that subscription, as on macOS; the name and colour come from `X-WR-CALNAME` and
   `X-APPLE-CALENDAR-COLOR`.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
-  without a network and pushes changes as soon as NetworkManager says the network is back. Sync is incremental with `sync-token`
-  (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
+  without a network and pushes changes as soon as NetworkManager says the network is back.
+  Sync is incremental with `sync-token` (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
   `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
   version stays and the local edit is kept beside it as a new event, and the sidebar says so.
 - **iCalendar.** Its own parser and writer: line folding, escaping, unknown properties and
@@ -43,27 +43,26 @@ views. Packaged as `bande-calendar`.
   inspector popover with title, location, all-day, start and end, repeat (the usual choices
   or Custom…: every N days, weeks on chosen weekdays, months on a day or on the first…last
   weekday, or years) and when it ends (never, after a number of times, or on a date), alert,
-  calendar and notes. Changing a
-  recurring event asks whether it is for this event only (an override) or all events.
+  calendar and notes. Changing a recurring event asks whether it is for this event only (an
+  override) or all events.
 - **Invitations** through the server (RFC 6638 implicit scheduling, as iCloud, Fastmail,
   Nextcloud and Google do it): the inspector lists the organizer and invitees with their
   answers, Accept, Maybe and Decline update your own `PARTSTAT` (an invitation's title and
-  times stay read-only), and on an event you organise
-  in a CalDAV calendar you can add invitees by address; the server sends the mail.
+  times stay read-only), and on an event you organise in a CalDAV calendar you can add
+  invitees by address; the server sends the mail. Your addresses come from
+  `calendar-user-address-set`.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed, with
   Snooze (5 minutes) and a click that opens Calendar on the event's day. Alerts,
   the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
   suspend or a clock change, and the view follows a change of the system time zone at once.
-- **Settings** (Calendar ▸ Settings…): default calendar, start of the week, the hours the day
-  starts and ends (the rest is shaded, and the week opens at the start), how many hours the
-  day and week show at a time, week numbers, default
-  alerts for new events and all-day events, how often accounts and subscriptions refresh, and
-  adding, re-signing and removing accounts, and time zone support, which shows each timed
-  event's zone in the inspector: its times are shown and typed in that zone, and a new zone
-  keeps the wall times of the whole series (exceptions and the end date move with it), and
-  View ▸ Time Zone shows the whole calendar in a zone its events use. Stored in
-  `~/.config/bande/calendar.conf`.
+- **Settings** (Calendar ▸ Settings…, stored in `~/.config/bande/calendar.conf`): default
+  calendar, start of the week, the hours the day starts and ends (the rest is shaded and the
+  week opens there), hours shown at a time, week numbers, default alerts for events and
+  all-day events, refresh intervals, adding, re-signing and removing accounts, and time zone
+  support. With it, the inspector shows each timed event's zone, its times are shown and typed
+  in that zone, a new zone keeps the wall times of the whole series (exceptions and end date
+  move with it), and View ▸ Time Zone shows the calendar in a zone its events use.
 - **Files and links.** `bande-calendar file.ics` or File ▸ Import… offers to add its events;
   File ▸ Export… (or Export… on a calendar's menu) saves a calendar as one `.ics` file, through
   the desktop's file chooser portal; `bande-calendar webcal://…` offers to subscribe. The
