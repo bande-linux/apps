@@ -185,6 +185,8 @@ pub enum Change {
     AddAccount,
     RemoveAccount(String),
     Password(String),
+    SubscriptionRefresh(String, Option<u32>),
+    SubscriptionAlerts(String, bool),
 }
 
 static CHANGES: OnceLock<Outbox<Change>> = OnceLock::new();

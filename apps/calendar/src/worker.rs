@@ -167,24 +167,23 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
         },
         Job::Sync(calendars) => {
             for (kind, account, calendar) in calendars {
-                let result =
-                    match &kind {
-                        AccountKind::CalDav { user, .. } => {
-                            let credentials = passwords.get(&account).map(|password| Credentials {
-                                user: user.clone(),
-                                password,
-                            });
-                            sync_calendar(&Client::new(credentials.as_ref()), &calendar)
-                                .map(Reply::Synced)
-                        }
-                        AccountKind::Subscription { url } => Client::new(None)
-                            .get(&http_url(url))
-                            .map(|resource| Reply::Refreshed {
-                                calendar: calendar.info.id.clone(),
-                                data: resource.data,
-                            }),
-                        AccountKind::Local => continue,
-                    };
+                let result = match &kind {
+                    AccountKind::CalDav { user, .. } => {
+                        let credentials = passwords.get(&account).map(|password| Credentials {
+                            user: user.clone(),
+                            password,
+                        });
+                        sync_calendar(&Client::new(credentials.as_ref()), &calendar)
+                            .map(Reply::Synced)
+                    }
+                    AccountKind::Subscription { url, .. } => Client::new(None)
+                        .get(&http_url(url))
+                        .map(|resource| Reply::Refreshed {
+                            calendar: calendar.info.id.clone(),
+                            data: resource.data,
+                        }),
+                    AccountKind::Local => continue,
+                };
                 if let Err(Error::Unauthorized) = &result {
                     reply(Reply::SignInFailed {
                         account: account.clone(),

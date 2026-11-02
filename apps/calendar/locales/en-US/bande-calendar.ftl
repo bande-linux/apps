@@ -185,3 +185,5 @@ nth-second = second
 nth-third = third
 nth-fourth = fourth
 nth-last = last
+refresh-default = As in Settings
+settings-subscription-alerts = Alerts
