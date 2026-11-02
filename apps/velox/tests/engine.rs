@@ -47,7 +47,7 @@ fn next(informer: &Informer, queue: &mut Vec<Update>, wanted: fn(&Update) -> boo
     loop {
         queue.extend(informer.drain());
         if let Some(found) = queue.iter().position(wanted) {
-            return queue.drain(..=found).last().unwrap();
+            return queue.drain(..=found).next_back().unwrap();
         }
         assert!(Instant::now() < deadline, "no update in time");
         std::thread::sleep(Duration::from_millis(10));
