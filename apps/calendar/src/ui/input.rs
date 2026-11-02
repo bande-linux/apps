@@ -787,6 +787,16 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
                 view.ask_delete(found);
             }
         }
+        Signal::Answer(index) => {
+            if let Some(found) = view
+                .inspector
+                .as_ref()
+                .map(|inspector| inspector.found.clone())
+            {
+                view.close_inspector(true);
+                view.answer(&found, index);
+            }
+        }
         Signal::Choice(action) => choose(view, &action),
         Signal::SetupSubmit => submit_setup(view),
         Signal::SetupKind(_) => {

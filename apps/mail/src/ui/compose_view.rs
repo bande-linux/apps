@@ -12,7 +12,7 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{
     Appearance, Header, Image, Item, Palette, Point, Radius, Rect, Scene, Shape, TextAlign,
-    TextRole, TextStyle, TextSystem,
+    TextRole, TextStyle, TextSystem, window_controls_end,
 };
 
 use crate::L10N;
@@ -31,7 +31,7 @@ const FIELD_ROW: f32 = 36.0;
 const FIELD_FONT: f32 = 13.0;
 const SYMBOL_PIXELS: u32 = 32;
 const TRAILING_INSET: f32 = 12.0;
-const TITLE_X: f32 = 120.0;
+const TITLE_X: f32 = window_controls_end(true) + 16.0;
 const BODY_GAP: f32 = 10.0;
 const CHIP_HEIGHT: f32 = 26.0;
 const CHIP_PADDING: f32 = 10.0;

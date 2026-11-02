@@ -41,6 +41,10 @@ views. Packaged as `bande-calendar`.
   inspector popover with title, location, all-day, start and end, repeat and when it ends
   (never, after a number of times, or on a date), alert, calendar and notes. Changing a
   recurring event asks whether it is for this event only (an override) or all events.
+- **Invitations** through the server (RFC 6638 implicit scheduling, as iCloud, Fastmail,
+  Nextcloud and Google do it): the inspector lists the organizer and invitees with their
+  answers, Accept, Maybe and Decline update your own `PARTSTAT`, and on an event you organise
+  in a CalDAV calendar you can add invitees by address; the server sends the mail.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed. Alerts,
   the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
@@ -86,7 +90,7 @@ whole test list and the reason for each is in `NOTES/tests.md`.
 
 ## Not done yet
 
-- Invitations (attendees, `METHOD:REQUEST`/`REPLY`), free/busy, tasks (`VTODO`).
+- Invitation e-mails (`METHOD:REQUEST`/`REPLY` over iMIP), free/busy, tasks (`VTODO`).
 - OAuth providers (Google, Microsoft); Basic authentication only, so iCloud and Fastmail work with
   an app password.
 - Editing the time zone of an event; custom repeat rules (they are kept and shown as Custom,

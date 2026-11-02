@@ -237,6 +237,7 @@ pub struct Details {
     pub repeat: Repeat,
     pub end_repeat: EndRepeat,
     pub alert: Alert,
+    pub invitees: Vec<String>,
 }
 
 pub fn moment_of(key: InstanceKey, like: &Moment) -> Moment {
