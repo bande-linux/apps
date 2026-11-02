@@ -23,7 +23,7 @@ pub enum MenuCommand {
     Signal(Stop),
 }
 
-const ACTIONS: [(MenuCommand, &str); 27] = [
+const ACTIONS: [(MenuCommand, &str); 30] = [
     (MenuCommand::Quit, "quit"),
     (MenuCommand::ForceQuit, "force-quit"),
     (MenuCommand::ShowInFiles, "show-in-files"),
@@ -41,7 +41,10 @@ const ACTIONS: [(MenuCommand, &str); 27] = [
     (MenuCommand::Filter(Filter::All), "filter-all"),
     (MenuCommand::Filter(Filter::Hierarchy), "filter-hierarchy"),
     (MenuCommand::Filter(Filter::Mine), "filter-mine"),
+    (MenuCommand::Filter(Filter::System), "filter-system"),
+    (MenuCommand::Filter(Filter::Active), "filter-active"),
     (MenuCommand::Filter(Filter::Apps), "filter-apps"),
+    (MenuCommand::Filter(Filter::Selected), "filter-selected"),
     (
         MenuCommand::Frequency(Frequency::VeryOften),
         "frequency-very-often",

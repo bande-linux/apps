@@ -29,7 +29,7 @@ ranked list at the end is what is left. Delete this plan when the list is done.
 
 | macOS | Bande |
 |---|---|
-| All / My / System / Selected / Applications in last 12 h / Active / Inactive / Windowed processes | All, All Hierarchically, My Processes, Apps. Missing Selected, Active, System |
+| All / My / System / Selected / Applications in last 12 h / Active / Inactive / Windowed processes | Have All, All Hierarchically, My, System, Active, Apps (windowed) and Selected Processes. No Inactive or last-12-hours apps |
 | All Processes, Hierarchically | Have (process tree by parent, kernel threads folded) |
 | Update Frequency: 1 s / 2 s / 5 s | Have, remembered; the graph span follows (1, 2 or 5 min) |
 | Columns, Dock Icon (CPU usage/history, memory, network, disk) | Columns have; dock icon is missing |
@@ -61,8 +61,7 @@ fixed four rows).
    icon content.
 2. Sample Process in the inspector (per-thread `wchan` and `syscall` snapshot, or perf when
    permitted) and a Statistics section (faults, context switches, I/O syscalls).
-3. Selected Processes and Active Processes filters.
-4. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
-5. Ports column (socket count per process), packets in/out, and UDP traffic per process (needs
+3. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
+4. Ports column (socket count per process), packets in/out, and UDP traffic per process (needs
    eBPF or nftables accounting).
-6. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).
+5. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).
