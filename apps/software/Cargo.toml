@@ -1,7 +1,7 @@
 [package]
 name = "bande-software"
 description = "Bande Software: browse, search and install apps from Debian"
-version = "0.1.2"
+version = "0.1.3"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true

@@ -192,7 +192,7 @@ impl Program for Store {
                 Entry::submenu(
                     &L10N.tr("menu-view"),
                     vec![
-                        item("menu-back", COMMAND_BACK, "Ctrl+["),
+                        item("menu-back", COMMAND_BACK, "Alt+Left"),
                         Entry::separator(),
                         item("discover", COMMAND_DISCOVER, "Ctrl+1"),
                         item("installed", COMMAND_INSTALLED, "Ctrl+2"),
