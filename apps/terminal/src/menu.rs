@@ -8,103 +8,108 @@ use bande_xdg::path_from_file_uri;
 use crate::L10N;
 use crate::keys::Command;
 
-const COMMANDS: [(Command, &str, &str, &str); 22] = [
-    (Command::Copy, "copy", "menu-copy", "Shift+Ctrl+C"),
-    (Command::Paste, "paste", "menu-paste", "Shift+Ctrl+V"),
+const COMMANDS: [(Command, &str, &str, Option<&str>); 22] = [
+    (Command::Copy, "copy", "menu-copy", Some("Shift+Ctrl+C")),
+    (Command::Paste, "paste", "menu-paste", Some("Shift+Ctrl+V")),
     (
         Command::SelectAll,
         "select-all",
         "menu-select-all",
-        "Shift+Ctrl+A",
+        Some("Shift+Ctrl+A"),
     ),
     (
         Command::ClearScrollback,
         "clear-scrollback",
         "menu-clear-scrollback",
-        "Shift+Ctrl+K",
+        Some("Shift+Ctrl+K"),
     ),
-    (Command::BiggerText, "bigger", "menu-bigger", "Ctrl+="),
-    (Command::SmallerText, "smaller", "menu-smaller", "Ctrl+-"),
+    (Command::BiggerText, "bigger", "menu-bigger", Some("Ctrl+=")),
+    (
+        Command::SmallerText,
+        "smaller",
+        "menu-smaller",
+        Some("Ctrl+-"),
+    ),
     (
         Command::DefaultTextSize,
         "default-size",
         "menu-default-size",
-        "Ctrl+0",
+        Some("Ctrl+0"),
     ),
-    (Command::NewTab, "new-tab", "menu-new-tab", "Shift+Ctrl+T"),
+    (
+        Command::NewTab,
+        "new-tab",
+        "menu-new-tab",
+        Some("Shift+Ctrl+T"),
+    ),
     (
         Command::SelectOutput,
         "select-output",
         "menu-select-output",
-        "Shift+Ctrl+O",
+        None,
     ),
-    (
-        Command::EditTitle,
-        "edit-title",
-        "menu-edit-title",
-        "Shift+Ctrl+I",
-    ),
+    (Command::EditTitle, "edit-title", "menu-edit-title", None),
     (
         Command::NewWindow,
         "new-window",
         "menu-new-window",
-        "Shift+Ctrl+N",
+        Some("Shift+Ctrl+N"),
     ),
-    (Command::NextTab, "next-tab", "menu-next-tab", "Ctrl+PgDn"),
+    (
+        Command::NextTab,
+        "next-tab",
+        "menu-next-tab",
+        Some("Ctrl+PgDn"),
+    ),
     (
         Command::PreviousTab,
         "previous-tab",
         "menu-previous-tab",
-        "Ctrl+PgUp",
+        Some("Ctrl+PgUp"),
     ),
-    (Command::Find, "find", "menu-find", "Shift+Ctrl+F"),
+    (Command::Find, "find", "menu-find", Some("Shift+Ctrl+F")),
     (
         Command::FindNext,
         "find-next",
         "menu-find-next",
-        "Shift+Ctrl+G",
+        Some("Shift+Ctrl+G"),
     ),
     (
         Command::SplitSideBySide,
         "split-side-by-side",
         "menu-split-side-by-side",
-        "Shift+Ctrl+D",
+        Some("Shift+Ctrl+D"),
     ),
     (
         Command::SplitStacked,
         "split-stacked",
         "menu-split-stacked",
-        "Shift+Ctrl+E",
+        Some("Shift+Ctrl+E"),
     ),
     (
         Command::NextPane,
         "next-pane",
         "menu-next-pane",
-        "Shift+Ctrl+]",
+        Some("Shift+Ctrl+]"),
     ),
     (
         Command::PreviousPane,
         "previous-pane",
         "menu-previous-pane",
-        "Shift+Ctrl+[",
+        Some("Shift+Ctrl+["),
     ),
     (
         Command::PreviousPrompt,
         "previous-prompt",
         "menu-previous-prompt",
-        "Shift+Ctrl+Up",
+        None,
     ),
-    (
-        Command::NextPrompt,
-        "next-prompt",
-        "menu-next-prompt",
-        "Shift+Ctrl+Down",
-    ),
+    (Command::NextPrompt, "next-prompt", "menu-next-prompt", None),
     (
         Command::FindPrevious,
         "find-previous",
         "menu-find-previous",
-        "Shift+Ctrl+H",
+        Some("Shift+Ctrl+H"),
     ),
 ];
 
@@ -170,7 +175,7 @@ impl MenuCommand {
     }
 }
 
-fn command_entry(command: Command) -> Option<(String, String, &'static str)> {
+fn command_entry(command: Command) -> Option<(String, String, Option<&'static str>)> {
     COMMANDS
         .iter()
         .find(|(known, ..)| *known == command)
@@ -179,7 +184,8 @@ fn command_entry(command: Command) -> Option<(String, String, &'static str)> {
 
 fn command_item(command: Command) -> MenuItem {
     match command_entry(command) {
-        Some((title, action, shortcut)) => MenuItem::new(&title, &action).shortcut(shortcut),
+        Some((title, action, Some(shortcut))) => MenuItem::new(&title, &action).shortcut(shortcut),
+        Some((title, action, None)) => MenuItem::new(&title, &action),
         None => MenuItem::separator(),
     }
 }
@@ -251,11 +257,16 @@ fn command_entries(commands: &[Option<Command>]) -> Vec<Entry> {
     commands
         .iter()
         .map(|command| {
-            command
-                .and_then(command_entry)
-                .map_or_else(Entry::separator, |(title, action, shortcut)| {
-                    Entry::item(&title, &action).shortcut(shortcut)
-                })
+            command.and_then(command_entry).map_or_else(
+                Entry::separator,
+                |(title, action, shortcut)| {
+                    let entry = Entry::item(&title, &action);
+                    match shortcut {
+                        Some(shortcut) => entry.shortcut(shortcut),
+                        None => entry,
+                    }
+                },
+            )
         })
         .collect()
 }

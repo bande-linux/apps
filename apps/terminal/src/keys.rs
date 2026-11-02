@@ -286,8 +286,6 @@ pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
     let character = match key {
         Key::PageUp if !shift => return Some(Command::PreviousTab),
         Key::PageDown if !shift => return Some(Command::NextTab),
-        Key::Up if shift => return Some(Command::PreviousPrompt),
-        Key::Down if shift => return Some(Command::NextPrompt),
         Key::Character(character) => character,
         _ => return None,
     };
@@ -310,8 +308,6 @@ pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
         (']' | '}', true) => Command::NextPane,
         ('[' | '{', true) => Command::PreviousPane,
         (',' | '<', true) => Command::Settings,
-        ('i', true) => Command::EditTitle,
-        ('o', true) => Command::SelectOutput,
         _ => return None,
     };
     Some(command)

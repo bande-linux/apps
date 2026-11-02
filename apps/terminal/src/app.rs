@@ -941,7 +941,7 @@ impl TerminalWindow {
         if self.link.take().is_some() {
             window.request_redraw();
         }
-        if opens_menu(key, modifiers) && !self.banner_focused {
+        if key == Key::Menu && !self.banner_focused {
             return self.menu_from_keyboard(window);
         }
         let command = shortcut(key, modifiers);
@@ -960,25 +960,18 @@ impl TerminalWindow {
         }
         let mode = self.mode();
         let in_alternate_screen = mode.contains(TermMode::ALT_SCREEN);
-        if modifiers == Modifiers::default() && !in_alternate_screen {
+        let shift_only = Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        };
+        if modifiers == shift_only && !in_alternate_screen {
             match key {
                 Key::PageUp => return self.scroll_pages(window, 1),
                 Key::PageDown => return self.scroll_pages(window, -1),
                 _ => {}
             }
         }
-        let unshifted = Modifiers {
-            shift: false,
-            ..modifiers
-        };
-        let shifted_page = matches!(key, Key::PageUp | Key::PageDown)
-            && modifiers.shift
-            && unshifted == Modifiers::default();
-        if shifted_page && !in_alternate_screen {
-            return;
-        }
         let modifiers = match key {
-            Key::PageUp | Key::PageDown => unshifted,
             Key::Character(_) if !self.settings.alt_as_meta => Modifiers {
                 alt: false,
                 ..modifiers
@@ -2248,14 +2241,6 @@ fn mouse_button(button: PointerButton) -> Option<MouseButton> {
 
 fn asks_for_menu(pointer: &Pointer) -> bool {
     pointer.button == PointerButton::Secondary
-}
-
-fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
-    let shift_only = Modifiers {
-        shift: true,
-        ..Modifiers::default()
-    };
-    key == Key::Menu || (key == Key::Function(10) && modifiers == shift_only)
 }
 
 fn quoted(name: &str) -> String {
