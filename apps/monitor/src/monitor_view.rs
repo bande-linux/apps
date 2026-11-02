@@ -1042,7 +1042,7 @@ fn paint_well(painter: &mut Painter, frame: Rect, palette: Palette) -> Shape {
         Scheme::Light => palette.well.mix(palette.sheet, 0.55),
         Scheme::Dark => palette.well.mix(palette.chassis, 0.5),
     };
-    painter.fill(well.clone(), background);
+    painter.fill(well, background);
     for quarter in 1..4 {
         let y = (frame.y + frame.height * quarter as f32 / 4.0).round();
         painter.fill(

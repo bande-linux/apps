@@ -555,10 +555,7 @@ impl Sampler {
             cpu,
             cores,
             disk,
-            interfaces: interfaces
-                .into_iter()
-                .map(|(name, now)| (name, now))
-                .collect(),
+            interfaces: interfaces.into_iter().collect(),
         });
         Ok(snapshot)
     }
