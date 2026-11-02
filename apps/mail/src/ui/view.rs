@@ -180,6 +180,25 @@ pub(crate) struct SetupSheet {
     pub(crate) password_field: WidgetId,
 }
 
+fn open_files() -> HashSet<PathBuf> {
+    let Ok(processes) = std::fs::read_dir("/proc") else {
+        return HashSet::new();
+    };
+    processes
+        .filter_map(|entry| entry.ok())
+        .filter(|process| {
+            process
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.parse::<u32>().is_ok())
+        })
+        .filter_map(|process| std::fs::read_dir(process.path().join("fd")).ok())
+        .flatten()
+        .filter_map(|entry| entry.ok())
+        .filter_map(|fd| std::fs::read_link(fd.path()).ok())
+        .collect()
+}
+
 pub struct MailView {
     pub(crate) store: Store,
     store_path: PathBuf,
@@ -1312,11 +1331,23 @@ impl MailView {
     }
 
     fn remove_unedited_attachments(&mut self) {
-        for (_, path, opened) in self.opened.drain(..) {
-            let unedited = std::fs::metadata(&path)
-                .and_then(|metadata| metadata.modified())
-                .is_ok_and(|modified| modified == opened);
-            if unedited
+        let unedited = self
+            .opened
+            .drain(..)
+            .filter(|(_, path, written)| {
+                std::fs::metadata(path)
+                    .and_then(|metadata| metadata.modified())
+                    .is_ok_and(|modified| modified == *written)
+            })
+            .map(|(_, path, _)| path)
+            .collect::<Vec<_>>();
+        if unedited.is_empty() {
+            return;
+        }
+        let in_use = open_files();
+        for path in unedited {
+            let real = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+            if !in_use.contains(&real)
                 && std::fs::remove_file(&path).is_ok()
                 && let Some(folder) = path.parent()
             {
