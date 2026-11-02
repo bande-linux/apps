@@ -18,12 +18,12 @@ use bande_toolkit::{
 use crate::L10N;
 use crate::discover::Settings as Servers;
 use crate::net::{Network, Security, Server};
-use crate::secrets::Keyring;
 use crate::settings::{Change, MAX_PREVIEW_LINES, MailSettings, announce};
 use crate::setup::{Outcome, Request as SetupRequest, check};
 use crate::store::{Account, AccountId, Rule, RuleAction, RuleField, Store};
 use crate::ui::view::TOOLBAR_HEIGHT;
 use crate::worker::{Event as MailEvent, Mailroom};
+use bande_keyring::Keyring;
 
 pub const SETTINGS_SIZE: (u32, u32) = (620, 620);
 const TAB_WIDTH: f32 = 92.0;
@@ -944,8 +944,14 @@ impl SettingsView {
         let spawned = std::thread::Builder::new()
             .name("check-servers".to_owned())
             .spawn(move || {
-                let outcome = match Keyring::session_bus()
-                    .and_then(|keyring| Ok((keyring.password(&email, &old_host)?, keyring)))
+                let outcome = match Keyring::open(crate::KEYRING)
+                    .and_then(|keyring| {
+                        Ok((
+                            keyring.password(&crate::keyring_key(&email, &old_host))?,
+                            keyring,
+                        ))
+                    })
+                    .map_err(crate::error::Error::from)
                 {
                     Ok((Some(password), keyring)) => {
                         let request = SetupRequest {
@@ -961,8 +967,16 @@ impl SettingsView {
                                     .and_then(|()| match servers.imap.host == old_host {
                                         true => Ok(()),
                                         false => keyring
-                                            .save(&email, &servers.imap.host, &request.password)
-                                            .and_then(|()| keyring.forget(&email, &old_host)),
+                                            .save(
+                                                &crate::keyring_key(&email, &servers.imap.host),
+                                                &crate::keyring_label(&email),
+                                                &request.password,
+                                            )
+                                            .and_then(|()| {
+                                                keyring
+                                                    .forget(&crate::keyring_key(&email, &old_host))
+                                            })
+                                            .map_err(Into::into),
                                     });
                                 match kept {
                                     Ok(()) => {

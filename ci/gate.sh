@@ -1,5 +1,5 @@
 #!/bin/bash
-# gate.sh [app...]: the local merge gate for the named apps (default: every app and the template):
+# gate.sh [app...]: the local merge gate for the named apps (default: every app, libs/ and the template):
 # ci/check-app.sh, cargo fmt --check, clippy --all-targets -D warnings and the tests, all --locked,
 # on a private session bus. One workspace target dir (./target), no incremental, no debug info. It takes
 # ~/bande-linux/kbuild.lock (one heavy build at a time) and runs under ~/bande-linux/bin/gentle;
@@ -22,6 +22,11 @@ packages=()
 for dir in "${dirs[@]}"; do
     packages+=(-p "bande-$(basename "$dir")")
 done
+if [ $# -eq 0 ]; then
+    for lib in libs/*/; do
+        packages+=(-p "bande-$(basename "$lib")")
+    done
+fi
 ci/check-app.sh "${dirs[@]}"
 free=$(df --output=avail -BG "$root" | tail -1 | tr -dc 0-9)
 need=12; [ -d target ] && need=4

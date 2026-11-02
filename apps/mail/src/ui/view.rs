@@ -26,7 +26,6 @@ use crate::error::Result;
 use crate::imap::{Flag, Role};
 use crate::message::{Content, Envelope};
 use crate::net::Network;
-use crate::secrets::Keyring;
 use crate::settings::{MailSettings, SortBy};
 use crate::setup::{Outcome, Request as SetupRequest, check};
 use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary};
@@ -38,6 +37,7 @@ use crate::ui::symbols::Symbols;
 use crate::ui::toolbar::{Signal, Signals, Toolbar};
 use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status, Worker};
 use bande_app_settings::{Stored, settings_folder};
+use bande_keyring::Keyring;
 
 pub const SHORTCUTS: [(&str, &str); 13] = [
     ("compose", "Ctrl+N"),
@@ -253,7 +253,9 @@ pub struct MailView {
 }
 
 fn keyring_password(email: String, host: String) -> crate::worker::PasswordSource {
-    Box::new(move || Keyring::session_bus()?.password(&email, &host))
+    Box::new(move || {
+        Ok(Keyring::open(crate::KEYRING)?.password(&crate::keyring_key(&email, &host))?)
+    })
 }
 
 impl MailView {
@@ -2022,9 +2024,13 @@ impl MailView {
             let host = account.imap.host.clone();
             let saved = password.clone();
             std::thread::spawn(move || {
-                if let Err(error) = Keyring::session_bus()
-                    .and_then(|keyring| keyring.save(&account.email, &host, &saved))
-                {
+                if let Err(error) = Keyring::open(crate::KEYRING).and_then(|keyring| {
+                    keyring.save(
+                        &crate::keyring_key(&account.email, &host),
+                        &crate::keyring_label(&account.email),
+                        &saved,
+                    )
+                }) {
                     tracing::warn!("cannot save the password: {error}");
                 }
             });
@@ -2077,8 +2083,12 @@ impl MailView {
         std::thread::spawn(move || {
             let outcome = check(&request, &network);
             if let Outcome::Ready(settings) = &outcome
-                && let Err(error) = Keyring::session_bus().and_then(|keyring| {
-                    keyring.save(&request.email, &settings.imap.host, &request.password)
+                && let Err(error) = Keyring::open(crate::KEYRING).and_then(|keyring| {
+                    keyring.save(
+                        &crate::keyring_key(&request.email, &settings.imap.host),
+                        &crate::keyring_label(&request.email),
+                        &request.password,
+                    )
                 })
             {
                 tracing::warn!("cannot save the password: {error}");
@@ -2190,9 +2200,9 @@ impl MailView {
         }
         self.release_held();
         std::thread::spawn(move || {
-            if let Err(error) = Keyring::session_bus()
-                .and_then(|keyring| keyring.forget(&account.email, &account.imap.host))
-            {
+            if let Err(error) = Keyring::open(crate::KEYRING).and_then(|keyring| {
+                keyring.forget(&crate::keyring_key(&account.email, &account.imap.host))
+            }) {
                 tracing::warn!("cannot forget the password: {error}");
             }
         });

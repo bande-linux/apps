@@ -2,8 +2,7 @@ use std::collections::HashMap;
 
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
-
-use crate::error::{Error, Result};
+use zbus::{Error, Result};
 
 const SERVICE: &str = "org.freedesktop.secrets";
 const SERVICE_PATH: &str = "/org/freedesktop/secrets";
@@ -12,25 +11,20 @@ const COLLECTION_INTERFACE: &str = "org.freedesktop.Secret.Collection";
 const ITEM_INTERFACE: &str = "org.freedesktop.Secret.Item";
 const PROMPT_INTERFACE: &str = "org.freedesktop.Secret.Prompt";
 const NO_PROMPT: &str = "/";
-const APPLICATION: &str = "org.bande.Mail";
 
 type Secret = (OwnedObjectPath, Vec<u8>, Vec<u8>, String);
+
+pub type Key<'a> = [(&'a str, &'a str)];
 
 pub struct Keyring {
     connection: Connection,
     session: OwnedObjectPath,
-}
-
-fn attributes<'a>(email: &'a str, host: &'a str) -> HashMap<&'a str, &'a str> {
-    HashMap::from([
-        ("application", APPLICATION),
-        ("account", email),
-        ("server", host),
-    ])
+    application: &'static str,
 }
 
 impl Keyring {
-    pub fn open(connection: Connection) -> Result<Self> {
+    pub fn open(application: &'static str) -> Result<Self> {
+        let connection = Connection::session()?;
         let (_, session): (OwnedValue, OwnedObjectPath) = connection
             .call_method(
                 Some(SERVICE),
@@ -44,24 +38,28 @@ impl Keyring {
         Ok(Self {
             connection,
             session,
+            application,
         })
     }
 
-    pub fn session_bus() -> Result<Self> {
-        Self::open(Connection::session()?)
+    fn attributes<'a>(&self, key: &Key<'a>) -> HashMap<&'a str, &'a str> {
+        key.iter()
+            .copied()
+            .chain([("application", self.application)])
+            .collect()
     }
 
     fn service<B>(&self, method: &str, body: &B) -> Result<zbus::message::Message>
     where
         B: zbus::export::serde::Serialize + zbus::zvariant::DynamicType,
     {
-        Ok(self.connection.call_method(
+        self.connection.call_method(
             Some(SERVICE),
             SERVICE_PATH,
             Some(SERVICE_INTERFACE),
             method,
             body,
-        )?)
+        )
     }
 
     fn prompt(&self, prompt: &ObjectPath<'_>) -> Result<bool> {
@@ -72,7 +70,7 @@ impl Keyring {
         let mut completed = proxy.receive_signal("Completed")?;
         proxy.call_method("Prompt", &(""))?;
         let Some(signal) = completed.next() else {
-            return Err(Error::Secret("the keyring prompt went away".to_owned()));
+            return Err(Error::Failure("the keyring prompt went away".to_owned()));
         };
         let (dismissed, _): (bool, OwnedValue) = signal.body().deserialize()?;
         Ok(!dismissed)
@@ -86,21 +84,21 @@ impl Keyring {
             self.service("Unlock", &(paths,))?.body().deserialize()?;
         match self.prompt(&prompt)? {
             true => Ok(()),
-            false => Err(Error::Secret("the keyring stayed locked".to_owned())),
+            false => Err(Error::Failure("the keyring stayed locked".to_owned())),
         }
     }
 
-    fn items(&self, email: &str, host: &str) -> Result<Vec<OwnedObjectPath>> {
+    fn items(&self, key: &Key<'_>) -> Result<Vec<OwnedObjectPath>> {
         let (unlocked, locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) = self
-            .service("SearchItems", &(attributes(email, host),))?
+            .service("SearchItems", &(self.attributes(key),))?
             .body()
             .deserialize()?;
         self.unlock(&locked)?;
         Ok(unlocked.into_iter().chain(locked).collect())
     }
 
-    pub fn password(&self, email: &str, host: &str) -> Result<Option<String>> {
-        let items = self.items(email, host)?;
+    pub fn password(&self, key: &Key<'_>) -> Result<Option<String>> {
+        let items = self.items(key)?;
         if items.is_empty() {
             return Ok(None);
         }
@@ -137,15 +135,14 @@ impl Keyring {
         }
     }
 
-    pub fn save(&self, email: &str, host: &str, password: &str) -> Result<()> {
+    pub fn save(&self, key: &Key<'_>, label: &str, password: &str) -> Result<()> {
         let collection = self.default_collection()?;
         self.unlock(std::slice::from_ref(&collection))?;
-        let label = format!("Mail password for {email}");
         let properties = HashMap::from([
             ("org.freedesktop.Secret.Item.Label", Value::from(label)),
             (
                 "org.freedesktop.Secret.Item.Attributes",
-                Value::from(attributes(email, host)),
+                Value::from(self.attributes(key)),
             ),
         ]);
         let secret = (
@@ -167,14 +164,14 @@ impl Keyring {
             .deserialize()?;
         match self.prompt(&prompt)? {
             true => Ok(()),
-            false => Err(Error::Secret(
+            false => Err(Error::Failure(
                 "saving the password was cancelled".to_owned(),
             )),
         }
     }
 
-    pub fn forget(&self, email: &str, host: &str) -> Result<()> {
-        for item in self.items(email, host)? {
+    pub fn forget(&self, key: &Key<'_>) -> Result<()> {
+        for item in self.items(key)? {
             let (prompt,): (OwnedObjectPath,) = self
                 .connection
                 .call_method(Some(SERVICE), &item, Some(ITEM_INTERFACE), "Delete", &())?
