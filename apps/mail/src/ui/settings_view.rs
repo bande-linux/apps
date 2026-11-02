@@ -55,6 +55,7 @@ enum Signal {
     Account(usize),
     Settings,
     Identity,
+    Enabled(bool),
     SaveServers,
     AddAccount,
     RemoveAccount,
@@ -491,6 +492,12 @@ impl SettingsView {
             row("settings-account", chooser),
             buttons(vec![add, remove]),
             heading("settings-account-information"),
+            row("settings-enabled", {
+                let state = Rc::clone(&self.state);
+                Toggle::new(&L10N.tr("settings-enabled"), account.enabled, move |on| {
+                    state.borrow_mut().signals.push(Signal::Enabled(on));
+                })
+            }),
             row("settings-email", Label::new(&account.email)),
             row("settings-name", name),
             heading("settings-signature"),
@@ -716,6 +723,12 @@ impl SettingsView {
                 }
                 Signal::Settings => self.save_settings(),
                 Signal::Identity => self.save_identity(),
+                Signal::Enabled(on) => {
+                    if let Some(account) = self.accounts.get_mut(self.account) {
+                        account.enabled = on;
+                    }
+                    self.save_identity();
+                }
                 Signal::SaveServers => {
                     self.save_servers();
                     rebuild = true;

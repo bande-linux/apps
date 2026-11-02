@@ -85,6 +85,7 @@ pub struct Account {
     pub imap: Server,
     pub smtp: Server,
     pub signature: String,
+    pub enabled: bool,
 }
 
 impl Account {
@@ -179,6 +180,7 @@ fn account_from(row: &Row<'_>) -> rusqlite::Result<Account> {
             security: security(row.get(9)?),
         },
         signature: row.get(10)?,
+        enabled: row.get(11)?,
     })
 }
 
@@ -211,6 +213,8 @@ fn summary_from(row: &Row<'_>) -> rusqlite::Result<Summary> {
         thread: row.get(16)?,
     })
 }
+
+const ENABLED: &str = " AND b.account IN (SELECT id FROM accounts WHERE enabled = 1)";
 
 fn thread_of(envelope: &Envelope) -> Option<String> {
     envelope
@@ -285,6 +289,12 @@ impl Store {
             }
             migration.execute_batch("PRAGMA user_version = 2;")?;
         }
+        if version < 3 {
+            migration.execute_batch(
+                "ALTER TABLE accounts ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1; \
+                 PRAGMA user_version = 3;",
+            )?;
+        }
         migration.commit()?;
         Ok(Self { connection })
     }
@@ -292,7 +302,7 @@ impl Store {
     pub fn accounts(&self) -> Result<Vec<Account>> {
         let mut statement = self.connection.prepare(
             "SELECT id, name, email, user, imap_host, imap_port, imap_security, \
-             smtp_host, smtp_port, smtp_security, signature FROM accounts ORDER BY id",
+             smtp_host, smtp_port, smtp_security, signature, enabled FROM accounts ORDER BY id",
         )?;
         let accounts = statement
             .query_map([], account_from)?
@@ -332,7 +342,7 @@ impl Store {
         self.connection.execute(
             "UPDATE accounts SET name = ?2, user = ?3, imap_host = ?4, imap_port = ?5, \
              imap_security = ?6, smtp_host = ?7, smtp_port = ?8, smtp_security = ?9, \
-             signature = ?10 WHERE id = ?1",
+             signature = ?10, enabled = ?11 WHERE id = ?1",
             params![
                 account.id,
                 account.name,
@@ -344,6 +354,7 @@ impl Store {
                 account.smtp.port,
                 account.smtp.security.name(),
                 account.signature,
+                account.enabled,
             ],
         )?;
         Ok(())
@@ -612,7 +623,7 @@ impl Store {
         };
         let query = format!(
             "SELECT {SUMMARY_COLUMNS} FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
-             WHERE {filter} AND m.deleted = 0{search_filter} ORDER BY m.date DESC, m.id DESC"
+             WHERE {filter} AND m.deleted = 0{search_filter}{ENABLED} ORDER BY m.date DESC, m.id DESC"
         );
         let mut statement = self.connection.prepare(&query)?;
         let mut values: Vec<Box<dyn rusqlite::ToSql>> = vec![scope_value];
@@ -817,7 +828,7 @@ impl Store {
         let (filter, scope_value) = scope_filter(scope);
         let query = format!(
             "SELECT COUNT(*) FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
-             WHERE {filter} AND m.deleted = 0 AND m.seen = 0"
+             WHERE {filter} AND m.deleted = 0 AND m.seen = 0{ENABLED}"
         );
         let count: i64 = self
             .connection

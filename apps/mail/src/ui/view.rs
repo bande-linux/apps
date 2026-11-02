@@ -329,7 +329,13 @@ impl MailView {
     }
 
     pub fn accounts_changed(&mut self) {
-        let stored = self.store.accounts().unwrap_or_default();
+        let stored = self
+            .store
+            .accounts()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|account| account.enabled)
+            .collect::<Vec<_>>();
         let known = self.accounts();
         let connects_alike = |a: &Account, b: &Account| {
             (&a.email, &a.user, &a.imap, &a.smtp) == (&b.email, &b.user, &b.imap, &b.smtp)
@@ -499,6 +505,7 @@ impl MailView {
         let accounts = self.store.accounts().unwrap_or_default();
         self.accounts = accounts
             .into_iter()
+            .filter(|account| account.enabled)
             .map(|account| {
                 let mailboxes = self.store.mailboxes(account.id).unwrap_or_default();
                 (account, mailboxes)
@@ -1491,9 +1498,11 @@ impl MailView {
         } else if *mode == Mode::Manual && servers.is_none() {
             Some("setup-missing-servers")
         } else if self
-            .accounts
+            .store
+            .accounts()
+            .unwrap_or_default()
             .iter()
-            .any(|(account, _)| account.email.eq_ignore_ascii_case(&email))
+            .any(|account| account.email.eq_ignore_ascii_case(&email))
         {
             Some("setup-exists")
         } else {
@@ -1581,6 +1590,7 @@ impl MailView {
             imap: settings.imap,
             smtp: settings.smtp,
             signature: String::new(),
+            enabled: true,
         };
         let id = match self.store.add_account(&account) {
             Ok(id) => id,

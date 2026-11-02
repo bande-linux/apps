@@ -16,7 +16,7 @@ apt install bande-mail
   whatever was found. When Gmail, iCloud, Yahoo, AOL or Fastmail refuse the password, the sheet
   says where to create an app password. Several accounts work side by side.
 - **Settings** (Ctrl+,) has four tabs. General: notifications for new mail and their sound.
-  Accounts: each account's full name, signature and server settings (user name, hosts, ports,
+  Accounts: whether each account is used, its full name, signature and server settings (user name, hosts, ports,
   TLS or STARTTLS), Add Account… and Remove…; changed servers are checked with the saved
   password before they are kept. Viewing: list preview lines, conversations, and whether remote
   content loads by itself (off by default). Composing: the account new messages are sent from
