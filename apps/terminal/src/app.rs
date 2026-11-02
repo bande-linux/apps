@@ -20,7 +20,8 @@ use bande_terminal::{
     tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
 use bande_toolkit::ui::{
-    Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
+    Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollExtent, ScrollPhase,
+    ScrollSource, Scrollbar, ScrollbarAction,
 };
 use bande_toolkit::{
     Appearance, DragAction, DragEvent, FrameRegions, Header, Item, MenuPlacement, Point, Radius,
@@ -174,6 +175,7 @@ pub struct TerminalWindow {
     link: Option<Link>,
     samples: VecDeque<(Duration, f32)>,
     momentum: Option<Momentum>,
+    scrollbar: Scrollbar,
     sliding: bool,
     flash: Option<Instant>,
     badge: u32,
@@ -234,6 +236,7 @@ impl TerminalWindow {
             link: None,
             samples: VecDeque::new(),
             momentum: None,
+            scrollbar: Scrollbar::default(),
             sliding: false,
             flash: None,
             badge: 0,
@@ -1424,6 +1427,9 @@ impl TerminalWindow {
         let at = pointer.position;
         self.pointer = at;
         let modifiers = pointer.modifiers;
+        if self.scrollbar_pointer(window, &Event::PointerMove(pointer)) {
+            return self.update_cursor(window, modifiers);
+        }
         let hover = self.tab_target(at);
         if hover != self.hover {
             self.hover = hover;
@@ -1500,7 +1506,10 @@ impl TerminalWindow {
             Cursor::Pointer
         } else if self.in_banner(at) {
             self.banner.as_ref().map_or(Cursor::Default, Banner::cursor)
-        } else if !self.in_content(at) || (reports_mouse(self.mode()) && !modifiers.shift) {
+        } else if self.over_scrollbar(at)
+            || !self.in_content(at)
+            || (reports_mouse(self.mode()) && !modifiers.shift)
+        {
             Cursor::Default
         } else {
             Cursor::Text
@@ -1631,6 +1640,9 @@ impl TerminalWindow {
 
     fn release(&mut self, window: &mut Window, pointer: Pointer) {
         let at = pointer.position;
+        if self.scrollbar_pointer(window, &Event::PointerUp(pointer)) {
+            return self.update_cursor(window, pointer.modifiers);
+        }
         match std::mem::replace(&mut self.gesture, Gesture::Idle) {
             Gesture::Reporting(button) if mouse_button(pointer.button) == Some(button) => {
                 self.report_mouse(MouseKind::Release(button), at, pointer.modifiers);
@@ -1701,7 +1713,7 @@ impl TerminalWindow {
             self.gesture = Gesture::Divider(divider);
             return;
         }
-        if !self.in_content(at) {
+        if self.scrollbar_pointer(window, &Event::PointerDown(pointer)) || !self.in_content(at) {
             return;
         }
         if self.banner_focused {
@@ -1783,7 +1795,46 @@ impl TerminalWindow {
 
     fn scroll_pages(&mut self, window: &mut Window, pages: i32) {
         self.session().terminal.scroll_pages(pages);
+        self.scrollbar.reveal(Instant::now());
         window.request_redraw();
+    }
+
+    fn scroll_extent(&self) -> Option<(Rect, ScrollExtent)> {
+        let extent = self
+            .terminal()
+            .scroll_extent(self.painter.metrics.cell_height)?;
+        Some((self.focused_frame(), extent))
+    }
+
+    fn over_scrollbar(&self, at: Point) -> bool {
+        self.scroll_extent()
+            .is_some_and(|(frame, extent)| self.scrollbar.claims(frame, &extent, at))
+    }
+
+    fn scrollbar_pointer(&mut self, window: &mut Window, event: &Event) -> bool {
+        let (frame, extent) = self.scroll_extent().unwrap_or_default();
+        let reduce_motion = self.painter.reduce_motion();
+        let action = self
+            .scrollbar
+            .pointer(Instant::now(), reduce_motion, frame, &extent, event);
+        match action {
+            None => false,
+            Some(ScrollbarAction::Redraw) => {
+                window.request_redraw();
+                matches!(event, Event::PointerDown(_) | Event::PointerUp(_))
+            }
+            Some(ScrollbarAction::Page(direction)) => {
+                self.momentum = None;
+                self.scroll_pages(window, -direction as i32);
+                true
+            }
+            Some(ScrollbarAction::Seek(offset)) => {
+                let line_height = self.painter.metrics.cell_height;
+                self.session().terminal.seek(offset, line_height);
+                window.request_redraw();
+                true
+            }
+        }
     }
 
     fn scroll(&mut self, window: &mut Window, scroll: Scroll) {
@@ -1824,6 +1875,7 @@ impl TerminalWindow {
     fn scroll_smoothly(&mut self, window: &mut Window, dy: f32) {
         let line_height = self.painter.metrics.cell_height;
         self.session().terminal.scroll_smoothly(-dy, line_height);
+        self.scrollbar.reveal(Instant::now());
         window.request_redraw();
     }
 
@@ -1906,6 +1958,7 @@ impl TerminalWindow {
             return;
         }
         self.session().terminal.scroll_lines(-lines);
+        self.scrollbar.reveal(Instant::now());
         window.request_redraw();
     }
 
@@ -2012,6 +2065,10 @@ impl View for TerminalWindow {
         }
         let sheet = self.sheet();
         let mut inside = self.sheet_items();
+        if let Some((frame, extent)) = self.scroll_extent() {
+            let knob = self.painter.theme.palette.ink3;
+            self.scrollbar.paint(now, frame, &extent, knob, &mut inside);
+        }
         if let Some(banner) = &mut self.banner {
             inside.extend(banner.items(size.0, size.1));
         }
@@ -2047,6 +2104,7 @@ impl View for TerminalWindow {
             }
             WindowEvent::Input(Event::PointerUp(pointer)) => self.release(window, pointer),
             WindowEvent::Input(Event::PointerLeave) => {
+                self.scrollbar_pointer(window, &Event::PointerLeave);
                 self.end_gesture(window);
                 if self.hover.take().is_some() || self.link.take().is_some() {
                     window.request_redraw();
@@ -2153,16 +2211,23 @@ impl View for TerminalWindow {
     }
 
     fn animating(&self) -> bool {
-        self.momentum.is_some() || self.sliding || self.flash_opacity(Instant::now()).is_some()
+        let now = Instant::now();
+        self.momentum.is_some()
+            || self.sliding
+            || self.flash_opacity(now).is_some()
+            || self.scrollbar.animating(now)
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.blinking()
-            .then(|| self.blink_from + BLINK * self.blink_phase.saturating_add(1))
+        let blink = self
+            .blinking()
+            .then(|| self.blink_from + BLINK * self.blink_phase.saturating_add(1));
+        blink.into_iter().chain(self.scrollbar.deadline()).min()
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) -> bool {
         self.blink_phase = self.blink_phase(now);
+        self.scrollbar.tick(now);
         window.request_redraw();
         true
     }

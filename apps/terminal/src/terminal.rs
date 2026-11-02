@@ -10,6 +10,7 @@ use alacritty_terminal::term::cell::Hyperlink;
 use alacritty_terminal::term::search::{Match, RegexIter, RegexSearch};
 use alacritty_terminal::term::{self, Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{ClearMode, CursorShape, CursorStyle, Handler, Processor};
+use bande_toolkit::ui::ScrollExtent;
 use bande_xdg::file_uri;
 
 use crate::SCROLLBACK;
@@ -291,6 +292,27 @@ impl Terminal {
         }
         self.term.scroll_display(Scroll::Delta(offset - current));
         self.shift = shift;
+    }
+
+    pub fn scroll_extent(&self, line_height: f32) -> Option<ScrollExtent> {
+        let grid = self.term.grid();
+        let history = grid.history_size();
+        if history == 0 || self.mode().contains(TermMode::ALT_SCREEN) {
+            return None;
+        }
+        let lines = grid.screen_lines() as f32;
+        Some(ScrollExtent {
+            offset: (history - grid.display_offset()) as f32 * line_height - self.shift,
+            content: (history as f32 + lines) * line_height,
+            viewport: lines * line_height,
+        })
+    }
+
+    pub fn seek(&mut self, offset: f32, line_height: f32) {
+        let history = self.term.grid().history_size();
+        let above = ((offset / line_height).round().max(0.0) as usize).min(history);
+        let wanted = (history - above) as i32;
+        self.scroll_display(Scroll::Delta(wanted - self.display_offset() as i32));
     }
 
     pub fn scroll_to_bottom(&mut self) {

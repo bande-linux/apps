@@ -5,8 +5,8 @@ use alacritty_terminal::index::{Column, Line, Point as GridPoint, Side};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::CursorShape;
 use bande_toolkit::{
-    Appearance, Color, Item, Paragraph, Path, Point, Radius, Rect, Scene, Shape, TextAlign,
-    TextRole, TextStyle, TextSystem,
+    Appearance, Color, Item, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextRole,
+    TextStyle, TextSystem,
 };
 
 use crate::panes::Divider;
@@ -211,6 +211,10 @@ impl Painter {
             font_size,
             cursor_hidden: false,
         }
+    }
+
+    pub fn reduce_motion(&self) -> bool {
+        self.appearance.reduce_motion
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
@@ -432,15 +436,6 @@ impl Painter {
             paint: self.theme.palette.edge.into(),
         }));
         items
-    }
-
-    pub fn scene(&mut self, terminal: &Terminal, width: u32, height: u32) -> Scene {
-        Scene {
-            width,
-            height,
-            background: self.theme.background,
-            items: self.terminal(terminal, Point::default(), &Highlights::default()),
-        }
     }
 
     pub fn terminal(
