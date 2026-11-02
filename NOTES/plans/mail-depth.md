@@ -58,4 +58,3 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 
 ## Known gaps in what landed (review, 2026-11-02)
 - Undo gives up without a word when the moved message does not show up after three syncs of the mailbox it went to.
-- From swaps the signature only when the old account had one.
