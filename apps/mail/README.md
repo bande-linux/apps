@@ -56,8 +56,8 @@ apt install bande-mail
   message in any mailbox of its account. Ctrl+click, Shift+click, Shift+Up/Down and Select All
   (Ctrl+A) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then
   act on all of them, and dragging them onto a mailbox in the sidebar moves them. Undo (Ctrl+Z)
-  puts moved or deleted messages back, up to 20 steps, and a mailbox that messages were moved to is
-  synced right after the move. Mailbox → New Mailbox… and a mailbox's menu in the sidebar
+  puts moved or deleted messages back, up to 20 steps, and a mailbox that messages were moved
+  to is synced right after the move. Mailbox → New Mailbox… and a mailbox's menu in the sidebar
   create, rename and delete mailboxes on the server; the special mailboxes keep their names.
 - **Compose** opens its own window, with From when there are several accounts. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's
