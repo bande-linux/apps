@@ -503,14 +503,43 @@ impl ComposeView {
                 .unwrap_or_default()
         };
         let (old, new) = (signature(self.sender), signature(index));
+        let opened = self
+            .senders
+            .iter()
+            .position(|account| account.email.eq_ignore_ascii_case(&self.draft.from.email))
+            .map(signature)
+            .filter(|opened| !opened.is_empty())
+            .map(|opened| format!("\n\n{opened}"))
+            .unwrap_or_default();
+        let quoted = self
+            .draft
+            .body
+            .strip_prefix(opened.as_str())
+            .unwrap_or(&self.draft.body)
+            .to_owned();
         self.sender = index;
         let Some(body) = self.ui.widget_as::<TextView>(self.body) else {
             return;
         };
         let text = body.text();
-        let swapped = match (old.is_empty(), text.find(&old)) {
-            (false, Some(at)) => format!("{}{new}{}", &text[..at], &text[at + old.len()..]),
-            _ => return,
+        let swapped = match (old.is_empty(), new.is_empty()) {
+            (false, false) => match text.find(&old) {
+                Some(at) => format!("{}{new}{}", &text[..at], &text[at + old.len()..]),
+                None => return,
+            },
+            (false, true) => {
+                let spaced = format!("\n\n{old}");
+                let gone = if text.contains(&spaced) { spaced } else { old };
+                match text.find(&gone) {
+                    Some(at) => format!("{}{}", &text[..at], &text[at + gone.len()..]),
+                    None => return,
+                }
+            }
+            (true, true) => return,
+            (true, false) => {
+                let at = text.rfind(&quoted).unwrap_or(text.len());
+                format!("{}\n\n{new}{}", &text[..at], &text[at..])
+            }
         };
         body.set_text(&swapped);
     }
