@@ -62,6 +62,15 @@ const UNDO_TRIES: u8 = 3;
 const MOVED_IN_KEPT: Duration = Duration::from_secs(10 * 60);
 const UNDO_LEVELS: usize = 20;
 const OPENED_UNREAD: usize = 10;
+const FLAG_COLORS: [&str; 7] = [
+    "flag-red",
+    "flag-orange",
+    "flag-yellow",
+    "flag-green",
+    "flag-blue",
+    "flag-purple",
+    "flag-gray",
+];
 const DRAG_THRESHOLD: f32 = 6.0;
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 
@@ -924,13 +933,7 @@ impl MailView {
             .chain(earlier)
             .filter(|summary| ids.contains(&summary.id))
         {
-            match flag {
-                Flag::Seen => summary.flags.seen = value,
-                Flag::Flagged => summary.flags.flagged = value,
-                Flag::Answered => summary.flags.answered = value,
-                Flag::Deleted => summary.flags.deleted = value,
-                Flag::Draft => summary.flags.draft = value,
-            }
+            summary.flags.set(flag, value);
         }
         self.refresh_sidebar();
     }
@@ -946,6 +949,29 @@ impl MailView {
 
     pub fn toggle_flag(&mut self) {
         self.toggle(Flag::Flagged, |summary| summary.flags.flagged);
+    }
+
+    fn flag_with(&mut self, color: u8) {
+        let ids = self
+            .chosen()
+            .iter()
+            .map(|summary| summary.id)
+            .collect::<Vec<_>>();
+        if ids.is_empty() {
+            return;
+        }
+        self.set_flag_on(&ids, Flag::Flagged, true);
+        for (bit, flag) in Flag::COLORS.into_iter().enumerate() {
+            self.set_flag_on(&ids, flag, color & (1 << bit) != 0);
+        }
+    }
+
+    pub fn flag_colors() -> Vec<(String, String)> {
+        FLAG_COLORS
+            .iter()
+            .enumerate()
+            .map(|(color, name)| (L10N.tr(name), format!("flag-color:{color}")))
+            .collect()
     }
 
     pub fn mark_all_read(&mut self) {
@@ -2676,6 +2702,15 @@ impl MailView {
                 }),
                 "toggle-flag",
             ),
+            MenuItem::submenu(
+                &L10N.tr("menu-flag"),
+                Menu::new(
+                    Self::flag_colors()
+                        .into_iter()
+                        .map(|(name, action)| MenuItem::new(&name, &action))
+                        .collect(),
+                ),
+            ),
             MenuItem::separator(),
             MenuItem::new(&L10N.tr("action-archive"), "archive")
                 .enabled(self.can_move_to(Role::Archive)),
@@ -2701,6 +2736,15 @@ impl MailView {
             "toggle-read" => self.toggle_read(),
             "toggle-flag" => self.toggle_flag(),
             "mark-all-read" => self.mark_all_read(),
+            action if action.starts_with("flag-color:") => {
+                if let Some(color) = action
+                    .strip_prefix("flag-color:")
+                    .and_then(|color| color.parse::<u8>().ok())
+                    .filter(|color| usize::from(*color) < FLAG_COLORS.len())
+                {
+                    self.flag_with(color);
+                }
+            }
             "apply-rules" => self.apply_rules_to_chosen(),
             "bcc-field" => {
                 self.settings.bcc_field = !self.settings.bcc_field;

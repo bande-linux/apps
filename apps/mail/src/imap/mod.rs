@@ -87,9 +87,27 @@ pub struct Flags {
     pub answered: bool,
     pub deleted: bool,
     pub draft: bool,
+    pub color: u8,
 }
 
 impl Flags {
+    pub fn set(&mut self, flag: Flag, value: bool) {
+        match flag {
+            Flag::Seen => self.seen = value,
+            Flag::Flagged => self.flagged = value,
+            Flag::Answered => self.answered = value,
+            Flag::Deleted => self.deleted = value,
+            Flag::Draft => self.draft = value,
+            Flag::Color(bit) => {
+                let mask = 1 << bit;
+                self.color = match value {
+                    true => self.color | mask,
+                    false => self.color & !mask,
+                };
+            }
+        }
+    }
+
     pub fn from_atoms<'a>(atoms: impl IntoIterator<Item = &'a str>) -> Self {
         let mut flags = Self::default();
         for atom in atoms {
@@ -99,6 +117,9 @@ impl Flags {
                 "\\answered" => flags.answered = true,
                 "\\deleted" => flags.deleted = true,
                 "\\draft" => flags.draft = true,
+                "$mailflagbit0" => flags.color |= 1,
+                "$mailflagbit1" => flags.color |= 2,
+                "$mailflagbit2" => flags.color |= 4,
                 _ => {}
             }
         }
@@ -113,9 +134,12 @@ pub enum Flag {
     Answered,
     Deleted,
     Draft,
+    Color(u8),
 }
 
 impl Flag {
+    pub const COLORS: [Self; 3] = [Self::Color(0), Self::Color(1), Self::Color(2)];
+
     pub fn atom(self) -> &'static str {
         match self {
             Self::Seen => "\\Seen",
@@ -123,6 +147,9 @@ impl Flag {
             Self::Answered => "\\Answered",
             Self::Deleted => "\\Deleted",
             Self::Draft => "\\Draft",
+            Self::Color(0) => "$MailFlagBit0",
+            Self::Color(1) => "$MailFlagBit1",
+            Self::Color(_) => "$MailFlagBit2",
         }
     }
 
@@ -133,6 +160,9 @@ impl Flag {
             Self::Answered => "answered",
             Self::Deleted => "deleted",
             Self::Draft => "draft",
+            Self::Color(0) => "color0",
+            Self::Color(1) => "color1",
+            Self::Color(_) => "color2",
         }
     }
 
@@ -143,6 +173,9 @@ impl Flag {
             Self::Answered,
             Self::Deleted,
             Self::Draft,
+            Self::Color(0),
+            Self::Color(1),
+            Self::Color(2),
         ]
         .into_iter()
         .find(|flag| flag.name() == name)

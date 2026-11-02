@@ -1,3 +1,4 @@
+use bande_toolkit::Color;
 use bande_toolkit::ui::{Scroll, Size};
 use bande_toolkit::{
     Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
@@ -11,6 +12,10 @@ use crate::ui::reader::{Clock, lay_out};
 use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
+
+const FLAG_COLORS: [u32; 7] = [
+    0xFF3B30, 0xFF9500, 0xFFCC00, 0x34C759, 0x007AFF, 0xAF52DE, 0x8E8E93,
+];
 use crate::worker::Status;
 
 const CHILD_INDENT: f32 = 14.0;
@@ -526,7 +531,10 @@ impl MailView {
                 Symbol::Flag,
                 match active {
                     true => ink,
-                    false => palette.warning,
+                    false => FLAG_COLORS
+                        .get(usize::from(summary.flags.color))
+                        .copied()
+                        .map_or(palette.warning, Color::hex),
                 },
             ),
             (summary.attachments, Symbol::Attachment, ink3),

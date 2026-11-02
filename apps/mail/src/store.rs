@@ -245,7 +245,7 @@ fn account_from(row: &Row<'_>) -> rusqlite::Result<Account> {
 
 const SUMMARY_COLUMNS: &str = "m.id, m.mailbox, b.account, m.uid, m.subject, m.sender_name, \
     m.sender_email, m.date, m.preview, m.seen, m.flagged, m.answered, m.deleted, m.draft, \
-    m.attachments, m.body IS NOT NULL, m.thread, m.size";
+    m.attachments, m.body IS NOT NULL, m.thread, m.size, m.color";
 
 fn summary_from(row: &Row<'_>) -> rusqlite::Result<Summary> {
     Ok(Summary {
@@ -266,6 +266,7 @@ fn summary_from(row: &Row<'_>) -> rusqlite::Result<Summary> {
             answered: row.get(11)?,
             deleted: row.get(12)?,
             draft: row.get(13)?,
+            color: row.get(18)?,
         },
         attachments: row.get(14)?,
         downloaded: row.get(15)?,
@@ -454,6 +455,12 @@ impl Store {
                  ALTER TABLE rules DROP COLUMN field; \
                  ALTER TABLE rules DROP COLUMN pattern; \
                  PRAGMA user_version = 5;",
+            )?;
+        }
+        if version < 6 {
+            migration.execute_batch(
+                "ALTER TABLE messages ADD COLUMN color INTEGER NOT NULL DEFAULT 0; \
+                 PRAGMA user_version = 6;",
             )?;
         }
         migration.commit()?;
@@ -697,8 +704,9 @@ impl Store {
             };
             transaction.execute(
                 "INSERT INTO messages (mailbox, uid, message_id, subject, sender_name, sender_email, \
-                 recipients, date, size, seen, flagged, answered, deleted, draft, header, thread) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) \
+                 recipients, date, size, seen, flagged, answered, deleted, draft, header, thread, \
+                 color) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17) \
                  ON CONFLICT (mailbox, uid) DO NOTHING",
                 params![
                     mailbox,
@@ -720,6 +728,7 @@ impl Store {
                     flags.draft,
                     header,
                     thread,
+                    flags.color,
                 ],
             )?;
         }
@@ -735,9 +744,10 @@ impl Store {
                 continue;
             };
             changed += transaction.execute(
-                "UPDATE messages SET seen = ?3, flagged = ?4, answered = ?5, deleted = ?6, draft = ?7 \
-                 WHERE mailbox = ?1 AND uid = ?2 AND (seen, flagged, answered, deleted, draft) \
-                 IS NOT (?3, ?4, ?5, ?6, ?7)",
+                "UPDATE messages SET seen = ?3, flagged = ?4, answered = ?5, deleted = ?6, \
+                 draft = ?7, color = ?8 WHERE mailbox = ?1 AND uid = ?2 \
+                 AND (seen, flagged, answered, deleted, draft, color) \
+                 IS NOT (?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     mailbox,
                     message.uid,
@@ -745,7 +755,8 @@ impl Store {
                     flags.flagged,
                     flags.answered,
                     flags.deleted,
-                    flags.draft
+                    flags.draft,
+                    flags.color
                 ],
             )?;
         }
@@ -850,7 +861,7 @@ impl Store {
         let mut statement = self.connection.prepare(&query)?;
         let found = statement
             .query_map(params![of.account, key, of.mailbox, of.id], |row| {
-                Ok((summary_from(row)?, row.get::<_, Option<String>>(18)?))
+                Ok((summary_from(row)?, row.get::<_, Option<String>>(19)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let mut seen = std::collections::HashSet::new();
@@ -996,17 +1007,18 @@ impl Store {
     }
 
     pub fn set_flag(&self, ids: &[MessageId], flag: Flag, value: bool) -> Result<Vec<AccountId>> {
-        let column = match flag {
-            Flag::Seen => "seen",
-            Flag::Flagged => "flagged",
-            Flag::Answered => "answered",
-            Flag::Deleted => "deleted",
-            Flag::Draft => "draft",
+        let change = match flag {
+            Flag::Seen => "seen = ?2".to_owned(),
+            Flag::Flagged => "flagged = ?2".to_owned(),
+            Flag::Answered => "answered = ?2".to_owned(),
+            Flag::Deleted => "deleted = ?2".to_owned(),
+            Flag::Draft => "draft = ?2".to_owned(),
+            Flag::Color(bit) => format!("color = (color & ~{0}) | (?2 * {0})", 1 << bit),
         };
         let accounts = self.queue(ids, &Action::Flag(flag, value))?;
         for id in ids {
             self.connection.execute(
-                &format!("UPDATE messages SET {column} = ?2 WHERE id = ?1"),
+                &format!("UPDATE messages SET {change} WHERE id = ?1"),
                 params![id, value],
             )?;
         }

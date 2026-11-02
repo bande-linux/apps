@@ -234,3 +234,11 @@ undo-lost-title = { $count ->
    *[other] { $count } Messages Could Not Be Put Back
 }
 undo-lost-message = Mail did not find it in { $mailbox } on the server. It may have been moved or deleted there.
+menu-flag = Flag
+flag-red = Red
+flag-orange = Orange
+flag-yellow = Yellow
+flag-green = Green
+flag-blue = Blue
+flag-purple = Purple
+flag-gray = Gray

@@ -84,6 +84,14 @@ pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
                 Entry::separator(),
                 selection("menu-toggle-read", "toggle-read"),
                 selection("menu-toggle-flag", "toggle-flag"),
+                Entry::submenu(
+                    &L10N.tr("menu-flag"),
+                    MailView::flag_colors()
+                        .into_iter()
+                        .map(|(name, action)| Entry::item(&name, &action))
+                        .collect(),
+                )
+                .enabled(viewer),
                 Entry::separator(),
                 selection("menu-apply-rules", "apply-rules"),
                 Entry::separator(),
