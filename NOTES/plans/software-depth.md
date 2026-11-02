@@ -26,7 +26,7 @@ done.
 | Offline | Browse works; installs explain | Have: NetworkManager state shown as a line; screenshots reload when the network returns |
 | Freshness | Catalogue follows apt | Have: reloaded on reopen when dpkg or the catalogue changed |
 | Keyboard | Find, Back, places | Have: Ctrl+F, Ctrl+[, Ctrl+1/2/3 |
-| Sources | Where an app comes from, trust | Have: Debian suite and component; with Flathub on, Flathub on rows and pages and a Debian/Flathub picker when both offer an app; no per-source trust or "add a source" UI |
+| Sources | Where an app comes from, trust | Have: Debian suite and component. With Flatpak in use, one row per app (Debian first, Flatpak-only apps never in New & Updated), every Flatpak marked "Flatpak · remote" on rows, pages, Installed and Updates (Debian rows marked too there), and a source picker on the page when Debian and one or more remotes offer the app: Debian by default, each source's version and what it means (system package or sandboxed Flatpak); no per-source trust or "add a source" UI |
 | Flatpak/Flathub | Apps Debian lacks | Dormant by default: Bande does not install `flatpak`. When the user has installed it with apt, Software (checked at launch) offers Settings… › Get apps from Flathub (off by default), which adds the remote with `--user` and reads its AppStream; per-user install with progress and Cancel, an X11-only app refused, remove with unused runtimes, the runtime download on the page; installs need no password |
 | Settings | Automatic updates, notifications | Belong to Settings › Software Update, which has "Automatically keep this computer up to date" |
 

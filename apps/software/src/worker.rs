@@ -95,7 +95,7 @@ pub enum Message {
         also: Vec<String>,
     },
     Details(String, Facts),
-    FlatpakDetails(String, flatpak::Facts),
+    FlatpakDetails(String, String, flatpak::Facts),
     Updates(Vec<Package>, Vec<flatpak::Update>),
     Failed(String, Failure),
     Flathub(Result<bool, Failure>),
@@ -383,7 +383,7 @@ fn ask(client: &Client, arch: &str, queries: &Receiver<Query>, out: &Outbox<Mess
                 reference,
                 installed,
             } => match flatpak::facts(&remote, &reference, installed) {
-                Ok(facts) => Message::FlatpakDetails(key, facts),
+                Ok(facts) => Message::FlatpakDetails(key, remote, facts),
                 Err(error) => {
                     tracing::warn!("cannot read the details of {reference}: {error}");
                     continue;

@@ -90,14 +90,10 @@ enum Task {
     Remove,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Source {
     Debian,
-    Flatpak,
-}
-
-impl Source {
-    const ALL: [Self; 2] = [Self::Debian, Self::Flatpak];
+    Flatpak(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -248,17 +244,32 @@ fn deb(app: &Component) -> Option<&str> {
     })
 }
 
-fn flatpak_bundle(app: &Component) -> Option<(&str, &str)> {
+fn flatpak_reference<'a>(app: &'a Component, wanted: &str) -> Option<&'a str> {
     app.bundles.iter().find_map(|bundle| match bundle {
-        Bundle::Flatpak { remote, reference } => Some((remote.as_str(), reference.as_str())),
-        Bundle::Deb(_) => None,
+        Bundle::Flatpak { remote, reference } if remote == wanted => Some(reference.as_str()),
+        _ => None,
     })
 }
 
-fn offers(app: &Component, source: Source) -> bool {
+fn sources(app: &Component) -> Vec<Source> {
+    let mut found: Vec<Source> = deb(app).map(|_| Source::Debian).into_iter().collect();
+    for bundle in &app.bundles {
+        if let Bundle::Flatpak { remote, .. } = bundle {
+            let source = Source::Flatpak(remote.clone());
+            if !found.contains(&source) {
+                found.push(source);
+            }
+        }
+    }
+    found
+}
+
+fn source_name(source: &Source) -> String {
     match source {
-        Source::Debian => deb(app).is_some(),
-        Source::Flatpak => flatpak_bundle(app).is_some(),
+        Source::Debian => L10N.tr("debian"),
+        Source::Flatpak(remote) => {
+            L10N.tr_args("source-flatpak", [("remote", remote_name(remote).into())])
+        }
     }
 }
 
@@ -349,7 +360,8 @@ pub struct Software {
     shots: HashMap<String, Result<Image, ShotError>>,
     shot: usize,
     facts: HashMap<String, Facts>,
-    flatpak_facts: HashMap<String, flatpak::Facts>,
+    flatpak_facts: HashMap<(String, String), flatpak::Facts>,
+    flatpak_offered: bool,
     busy: HashMap<String, Busy>,
     failed: HashMap<String, (Task, Failure)>,
     removal: Option<Removal>,
@@ -443,6 +455,7 @@ impl Software {
             shot: 0,
             facts: HashMap::new(),
             flatpak_facts: HashMap::new(),
+            flatpak_offered: false,
             busy: HashMap::new(),
             failed: HashMap::new(),
             removal: None,
@@ -642,8 +655,8 @@ impl Software {
             Intent::Back => self.back(),
             Intent::More => self.shown += PAGE_ROWS,
             Intent::Install(index) => self.install(index),
-            Intent::Cancel(key) => match self.busy.get(&key).map(|busy| busy.source) {
-                Some(Source::Flatpak) => self.flatpak_canceller.cancel(),
+            Intent::Cancel(key) => match self.busy.get(&key).map(|busy| &busy.source) {
+                Some(Source::Flatpak(_)) => self.flatpak_canceller.cancel(),
                 Some(Source::Debian) => {
                     if let Err(error) = self.canceller.cancel() {
                         tracing::warn!("cannot cancel: {error}");
@@ -692,46 +705,60 @@ impl Software {
             return;
         };
         let key = app.key().to_owned();
-        match self.source_of(app) {
-            Some(Source::Debian) if !self.facts.contains_key(&key) => {
-                if let Some(package) = deb(app) {
-                    self.ask(Query::Details {
-                        key,
-                        package: package.to_owned(),
-                    });
+        let wanted = match self.is_installed(&key) {
+            true => self.source_of(app).into_iter().collect(),
+            false => sources(app),
+        };
+        for source in wanted {
+            match source {
+                Source::Debian if !self.facts.contains_key(&key) => {
+                    if let Some(package) = deb(app) {
+                        self.ask(Query::Details {
+                            key: key.clone(),
+                            package: package.to_owned(),
+                        });
+                    }
                 }
-            }
-            Some(Source::Flatpak) if !self.flatpak_facts.contains_key(&key) => {
-                let installed = self.flatpaks.get(&key);
-                if let Some((remote, reference)) = installed
-                    .map(|found| (found.origin.as_str(), found.reference.as_str()))
-                    .or_else(|| flatpak_bundle(app))
+                Source::Flatpak(remote)
+                    if !self
+                        .flatpak_facts
+                        .contains_key(&(key.clone(), remote.clone())) =>
                 {
-                    self.ask(Query::FlatpakDetails {
-                        key: key.clone(),
-                        remote: remote.to_owned(),
-                        reference: reference.to_owned(),
-                        installed: installed.is_some(),
-                    });
+                    let installed = self
+                        .flatpaks
+                        .get(&key)
+                        .filter(|found| found.origin == remote);
+                    if let Some(reference) = installed
+                        .map(|found| found.reference.as_str())
+                        .or_else(|| flatpak_reference(app, &remote))
+                    {
+                        self.ask(Query::FlatpakDetails {
+                            key: key.clone(),
+                            reference: reference.to_owned(),
+                            remote,
+                            installed: installed.is_some(),
+                        });
+                    }
                 }
+                _ => {}
             }
-            _ => {}
         }
     }
 
     fn source_of(&self, app: &Component) -> Option<Source> {
         let key = app.key();
-        if self.flatpaks.contains_key(key) {
-            return Some(Source::Flatpak);
+        if let Some(found) = self.flatpaks.get(key) {
+            return Some(Source::Flatpak(found.origin.clone()));
         }
         if self.installed.contains(key) {
             return deb(app).map(|_| Source::Debian);
         }
+        let offered = sources(app);
         self.chosen
             .get(key)
-            .copied()
-            .filter(|source| offers(app, *source))
-            .or_else(|| Source::ALL.into_iter().find(|source| offers(app, *source)))
+            .filter(|source| offered.contains(source))
+            .cloned()
+            .or_else(|| offered.into_iter().next())
     }
 
     fn is_installed(&self, key: &str) -> bool {
@@ -799,6 +826,12 @@ impl Software {
                 self.flathub = flathub;
                 self.facts.clear();
                 self.flatpak_facts.clear();
+                self.flatpak_offered = !self.flatpaks.is_empty()
+                    || self
+                        .apps
+                        .iter()
+                        .flat_map(|app| &app.bundles)
+                        .any(|bundle| matches!(bundle, Bundle::Flatpak { .. }));
                 self.loading = false;
                 self.remember_flathub();
                 self.refresh_details();
@@ -830,7 +863,7 @@ impl Software {
                 let source = self.busy.remove(&key).map(|busy| busy.source);
                 self.facts.remove(&key);
                 match source {
-                    Some(Source::Flatpak) => self.installed_flatpak(key),
+                    Some(Source::Flatpak(remote)) => self.installed_flatpak(key, remote),
                     _ => {
                         self.installed.insert(key);
                     }
@@ -841,15 +874,15 @@ impl Software {
             Message::Removed(key) => {
                 self.busy.remove(&key);
                 self.facts.remove(&key);
-                self.flatpak_facts.remove(&key);
+                self.flatpak_facts.retain(|(found, _), _| *found != key);
                 if self.flatpaks.remove(&key).is_none() {
                     self.installed.remove(&key);
                 }
                 self.ask(Query::Updates);
                 self.refresh_details();
             }
-            Message::FlatpakDetails(key, facts) => {
-                self.flatpak_facts.insert(key, facts);
+            Message::FlatpakDetails(key, remote, facts) => {
+                self.flatpak_facts.insert((key, remote), facts);
             }
             Message::Flathub(result) => {
                 self.flathub_busy = false;
@@ -928,19 +961,19 @@ impl Software {
         }
     }
 
-    fn installed_flatpak(&mut self, key: String) {
-        let Some((remote, reference)) = self
+    fn installed_flatpak(&mut self, key: String, remote: String) {
+        let Some(reference) = self
             .apps
             .iter()
             .find(|app| app.key() == key)
-            .and_then(flatpak_bundle)
-            .map(|(remote, reference)| (remote.to_owned(), reference.to_owned()))
+            .and_then(|app| flatpak_reference(app, &remote))
+            .map(str::to_owned)
         else {
             return;
         };
         let version = self
             .flatpak_facts
-            .remove(&key)
+            .remove(&(key.clone(), remote.clone()))
             .map(|facts| facts.version)
             .unwrap_or_default();
         self.flatpaks.insert(
@@ -956,14 +989,14 @@ impl Software {
 
     fn start(&mut self, key: String, task: Task, source: Source) {
         self.failed.remove(&key);
-        let progress = match (source, task) {
+        let progress = match (&source, task) {
             (Source::Debian, _) => Progress::default(),
-            (Source::Flatpak, Task::Install) => Progress {
+            (Source::Flatpak(_), Task::Install) => Progress {
                 status: Status::Downloading,
                 allow_cancel: true,
                 ..Progress::default()
             },
-            (Source::Flatpak, Task::Remove) => Progress {
+            (Source::Flatpak(_), Task::Remove) => Progress {
                 status: Status::Removing,
                 ..Progress::default()
             },
@@ -983,26 +1016,24 @@ impl Software {
             return;
         };
         let key = app.key().to_owned();
-        let job = match self.source_of(app) {
-            Some(Source::Debian) => deb(app).map(|package| Job::Install {
+        let Some(source) = self.source_of(app) else {
+            return;
+        };
+        let job = match &source {
+            Source::Debian => deb(app).map(|package| Job::Install {
                 key: key.clone(),
                 package: package.to_owned(),
             }),
-            Some(Source::Flatpak) => {
-                flatpak_bundle(app).map(|(remote, reference)| Job::FlatpakInstall {
+            Source::Flatpak(remote) => {
+                flatpak_reference(app, remote).map(|reference| Job::FlatpakInstall {
                     key: key.clone(),
-                    remote: remote.to_owned(),
+                    remote: remote.clone(),
                     reference: reference.to_owned(),
                 })
             }
-            None => None,
         };
         let Some(job) = job else {
             return;
-        };
-        let source = match job {
-            Job::FlatpakInstall { .. } => Source::Flatpak,
-            _ => Source::Debian,
         };
         self.start(key, Task::Install, source);
         self.send(job);
@@ -1018,7 +1049,7 @@ impl Software {
                 id: found.reference.clone(),
                 key,
                 also: Vec::new(),
-                source: Source::Flatpak,
+                source: Source::Flatpak(found.origin.clone()),
             });
             return;
         }
@@ -1034,11 +1065,18 @@ impl Software {
             key, id, source, ..
         }) = self.removal.take()
         {
-            self.start(key.clone(), Task::Remove, source);
-            self.send(match source {
-                Source::Debian => Job::Remove { key, id },
-                Source::Flatpak => Job::FlatpakRemove { key, reference: id },
-            });
+            let job = match &source {
+                Source::Debian => Job::Remove {
+                    key: key.clone(),
+                    id,
+                },
+                Source::Flatpak(_) => Job::FlatpakRemove {
+                    key: key.clone(),
+                    reference: id,
+                },
+            };
+            self.start(key, Task::Remove, source);
+            self.send(job);
         }
     }
 
@@ -1077,7 +1115,7 @@ impl Software {
 
     fn has_update(&self, app: &Component) -> bool {
         match self.source_of(app) {
-            Some(Source::Flatpak) => self
+            Some(Source::Flatpak(_)) => self
                 .flatpak_updates
                 .iter()
                 .any(|update| update.id == app.key()),
@@ -1108,14 +1146,12 @@ impl Software {
     }
 
     fn source_caption(&self, app: &Component) -> Option<String> {
-        if self.source_of(app) != Some(Source::Flatpak) {
-            return None;
+        let source = self.source_of(app)?;
+        let listed = matches!(self.place, Place::Installed | Place::Updates);
+        match source {
+            Source::Debian if !(listed && self.flatpak_offered) => None,
+            source => Some(source_name(&source)),
         }
-        self.flatpaks
-            .get(app.key())
-            .map(|found| found.origin.as_str())
-            .or_else(|| flatpak_bundle(app).map(|(remote, _)| remote))
-            .map(remote_name)
     }
 
     fn app_row(&self, index: usize) -> Option<Box<dyn Widget>> {
@@ -1153,10 +1189,14 @@ impl Software {
         indices.sort_by_cached_key(|index| {
             self.apps
                 .get(*index)
-                .map(|app| app.name.to_lowercase())
+                .map(|app| (deb(app).is_none(), app.name.to_lowercase()))
                 .unwrap_or_default()
         });
         indices
+    }
+
+    fn debian_first(&self, indices: &mut [usize]) {
+        indices.sort_by_key(|index| self.apps.get(*index).is_none_or(|app| deb(app).is_none()));
     }
 
     fn matching(&self, keep: impl Fn(&Component) -> bool) -> Vec<usize> {
@@ -1169,7 +1209,8 @@ impl Software {
     }
 
     fn results(&mut self) -> Widgets {
-        let found = search(&self.apps, &self.query);
+        let mut found = search(&self.apps, &self.query);
+        self.debian_first(&mut found);
         let query = self.query.trim().to_owned();
         if found.is_empty() {
             return vec![boxed(Label::new(
@@ -1194,7 +1235,8 @@ impl Software {
                 ))
             })
             .collect();
-        let mut fresh = self.matching(|app| has_local_icon(app) && latest_release(app) > 0);
+        let mut fresh = self
+            .matching(|app| deb(app).is_some() && has_local_icon(app) && latest_release(app) > 0);
         fresh.sort_by_key(|index| {
             std::cmp::Reverse(self.apps.get(*index).map(latest_release).unwrap_or(0))
         });
@@ -1294,17 +1336,35 @@ impl Software {
             widgets.push(boxed(Label::heading(&L10N.tr("app-updates"))));
             widgets.extend(self.rows(&apps, apps.len()));
         }
+        let debian = self.flatpak_offered.then(|| source_name(&Source::Debian));
         let mut packages: Vec<String> = self
-            .flatpak_updates
+            .updates
             .iter()
-            .map(|update| (&update.name, &update.version))
-            .chain(
-                self.updates
-                    .iter()
-                    .map(|package| (&package.name, &package.version)),
-            )
+            .map(|package| (&package.name, &package.version, debian.clone()))
+            .chain(self.flatpak_updates.iter().map(|update| {
+                let remote = self
+                    .flatpaks
+                    .get(&update.id)
+                    .map(|found| found.origin.clone())
+                    .unwrap_or_default();
+                (
+                    &update.name,
+                    &update.version,
+                    Some(source_name(&Source::Flatpak(remote))),
+                )
+            }))
             .take(LISTED_UPDATES)
-            .map(|(name, version)| format!("{name} {version}"))
+            .map(|(name, version, source)| match source {
+                Some(source) => L10N.tr_args(
+                    "update-from",
+                    [
+                        ("name", name.clone().into()),
+                        ("version", version.clone().into()),
+                        ("source", source.into()),
+                    ],
+                ),
+                None => format!("{name} {version}"),
+            })
             .collect();
         if count > LISTED_UPDATES {
             packages
@@ -1346,55 +1406,88 @@ impl Software {
         widgets
     }
 
-    fn source_picker(&self, app: &Component) -> Option<Box<dyn Widget>> {
-        if self.is_installed(app.key()) || !Source::ALL.iter().all(|source| offers(app, *source)) {
-            return None;
+    fn source_version(&self, app: &Component, source: &Source) -> Option<String> {
+        match source {
+            Source::Debian => self.facts.get(app.key())?.available.clone(),
+            Source::Flatpak(remote) => Some(
+                self.flatpak_facts
+                    .get(&(app.key().to_owned(), remote.clone()))?
+                    .version
+                    .clone(),
+            ),
         }
-        let names: Vec<String> = Source::ALL
-            .into_iter()
-            .map(|source| match source {
-                Source::Debian => L10N.tr("debian"),
-                Source::Flatpak => flatpak_bundle(app)
-                    .map(|(remote, _)| remote_name(remote))
-                    .unwrap_or_default(),
-            })
-            .collect();
+        .filter(|version| !version.is_empty())
+    }
+
+    fn source_picker(&self, app: &Component) -> Widgets {
+        let offered = sources(app);
+        if self.is_installed(app.key()) || offered.len() < 2 {
+            return Vec::new();
+        }
+        let names: Vec<String> = offered.iter().map(source_name).collect();
         let selected = self
             .source_of(app)
-            .and_then(|chosen| Source::ALL.iter().position(|source| *source == chosen));
+            .and_then(|chosen| offered.iter().position(|source| *source == chosen));
         let intents = Rc::clone(&self.intents);
         let key = app.key().to_owned();
-        Some(boxed(SegmentedControl::new(
-            &L10N.tr("info-source"),
-            &names,
-            selected,
-            move |index| {
-                if let Some(source) = Source::ALL.get(index) {
-                    intents
-                        .borrow_mut()
-                        .push(Intent::Source(key.clone(), *source));
-                }
-            },
-        )))
+        let choices = offered.clone();
+        let mut widgets = vec![row(vec![
+            boxed(Label::new(&L10N.tr("info-source")).secondary()),
+            boxed(SegmentedControl::new(
+                &L10N.tr("info-source"),
+                &names,
+                selected,
+                move |index| {
+                    if let Some(source) = choices.get(index) {
+                        intents
+                            .borrow_mut()
+                            .push(Intent::Source(key.clone(), source.clone()));
+                    }
+                },
+            )),
+        ])];
+        widgets.extend(offered.iter().map(|source| {
+            let name = match self.source_version(app, source) {
+                Some(version) => L10N.tr_args(
+                    "source-version",
+                    [
+                        ("source", source_name(source).into()),
+                        ("version", version.into()),
+                    ],
+                ),
+                None => source_name(source),
+            };
+            let note = match source {
+                Source::Debian => "source-debian-note",
+                Source::Flatpak(_) => "source-flatpak-note",
+            };
+            boxed(
+                Label::new(&L10N.tr_args(
+                    "source-about",
+                    [("source", name.into()), ("note", L10N.tr(note).into())],
+                ))
+                .secondary(),
+            )
+        }));
+        widgets
+    }
+
+    fn chosen_flatpak_facts(&self, app: &Component) -> Option<&flatpak::Facts> {
+        let Some(Source::Flatpak(remote)) = self.source_of(app) else {
+            return None;
+        };
+        self.flatpak_facts.get(&(app.key().to_owned(), remote))
     }
 
     fn needs_x11(&self, app: &Component) -> bool {
-        self.source_of(app) == Some(Source::Flatpak)
-            && self
-                .flatpak_facts
-                .get(app.key())
-                .is_some_and(|facts| flatpak_needs_x11(&facts.metadata))
+        self.chosen_flatpak_facts(app)
+            .is_some_and(|facts| flatpak_needs_x11(&facts.metadata))
     }
 
     fn actions(&self, index: usize, app: &Component) -> Widgets {
         let key = app.key();
         let mut widgets: Widgets = Vec::new();
-        if let Some(picker) = self.source_picker(app) {
-            widgets.push(row(vec![
-                boxed(Label::new(&L10N.tr("info-source")).secondary()),
-                picker,
-            ]));
-        }
+        widgets.extend(self.source_picker(app));
         if let Some(busy) = self.busy.get(key) {
             widgets.extend(self.progress(key, app, busy.task, &busy.progress));
         } else if let Some(removal) = self.removal.as_ref().filter(|removal| removal.key == key) {
@@ -1429,7 +1522,7 @@ impl Software {
             )]));
             let hint = match source {
                 Source::Debian => "password-hint",
-                Source::Flatpak => "flatpak-hint",
+                Source::Flatpak(_) => "flatpak-hint",
             };
             widgets.push(boxed(Label::new(&L10N.tr(hint)).secondary()));
         }
@@ -1461,7 +1554,7 @@ impl Software {
                 [("packages", removal.also.join(", ").into())],
             ))));
         }
-        if removal.source == Source::Flatpak {
+        if matches!(removal.source, Source::Flatpak(_)) {
             widgets.push(boxed(Label::new(&L10N.tr("remove-runtimes")).secondary()));
         }
         widgets.push(row(vec![
@@ -1563,15 +1656,13 @@ impl Software {
     }
 
     fn flatpak_facts(&self, app: &Component) -> Option<(Facts, Option<(String, u64)>)> {
-        if self.source_of(app) != Some(Source::Flatpak) {
+        let Some(Source::Flatpak(remote)) = self.source_of(app) else {
             return None;
-        }
-        let facts = self.flatpak_facts.get(app.key())?;
+        };
+        let facts = self
+            .flatpak_facts
+            .get(&(app.key().to_owned(), remote.clone()))?;
         let installed = self.flatpaks.get(app.key());
-        let remote = installed
-            .map(|found| found.origin.as_str())
-            .or_else(|| flatpak_bundle(app).map(|(remote, _)| remote))
-            .unwrap_or_default();
         let version = (!facts.version.is_empty()).then(|| facts.version.clone());
         let runtime = facts
             .runtime
@@ -1588,7 +1679,7 @@ impl Software {
                 size: installed.map(|_| facts.size).unwrap_or(0),
                 download: installed.map(|_| 0).unwrap_or(facts.download),
                 extra: 0,
-                origin: remote_name(remote),
+                origin: source_name(&Source::Flatpak(remote)),
                 homepage: String::new(),
             },
             runtime,
@@ -1596,10 +1687,7 @@ impl Software {
     }
 
     fn permissions(&self, app: &Component) -> Widgets {
-        if self.source_of(app) != Some(Source::Flatpak) {
-            return Vec::new();
-        }
-        let Some(facts) = self.flatpak_facts.get(app.key()) else {
+        let Some(facts) = self.chosen_flatpak_facts(app) else {
             return Vec::new();
         };
         let mut widgets = vec![boxed(Label::heading(&L10N.tr("permissions")))];
@@ -1680,10 +1768,7 @@ impl Software {
             .map(|facts| facts.origin.as_str())
             .filter(|origin| !origin.is_empty())
             .map(origin_name)
-            .or_else(|| match self.source_of(app)? {
-                Source::Debian => Some(L10N.tr("debian")),
-                Source::Flatpak => flatpak_bundle(app).map(|(remote, _)| remote_name(remote)),
-            });
+            .or_else(|| self.source_of(app).map(|source| source_name(&source)));
         if let Some(origin) = origin {
             cells.push(fact(&L10N.tr("info-source"), text(&origin)));
         }
@@ -1719,6 +1804,9 @@ impl Software {
         }
         if !app.summary.is_empty() {
             heading.push(boxed(Label::new(&app.summary)));
+        }
+        if let Some(source @ Source::Flatpak(_)) = self.source_of(app) {
+            heading.push(boxed(Label::new(&source_name(&source)).secondary()));
         }
         let mut widgets = vec![
             row(vec![boxed(self.button(&L10N.tr("back"), Intent::Back))]),
