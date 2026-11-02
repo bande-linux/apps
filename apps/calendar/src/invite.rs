@@ -46,8 +46,10 @@ fn address(value: &str) -> &str {
     }
 }
 
-fn same(property: &Property, me: &str) -> bool {
-    address(&property.value).eq_ignore_ascii_case(me.trim())
+fn same(property: &Property, me: &[String]) -> bool {
+    let found = address(&property.value);
+    me.iter()
+        .any(|mine| found.eq_ignore_ascii_case(mine.trim()))
 }
 
 fn invitee(property: &Property, organizer: bool) -> Invitee {
@@ -84,7 +86,7 @@ pub fn invitees(event: &Event) -> Vec<Invitee> {
         .collect()
 }
 
-pub fn my_answer(event: &Event, me: &str) -> Option<Answer> {
+pub fn my_answer(event: &Event, me: &[String]) -> Option<Answer> {
     let organizer = event.component.property("ORGANIZER")?;
     if same(organizer, me) {
         return None;
@@ -96,7 +98,7 @@ pub fn my_answer(event: &Event, me: &str) -> Option<Answer> {
         .map(|attendee| Answer::of(attendee.param("PARTSTAT")))
 }
 
-pub fn answer(object: &CalendarObject, me: &str, answer: Answer) -> CalendarObject {
+pub fn answer(object: &CalendarObject, me: &[String], answer: Answer) -> CalendarObject {
     let mut object = object.clone();
     for event in &mut object.events {
         for attendee in
@@ -126,15 +128,15 @@ pub fn parse_addresses(text: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn invite(event: &mut Event, me: &str, addresses: &[String]) {
-    if addresses.is_empty() {
+pub fn invite(event: &mut Event, me: &[String], addresses: &[String]) {
+    let Some(organizer) = me.first().filter(|_| !addresses.is_empty()) else {
         return;
-    }
+    };
     let component = &mut event.component;
     if component.property("ORGANIZER").is_none() {
-        component.push(Property::new("ORGANIZER", format!("mailto:{me}")));
+        component.push(Property::new("ORGANIZER", format!("mailto:{organizer}")));
         component.push(
-            Property::new("ATTENDEE", format!("mailto:{me}"))
+            Property::new("ATTENDEE", format!("mailto:{organizer}"))
                 .with_param("PARTSTAT", "ACCEPTED")
                 .with_param("ROLE", "CHAIR"),
         );
@@ -142,7 +144,7 @@ pub fn invite(event: &mut Event, me: &str, addresses: &[String]) {
     for address in addresses {
         if component
             .all("ATTENDEE")
-            .any(|attendee| same(attendee, address))
+            .any(|attendee| same(attendee, std::slice::from_ref(address)))
         {
             continue;
         }
@@ -155,7 +157,7 @@ pub fn invite(event: &mut Event, me: &str, addresses: &[String]) {
     }
 }
 
-pub fn revise(object: &mut CalendarObject, me: &str) {
+pub fn revise(object: &mut CalendarObject, me: &[String]) {
     for event in &mut object.events {
         let organizing = event
             .component

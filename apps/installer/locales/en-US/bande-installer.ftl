@@ -17,6 +17,10 @@ also-installs = { $count ->
     [one] Also installs 1 package
    *[other] Also installs { $count } packages
 }
+also-installs-download = { $count ->
+    [one] Also installs 1 package · { $size } to download
+   *[other] Also installs { $count } packages · { $size } to download
+}
 removes = { $count ->
     [one] Removes 1 package: { $names }
    *[other] Removes { $count } packages: { $names }
@@ -28,6 +32,9 @@ needs = Needs { $names }
 details = Details
 packages = Packages
 status-waiting = Waiting for another installation to finish…
+status-authorizing = Waiting for your password…
+authorize-hint = Enter an administrator’s password in the dialog to continue, or cancel it to stop.
+password-hint = Installing asks for an administrator’s password.
 status-downloading = Downloading…
 status-installing = Installing…
 status-removing = Removing…
@@ -51,4 +58,7 @@ removed = “{ $name }” was removed.
 failed-locked = Another installation is running. Try again when it finishes.
 failed-system = This package is part of the system and can't be removed.
 failed-unavailable = Installing packages needs PackageKit, which isn't installed.
+failed-no-network = The packages it needs couldn't be downloaded. Check your internet connection and try again.
+failed-no-space = There isn't enough disk space. Free up some space and try again.
+failed-dependencies = It needs packages that can't be installed right now. Install pending updates in Settings › Software Update, then try again.
 failed-other = The package couldn't be installed.

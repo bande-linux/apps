@@ -19,7 +19,7 @@ views. Packaged as `bande-calendar`.
   refreshed on a wall-clock deadline kept across restarts (every 5 minutes to every week, or
   never); the name and colour come from `X-WR-CALNAME` and `X-APPLE-CALENDAR-COLOR`.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
-  without a network and pushes changes later. Sync is incremental with `sync-token`
+  without a network and pushes changes as soon as NetworkManager says the network is back. Sync is incremental with `sync-token`
   (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
   `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
   version stays and the local edit is kept beside it as a new event, and the sidebar says so.
@@ -43,7 +43,8 @@ views. Packaged as `bande-calendar`.
   recurring event asks whether it is for this event only (an override) or all events.
 - **Invitations** through the server (RFC 6638 implicit scheduling, as iCloud, Fastmail,
   Nextcloud and Google do it): the inspector lists the organizer and invitees with their
-  answers, Accept, Maybe and Decline update your own `PARTSTAT`, and on an event you organise
+  answers, Accept, Maybe and Decline update your own `PARTSTAT` (an invitation's title and
+  times stay read-only), and on an event you organise
   in a CalDAV calendar you can add invitees by address; the server sends the mail.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed. Alerts,
@@ -88,8 +89,10 @@ Settings; the desktop pin is shared by the workspace (see `../../README.md`).
 ## Tests
 
 `tests/untrusted.rs` opens a hostile `.ics` file without panicking, refuses a FIFO or a file over
-64 MiB, and never sends a password over plain HTTP to anything but this computer. The repo's
-whole test list and the reason for each is in `NOTES/tests.md`.
+64 MiB, and never sends a password over plain HTTP to anything but this computer.
+`tests/time_zone.rs` moves a repeating event to another zone and checks that its times,
+exceptions and end follow. The repo's whole test list and the reason for each is in
+`NOTES/tests.md`.
 
 ## Not done yet
 

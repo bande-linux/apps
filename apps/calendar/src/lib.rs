@@ -3,6 +3,7 @@ pub mod caldav;
 pub mod edit;
 pub mod ical;
 pub mod invite;
+pub mod online;
 pub mod portal;
 pub mod secrets;
 pub mod settings;

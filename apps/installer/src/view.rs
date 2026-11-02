@@ -52,6 +52,7 @@ fn arch_name(arch: &str) -> String {
 fn status_line(status: Status) -> String {
     match status {
         Status::Waiting => L10N.tr("status-waiting"),
+        Status::Authorizing => L10N.tr("status-authorizing"),
         Status::Downloading => L10N.tr("status-downloading"),
         Status::Installing => L10N.tr("status-installing"),
         Status::Removing => L10N.tr("status-removing"),
@@ -278,10 +279,17 @@ impl Installer {
             )));
         }
         if !preview.also.is_empty() {
-            widgets.push(disclosure(
-                &L10N.tr_args("also-installs", [("count", preview.also.len().into())]),
-                &preview.also.join("\n"),
-            ));
+            let title = match preview.download {
+                0 => L10N.tr_args("also-installs", [("count", preview.also.len().into())]),
+                size => L10N.tr_args(
+                    "also-installs-download",
+                    [
+                        ("count", preview.also.len().into()),
+                        ("size", format_size(size).into()),
+                    ],
+                ),
+            };
+            widgets.push(disclosure(&title, &preview.also.join("\n")));
         }
         if !preview.removes.is_empty() {
             widgets.push(boxed(Label::new(&L10N.tr_args(
@@ -311,6 +319,7 @@ impl Installer {
                 .button(&L10N.tr("install-and-remove"), Intent::Install)
                 .destructive(),
         };
+        widgets.push(boxed(Label::new(&L10N.tr("password-hint")).secondary()));
         widgets.push(row(vec![
             boxed(self.button(&L10N.tr("cancel"), Intent::Close)),
             boxed(install),
@@ -322,14 +331,19 @@ impl Installer {
         let status = status_line(progress.status);
         let mut cancel = self.button(&L10N.tr("cancel"), Intent::Cancel);
         cancel.set_enabled(progress.allow_cancel);
-        vec![
+        let fraction = match progress.status {
+            Status::Authorizing | Status::Waiting => None,
+            _ => progress.percent.map(|percent| percent as f32 / 100.0),
+        };
+        let mut widgets = vec![
             boxed(Label::new(&status)),
-            boxed(ProgressBar::new(
-                &status,
-                progress.percent.map(|percent| percent as f32 / 100.0),
-            )),
-            row(vec![boxed(cancel)]),
-        ]
+            boxed(ProgressBar::new(&status, fraction)),
+        ];
+        if progress.status == Status::Authorizing {
+            widgets.push(boxed(Label::new(&L10N.tr("authorize-hint")).secondary()));
+        }
+        widgets.push(row(vec![boxed(cancel)]));
+        widgets
     }
 
     fn body(&self) -> Widgets {
@@ -441,6 +455,9 @@ impl Installer {
                     Problem::Locked => L10N.tr("failed-locked"),
                     Problem::SystemPackage => L10N.tr("failed-system"),
                     Problem::Unavailable => L10N.tr("failed-unavailable"),
+                    Problem::NoNetwork => L10N.tr("failed-no-network"),
+                    Problem::NoSpace => L10N.tr("failed-no-space"),
+                    Problem::Dependencies => L10N.tr("failed-dependencies"),
                     Problem::Other => L10N.tr("failed-other"),
                 };
                 let mut widgets = vec![boxed(Label::new(&sentence))];

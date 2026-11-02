@@ -27,6 +27,8 @@ pub enum AccountKind {
         server: String,
         user: String,
         home: String,
+        #[serde(default)]
+        addresses: Vec<String>,
     },
     Subscription {
         url: String,

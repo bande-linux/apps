@@ -188,10 +188,17 @@ fn hit_at(view: &CalendarView, point: Point) -> Option<Hit> {
 }
 
 fn writable(view: &CalendarView, found: &Found) -> bool {
-    view.library
-        .calendars
-        .get(found.calendar)
-        .is_some_and(|calendar| !calendar.info.read_only)
+    let invited = view.me(found.calendar).is_some_and(|me| {
+        view.library
+            .event(found)
+            .is_some_and(|event| crate::invite::my_answer(event, &me).is_some())
+    });
+    !invited
+        && view
+            .library
+            .calendars
+            .get(found.calendar)
+            .is_some_and(|calendar| !calendar.info.read_only)
 }
 
 fn over_controls(view: &CalendarView, point: Point) -> bool {
