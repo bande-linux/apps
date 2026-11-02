@@ -958,7 +958,9 @@ impl Program for CalendarApp {
     }
 
     fn command(&mut self, cx: &mut Cx<Self>, _window: Option<WindowId>, command: &str) {
-        if self.main.is_none() || command == SHOW_CALENDAR {
+        if self.main.is_none() {
+            self.reopen(cx);
+        } else if command == SHOW_CALENDAR {
             self.raise(cx);
         }
         self.with_view(cx, |_, view| {

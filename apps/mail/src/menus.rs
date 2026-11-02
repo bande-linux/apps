@@ -13,10 +13,6 @@ fn item(message: &str, action: &str) -> Entry {
 
 pub const VIEWER: &str = "viewer";
 
-pub fn opens_viewer(action: &str) -> bool {
-    matches!(action, "add-account" | "new-mailbox")
-}
-
 pub fn window_menu() -> Vec<Entry> {
     vec![Entry::item(&L10N.tr("menu-viewer"), VIEWER)]
 }

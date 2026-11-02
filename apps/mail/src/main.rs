@@ -422,6 +422,9 @@ impl Mail {
     }
 
     fn serve_main(&mut self, cx: &mut Cx<Self>) {
+        if self.parked.as_ref().is_some_and(|view| view.has_sheet()) {
+            self.show_viewer(cx);
+        }
         if let Some(main) = self.main {
             return self.serve(cx, main);
         }
@@ -519,7 +522,9 @@ impl Mail {
     }
 
     fn show_viewer(&mut self, cx: &mut Cx<Self>) {
-        self.reopen(cx);
+        if self.main.is_none() {
+            return self.reopen(cx);
+        }
         if let Some((window, _)) = self.main.and_then(|main| cx.window(main))
             && let Err(error) = window
                 .activation_token(APP_ID)
@@ -619,9 +624,6 @@ impl Program for Mail {
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
         if command == menus::VIEWER {
             return self.show_viewer(cx);
-        }
-        if menus::opens_viewer(command) {
-            self.reopen(cx);
         }
         let handled = match window.and_then(|window| cx.window(window)) {
             Some((_, Pane::Main(view))) => view.menu_action(command),

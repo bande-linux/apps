@@ -339,7 +339,9 @@ fn open_main(
 
 impl ActivityMonitor {
     fn show_main(&mut self, cx: &mut Cx<Self>) {
-        self.reopen(cx);
+        if self.main.is_none() {
+            return self.reopen(cx);
+        }
         if let Some((window, _)) = self.main.and_then(|main| cx.window(main))
             && let Err(error) = window
                 .activation_token(APP_ID)
