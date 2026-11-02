@@ -57,6 +57,10 @@ pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
                 Entry::item(&L10N.tr("menu-sort-ascending"), "sort-ascending")
                     .radio(settings.ascending),
             );
+            entries.push(Entry::separator());
+            entries.push(
+                Entry::item(&L10N.tr("menu-bcc-field"), "bcc-field").radio(settings.bcc_field),
+            );
             entries
         }),
         Entry::submenu(

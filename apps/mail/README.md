@@ -68,7 +68,8 @@ apt install bande-mail
   puts moved or deleted messages back, up to 20 steps, and a mailbox that messages were moved
   to is synced right after the move. Mailbox → New Mailbox… and a mailbox's menu in the sidebar
   create, rename and delete mailboxes on the server; the special mailboxes keep their names.
-- **Compose** opens its own window, with From when there are several accounts. Replies quote the
+- **Compose** opens its own window, with From when there are several accounts, and Bcc when
+  View → Bcc Address Field is on or the message has Bcc recipients. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's
   signature goes above the quoted text and replaces the previous account's signature when From
   changes. Files are

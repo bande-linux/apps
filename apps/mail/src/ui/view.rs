@@ -2657,6 +2657,10 @@ impl MailView {
             "toggle-read" => self.toggle_read(),
             "toggle-flag" => self.toggle_flag(),
             "mark-all-read" => self.mark_all_read(),
+            "bcc-field" => {
+                self.settings.bcc_field = !self.settings.bcc_field;
+                self.keep_settings();
+            }
             "sort-ascending" | "sort-descending" => {
                 self.settings.ascending = action == "sort-ascending";
                 self.keep_settings();
