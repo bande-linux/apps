@@ -40,6 +40,7 @@ pub struct MailSettings {
     pub send_from: String,
     pub sort: SortBy,
     pub ascending: bool,
+    pub bcc_field: bool,
 }
 
 impl Default for MailSettings {
@@ -56,6 +57,7 @@ impl Default for MailSettings {
             send_from: String::new(),
             sort: SortBy::Date,
             ascending: false,
+            bcc_field: false,
         }
     }
 }
@@ -93,6 +95,7 @@ impl Stored for MailSettings {
                         .unwrap_or_default();
                 }
                 "ascending" => settings.ascending = flag(value).unwrap_or(settings.ascending),
+                "bcc-field" => settings.bcc_field = flag(value).unwrap_or(settings.bcc_field),
                 _ => {}
             }
         }
@@ -101,7 +104,7 @@ impl Stored for MailSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\n",
+            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\nbcc-field = {}\n",
             self.notify,
             self.sound,
             self.load_remote,
@@ -113,6 +116,7 @@ impl Stored for MailSettings {
             self.send_from.trim(),
             self.sort.name(),
             self.ascending,
+            self.bcc_field,
         )
     }
 }

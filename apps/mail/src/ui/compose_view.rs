@@ -6,8 +6,8 @@ use std::time::{Duration, Instant, SystemTime};
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
-    Alert, BUTTON_HEIGHT, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Menu,
-    PopUpButton, Size, TEXT_FIELD_HEIGHT, TextField, TextView, Ui, Widget, WidgetId,
+    Alert, BUTTON_HEIGHT, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Label,
+    Menu, PopUpButton, Size, TEXT_FIELD_HEIGHT, TextField, TextView, Ui, Widget, WidgetId,
     shortcut_pressed,
 };
 use bande_toolkit::{
@@ -53,6 +53,8 @@ pub struct ComposeView {
     attach: WidgetId,
     to: WidgetId,
     cc: WidgetId,
+    bcc: WidgetId,
+    bcc_shown: bool,
     subject: WidgetId,
     from: Option<WidgetId>,
     body: WidgetId,
@@ -91,8 +93,12 @@ fn joined(addresses: &[Address]) -> String {
         .join(", ")
 }
 
-fn rows(from: bool) -> Vec<&'static str> {
-    let mut rows = vec!["compose-to", "compose-cc", "compose-subject"];
+fn rows(from: bool, bcc: bool) -> Vec<&'static str> {
+    let mut rows = vec!["compose-to", "compose-cc"];
+    if bcc {
+        rows.push("compose-bcc");
+    }
+    rows.push("compose-subject");
     if from {
         rows.push("compose-from");
     }
@@ -103,6 +109,7 @@ impl ComposeView {
     pub fn new(
         outgoing: Outgoing,
         senders: Vec<Account>,
+        bcc_field: bool,
         palette: Palette,
         text: TextSystem,
     ) -> Self {
@@ -142,6 +149,11 @@ impl ComposeView {
         let field = |text: &str| TextField::new("", text, |_| {}).borderless(FIELD_FONT);
         let to = host.insert(field(&joined(&draft.to)), Rect::default());
         let cc = host.insert(field(&joined(&draft.cc)), Rect::default());
+        let bcc_shown = bcc_field || !draft.bcc.is_empty();
+        let bcc = match bcc_shown {
+            true => host.insert(field(&joined(&draft.bcc)), Rect::default()),
+            false => host.insert(Label::new(""), Rect::default()),
+        };
         let subject = host.insert(field(&draft.subject), Rect::default());
         let sender = senders
             .iter()
@@ -171,6 +183,8 @@ impl ComposeView {
             attach,
             to,
             cc,
+            bcc,
+            bcc_shown,
             subject,
             from,
             body,
@@ -215,6 +229,26 @@ impl ComposeView {
         }
     }
 
+    pub fn set_bcc_field(&mut self, shown: bool) {
+        if shown == self.bcc_shown || (!shown && !self.field_text(self.bcc).trim().is_empty()) {
+            return;
+        }
+        let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) else {
+            return;
+        };
+        let replaced = match shown {
+            true => host.replace(
+                self.bcc,
+                TextField::new("", "", |_| {}).borderless(FIELD_FONT),
+            ),
+            false => host.replace(self.bcc, Label::new("")),
+        };
+        if let Some(bcc) = replaced {
+            self.bcc = bcc;
+            self.bcc_shown = shown;
+        }
+    }
+
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.palette = appearance.palette();
         self.ui.set_appearance(appearance);
@@ -239,7 +273,12 @@ impl ComposeView {
         let field_x = MARGIN + LABEL_WIDTH;
         let field_width = (width - field_x - MARGIN).max(40.0);
         let mut y = TOOLBAR_HEIGHT;
-        let mut fields = vec![self.to, self.cc, self.subject];
+        let mut fields = vec![self.to, self.cc];
+        match self.bcc_shown {
+            true => fields.push(self.bcc),
+            false => frames.push((self.bcc, Rect::default())),
+        }
+        fields.push(self.subject);
         fields.extend(self.from);
         for id in fields {
             let height = self
@@ -308,7 +347,7 @@ impl ComposeView {
         let palette = self.palette;
         let mut items = Vec::new();
         let mut y = TOOLBAR_HEIGHT;
-        for label in rows(self.from.is_some()) {
+        for label in rows(self.from.is_some(), self.bcc_shown) {
             let paragraph = self.ui.context().text.paragraph(
                 &L10N.tr(label),
                 TextStyle::role(TextRole::Body, palette.ink3),
@@ -411,6 +450,10 @@ impl ComposeView {
                 .unwrap_or_else(|| self.draft.from.clone()),
             to: parse_addresses(&self.field_text(self.to)),
             cc: parse_addresses(&self.field_text(self.cc)),
+            bcc: match self.bcc_shown {
+                true => parse_addresses(&self.field_text(self.bcc)),
+                false => self.draft.bcc.clone(),
+            },
             subject: self.field_text(self.subject),
             body: self
                 .ui

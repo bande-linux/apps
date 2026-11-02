@@ -265,12 +265,13 @@ impl Mail {
     }
 
     fn open_compose(&mut self, cx: &mut Cx<Self>, outgoing: Outgoing) -> Option<WindowId> {
-        let senders = main_view(cx, self.main, &mut self.parked)
-            .map(|view| view.accounts())
+        let (senders, bcc_field) = main_view(cx, self.main, &mut self.parked)
+            .map(|view| (view.accounts(), view.settings().bcc_field))
             .unwrap_or_default();
         let mut view = ComposeView::new(
             outgoing,
             senders,
+            bcc_field,
             Appearance::default().palette(),
             TextSystem::new(),
         );
@@ -622,6 +623,17 @@ impl Program for Mail {
                 view.menu_action(command);
             }
             self.serve_main(cx);
+        }
+        if command == "bcc-field" {
+            let shown = main_view(cx, self.main, &mut self.parked)
+                .is_some_and(|view| view.settings().bcc_field);
+            let windows: Vec<WindowId> = cx.windows().collect();
+            for window in windows {
+                if let Some((_, Pane::Compose(view))) = cx.window(window) {
+                    view.set_bcc_field(shown);
+                    refresh(cx, window);
+                }
+            }
         }
         if let Some(window) = window {
             self.serve(cx, window);
