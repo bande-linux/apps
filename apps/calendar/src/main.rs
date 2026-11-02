@@ -10,7 +10,7 @@ use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_calendar::alerts::{Due, due_between};
 use bande_calendar::caldav::Discovered;
 use bande_calendar::ical::{CalendarObject, read_file};
-use bande_calendar::notice::{Notice, Notices, OPEN, SNOOZE as SNOOZE_ACTION};
+use bande_calendar::notice::{Notice, Notices, OPEN, SNOOZE as SNOOZE_ACTION, Subject};
 use bande_calendar::online::System;
 use bande_calendar::portal::{Choose, choose_file};
 use bande_calendar::settings::{CalendarSettings, Change, listen};
@@ -130,7 +130,7 @@ struct CalendarApp {
     alerts_checked: Timestamp,
     fired: HashMap<String, Timestamp>,
     notices: Notices,
-    shown_alerts: HashMap<u32, Due>,
+    shown: HashMap<u32, Subject>,
     snoozed: Vec<(Timestamp, Due)>,
     syncing: bool,
     sync_again: bool,
@@ -534,6 +534,11 @@ impl CalendarApp {
                 Reply::SignInFailed { account } => {
                     if self.asked.insert(account.clone()) {
                         view.ask_password(&account);
+                        if self.main.is_none()
+                            && let Some(known) = view.library().account(&account)
+                        {
+                            self.notices.sign_in_failed(account, &known.name);
+                        }
                     }
                 }
                 Reply::Failed { calendar, error } => {
@@ -630,6 +635,7 @@ impl CalendarApp {
                     password,
                 } => {
                     self.asked.remove(&account);
+                    self.withdraw_sign_in(&account);
                     self.worker.send(Job::SetPassword {
                         account,
                         user,
@@ -828,32 +834,45 @@ impl CalendarApp {
 
     fn notice(&mut self, cx: &mut Cx<Self>, notice: Notice) {
         match notice {
-            Notice::Shown(id, due) => {
-                self.shown_alerts.insert(id, due);
+            Notice::Shown(id, Subject::SignIn(account)) if !self.asked.contains(&account) => {
+                self.notices.withdraw(id);
+            }
+            Notice::Shown(id, subject) => {
+                self.shown.insert(id, subject);
             }
             Notice::Closed(id) => {
-                self.shown_alerts.remove(&id);
+                self.shown.remove(&id);
             }
-            Notice::Invoked(id, action) => {
-                let Some(due) = self.shown_alerts.remove(&id) else {
-                    return;
-                };
-                match action.as_str() {
-                    SNOOZE_ACTION => {
-                        let now = Timestamp::now();
-                        self.snoozed
-                            .push((now.saturating_add(SNOOZE).unwrap_or(now), due));
-                        self.with_view(cx, |app, view| app.check_alerts(view));
-                    }
-                    OPEN => {
-                        self.raise(cx);
-                        let day = due.starts.to_zoned(self.zone.clone()).date();
-                        self.with_view(cx, |_, view| view.go_to(day));
-                    }
-                    _ => {}
+            Notice::Invoked(id, action) => match (self.shown.remove(&id), action.as_str()) {
+                (Some(Subject::Alert(due)), SNOOZE_ACTION) => {
+                    let now = Timestamp::now();
+                    self.snoozed
+                        .push((now.saturating_add(SNOOZE).unwrap_or(now), due));
+                    self.with_view(cx, |app, view| app.check_alerts(view));
                 }
-            }
+                (Some(Subject::Alert(due)), OPEN) => {
+                    self.raise(cx);
+                    let day = due.starts.to_zoned(self.zone.clone()).date();
+                    self.with_view(cx, |_, view| view.go_to(day));
+                }
+                (Some(Subject::SignIn(account)), OPEN) => {
+                    self.raise(cx);
+                    self.with_view(cx, |_, view| view.ask_password(&account));
+                }
+                _ => {}
+            },
         }
+    }
+
+    fn withdraw_sign_in(&mut self, account: &str) {
+        let notices = &self.notices;
+        self.shown.retain(|id, subject| match subject {
+            Subject::SignIn(asked) if asked == account => {
+                notices.withdraw(*id);
+                false
+            }
+            _ => true,
+        });
     }
 
     fn follow_settings(&mut self, cx: &mut Cx<Self>) {
@@ -942,7 +961,7 @@ impl Program for CalendarApp {
             alerts_checked: Timestamp::now(),
             fired: HashMap::new(),
             notices: Notices::start()?,
-            shown_alerts: HashMap::new(),
+            shown: HashMap::new(),
             snoozed: Vec::new(),
             syncing: false,
             sync_again: false,

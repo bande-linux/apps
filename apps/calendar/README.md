@@ -14,7 +14,8 @@ views. Packaged as `bande-calendar`.
   has iCloud, Fastmail, Google and Nextcloud presets that fill in the server and say which
   password to use (Google needs OAuth, so it offers a subscription to the calendar's secret
   iCal address instead). When the server refuses the password, Calendar asks for it again
-  (also from Password… in Settings) and keeps every offline change meanwhile.
+  (also from Password… in Settings) and keeps every offline change meanwhile; with its window
+  closed it posts one notification instead, which opens the window at the password sheet.
 - **Subscriptions.** `webcal:` / `webcals:` links and plain `https:` `.ics` URLs, read-only,
   refreshed on a wall-clock deadline kept across restarts (every 5 minutes to every week, or
   never; for all of them or one by one in Settings); their alerts are dropped unless turned on

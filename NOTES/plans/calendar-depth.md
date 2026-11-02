@@ -31,7 +31,7 @@ work and family calendars on it without a second app? Reviewed 2026-11-02.
 | Time zones and DST | done: tz database, VTIMEZONE in and out, zone per event, DST-safe wall-clock timers, follows a system time zone change (timedate1) at once |
 | Offline edits, conflicts | done: pending changes on disk, pushed as soon as NetworkManager reports the network back; a 412 keeps the server copy and the local edit as a new event |
 | Invitations | done via implicit scheduling: invitees and answers shown, Accept/Maybe/Decline (an invitation's title and times stay read-only), add invitees, SEQUENCE raised by the organizer; your addresses come from `calendar-user-address-set` (accounts added before 2026-11-02 fall back to the login name) |
-| Wrong/expired password | done: asked again on 401, or from Settings, pending changes kept |
+| Wrong/expired password | done: asked again on 401 (with the window closed, a notification opens it with the sheet, once per refusal), or from Settings, pending changes kept |
 
 ## Landed 2026-11-02 (apps main)
 
