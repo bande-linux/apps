@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::os::fd::BorrowedFd;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
@@ -10,6 +10,7 @@ use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_calendar::alerts::{Due, due_between};
 use bande_calendar::caldav::Discovered;
 use bande_calendar::ical::{CalendarObject, read_file};
+use bande_calendar::portal::{Choose, choose_file};
 use bande_calendar::settings::{CalendarSettings, Change, listen};
 use bande_calendar::store::{Account, AccountKind, CalendarInfo, Library, data_dir, new_uid};
 use bande_calendar::sync::{apply, subscription_outcome};
@@ -53,6 +54,47 @@ fn settings_window(appearance: Appearance) -> Box<dyn View> {
     Box::new(SettingsView::new(appearance))
 }
 
+enum Chosen {
+    Open(PathBuf),
+    Failed(String),
+}
+
+fn choose(outbox: bande_inbox::Outbox<Chosen>, export: Option<(String, String)>) {
+    let spawned = std::thread::Builder::new()
+        .name("choose".to_owned())
+        .spawn(move || {
+            let (title, save) = match &export {
+                Some((name, _)) => (L10N.tr("export-dialog-title"), Choose::Save(name)),
+                None => (L10N.tr("import-dialog-title"), Choose::Open),
+            };
+            let chosen = match choose_file(&title, save) {
+                Ok(Some(path)) => path,
+                Ok(None) => return,
+                Err(error) => {
+                    tracing::warn!("cannot choose a file: {error}");
+                    return;
+                }
+            };
+            let done = match export {
+                None => Chosen::Open(chosen),
+                Some((_, data)) => match std::fs::write(&chosen, data) {
+                    Ok(()) => return,
+                    Err(error) => Chosen::Failed(L10N.tr_args(
+                        "export-failed",
+                        [
+                            ("file", chosen.display().to_string().into()),
+                            ("error", error.to_string().into()),
+                        ],
+                    )),
+                },
+            };
+            outbox.send(done);
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot choose a file: {error}");
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Refresh {
     Due,
@@ -65,6 +107,7 @@ struct CalendarApp {
     worker: Worker,
     alarm: WallAlarm,
     changes: Inbox<Change>,
+    chosen: Inbox<Chosen>,
     settings: CalendarSettings,
     settings_watch: Option<SettingsWatch>,
     zone: TimeZone,
@@ -138,6 +181,9 @@ fn app_menus(mode: Mode) -> Vec<Entry> {
                 entry("new-calendar", "new-calendar").shortcut("Alt+Ctrl+N"),
                 entry("add-account", "add-account"),
                 entry("refresh", "refresh").shortcut("Ctrl+R"),
+                Entry::separator(),
+                entry("import-menu", "import"),
+                entry("export", "export"),
             ],
         ),
         edit_submenu(Vec::new()),
@@ -546,6 +592,8 @@ impl CalendarApp {
                     view.refresh_search();
                 }
                 Request::Refresh => self.sync(view, Refresh::All),
+                Request::Import => choose(self.chosen.outbox(), None),
+                Request::Export { name, data } => choose(self.chosen.outbox(), Some((name, data))),
                 Request::Collection {
                     account,
                     url,
@@ -771,6 +819,7 @@ impl Program for CalendarApp {
             worker,
             alarm: WallAlarm::new()?,
             changes,
+            chosen: Inbox::new()?,
             settings,
             settings_watch,
             zone,
@@ -845,10 +894,15 @@ impl Program for CalendarApp {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        [self.worker.fd(), self.alarm.fd(), self.changes.fd()]
-            .into_iter()
-            .chain(self.settings_watch.iter().map(SettingsWatch::fd))
-            .collect()
+        [
+            self.worker.fd(),
+            self.alarm.fd(),
+            self.changes.fd(),
+            self.chosen.fd(),
+        ]
+        .into_iter()
+        .chain(self.settings_watch.iter().map(SettingsWatch::fd))
+        .collect()
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
@@ -864,6 +918,19 @@ impl Program for CalendarApp {
             2 => {
                 for change in self.changes.drain() {
                     self.apply_change(cx, change);
+                }
+            }
+            3 => {
+                for chosen in self.chosen.drain() {
+                    self.raise(cx);
+                    self.with_view(cx, |_, view| match chosen {
+                        Chosen::Open(path) => open_arguments(
+                            view,
+                            &[path.to_string_lossy().into_owned()],
+                            Path::new("/"),
+                        ),
+                        Chosen::Failed(error) => view.set_status(Some(error)),
+                    });
                 }
             }
             _ => self.follow_settings(cx),

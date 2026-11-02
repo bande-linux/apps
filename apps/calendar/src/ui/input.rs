@@ -26,6 +26,9 @@ pub const ACTION_REFRESH: &str = "refresh";
 pub const ACTION_ADD_ACCOUNT: &str = "add-account";
 pub const ACTION_DELETE: &str = "delete";
 pub const ACTION_MODE: &str = "mode-";
+pub const ACTION_IMPORT: &str = "import";
+pub const ACTION_EXPORT: &str = "export";
+const ACTION_EXPORT_CALENDAR: &str = "calendar-export:";
 const ACTION_COLOR: &str = "calendar-color:";
 const ACTION_REMOVE_ACCOUNT: &str = "remove-account:";
 const ACTION_RENAME: &str = "calendar-rename:";
@@ -69,6 +72,10 @@ fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
     items.push(MenuItem::new(
         &L10N.tr("rename-calendar"),
         &format!("{ACTION_RENAME}{index}"),
+    ));
+    items.push(MenuItem::new(
+        &L10N.tr("export"),
+        &format!("{ACTION_EXPORT_CALENDAR}{index}"),
     ));
     if !subscription && (calendar.info.account != crate::store::LOCAL_ACCOUNT || locals > 1) {
         items.push(MenuItem::new(
@@ -123,6 +130,14 @@ pub fn menu_command(view: &mut CalendarView, action: &str) -> bool {
         ACTION_NEW_EVENT => signal(view, Signal::NewEvent),
         ACTION_ADD_ACCOUNT => signal(view, Signal::AddAccount),
         ACTION_REFRESH => view.requests.push(Request::Refresh),
+        ACTION_IMPORT => view.requests.push(Request::Import),
+        ACTION_EXPORT => view.export_calendar(None),
+        other if other.starts_with(ACTION_EXPORT_CALENDAR) => {
+            match other[ACTION_EXPORT_CALENDAR.len()..].parse() {
+                Ok(index) => view.export_calendar(Some(index)),
+                Err(_) => return false,
+            }
+        }
         ACTION_FIND => {
             let search = view.toolbar.search;
             view.ui.set_focus(search);
