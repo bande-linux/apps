@@ -11,7 +11,7 @@ ranked list at the end is what is left. Delete this plan when the list is done.
 | Memory: Memory, Compressed, Threads, Ports, PID, User | Find what holds memory | Have Memory (footprint from `bande_status::memory::footprint`: PSS anon + swap PSS), Compressed (swap PSS), Resident, Threads, PID, User. No Ports column |
 | Energy: Energy Impact, 12 hr Power, App Nap, Preventing Sleep | Find battery drains | Have Energy Impact (CPU + GPU + wake-ups, 30 s average), wake-ups, Preventing Sleep (logind inhibitors). No 12 hr average |
 | Disk: Bytes Written/Read, Kind, PID | Find what hits the disk | Have rates and totals per process |
-| Network: Sent/Rcvd Bytes and Packets per process | Find what uses the network | Per interface only; per-process traffic is missing |
+| Network: Sent/Rcvd Bytes and Packets per process | Find what uses the network | Have bytes per process for TCP (sock_diag `tcp_info` per socket, matched to `/proc/<pid>/fd`, only while the tab shows). UDP/QUIC has no kernel byte counters and other users' sockets cannot be matched, so those show –. No packet counts |
 | Column chooser (right-click a header) | Pick columns | Have, remembered per tab |
 | GPU (window) | GPU use | Have a GPU tab when a DRM device reports per-client use |
 
@@ -57,13 +57,11 @@ fixed four rows).
 
 ## Ranked remaining
 
-1. Per-process network bytes (sock_diag `INET_DIAG_INFO` bytes_acked/received per socket, mapped
-   to processes through `/proc/<pid>/fd` socket inodes; only while the Network tab shows).
-2. Dock icon modes (CPU usage, CPU history, memory pressure): needs a desktop API for live dock
+1. Dock icon modes (CPU usage, CPU history, memory pressure): needs a desktop API for live dock
    icon content.
-3. Sample Process in the inspector (per-thread `wchan` and `syscall` snapshot, or perf when
+2. Sample Process in the inspector (per-thread `wchan` and `syscall` snapshot, or perf when
    permitted) and a Statistics section (faults, context switches, I/O syscalls).
-4. Selected Processes and Active Processes filters.
-5. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
-6. Ports column (socket count per process) and packets in/out.
-7. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).
+3. Selected Processes and Active Processes filters.
+4. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
+5. Ports column (socket count per process), packets in/out, and UDP traffic per process (needs eBPF or nftables accounting).
+6. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).

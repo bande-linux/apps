@@ -78,12 +78,12 @@ fn column_width(column: Column) -> f32 {
     }
 }
 
-fn table_columns(tab: Tab, columns: &[Column], text: &mut TextSystem) -> Vec<TableColumn> {
+fn table_columns(columns: &[Column], text: &mut TextSystem) -> Vec<TableColumn> {
     let header = TextStyle::role(TextRole::Label, Color::BLACK);
     columns
         .iter()
         .map(|column| {
-            let title = column.title(tab);
+            let title = column.title();
             let needed = text
                 .paragraph(&title.to_uppercase(), header, None, TextAlign::Start)
                 .width()
@@ -112,7 +112,6 @@ fn row_id(key: &RowKey) -> String {
     match key {
         RowKey::Group(key) => group_id(key),
         RowKey::Process { pid, start_ticks } => format!("process:{pid}:{start_ticks}"),
-        RowKey::Interface(name) => format!("interface:{name}"),
     }
 }
 
@@ -195,7 +194,7 @@ fn tabs_control(list: &List, tabs: &[Tab], tab: Tab) -> SegmentedControl {
 impl MonitorView {
     pub fn new(monitor: Monitor, palette: Palette, mut text: TextSystem, mut icons: Icons) -> Self {
         let tab = monitor.tab();
-        let mut table = Table::new(table_columns(tab, monitor.columns(), &mut text));
+        let mut table = Table::new(table_columns(monitor.columns(), &mut text));
         table.set_sort(table_sort(monitor.columns(), monitor.sort()));
         let mut list = List::new(table, palette, text);
         let send = sender(list.signals());
@@ -646,8 +645,9 @@ impl MonitorView {
         self.show_columns();
     }
 
-    fn measures(&self) -> [bool; 4] {
+    fn measures(&self) -> [bool; 5] {
         [
+            self.monitor.measures_network(),
             self.monitor.measures_footprint(),
             self.monitor.measures_gpu(),
             self.monitor.measures_wakeups(),
@@ -656,8 +656,7 @@ impl MonitorView {
     }
 
     fn show_columns(&mut self) {
-        let tab = self.monitor.tab();
-        let columns = table_columns(tab, self.monitor.columns(), self.list.text());
+        let columns = table_columns(self.monitor.columns(), self.list.text());
         let sort = table_sort(self.monitor.columns(), self.monitor.sort());
         if let Some(table) = self.list.table() {
             table.set_columns(columns);
@@ -865,7 +864,7 @@ impl MonitorView {
         }
         let header = at.y < self.list.frame().y + self.list.header_height();
         if is_secondary(pointer) && header && self.monitor.tab().has_column_choice() {
-            let menu = columns_menu(self.monitor.tab(), self.monitor.columns());
+            let menu = columns_menu(self.monitor.columns());
             self.requests.push(Request::Menu(menu, at));
             return true;
         }
@@ -1536,6 +1535,10 @@ impl Screen for MonitorView {
 
     fn measures_disk(&self) -> bool {
         self.monitor.measures_disk()
+    }
+
+    fn measures_network(&self) -> bool {
+        self.monitor.measures_network()
     }
 
     fn measures_footprint(&self) -> bool {

@@ -123,17 +123,14 @@ pub fn process_menu(selected: Selected) -> Menu {
     ])
 }
 
-pub fn columns_menu(tab: Tab, shown: &[Column]) -> Menu {
+pub fn columns_menu(shown: &[Column]) -> Menu {
     Menu::new(
         std::iter::once(Column::Name)
             .chain(Column::CHOOSABLE)
             .map(|column| {
-                MenuItem::new(
-                    &column.title(tab),
-                    &format!("{COLUMN_ACTION}{}", column.id()),
-                )
-                .checked(shown.contains(&column))
-                .enabled(column != Column::Name)
+                MenuItem::new(&column.title(), &format!("{COLUMN_ACTION}{}", column.id()))
+                    .checked(shown.contains(&column))
+                    .enabled(column != Column::Name)
             })
             .collect(),
     )

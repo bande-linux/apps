@@ -244,6 +244,10 @@ pub trait Screen {
         false
     }
 
+    fn measures_network(&self) -> bool {
+        false
+    }
+
     fn inspects(&self, _pid: u32) -> bool {
         false
     }
