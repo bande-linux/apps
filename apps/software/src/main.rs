@@ -105,9 +105,10 @@ impl Program for Store {
     }
 
     fn reopen(&mut self, cx: &mut Cx<Self>) {
-        let Some(pane) = self.parked.take() else {
+        let Some(mut pane) = self.parked.take() else {
             return;
         };
+        pane.0.reload();
         match open_main(cx, pane) {
             Ok(main) => self.main = Some(main),
             Err(error) => tracing::warn!("cannot open Software: {error}"),

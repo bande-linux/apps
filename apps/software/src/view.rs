@@ -17,7 +17,7 @@ use bande_toolkit::{Image, Palette, Rect, TextSystem};
 
 use crate::L10N;
 use crate::catalog::{Block, Bundle, Category, Component, Icon, search};
-use crate::media::{self, Loaded, Media, ShotError};
+use crate::media::{self, Loaded, Media, Request, ShotError};
 use crate::online;
 use crate::widgets::{AppRow, Grid, Picture};
 use crate::worker::{self, Facts, Failure, Job, Message, Problem, Query};
@@ -393,6 +393,13 @@ impl Software {
         true
     }
 
+    pub fn reload(&mut self) {
+        if self.media.icons.send(Request::Catalogue).is_err() {
+            tracing::warn!("the catalogue loader stopped");
+        }
+        self.ask(Query::Updates);
+    }
+
     pub fn take_finished(&mut self) -> Vec<Finished> {
         std::mem::take(&mut self.finished)
     }
@@ -520,8 +527,28 @@ impl Software {
     fn receive(&mut self, message: Message) {
         match message {
             Message::Loaded(Loaded::Catalogue { apps, installed }) => {
-                self.apps = apps.into_iter().filter(|app| !app.needs_x11).collect();
+                let apps: Vec<Component> = apps.into_iter().filter(|app| !app.needs_x11).collect();
+                let shown: Vec<Option<usize>> = self
+                    .pages
+                    .iter()
+                    .map(|(page, _)| match page {
+                        Page::App(index) => {
+                            let key = self.apps.get(*index).map(Component::key);
+                            apps.iter().position(|app| Some(app.key()) == key)
+                        }
+                        _ => Some(0),
+                    })
+                    .collect();
+                let kept = shown.iter().take_while(|found| found.is_some()).count();
+                self.pages.truncate(kept.max(1));
+                for ((page, _), found) in self.pages.iter_mut().zip(shown) {
+                    if let (Page::App(index), Some(found)) = (page, found) {
+                        *index = found;
+                    }
+                }
+                self.apps = apps;
                 self.installed = installed;
+                self.facts.clear();
                 self.loading = false;
             }
             Message::Online(online) => {
@@ -615,7 +642,7 @@ impl Software {
         }
         self.requested
             .extend(wanted.iter().map(|(key, _)| key.clone()));
-        if self.media.icons.send(wanted).is_err() {
+        if self.media.icons.send(Request::Icons(wanted)).is_err() {
             tracing::warn!("the icon loader stopped");
         }
     }
