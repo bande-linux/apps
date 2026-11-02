@@ -136,7 +136,7 @@ pub fn unsent_folder() -> Option<PathBuf> {
 
 pub fn keep_unsent(path: &Path, draft: &Draft) -> io::Result<()> {
     let message = build(draft, &Zoned::now());
-    bande_xdg::replace_file(path, &String::from_utf8_lossy(&message))
+    bande_xdg::replace_file(path, &message)
 }
 
 pub fn forget_unsent(outgoing: &Outgoing) {
