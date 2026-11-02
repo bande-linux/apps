@@ -168,6 +168,15 @@ pub(crate) fn answer_stop(
         FORCE_QUIT => Stop::ForceQuit,
         _ => return None,
     };
+    send_signal(target, how, icon, choose)
+}
+
+pub(crate) fn send_signal(
+    target: &StopTarget,
+    how: Stop,
+    icon: Option<Image>,
+    choose: impl FnMut(&str) + 'static,
+) -> Option<Alert> {
     match stop_target(target, how) {
         Ok(()) => None,
         Err(SignalError::PermissionDenied) => Some(with_icon(
@@ -232,6 +241,10 @@ pub trait Screen {
     }
 
     fn measures_disk(&self) -> bool {
+        false
+    }
+
+    fn measures_network(&self) -> bool {
         false
     }
 

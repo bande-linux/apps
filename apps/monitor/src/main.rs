@@ -132,6 +132,8 @@ impl ActivityMonitor {
         self.sampler
             .measure_disk(measured(cx, &windows, |screen| screen.measures_disk()));
         self.sampler
+            .measure_network(measured(cx, &windows, |screen| screen.measures_network()));
+        self.sampler
             .measure_gpu(measured(cx, &windows, |screen| screen.measures_gpu()));
         self.sampler
             .measure_wakeups(measured(cx, &windows, |screen| screen.measures_wakeups()));
@@ -461,6 +463,7 @@ fn first_sample(sampler: &mut Sampler, screen: &mut impl Screen) -> Snapshot {
     sampler.measure_gpu(screen.measures_gpu());
     sampler.measure_wakeups(screen.measures_wakeups());
     sampler.measure_disk(screen.measures_disk());
+    sampler.measure_network(screen.measures_network());
     match sampler.sample() {
         Ok(snapshot) => {
             screen.update(snapshot.clone());

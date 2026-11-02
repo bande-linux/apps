@@ -10,7 +10,7 @@ use jiff::tz::TimeZone;
 use super::panel::{Arrow, Line, Panel, Width};
 use super::{L10N, Signal, Signals, sender};
 use crate::edit::{Alert, Details, EndRepeat, Repeat, zone_name};
-use crate::ical::Event;
+use crate::ical::{Event, Rule};
 use crate::invite::{Answer, Invitee, invitees, my_answer, parse_addresses};
 use crate::store::Found;
 
@@ -220,6 +220,7 @@ fn details_of(found: &Found, event: &Event, context: &Context) -> Details {
         start,
         end,
         repeat: Repeat::of(event.rule.as_ref()),
+        custom: None,
         end_repeat: EndRepeat::of(event.rule.as_ref(), &event.start, local),
         alert: Alert::of(&event.alarms, all_day),
         invitees: Vec::new(),
@@ -275,7 +276,7 @@ impl Inspector {
             date_text(last_day),
             time_text(details.end),
         ];
-        let repeats = with_current(&Repeat::CHOICES, details.repeat);
+        let repeats = with_current(&Repeat::CHOICES, Repeat::Custom);
         let alerts = match details.all_day {
             true => with_current(&Alert::ALL_DAY, details.alert),
             false => with_current(&Alert::TIMED, details.alert),
@@ -640,6 +641,15 @@ impl Inspector {
         };
         (details != self.original || self.calendar_choice != self.original_calendar)
             .then_some(details)
+    }
+
+    pub fn wants_custom(&self, signal: &Signal) -> bool {
+        matches!(signal, Signal::Repeat(index) if self.repeats.get(*index) == Some(&Repeat::Custom))
+    }
+
+    pub fn set_custom(&mut self, rule: Rule) {
+        self.details.repeat = Repeat::Custom;
+        self.details.custom = Some(rule);
     }
 
     pub fn chosen_calendar(&self) -> Option<usize> {

@@ -27,6 +27,7 @@ fn a_series_moved_to_another_zone_keeps_its_times_exceptions_and_end() {
         start: date(2026, 11, 3).at(10, 0, 0, 0),
         end: date(2026, 11, 3).at(11, 0, 0, 0),
         repeat: Repeat::Weekly,
+        custom: None,
         end_repeat: EndRepeat::On(date(2026, 12, 1)),
         alert: Alert::None,
         invitees: Vec::new(),

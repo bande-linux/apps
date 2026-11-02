@@ -1,3 +1,4 @@
+mod custom;
 pub mod geometry;
 mod input;
 mod inspector;
@@ -109,6 +110,12 @@ pub(crate) enum Signal {
     EndTime(String),
     Repeat(usize),
     EndRepeatKind(usize),
+    CustomFrequency(usize),
+    CustomInterval(String),
+    CustomDay(usize, bool),
+    CustomOnWeekday(usize, bool),
+    CustomDone,
+    CustomCancel,
     Invitees(String),
     TimeZone(String),
     Answer(usize),
@@ -188,7 +195,7 @@ pub(crate) enum Confirm {
     },
     Details {
         found: Found,
-        details: Details,
+        details: Box<Details>,
         calendar: Option<usize>,
     },
     Delete(Found),
@@ -230,6 +237,7 @@ pub struct CalendarView {
     selected: Option<Selection>,
     inspector: Option<inspector::Inspector>,
     setup: Option<setup::Setup>,
+    custom: Option<custom::Custom>,
     naming: Option<naming::Naming>,
     confirm: Option<Confirm>,
     search: String,
@@ -283,6 +291,7 @@ impl CalendarView {
             selected: None,
             inspector: None,
             setup: None,
+            custom: None,
             naming: None,
             confirm: None,
             search: String::new(),
@@ -652,6 +661,40 @@ impl CalendarView {
         if let Some(field) = field {
             self.ui.set_focus(field);
         }
+    }
+
+    pub(crate) fn open_custom(&mut self) {
+        let Some(found) = self
+            .inspector
+            .as_ref()
+            .map(|inspector| inspector.found.clone())
+        else {
+            return;
+        };
+        let rule = self
+            .library
+            .object(found.calendar, found.object)
+            .and_then(|object| object.master())
+            .and_then(|master| master.rule.clone());
+        let (panel, custom) = custom::Custom::build(
+            &self.signals,
+            rule.as_ref(),
+            found.occurrence.start.date(),
+            &self.formats,
+            self.first_weekday(),
+        );
+        self.custom = Some(custom);
+        self.ui.present_sheet(panel);
+    }
+
+    pub(crate) fn finish_custom(&mut self, done: bool) {
+        let Some(custom) = self.custom.take() else {
+            return;
+        };
+        if done && let Some(inspector) = &mut self.inspector {
+            inspector.set_custom(custom.rule());
+        }
+        custom.close(&mut self.ui);
     }
 
     pub fn open_account_setup(&mut self) {
@@ -1122,7 +1165,7 @@ impl CalendarView {
             true => self.ask_scope(
                 Confirm::Details {
                     found,
-                    details,
+                    details: Box::new(details),
                     calendar,
                 },
                 &L10N.tr("change-recurring-title"),

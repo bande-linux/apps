@@ -144,29 +144,7 @@ pub(crate) fn read_disks(root: &Path) -> DiskCounters {
         })
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum InterfaceKind {
-    WiFi,
-    Ethernet,
-    Vpn,
-    #[default]
-    Other,
-}
-
-fn interface_kind(folder: &Path) -> InterfaceKind {
-    let read = |name: &str| fs::read_to_string(folder.join(name)).unwrap_or_default();
-    if folder.join("wireless").exists() || folder.join("phy80211").exists() {
-        InterfaceKind::WiFi
-    } else if folder.join("tun_flags").exists() || read("uevent").contains("DEVTYPE=wireguard") {
-        InterfaceKind::Vpn
-    } else if read("type").trim() == "1" && folder.join("device").exists() {
-        InterfaceKind::Ethernet
-    } else {
-        InterfaceKind::Other
-    }
-}
-
-pub(crate) fn read_interfaces(root: &Path) -> Vec<(String, InterfaceKind, Transferred)> {
+pub(crate) fn read_interfaces(root: &Path) -> Vec<(String, Transferred)> {
     let Ok(dev) = fs::read_to_string(root.join("proc/net/dev")) else {
         return Vec::new();
     };
@@ -184,7 +162,6 @@ pub(crate) fn read_interfaces(root: &Path) -> Vec<(String, InterfaceKind, Transf
             let counter = |index: usize| counters.get(index)?.parse::<u64>().ok();
             Some((
                 name.to_owned(),
-                interface_kind(&folder),
                 Transferred {
                     received: counter(0)?,
                     sent: counter(8)?,

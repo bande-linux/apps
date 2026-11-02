@@ -14,6 +14,7 @@ mod proc;
 mod sampler;
 mod signal;
 mod system;
+mod traffic;
 mod view;
 
 use std::sync::LazyLock;
@@ -32,9 +33,9 @@ pub use model::{
 };
 pub use monitor_view::{MonitorView, TOOLBAR_HEIGHT};
 pub use power::{BATTERY_HISTORY, BatteryReport, battery_reader};
-pub use sampler::{GpuUse, Interface, Process, Rates, Sampler, Snapshot};
+pub use sampler::{GpuUse, Interface, Process, Rates, Sampler, Snapshot, Traffic};
 pub use signal::{SignalError, Stop, stop};
-pub use system::{InterfaceKind, Memory, Pressure, PressureLevel};
+pub use system::{Memory, Pressure, PressureLevel};
 pub use view::{Icons, Request, Screen};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-monitor.ftl");

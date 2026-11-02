@@ -21,7 +21,7 @@ work and family calendars on it without a second app? Reviewed 2026-11-02.
 
 | Need | State |
 |---|---|
-| Create/edit with repeat, end repeat, invitees, alerts | done; custom repeat rules shown as Custom, not editable |
+| Create/edit with repeat, end repeat, invitees, alerts | done, with a Custom repeat sheet (interval, weekdays, nth weekday of month/year) |
 | Drag to move or resize | done (also across days, into the all-day row) |
 | Day/Week/Month/Year views | done; year view shows no event density |
 | Search | done (title, location, notes) |
@@ -47,13 +47,11 @@ occurrence cache per shown range; slim sync jobs; unchanged sync-token skip.
    entry. Owner decision: it would show as a running app in the taskbar (needs a desktop
    "background app" notion), and the idle-wake bug (twice a second, release-review) must be
    fixed first so it costs nothing.
-2. **Custom repeat editor** (every N days/weeks on chosen days, monthly on the 2nd Tuesday,
-   yearly). Rules are kept and shown as Custom.
-3. **View in another time zone** (macOS toolbar zone pop-up when time zone support is on).
-4. **Per-subscription settings**: refresh interval, remove alerts (macOS default on), and the
+2. **View in another time zone** (macOS toolbar zone pop-up when time zone support is on).
+3. **Per-subscription settings**: refresh interval, remove alerts (macOS default on), and the
    subscription's URL editable; honour `REFRESH-INTERVAL` / `X-PUBLISHED-TTL` as the default.
-5. **Invitee autocomplete and free/busy** (needs Contacts and CalDAV scheduling outbox POST).
-6. **OAuth** for Google and Microsoft 365 (Basic only today; Google offered as a subscription).
-7. **Birthdays calendar** from Contacts.
-8. **Hours shown at a time** (day/week zoom) and event density in the year view.
-9. **Shared file chooser helper**: `portal.rs` repeats Mail's; move it to a desktop crate.
+4. **Invitee autocomplete and free/busy** (needs Contacts and CalDAV scheduling outbox POST).
+5. **OAuth** for Google and Microsoft 365 (Basic only today; Google offered as a subscription).
+6. **Birthdays calendar** from Contacts.
+7. **Hours shown at a time** (day/week zoom) and event density in the year view.
+8. **Shared file chooser helper**: `portal.rs` repeats Mail's; move it to a desktop crate.
