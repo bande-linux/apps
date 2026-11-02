@@ -4,7 +4,7 @@ use std::rc::Rc;
 use accesskit::TreeUpdate;
 use bande_app::{Detached, TabDrop, TabDropTarget, TabHost, View};
 use bande_toolkit::ui::{
-    BUTTON_HEIGHT, Button, Context, Event, FreeLayout, Key, Pointer, PointerButton,
+    BUTTON_HEIGHT, Button, Context, Event, FreeLayout, Key, Modifiers, Pointer, PointerButton,
     TEXT_FIELD_HEIGHT, TabAction, TabLabel, TabStrip, TabStripLayout, TabsShown, TextField, Ui,
     WidgetId, frame_time,
 };
@@ -1396,6 +1396,13 @@ impl BrowserView {
             return false;
         };
         match input {
+            Event::Key {
+                key: Key::Function(5),
+                modifiers,
+            } if *modifiers == Modifiers::default() => {
+                self.reload();
+                true
+            }
             Event::Key { key: Key::Down, .. }
                 if self.address_focused() && !self.suggestions.is_empty() =>
             {

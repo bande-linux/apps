@@ -256,10 +256,10 @@ impl Program for Browser {
         ];
         let history = vec![
             Entry::item(&L10N.tr("back"), BACK)
-                .shortcut("Ctrl+[")
+                .shortcut("Alt+Left")
                 .enabled(view.is_some_and(BrowserView::can_go_back)),
             Entry::item(&L10N.tr("forward"), FORWARD)
-                .shortcut("Ctrl+]")
+                .shortcut("Alt+Right")
                 .enabled(view.is_some_and(BrowserView::can_go_forward)),
             Entry::item(&L10N.tr("reopen-tab"), REOPEN_TAB)
                 .shortcut("Shift+Ctrl+T")
@@ -268,7 +268,7 @@ impl Program for Browser {
         let page = vec![
             Entry::item(&L10N.tr("reload"), RELOAD).shortcut("Ctrl+R"),
             Entry::item(&L10N.tr("stop"), STOP)
-                .shortcut("Ctrl+.")
+                .shortcut("Escape")
                 .enabled(view.is_some_and(BrowserView::is_loading)),
             Entry::separator(),
             Entry::item(&L10N.tr("zoom-in"), ZOOM_IN).shortcut("Ctrl+="),
@@ -277,7 +277,7 @@ impl Program for Browser {
         ];
         let mut history = history;
         history.push(Entry::separator());
-        history.push(Entry::item(&L10N.tr("show-history"), SHOW_HISTORY).shortcut("Ctrl+Y"));
+        history.push(Entry::item(&L10N.tr("show-history"), SHOW_HISTORY).shortcut("Ctrl+H"));
         let recent = self.places.recent(RECENT_SHOWN);
         if !recent.is_empty() {
             history.push(Entry::separator());
@@ -297,7 +297,7 @@ impl Program for Browser {
             )
             .shortcut("Ctrl+D")
             .enabled(view.and_then(BrowserView::current_page).is_some()),
-            Entry::item(&L10N.tr("show-bookmarks"), SHOW_BOOKMARKS).shortcut("Shift+Ctrl+B"),
+            Entry::item(&L10N.tr("show-bookmarks"), SHOW_BOOKMARKS).shortcut("Shift+Ctrl+O"),
         ];
         let saved = self.places.bookmarks();
         if !saved.is_empty() {
@@ -312,7 +312,6 @@ impl Program for Browser {
         file.push(Entry::separator());
         file.push(
             Entry::item(&L10N.tr("open-in-system-browser"), SYSTEM_BROWSER)
-                .shortcut("Shift+Ctrl+O")
                 .enabled(view.and_then(BrowserView::current_page).is_some()),
         );
         let tabs = view.map_or(0, BrowserView::tab_count);
