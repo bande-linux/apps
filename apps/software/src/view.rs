@@ -28,7 +28,7 @@ const PADDING: f32 = 24.0;
 const PAGE_ROWS: usize = 40;
 const NEW_ROWS: usize = 12;
 const ROW_ICON: f32 = 40.0;
-const PAGE_ICON: f32 = 80.0;
+const PAGE_ICON: f32 = 96.0;
 const SHOT_WIDTH: f32 = 640.0;
 const SHOT_HEIGHT: f32 = 400.0;
 const LISTED_UPDATES: usize = 30;
@@ -247,6 +247,17 @@ fn latest_release(app: &Component) -> i64 {
         .filter_map(|release| release.timestamp)
         .max()
         .unwrap_or(0)
+}
+
+fn remote_icon(app: &Component) -> Option<&str> {
+    app.icons
+        .iter()
+        .filter_map(|icon| match icon {
+            Icon::Remote { url, size } if *size as f32 > PAGE_ICON => Some((size, url.as_str())),
+            _ => None,
+        })
+        .max_by_key(|(size, _)| **size)
+        .map(|(_, url)| url)
 }
 
 fn has_local_icon(app: &Component) -> bool {
@@ -519,6 +530,11 @@ impl Software {
             self.shot = 0;
             self.shots.clear();
             self.request_shot();
+            if let Some(url) = self.apps.get(index).and_then(remote_icon)
+                && self.media.shots.send(url.to_owned()).is_err()
+            {
+                tracing::warn!("the screenshot loader stopped");
+            }
             if let Some(app) = self.apps.get(index)
                 && let Some(package) = deb(app)
                 && !self.facts.contains_key(app.key())
@@ -1207,7 +1223,9 @@ impl Software {
             row(vec![boxed(self.button(&L10N.tr("back"), Intent::Back))]),
             row(vec![
                 boxed(Picture::new(
-                    self.icon(app),
+                    remote_icon(app)
+                        .and_then(|url| self.shots.get(url)?.clone().ok())
+                        .or_else(|| self.icon(app)),
                     PAGE_ICON,
                     PAGE_ICON,
                     &app.name,
