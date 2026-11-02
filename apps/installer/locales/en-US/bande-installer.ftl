@@ -27,6 +27,10 @@ removes = { $count ->
    *[other] Removes { $count } packages: { $names }
 }
 trust = This package doesn't come from your software sources. Its install scripts get full control of this computer, and it may add its own software source. Install it only if you trust where you got it.
+signed-available = The same version is in your software sources ({ $source }), where it is signed. Installing it from there is safer than installing this file.
+origin-debian = Debian { $suite }, { $component }
+install-file = Install This File
+install-signed = Install from Software Sources
 from-maintainer = From { $maintainer }
 blocked = Can't install: it needs packages that aren't available
 needs = Needs { $names }

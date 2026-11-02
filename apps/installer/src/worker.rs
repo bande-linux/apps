@@ -13,7 +13,7 @@ use crate::flow::{self, Outcome, State};
 #[derive(Debug, Clone)]
 pub enum Job {
     Inspect,
-    Install,
+    Install(Option<String>),
     AskRemove,
     Remove,
 }
@@ -85,7 +85,7 @@ fn run(client: &Client, path: &Path, machine: &Machine, jobs: Receiver<Job>, out
         };
         let outcome = match job {
             Job::Inspect => continue,
-            Job::Install => flow::install(client, path, &progress),
+            Job::Install(signed) => flow::install(client, path, signed.as_deref(), &progress),
             Job::AskRemove => Outcome::Done(flow::removal(client, known)),
             Job::Remove => flow::remove(client, known, &progress),
         };

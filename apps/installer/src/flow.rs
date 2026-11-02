@@ -16,8 +16,15 @@ pub enum Action {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Signed {
+    pub id: String,
+    pub origin: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Preview {
     pub action: Action,
+    pub signed: Option<Signed>,
     pub also: Vec<String>,
     pub download: u64,
     pub removes: Vec<String>,
@@ -155,6 +162,7 @@ pub fn preview(client: &Client, path: &Path, deb: &Deb) -> State {
     match client.install_files(path, Mode::Simulate, &|_| {}) {
         Ok(applied) => State::Ready(Preview {
             action,
+            signed: signed(client, deb),
             also: others(&applied, &deb.name, &INSTALLING),
             download: download_size(client, &applied, &deb.name),
             removes: others(&applied, &deb.name, &[Info::Removing, Info::Obsoleting]),
@@ -191,8 +199,41 @@ pub enum Outcome {
     Back,
 }
 
-pub fn install(client: &Client, path: &Path, progress: &dyn Fn(Progress)) -> Outcome {
-    match client.install_files(path, Mode::Apply, progress) {
+fn signed(client: &Client, deb: &Deb) -> Option<Signed> {
+    let found = client
+        .resolve(std::slice::from_ref(&deb.name))
+        .inspect_err(|error| tracing::warn!("cannot look in the software sources: {error}"))
+        .ok()?;
+    found
+        .into_iter()
+        .find(|package| {
+            package.name == deb.name
+                && package.arch == deb.arch
+                && package.version == deb.version
+                && package.info != Info::Installed
+        })
+        .map(|package| Signed {
+            origin: package
+                .origin
+                .rsplit(':')
+                .next()
+                .unwrap_or_default()
+                .to_owned(),
+            id: package.id,
+        })
+}
+
+pub fn install(
+    client: &Client,
+    path: &Path,
+    signed: Option<&str>,
+    progress: &dyn Fn(Progress),
+) -> Outcome {
+    let applied = match signed {
+        Some(id) => client.install(&[id.to_owned()], Mode::Apply, progress),
+        None => client.install_files(path, Mode::Apply, progress),
+    };
+    match applied {
         Ok(applied) => {
             let files = client.files_local(path).unwrap_or_else(|error| {
                 tracing::warn!("cannot list the installed files: {error}");
