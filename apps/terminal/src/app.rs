@@ -1556,8 +1556,7 @@ impl TerminalWindow {
             .activation_token(APP_ID)
             .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
             .ok();
-        let command = ["xdg-open".to_owned(), uri.to_owned()];
-        if let Err(error) = bande_xdg::spawn_detached("", &command, None, token.as_deref()) {
+        if let Err(error) = bande_xdg::open(uri, token.as_deref()) {
             tracing::warn!("cannot open {uri}: {error}");
         }
     }
