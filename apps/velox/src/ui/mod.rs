@@ -9,28 +9,94 @@ use bande_toolkit::ui::{Cell, Column, Context, Label, Row, Table, Ui, Widget, Wi
 use bande_toolkit::{Appearance, Header, Palette, SHEET_INSET, TextSystem};
 
 pub use self::widgets::SIDEBAR_WIDTH;
-pub(crate) use self::widgets::{Centered, dot, symbol};
-use self::widgets::{Light, Pill, Root};
+pub(crate) use self::widgets::{Centered, Root, dot, symbol};
+use self::widgets::{Light, Pill};
 use crate::L10N;
 use crate::containers::{self, Containers};
-use crate::engine::{Action, Engine, EngineInfo, Flavor, Update};
+use crate::engine::{Action, Engine, EngineInfo, Flavor, Task, Update};
 use crate::readiness::Readiness;
+use crate::resources::Resources;
 
 const CONTAINERS_SYMBOL: &str = include_str!("../../data/symbols/containers.svg");
-const CONTAINERS_KEY: &str = "containers";
-const COUNT_WIDTH: f32 = 56.0;
+const OVERVIEW_SYMBOL: &str = include_str!("../../data/symbols/overview.svg");
+const IMAGES_SYMBOL: &str = include_str!("../../data/symbols/images.svg");
+const VOLUMES_SYMBOL: &str = include_str!("../../data/symbols/volumes.svg");
+const NETWORKS_SYMBOL: &str = include_str!("../../data/symbols/networks.svg");
+const COUNT_WIDTH: f32 = 60.0;
 const TITLE_INSET: f32 = 16.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Section {
+    Overview,
+    Containers,
+    Images,
+    Volumes,
+    Networks,
+}
+
+impl Section {
+    pub const ALL: [Self; 5] = [
+        Self::Overview,
+        Self::Containers,
+        Self::Images,
+        Self::Volumes,
+        Self::Networks,
+    ];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Overview => "overview",
+            Self::Containers => "containers",
+            Self::Images => "images",
+            Self::Volumes => "volumes",
+            Self::Networks => "networks",
+        }
+    }
+
+    pub fn command(self) -> &'static str {
+        match self {
+            Self::Overview => "show-overview",
+            Self::Containers => "show-containers",
+            Self::Images => "show-images",
+            Self::Volumes => "show-volumes",
+            Self::Networks => "show-networks",
+        }
+    }
+
+    pub fn title(self) -> String {
+        L10N.tr(match self {
+            Self::Overview => "pane-overview",
+            Self::Containers => "pane-containers",
+            Self::Images => "pane-images",
+            Self::Volumes => "pane-volumes",
+            Self::Networks => "pane-networks",
+        })
+    }
+
+    fn symbol(self) -> &'static str {
+        match self {
+            Self::Overview => OVERVIEW_SYMBOL,
+            Self::Containers => CONTAINERS_SYMBOL,
+            Self::Images => IMAGES_SYMBOL,
+            Self::Volumes => VOLUMES_SYMBOL,
+            Self::Networks => NETWORKS_SYMBOL,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Request {
     Act(Engine, Action, Vec<String>),
     Relist(Engine),
     OpenLink(String),
+    Task(Engine, String, Task),
+    Watch(Engine, Vec<String>),
     Containers(containers::Request),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Intent {
+    Navigate(String),
     Copy(&'static str),
     Open(&'static str),
     Alternative(bool),
@@ -68,6 +134,8 @@ pub struct VeloxView {
     alternative: bool,
     intents: Intents,
     requests: Vec<Request>,
+    section: Section,
+    resources: Resources,
 }
 
 fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
@@ -98,12 +166,18 @@ impl VeloxView {
     pub fn new(appearance: Appearance) -> Self {
         let palette = appearance.palette();
         let intents = Intents::default();
+        let navigate = Rc::clone(&intents);
         let sidebar = Table::new(vec![
             Column::new("", SIDEBAR_WIDTH).flexible(),
             Column::new("", COUNT_WIDTH).numeric(),
         ])
         .without_header()
-        .sidebar();
+        .sidebar()
+        .on_selection(move |keys| {
+            if let Some(key) = keys.first() {
+                push(&navigate, Intent::Navigate(key.clone()));
+            }
+        });
         let sidebar_id = sidebar.id();
         let root = Root::new(
             boxed(sidebar),
@@ -126,6 +200,8 @@ impl VeloxView {
             alternative: false,
             intents,
             requests: Vec::new(),
+            section: Section::Containers,
+            resources: Resources::new(),
         };
         view.refresh();
         view
@@ -144,6 +220,7 @@ impl VeloxView {
         self.ui.set_appearance(appearance);
         self.shown = Shown::Nothing;
         self.containers.reset();
+        self.resources.rebuild();
         if let Some(root) = self.ui.widget_as::<Root>(self.root) {
             root.set_tools(Vec::new());
         }
@@ -161,7 +238,70 @@ impl VeloxView {
     }
 
     pub fn title(&self) -> String {
-        L10N.tr("pane-containers")
+        self.section.title()
+    }
+
+    pub fn ready(&self) -> bool {
+        matches!(self.connection, Connection::Ready(_))
+    }
+
+    pub fn section(&self) -> Section {
+        self.section
+    }
+
+    pub fn show(&mut self, section: Section) {
+        if self.section != section {
+            self.section = section;
+            self.refresh();
+        }
+    }
+
+    pub fn command(&mut self, command: &str) -> bool {
+        if let Some(section) = Section::ALL
+            .into_iter()
+            .find(|section| section.command() == command)
+        {
+            self.show(section);
+            return true;
+        }
+        if self.containers.command(&mut self.ui, command) {
+            self.refresh();
+            return true;
+        }
+        let Connection::Ready(info) = &self.connection else {
+            return false;
+        };
+        let info = info.clone();
+        if crate::images::opens_images(command) {
+            self.section = Section::Images;
+            self.refresh();
+        }
+        let done = self
+            .resources
+            .command(&mut self.ui, &self.containers.list(), &info, command);
+        self.pump();
+        self.refresh();
+        done
+    }
+
+    pub fn resource_menu(&self) -> Option<Entry> {
+        let info = match &self.connection {
+            Connection::Ready(info) => Some(info),
+            _ => None,
+        };
+        self.resources
+            .menu(self.section, &self.containers.list(), info, &self.palette)
+    }
+
+    pub fn container_menu(&self) -> Vec<Entry> {
+        self.containers.menu()
+    }
+
+    pub fn view_entries(&self) -> Vec<Entry> {
+        match self.section {
+            Section::Containers => vec![self.containers.inspector_entry()],
+            _ => Vec::new(),
+        }
     }
 
     pub fn header(&self) -> Header {
@@ -177,6 +317,16 @@ impl VeloxView {
     }
 
     pub fn take_requests(&mut self) -> Vec<Request> {
+        if let Connection::Ready(info) = &self.connection {
+            let engine = Engine::new(&info.socket);
+            for task in self.resources.take_tasks() {
+                self.requests
+                    .push(Request::Task(engine.clone(), info.api.clone(), task));
+            }
+            if let Some(ids) = self.resources.take_watch() {
+                self.requests.push(Request::Watch(engine, ids));
+            }
+        }
         let mut requests = std::mem::take(&mut self.requests);
         requests.extend(self.containers.take_requests());
         requests
@@ -189,24 +339,10 @@ impl VeloxView {
         }
     }
 
-    pub fn command(&mut self, command: &str) -> bool {
-        let known = self.containers.command(&mut self.ui, command);
-        if known {
-            self.refresh();
-        }
-        known
-    }
-
-    pub fn container_menu(&self) -> Vec<Entry> {
-        self.containers.menu()
-    }
-
-    pub fn view_entries(&self) -> Vec<Entry> {
-        vec![self.containers.inspector_entry()]
-    }
-
     pub fn focus_filter(&mut self) {
-        self.containers.focus_filter(&mut self.ui);
+        if !self.resources.focus_filter(&mut self.ui) {
+            self.containers.focus_filter(&mut self.ui);
+        }
     }
 
     pub fn set_hidden(&mut self, hidden: bool) {
@@ -224,10 +360,18 @@ impl VeloxView {
     }
 
     pub fn apply(&mut self, update: Update) {
+        if let Update::Stats(id, sample) = &update {
+            self.containers.sample(&mut self.ui, id, *sample);
+        }
+        let Some(update) = self.resources.apply(&mut self.ui, update) else {
+            self.refresh();
+            return;
+        };
         match update {
             Update::Blocked(readiness) => {
                 self.connection = Connection::Blocked(readiness);
                 self.containers.set_engine(None);
+                self.resources.clear();
             }
             Update::Ready(info) => {
                 self.containers.set_engine(Some(info.clone()));
@@ -239,16 +383,34 @@ impl VeloxView {
     }
 
     pub fn pump(&mut self) -> bool {
-        let intents: Vec<Intent> = self.intents.borrow_mut().drain(..).collect();
+        let info = match &self.connection {
+            Connection::Ready(info) => Some(info.clone()),
+            _ => None,
+        };
+        let acted = self
+            .resources
+            .pump(&mut self.ui, &self.containers.list(), info.as_ref());
+        if let Some(section) = self.resources.take_navigation() {
+            self.section = section;
+        }
         let pumped = self.containers.pump(&mut self.ui);
+        let intents: Vec<Intent> = self.intents.borrow_mut().drain(..).collect();
         for intent in &intents {
             match intent {
+                Intent::Navigate(key) => {
+                    if let Some(section) = Section::ALL
+                        .into_iter()
+                        .find(|section| section.key() == key)
+                    {
+                        self.section = section;
+                    }
+                }
                 Intent::Copy(text) => self.ui.context().copy(text),
                 Intent::Open(link) => self.requests.push(Request::OpenLink((*link).to_owned())),
                 Intent::Alternative(open) => self.alternative = *open,
             }
         }
-        if intents.is_empty() && !pumped {
+        if intents.is_empty() && !pumped && !acted {
             return false;
         }
         self.refresh();
@@ -257,23 +419,35 @@ impl VeloxView {
 
     fn sidebar_rows(&self) -> Vec<Row> {
         let (running, total) = self.containers.running();
-        let count = match &self.connection {
-            Connection::Ready(_) => format!("{running}/{total}"),
-            _ => String::new(),
+        let ready = matches!(self.connection, Connection::Ready(_));
+        let row = |section: Section| {
+            let count = match (ready, section) {
+                (false, _) => String::new(),
+                (true, Section::Containers) => format!("{running}/{total}"),
+                (true, _) => self
+                    .resources
+                    .count(section)
+                    .map(|count| count.to_string())
+                    .unwrap_or_default(),
+            };
+            Row::new(
+                section.key(),
+                vec![
+                    Cell::new(section.title()).icon(symbol(section.symbol(), self.palette.accent)),
+                    Cell::new(count).muted().tabular(),
+                ],
+            )
         };
         vec![
+            row(Section::Overview),
             Row::new(
                 "heading",
                 vec![Cell::new(L10N.tr("sidebar-containers")).muted().label()],
             ),
-            Row::new(
-                CONTAINERS_KEY,
-                vec![
-                    Cell::new(L10N.tr("pane-containers"))
-                        .icon(symbol(CONTAINERS_SYMBOL, self.palette.accent)),
-                    Cell::new(count).muted().tabular(),
-                ],
-            ),
+            row(Section::Containers),
+            row(Section::Images),
+            row(Section::Volumes),
+            row(Section::Networks),
         ]
     }
 
@@ -289,9 +463,30 @@ impl VeloxView {
         let rows = self.sidebar_rows();
         if let Some(sidebar) = self.ui.widget_as::<Table>(self.sidebar) {
             sidebar.set_rows(rows);
-            sidebar.select(&[CONTAINERS_KEY.to_owned()]);
+            sidebar.select(&[self.section.key().to_owned()]);
         }
         let pill = self.pill();
+        if let (Connection::Ready(info), false) =
+            (&self.connection, self.section == Section::Containers)
+        {
+            if let Some(root) = self.ui.widget_as::<Root>(self.root) {
+                root.set_pill(boxed(pill));
+            }
+            self.containers.reset();
+            self.containers.leave();
+            self.shown = Shown::Nothing;
+            self.page_for = None;
+            let info = info.clone();
+            self.resources.show(
+                &mut self.ui,
+                self.root,
+                self.section,
+                &self.containers.list(),
+                &info,
+            );
+            return;
+        }
+        self.resources.hide(&mut self.ui, self.root);
         let wanted = match &self.connection {
             Connection::Connecting => Shown::Nothing,
             Connection::Blocked(_) => Shown::Page,

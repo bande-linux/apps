@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
@@ -18,7 +18,7 @@ use super::table::{self, PROJECT_PREFIX, Shown};
 use super::widgets::{PortLinks, Split};
 use super::work::{Event, Request as Work};
 use crate::L10N;
-use crate::engine::{Action, Container, Engine, EngineInfo, Flavor};
+use crate::engine::{Action, Container, Engine, EngineInfo, Flavor, Sample};
 use crate::ui::{Centered, Request, symbol};
 
 const START_SYMBOL: &str = include_str!("../../data/symbols/start.svg");
@@ -273,6 +273,7 @@ impl Containers {
             model.pending.clear();
             self.usage.clear();
             self.inspected = None;
+            self.watched = None;
         }
         model.info = info;
     }
@@ -364,7 +365,7 @@ impl Containers {
                 drop(model);
                 self.event(ui, event);
             }
-            Update::Blocked(_) | Update::Ready(_) => {}
+            _ => {}
         }
     }
 
@@ -383,20 +384,6 @@ impl Containers {
                 {
                     self.inspected = Some(found);
                     self.subject = None;
-                }
-            }
-            Event::Sampled(id, sample) => {
-                if self
-                    .watched
-                    .as_ref()
-                    .is_some_and(|watched| watched.contains(&id))
-                {
-                    self.usage.entry(id.clone()).or_default().push(sample);
-                }
-                if let (Some(ids), Some(usage)) = (self.graphs, self.usage.get(&id))
-                    && self.inspected.as_ref().is_some_and(|shown| shown.id == id)
-                {
-                    inspector::update(ui, ids, usage.graphs());
                 }
             }
             Event::Copied(text) => ui.context().copy(&text),
@@ -905,12 +892,35 @@ impl Containers {
         if self.watched.as_ref() == Some(&wanted) {
             return;
         }
-        self.usage.retain(|id, _| wanted.contains(id));
-        let engine = self.engine_of(&model);
+        let Some(engine) = self.engine_of(&model) else {
+            return;
+        };
         drop(model);
+        self.usage.retain(|id, _| wanted.contains(id));
         self.watched = Some(wanted.clone());
         self.requests
             .push(Request::Containers(Work::Watch(engine, wanted)));
+    }
+
+    pub fn sample(&mut self, ui: &mut Ui, id: &str, sample: Sample) {
+        if !self
+            .watched
+            .as_ref()
+            .is_some_and(|watched| watched.iter().any(|watched| watched == id))
+        {
+            return;
+        }
+        let usage = self.usage.entry(id.to_owned()).or_default();
+        usage.push(sample);
+        if let Some(ids) = self.graphs
+            && self.inspected.as_ref().is_some_and(|shown| shown.id == id)
+        {
+            inspector::update(ui, ids, usage.graphs());
+        }
+    }
+
+    pub fn list(&self) -> Ref<'_, BTreeMap<String, Container>> {
+        Ref::map(self.model.borrow(), |model| &model.list)
     }
 }
 

@@ -10,7 +10,7 @@ use bande_toolkit::{
     Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use bande_velox::{
-    Informer, L10N, LogsTarget, LogsView, Request, SIDEBAR_WIDTH, Update, VeloxView, Work,
+    Informer, L10N, LogsTarget, LogsView, Request, SIDEBAR_WIDTH, Section, Update, VeloxView, Work,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs};
 
@@ -20,6 +20,7 @@ const LOGS_SIZE: (u32, u32) = (760, 480);
 const FIND: &str = "find";
 const SHOW_MAIN: &str = "show-main";
 const SHOW_LOGS: &str = "show-logs:";
+const VIEW_KEYS: [&str; 5] = ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5"];
 
 static INFO: Info = Info {
     id: APP_ID,
@@ -50,6 +51,8 @@ impl Pane {
                 Request::Act(engine, action, ids) => self.informer.act(engine, action, ids),
                 Request::Relist(engine) => self.informer.relist(engine),
                 Request::OpenLink(link) => self.open_link(window, &link),
+                Request::Task(engine, api, task) => self.informer.run(engine, api, task),
+                Request::Watch(engine, ids) => self.informer.watch("overview", &engine, ids),
                 Request::Containers(request) => {
                     let token = || window.activation_token(APP_ID).ok();
                     self.logs.extend(self.work.serve(request, token));
@@ -80,7 +83,7 @@ impl Pane {
     fn command(&mut self, window: &mut Window, command: &str) -> bool {
         match command {
             FIND => self.view.focus_filter(),
-            command if self.view.command(command) => {}
+            _ if self.view.command(command) => {}
             _ => return false,
         }
         self.serve(window);
@@ -100,6 +103,7 @@ impl View for Pane {
         });
         self.view.set_full_screen(full_screen);
         let scene = View::scene(self.view.ui(), window);
+        window.set_title(&self.view.title());
         window.set_header(self.view.header());
         self.view.sync_streams();
         self.serve(window);
@@ -250,7 +254,7 @@ impl Velox {
             |appearance| {
                 Screen::Main(Box::new(Pane {
                     view: VeloxView::new(appearance),
-                    work: Work::new(&shared),
+                    work: Work::new(Rc::clone(&shared)),
                     informer: shared,
                     logs: Vec::new(),
                     apps: None,
@@ -306,8 +310,25 @@ impl Program for Velox {
             Some(Screen::Main(pane)) => Some(&pane.view),
             _ => None,
         };
-        let mut shown = vec![Entry::item(&L10N.tr("find"), FIND).shortcut("Ctrl+F")];
-        shown.extend(view.map(VeloxView::view_entries).unwrap_or_default());
+        let ready = view.is_some_and(VeloxView::ready);
+        let mut sections: Vec<Entry> = Section::ALL
+            .into_iter()
+            .zip(VIEW_KEYS)
+            .map(|(section, key)| {
+                Entry::item(&section.title(), section.command())
+                    .shortcut(key)
+                    .radio(view.is_some_and(|view| view.section() == section))
+            })
+            .collect();
+        sections.push(Entry::separator());
+        sections.push(Entry::item(&L10N.tr("find"), FIND).shortcut("Ctrl+F"));
+        sections.extend(view.map(VeloxView::view_entries).unwrap_or_default());
+        let pane = view.and_then(VeloxView::resource_menu).unwrap_or_else(|| {
+            Entry::submenu(
+                &L10N.tr("menu-container"),
+                view.map(VeloxView::container_menu).unwrap_or_default(),
+            )
+        });
         let mut window = vec![Entry::item(&L10N.tr("app-name"), SHOW_MAIN)];
         window.extend(cx.windows().filter_map(|id| match cx.view(id) {
             Some(Screen::Logs(logs)) => Some(Entry::item(
@@ -318,11 +339,9 @@ impl Program for Velox {
         }));
         Menus {
             menus: vec![
-                Entry::submenu(&L10N.tr("menu-view"), shown),
-                Entry::submenu(
-                    &L10N.tr("menu-container"),
-                    view.map(VeloxView::container_menu).unwrap_or_default(),
-                ),
+                Entry::submenu(&L10N.tr("menu-file"), bande_velox::file_menu(ready)),
+                Entry::submenu(&L10N.tr("menu-view"), sections),
+                pane,
             ],
             window,
         }

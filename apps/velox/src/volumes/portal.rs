@@ -1,0 +1,70 @@
+use std::collections::HashMap;
+use std::hash::{BuildHasher, RandomState};
+use std::path::PathBuf;
+
+use zbus::blocking::{Connection, Proxy};
+use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+
+use crate::L10N;
+
+const DESKTOP: &str = "org.freedesktop.portal.Desktop";
+const DESKTOP_PATH: &str = "/org/freedesktop/portal/desktop";
+const CHOOSER: &str = "org.freedesktop.portal.FileChooser";
+const REQUEST: &str = "org.freedesktop.portal.Request";
+const SUCCESS: u32 = 0;
+
+fn ask(method: &str, title: &str, option: (&str, Value<'_>)) -> zbus::Result<Option<PathBuf>> {
+    let connection = Connection::session()?;
+    let sender = connection
+        .unique_name()
+        .map(|name| name.trim_start_matches(':').replace('.', "_"))
+        .unwrap_or_default();
+    let token = format!("bande_velox_{:x}", RandomState::new().hash_one(title));
+    let handle = OwnedObjectPath::try_from(format!("{DESKTOP_PATH}/request/{sender}/{token}"))
+        .map_err(zbus::Error::from)?;
+    let request = Proxy::new(&connection, DESKTOP, handle, REQUEST)?;
+    let mut responses = request.receive_signal("Response")?;
+    let kind = L10N.tr("filter-tar");
+    let filter = vec![(
+        kind.as_str(),
+        vec![
+            (0u32, "*.tar"),
+            (0u32, "*.tar.gz"),
+            (1u32, "application/x-tar"),
+        ],
+    )];
+    let options = HashMap::from([
+        ("handle_token", Value::from(token.as_str())),
+        ("filters", Value::from(filter)),
+        option,
+    ]);
+    connection.call_method(
+        Some(DESKTOP),
+        DESKTOP_PATH,
+        Some(CHOOSER),
+        method,
+        &("", title, options),
+    )?;
+    let Some(response) = responses.next() else {
+        return Ok(None);
+    };
+    let (code, results): (u32, HashMap<String, OwnedValue>) = response.body().deserialize()?;
+    if code != SUCCESS {
+        return Ok(None);
+    }
+    Ok(results
+        .get("uris")
+        .and_then(|uris| Vec::<String>::try_from(uris.try_clone().ok()?).ok())
+        .and_then(|uris| {
+            uris.first()
+                .and_then(|uri| bande_xdg::path_from_file_uri(uri))
+        }))
+}
+
+pub fn choose_archive(title: &str) -> zbus::Result<Option<PathBuf>> {
+    ask("OpenFile", title, ("multiple", Value::from(false)))
+}
+
+pub fn choose_save_path(title: &str, name: &str) -> zbus::Result<Option<PathBuf>> {
+    ask("SaveFile", title, ("current_name", Value::from(name)))
+}

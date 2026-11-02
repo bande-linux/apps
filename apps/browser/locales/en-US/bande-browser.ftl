@@ -11,6 +11,4 @@ forward = Forward
 address-placeholder = Search or enter website name
 loading = Loading…
 cannot-open = Browser can’t open the page
-page-loaded = { $status } · { $type } · { $size } bytes
-engine-pending = The engine draws this page once its display list lands.
-new-page = New Page
+cannot-show = Browser can’t show this kind of file yet

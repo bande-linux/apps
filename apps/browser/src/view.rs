@@ -11,9 +11,10 @@ use bande_toolkit::{
     Appearance, FrameRegions, Header, Image, Item, Radius, Rect, SHEET_INSET, Scene, Shape,
     TextSystem, WINDOW_HEADER_HEIGHT, Window, WindowEvent, window_controls_end,
 };
-use web_net::{FetchError, FetchId, Response, Url};
+use web_net::Url;
 
 use crate::page::{Content, PageView};
+use crate::renderer::{Command, Link, LoadId, Outcome, Update, ViewId};
 use crate::{L10N, address};
 
 const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
@@ -23,15 +24,18 @@ const SYMBOL_BUTTON: f32 = 28.0;
 const SYMBOL_PIXELS: u32 = 16;
 const ADDRESS_MIN: f32 = 240.0;
 const ADDRESS_MAX: f32 = 680.0;
+const FIRST_WIDTH: f32 = 1088.0;
 
 const BACK: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
 const FORWARD: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="m6 3.5 4.5 4.5L6 12.5" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
+const STOP: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="m4.5 4.5 7 7m0-7-7 7" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>"##;
 const RELOAD: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M12.6 6.2A5 5 0 1 0 13 9" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" fill="none"/><path d="M13 2.8v3.6H9.4" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
 
 enum Signal {
     Back,
     Forward,
     Reload,
+    Stop,
 }
 
 type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -46,9 +50,11 @@ fn symbol(svg: &str, label: &str, signals: &Signals, signal: fn() -> Signal) -> 
     .tooltip(label)
 }
 
-pub(crate) struct Request {
-    pub(crate) cancel: Option<FetchId>,
-    pub(crate) load: Option<Url>,
+fn reload_button(signals: &Signals, loading: bool) -> Button {
+    match loading {
+        true => symbol(STOP, &L10N.tr("stop"), signals, || Signal::Stop),
+        false => symbol(RELOAD, &L10N.tr("reload"), signals, || Signal::Reload),
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -57,11 +63,22 @@ enum Target {
     Entry(usize),
 }
 
+struct Entry {
+    url: Url,
+    scroll: f32,
+}
+
+struct Pending {
+    load: LoadId,
+    target: Target,
+}
+
 struct Toolbar {
     back: WidgetId,
     forward: WidgetId,
     address: WidgetId,
     reload: WidgetId,
+    stop_shown: bool,
 }
 
 pub(crate) struct BrowserView {
@@ -70,17 +87,26 @@ pub(crate) struct BrowserView {
     toolbar: Toolbar,
     page: WidgetId,
     host: WidgetId,
-    entries: Vec<Url>,
+    id: ViewId,
+    renderer: Link,
+    next_load: u64,
+    shown: Option<LoadId>,
+    pending: Option<Pending>,
+    entries: Vec<Entry>,
     current: Option<usize>,
-    pending: Option<(Url, Target)>,
-    fetch: Option<FetchId>,
-    request: Option<Request>,
+    sent_width: f32,
     title: Option<String>,
     full_screen: bool,
 }
 
+fn without_fragment(url: &Url) -> Url {
+    let mut url = url.clone();
+    url.set_fragment(None);
+    url
+}
+
 impl BrowserView {
-    pub(crate) fn new(appearance: Appearance) -> Self {
+    pub(crate) fn new(appearance: Appearance, id: ViewId, renderer: Link) -> Self {
         let signals: Signals = Rc::default();
         let mut host = FreeLayout::new();
         let back = host.insert_in_header(
@@ -95,10 +121,7 @@ impl BrowserView {
             TextField::new(&L10N.tr("address-placeholder"), "", |_| {}),
             Rect::default(),
         );
-        let reload = host.insert_in_header(
-            symbol(RELOAD, &L10N.tr("reload"), &signals, || Signal::Reload),
-            Rect::default(),
-        );
+        let reload = host.insert_in_header(reload_button(&signals, false), Rect::default());
         let page = host.insert(PageView::new(), Rect::default());
         let host_id = bande_toolkit::ui::Widget::id(&host);
         let mut ui = Ui::new(
@@ -114,14 +137,18 @@ impl BrowserView {
                 forward,
                 address,
                 reload,
+                stop_shown: false,
             },
             page,
             host: host_id,
+            id,
+            renderer,
+            next_load: 0,
+            shown: None,
+            pending: None,
             entries: Vec::new(),
             current: None,
-            pending: None,
-            fetch: None,
-            request: None,
+            sent_width: 0.0,
             title: None,
             full_screen: false,
         };
@@ -129,87 +156,166 @@ impl BrowserView {
         view
     }
 
-    pub(crate) fn navigate(&mut self, url: Url) {
-        self.load(url, Target::New);
+    pub(crate) fn id(&self) -> ViewId {
+        self.id
     }
 
-    fn load(&mut self, url: Url, target: Target) {
-        self.request = Some(Request {
-            cancel: self.fetch.take(),
-            load: Some(url.clone()),
+    pub(crate) fn navigate(&mut self, url: Url) {
+        self.start(url, Target::New);
+    }
+
+    fn follow(&mut self, url: Url) {
+        let same_document = self.shown.is_some()
+            && self
+                .current_url()
+                .is_some_and(|current| without_fragment(current) == without_fragment(&url));
+        if !same_document {
+            return self.navigate(url);
+        }
+        self.save_scroll();
+        let next = self.current.map_or(0, |current| current + 1);
+        self.entries.truncate(next);
+        self.entries.push(Entry {
+            url: url.clone(),
+            scroll: 0.0,
+        });
+        self.current = Some(next);
+        self.set_address(url.as_str());
+        self.scroll_to_fragment(&url);
+        self.refresh_navigation();
+    }
+
+    fn scroll_to_fragment(&mut self, url: &Url) {
+        match (self.shown, url.fragment().filter(|name| !name.is_empty())) {
+            (Some(load), Some(name)) => self.renderer.send(Command::Fragment {
+                view: self.id,
+                load,
+                name: name.to_owned(),
+            }),
+            _ => {
+                self.with_page(|page| page.jump_to(0.0));
+            }
+        }
+    }
+
+    fn start(&mut self, url: Url, target: Target) {
+        self.save_scroll();
+        self.next_load += 1;
+        let load = LoadId(self.next_load);
+        let width = self
+            .with_page(|page| page.width())
+            .filter(|width| *width > 0.0)
+            .unwrap_or(FIRST_WIDTH);
+        self.sent_width = width;
+        self.renderer.send(Command::Load {
+            view: self.id,
+            load,
+            url: url.clone(),
+            width,
         });
         self.set_address(url.as_str());
-        self.with_page(|page| page.show(Content::Loading(url.clone())));
-        self.pending = Some((url, target));
+        if !self.with_page(|page| page.has_document()).unwrap_or(false) {
+            self.with_page(|page| page.show(Content::Loading(url.clone())));
+        }
+        self.pending = Some(Pending { load, target });
         self.focus_page();
-    }
-
-    pub(crate) fn loading(&mut self, fetch: FetchId) {
-        self.fetch = Some(fetch);
-    }
-
-    pub(crate) fn fetch(&self) -> Option<FetchId> {
-        self.fetch
+        self.refresh_navigation();
     }
 
     pub(crate) fn is_loading(&self) -> bool {
-        self.fetch.is_some()
+        self.pending.is_some()
     }
 
-    pub(crate) fn take_request(&mut self) -> Option<Request> {
-        self.request.take()
+    pub(crate) fn close(&self) {
+        self.renderer.send(Command::Close { view: self.id });
     }
 
-    pub(crate) fn loaded(&mut self, result: Result<Response, FetchError>) {
-        self.fetch = None;
-        let Some((requested, target)) = self.pending.take() else {
+    pub(crate) fn update(&mut self, update: Update) {
+        let pending = self.pending.as_ref().map(|pending| pending.load);
+        match update.outcome {
+            Outcome::Relaid(list, links) if Some(update.load) == self.shown => {
+                self.with_page(|page| page.relaid(list, links));
+            }
+            Outcome::Scroll(y) if Some(update.load) == self.shown => {
+                self.with_page(|page| page.jump_to(y));
+            }
+            outcome if Some(update.load) == pending => self.commit(update.load, outcome),
+            _ => {}
+        }
+    }
+
+    fn commit(&mut self, load: LoadId, outcome: Outcome) {
+        let Some(pending) = self.pending.take() else {
             return;
         };
-        let (url, content) = match result {
-            Ok(response) => (response.url.clone(), Content::Loaded(response)),
-            Err(error) => (requested.clone(), Content::failed(requested, &error)),
+        let (url, title, content, scroll) = match outcome {
+            Outcome::Frame(frame) => {
+                self.shown = Some(load);
+                let content = Content::Document {
+                    list: frame.list,
+                    links: frame.links,
+                };
+                (frame.url, frame.title, content, frame.fragment)
+            }
+            Outcome::Failed { url, message } => {
+                self.shown = None;
+                (url.clone(), None, Content::Failed { url, message }, None)
+            }
+            Outcome::Unsupported { url, kind } => {
+                self.shown = None;
+                (url.clone(), None, Content::Unsupported { url, kind }, None)
+            }
+            Outcome::Relaid(..) | Outcome::Scroll(_) => return,
         };
-        self.title = url.host_str().map(str::to_owned);
-        match target {
+        let restored = match pending.target {
             Target::New => {
                 let next = self.current.map_or(0, |current| current + 1);
                 self.entries.truncate(next);
-                self.entries.push(url.clone());
+                self.entries.push(Entry {
+                    url: url.clone(),
+                    scroll: 0.0,
+                });
                 self.current = Some(next);
+                None
             }
-            Target::Entry(index) => {
-                if let Some(entry) = self.entries.get_mut(index) {
-                    *entry = url.clone();
-                    self.current = Some(index);
-                }
-            }
-        }
+            Target::Entry(index) => self.entries.get_mut(index).and_then(|entry| {
+                entry.url = url.clone();
+                self.current = Some(index);
+                Some(entry.scroll).filter(|scroll| *scroll > 0.0)
+            }),
+        };
         if !self.address_focused() {
             self.set_address(url.as_str());
         }
-        self.with_page(|page| page.show(content));
+        self.with_page(|page| {
+            page.show(content);
+            if let Some(y) = restored.or(scroll) {
+                page.jump_to(y);
+            }
+        });
+        self.title = title.or_else(|| url.host_str().map(str::to_owned));
         self.refresh_navigation();
     }
 
     pub(crate) fn stop(&mut self) {
-        if let Some(fetch) = self.fetch.take() {
-            self.request = Some(Request {
-                cancel: Some(fetch),
-                load: None,
-            });
+        if self.pending.take().is_none() {
+            return;
         }
-        self.pending = None;
+        self.renderer.send(Command::Stop { view: self.id });
         let shown = self.current_url().map(|url| url.to_string());
         self.set_address(shown.as_deref().unwrap_or_default());
-        self.with_page(|page| page.show(Content::Blank));
+        if self.shown.is_none() {
+            self.with_page(|page| page.show(Content::Blank));
+        }
+        self.refresh_navigation();
     }
 
     pub(crate) fn reload(&mut self) {
         if let Some((index, url)) = self
             .current
-            .and_then(|index| Some((index, self.entries.get(index)?.clone())))
+            .and_then(|index| Some((index, self.entries.get(index)?.url.clone())))
         {
-            self.load(url, Target::Entry(index));
+            self.start(url, Target::Entry(index));
         }
     }
 
@@ -237,13 +343,40 @@ impl BrowserView {
     }
 
     fn go_to(&mut self, index: usize) {
-        if let Some(url) = self.entries.get(index).cloned() {
-            self.load(url, Target::Entry(index));
+        let Some(entry) = self.entries.get(index) else {
+            return;
+        };
+        let (url, scroll) = (entry.url.clone(), entry.scroll);
+        let same_document = self.shown.is_some()
+            && self.pending.is_none()
+            && self
+                .current_url()
+                .is_some_and(|current| without_fragment(current) == without_fragment(&url));
+        if !same_document {
+            return self.start(url, Target::Entry(index));
+        }
+        self.save_scroll();
+        self.current = Some(index);
+        self.set_address(url.as_str());
+        self.with_page(|page| page.jump_to(scroll));
+        self.refresh_navigation();
+    }
+
+    fn save_scroll(&mut self) {
+        if self.shown.is_none() {
+            return;
+        }
+        let offset = self.with_page(|page| page.offset()).unwrap_or(0.0);
+        if let Some(entry) = self
+            .current
+            .and_then(|current| self.entries.get_mut(current))
+        {
+            entry.scroll = offset;
         }
     }
 
     fn current_url(&self) -> Option<&Url> {
-        self.entries.get(self.current?)
+        self.entries.get(self.current?).map(|entry| &entry.url)
     }
 
     pub(crate) fn focus_address(&mut self) {
@@ -270,17 +403,27 @@ impl BrowserView {
             });
     }
 
-    fn with_page(&mut self, update: impl FnOnce(&mut PageView)) {
-        if let Some(page) = self.ui.widget_as::<PageView>(self.page) {
-            update(page);
-        }
+    fn with_page<T>(&mut self, update: impl FnOnce(&mut PageView) -> T) -> Option<T> {
+        self.ui.widget_as::<PageView>(self.page).map(update)
     }
 
     fn refresh_navigation(&mut self) {
+        let loading = self.is_loading();
+        if loading != self.toolbar.stop_shown {
+            let button = reload_button(&self.signals, loading);
+            let replaced = self
+                .ui
+                .widget_as::<FreeLayout>(self.host)
+                .and_then(|host| host.replace(self.toolbar.reload, button));
+            if let Some(id) = replaced {
+                self.toolbar.reload = id;
+                self.toolbar.stop_shown = loading;
+            }
+        }
         let enabled = [
             (self.toolbar.back, self.can_go_back()),
             (self.toolbar.forward, self.can_go_forward()),
-            (self.toolbar.reload, self.current.is_some()),
+            (self.toolbar.reload, loading || self.current.is_some()),
         ];
         for (id, on) in enabled {
             if let Some(button) = self.ui.widget_as::<Button>(id) {
@@ -302,6 +445,13 @@ impl BrowserView {
         }
     }
 
+    fn settle(&mut self) {
+        self.drain();
+        if let Some(url) = self.with_page(PageView::take_followed).flatten() {
+            self.follow(url);
+        }
+    }
+
     fn drain(&mut self) {
         loop {
             let signals = std::mem::take(&mut *self.signals.borrow_mut());
@@ -313,6 +463,7 @@ impl BrowserView {
                     Signal::Back => self.go_back(),
                     Signal::Forward => self.go_forward(),
                     Signal::Reload => self.reload(),
+                    Signal::Stop => self.stop(),
                 }
             }
         }
@@ -390,6 +541,7 @@ impl BrowserView {
         self.with_page(|page| page.set_radius(radius));
         let palette = self.ui.context().palette;
         let (controls, dialog) = self.ui.paint_layers(width, height);
+        self.follow_width();
         let mut items = vec![Item::Fill {
             shape: Shape::rounded(sheet, radius),
             paint: palette.sheet.into(),
@@ -401,6 +553,17 @@ impl BrowserView {
             height,
             background: palette.chassis,
             items,
+        }
+    }
+
+    fn follow_width(&mut self) {
+        let width = self.with_page(|page| page.width()).unwrap_or(0.0);
+        if width > 0.0 && width != self.sent_width {
+            self.sent_width = width;
+            self.renderer.send(Command::Resize {
+                view: self.id,
+                width,
+            });
         }
     }
 
@@ -479,8 +642,8 @@ impl View for BrowserView {
                 false
             }
         };
-        self.drain();
-        history || handled || self.request.is_some()
+        self.settle();
+        history || handled
     }
 
     fn set_appearance(&mut self, appearance: Appearance) {

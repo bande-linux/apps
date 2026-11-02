@@ -3,10 +3,11 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{Cell, Column, Row};
 
-use super::stats::{Usage, bytes, percent};
+use super::stats::{Usage, percent};
 use super::widgets::port_text;
 use crate::L10N;
 use crate::engine::{Action, Container};
+use crate::resources::size;
 use crate::ui::dot;
 
 pub const PROJECT_PREFIX: &str = "project:";
@@ -112,7 +113,7 @@ impl Shown<'_> {
         {
             Some(sample) => [
                 Cell::new(percent(sample.cpu)),
-                Cell::new(bytes(sample.memory as f64)),
+                Cell::new(size(sample.memory)),
             ],
             None => [Cell::new("—").muted(), Cell::new("—").muted()],
         }
