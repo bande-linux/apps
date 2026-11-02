@@ -1,8 +1,8 @@
-use bande_toolkit::{Point, Rect, WINDOW_HEADER_HEIGHT};
+use bande_toolkit::{Point, Rect, WINDOW_HEADER_HEIGHT, window_controls_end};
 
 pub const STRIP_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 pub const TAB_HEIGHT: f32 = 28.0;
-pub const HEADER_LEADING: f32 = 94.0;
+pub const HEADER_LEADING: f32 = window_controls_end(true) + 16.0;
 pub const FULL_SCREEN_LEADING: f32 = 12.0;
 const TRAILING: f32 = 12.0;
 const NEW_TAB_SIZE: f32 = 28.0;
