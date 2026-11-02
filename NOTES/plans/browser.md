@@ -123,12 +123,7 @@ Decided:
    rush.
 8. **Throughput:** 3–4 parallel agent streams (parser and style, layout, net and processes, app).
 
-Open:
-1. **Owner action: ask Google for a Widevine CDM licence** for Browser on Linux arm64 (Widevine
-   partner contact). Approval is uncertain for a small independent browser. Without it, DRM
-   sites open in chromium or firefox-esr with Asahi's `widevine-installer`. *Recommend asking now:
-   it is the longest lead time in the plan.*
-2. **Software fallback for H.264, HEVC and VP9 without the AVD** (the dev VM, other machines):
-   Debian's libavcodec in the sandboxed media process, or no fallback. *Recommend libavcodec.*
-3. **An Intel or AMD amd64 test machine** for the VA-API backend; there's none in the lab today.
-   *Recommend one, before VA-API work starts in phase 4.*
+9. **Widevine:** build full support (W-CDM) now; the owner contacts Google about a licence
+   himself, and testing Netflix is one of the last steps.
+10. **Software fallback without the AVD:** Debian's libavcodec in the sandboxed media process.
+11. **VA-API:** tested later on normal amd64 PCs, together with bande-desktop on amd64.
