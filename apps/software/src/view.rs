@@ -173,6 +173,15 @@ fn open_software_update() {
     }
 }
 
+fn in_background(work: impl FnOnce() + Send + 'static) {
+    if let Err(error) = std::thread::Builder::new()
+        .name("software-open".to_owned())
+        .spawn(work)
+    {
+        tracing::warn!("cannot start a thread: {error}");
+    }
+}
+
 fn open_website(url: &str) {
     let apps = bande_xdg::Apps::load(bande_xdg::data_dirs(), &bande_xdg::config_dirs());
     let scheme = url
@@ -415,11 +424,11 @@ impl Software {
         if messages.is_empty() && intents.is_empty() {
             return false;
         }
-        for message in messages {
-            self.receive(message);
-        }
         for intent in intents {
             self.act(intent);
+        }
+        for message in messages {
+            self.receive(message);
         }
         self.rebuild();
         true
@@ -513,7 +522,7 @@ impl Software {
                 self.shot = self.shot.saturating_add_signed(step);
                 self.request_shot();
             }
-            Intent::Website(url) => open_website(&url),
+            Intent::Website(url) => in_background(move || open_website(&url)),
             Intent::SoftwareUpdate => open_software_update(),
         }
     }
@@ -527,6 +536,7 @@ impl Software {
         self.shown = PAGE_ROWS;
         self.pages.push((page, ScrollState::default()));
         if let Page::App(index) = page {
+            self.ask_details(index);
             self.shot = 0;
             self.shots.clear();
             self.request_shot();
@@ -535,15 +545,24 @@ impl Software {
             {
                 tracing::warn!("the screenshot loader stopped");
             }
-            if let Some(app) = self.apps.get(index)
-                && let Some(package) = deb(app)
-                && !self.facts.contains_key(app.key())
-            {
-                self.ask(Query::Details {
-                    key: app.key().to_owned(),
-                    package: package.to_owned(),
-                });
-            }
+        }
+    }
+
+    fn ask_details(&self, index: usize) {
+        if let Some(app) = self.apps.get(index)
+            && let Some(package) = deb(app)
+            && !self.facts.contains_key(app.key())
+        {
+            self.ask(Query::Details {
+                key: app.key().to_owned(),
+                package: package.to_owned(),
+            });
+        }
+    }
+
+    fn refresh_details(&self) {
+        if let Page::App(index) = self.page() {
+            self.ask_details(index);
         }
     }
 
@@ -577,7 +596,15 @@ impl Software {
                     })
                     .collect();
                 let kept = shown.iter().take_while(|found| found.is_some()).count();
-                self.pages.truncate(kept.max(1));
+                if kept.max(1) < self.pages.len() {
+                    self.pages.truncate(kept.max(1));
+                    let restored = self
+                        .pages
+                        .last()
+                        .map(|(_, scroll)| scroll.clone())
+                        .unwrap_or_default();
+                    *self.scroll.borrow_mut() = restored;
+                }
                 for ((page, _), found) in self.pages.iter_mut().zip(shown) {
                     if let (Page::App(index), Some(found)) = (page, found) {
                         *index = found;
@@ -587,6 +614,7 @@ impl Software {
                 self.installed = installed;
                 self.facts.clear();
                 self.loading = false;
+                self.refresh_details();
             }
             Message::Online(online) => {
                 self.online = online;
@@ -616,12 +644,14 @@ impl Software {
                 self.facts.remove(&key);
                 self.installed.insert(key);
                 self.ask(Query::Updates);
+                self.refresh_details();
             }
             Message::Removed(key) => {
                 self.busy.remove(&key);
                 self.facts.remove(&key);
                 self.installed.remove(&key);
                 self.ask(Query::Updates);
+                self.refresh_details();
             }
             Message::Stopped(key) => {
                 self.busy.remove(&key);
@@ -728,19 +758,21 @@ impl Software {
         let Some(launchable) = self.apps.get(index).and_then(|app| app.launchable.clone()) else {
             return;
         };
-        let entries = bande_xdg::applications(
-            &bande_xdg::data_dirs(),
-            None,
-            &bande_xdg::current_desktops(),
-        );
-        let entry = entries.iter().find(|entry| {
-            entry.path.file_name().and_then(|name| name.to_str()) == Some(launchable.as_str())
+        in_background(move || {
+            let entries = bande_xdg::applications(
+                &bande_xdg::data_dirs(),
+                None,
+                &bande_xdg::current_desktops(),
+            );
+            let entry = entries.iter().find(|entry| {
+                entry.path.file_name().and_then(|name| name.to_str()) == Some(launchable.as_str())
+            });
+            if let Some(entry) = entry
+                && let Err(error) = bande_xdg::launch(entry, None)
+            {
+                tracing::warn!("cannot open {}: {error}", entry.name);
+            }
         });
-        if let Some(entry) = entry
-            && let Err(error) = bande_xdg::launch(entry, None)
-        {
-            tracing::warn!("cannot open {}: {error}", entry.name);
-        }
     }
 
     fn button(&self, title: &str, intent: Intent) -> Button {
@@ -957,8 +989,14 @@ impl Software {
         ];
         if progress.status == Status::Authorizing {
             widgets.push(boxed(
-                Label::new(&L10N.tr_args("authorize-hint", [("name", app.name.clone().into())]))
-                    .secondary(),
+                Label::new(&L10N.tr_args(
+                    match task {
+                        Task::Install => "authorize-hint",
+                        Task::Remove => "authorize-hint-remove",
+                    },
+                    [("name", app.name.clone().into())],
+                ))
+                .secondary(),
             ));
         }
         widgets
@@ -998,10 +1036,10 @@ impl Software {
                     .primary(),
             )]));
             widgets.push(boxed(Label::new(&L10N.tr("password-hint")).secondary()));
-        } else if let Some(bundle) = app.bundles.first() {
+        } else if let Some(Bundle::Flatpak { remote, .. }) = app.bundles.first() {
             widgets.push(boxed(Label::new(&L10N.tr_args(
                 "flatpak-unsupported",
-                [("source", source(bundle).into())],
+                [("remote", remote.clone().into())],
             ))));
         }
         if let Some((task, failure)) = self.failed.get(key) {

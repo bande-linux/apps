@@ -115,8 +115,9 @@ impl Program for Store {
         }
     }
 
-    fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, view: Pane) {
+    fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, mut view: Pane) {
         if self.main == Some(window) {
+            view.0.take_finished();
             self.main = None;
             self.parked = Some(view);
         }
