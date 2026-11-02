@@ -9,10 +9,10 @@ done.
 | Area | User need (App Store, GNOME Software) | Bande Software |
 |---|---|---|
 | Start | Window at once, catalogue fills in | Have: catalogue, installed apps and icons load on worker threads; a spinner until the catalogue arrives |
-| Places | Discover, Installed, Updates, categories | Have: segmented Discover/Installed/Updates; Discover shows the nine categories and New & Updated (latest AppStream releases); category pages |
+| Places | Discover, Installed, Updates, categories | Have: segmented Discover/Installed/Updates (with the update count); Discover shows the nine categories and New & Updated (latest AppStream releases); category pages |
 | Rows | Icon, name, summary, Get/Open | Have: two-column rows with the AppStream icon (JPEG XL, PNG or SVG, or the desktop entry's icon), Install/Open or the job's status |
 | Search | Instant, ranked | Have: name, keywords, summary (bande-search), Show More pages of 40 |
-| App page | Icon, name, developer, summary, screenshots, description | Have; screenshots are fetched once, cached in `~/.cache/bande-software`, with Previous/Next and captions |
+| App page | Icon, name, developer, summary, screenshots, description | Have: Debian's 128 px icon, screenshots fetched once and cached in `~/.cache/bande-software`, with Previous/Next and captions |
 | App page | What's New | Have: latest release, its date and notes |
 | App page | Version, size, licence, source, developer, website | Have: available and installed version, download with the packages it pulls in (simulated install) or size on disk, category, licence, Debian suite and component, developer, website link |
 | App page | Ratings and reviews | Missing; no review service (ODRS is the candidate) |
@@ -20,7 +20,7 @@ done.
 | Install | One click, password, progress, cancel, Open | Have: "You'll be asked for an administrator's password", "Waiting for your password…" while polkit asks, a cancelled prompt goes back quietly, progress with status and percent, Cancel when PackageKit allows it, Open when done |
 | Install | Done while the window is closed | Have: a notification when it finishes or fails |
 | Remove | Confirm, list what else goes | Have |
-| Installed | Every installed app | Have for the catalogue and for apps that ship metainfo (the Bande apps); apps with only a desktop entry are missing |
+| Installed | Every installed app | Have: catalogue apps, apps that ship metainfo (the Bande apps) and apps with only a desktop entry, each with its package for removal |
 | Updates | List, Update All, restarts | Hands off to Settings › Software Update (live, boot and offline classes, restarts). Software lists the updates, the apps among them and opens the pane |
 | Errors | A sentence a person can act on | Have: no network, locked, no disk space, not in the package lists, unmet dependencies, system package, unsigned, no PackageKit; the PackageKit text under Details |
 | Offline | Browse works; installs explain | Have: NetworkManager state shown as a line; screenshots reload when the network returns |
@@ -36,7 +36,7 @@ done.
 |---|---|---|
 | Open a .deb | Name, icon, version, summary, size | Have: the app's name and icon from the package's desktop entry, package name, version, installed size, summary, Details |
 | Dependencies | What else it installs or removes, how much | Have: "Also installs N packages · X to download" with the list, and what it removes (the button becomes Install and Remove) |
-| Trust | Warn for packages outside the sources | Have: always warns that the package is not from the software sources and its scripts run as root |
+| Trust | Warn for packages outside the sources | Have: warns that the package is not from the software sources and its scripts run as root; when the sources have the same version, offers Install from Software Sources (signed) beside Install This File |
 | Version | Upgrade, downgrade, already installed | Have: upgrade and downgrade notices, a downgrade caution, "Version X is installed" with Remove… |
 | Install | Password, progress, cancel | Have: password hint, "Waiting for your password…", progress, Cancel |
 | Done | Success with Open, failure with a reason | Have: Open per app the package installs, restart notice; failures for locked, system package, no PackageKit, no network, disk space, dependencies, with the details |
@@ -73,22 +73,16 @@ kept up to date, and removable, with their sandbox permissions shown.
 Software:
 1. Flatpak and Flathub, as planned above.
 2. Automatic updates in Settings › Software Update (download in the background, install live
-   updates at idle), and an update count badge on the Updates segment.
-3. Installed rows for apps that only have a desktop entry (match `dpkg -S` of the entry), so
-   every installed app can be removed here.
-4. A sharper page icon: Debian's 128 px remote icons (`Icon::Remote`) through the screenshot
-   loader and its cache.
-5. Curated Discover (editor's picks per category, like GNOME Software's featured list) instead of
+   updates at idle).
+3. Curated Discover (editor's picks per category, like GNOME Software's featured list) instead of
    only New & Updated.
-6. OARS age rating and the licence as free/proprietary with a link.
-7. Reviews from ODRS (opt-in, read-only first).
-8. Prune the screenshot cache (oldest first past a size cap).
-9. Move `Picture`/the installer's `Icon` into a toolkit image widget, and share the NetworkManager
+4. OARS age rating and the licence as free/proprietary with a link.
+5. Reviews from ODRS (opt-in, read-only first).
+6. Prune the screenshot cache (oldest first past a size cap).
+7. Move `Picture`/the installer's `Icon` into a toolkit image widget, and share the NetworkManager
    online follower with Calendar through a desktop library.
 
 Package Installer:
-1. Say when the same version is in the configured sources and offer to install from there, so
-   the package gets signed updates.
-2. Name the source a package adds (scan `etc/apt/sources.list.d` in the package) before
+1. Name the source a package adds (scan `etc/apt/sources.list.d` in the package) before
    installing.
-3. Reinstall when the same version is installed.
+2. Reinstall when the same version is installed.
