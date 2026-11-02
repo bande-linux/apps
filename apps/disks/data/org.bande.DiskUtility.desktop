@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Disk Utility
+GenericName=Disks
+Comment=Erase, partition and repair disks, and work with disk images
+Icon=org.bande.DiskUtility
+Exec=bande-disks
+StartupNotify=true
+Categories=System;Utility;
+Keywords=disk;drive;partition;format;erase;usb;iso;image;smart;fsck;

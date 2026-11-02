@@ -20,6 +20,7 @@ this list.
 | `apps/installer/tests/deb.rs` `a_built_deb_opens_with_its_fields_and_a_truncated_download_is_refused` | End to end with `dpkg-deb`: a real `.deb` opens with its fields and its app's name and icon (read from the archive with size caps), and a truncated download is refused instead of shown. |
 | `apps/velox/tests/engine.rs` `the_list_follows_events_and_reconciles_when_the_engine_stops_and_returns` | End to end against a fake Engine API on a unix socket (`DOCKER_HOST`): with no engine the not-ready view offers copyable steps; when the socket appears the list and live events arrive without a restart; when the engine goes away and comes back, Velox reconnects and lists again. |
 | `apps/velox/src/engine/http.rs` `chunked_bodies_decode_across_split_chunks_extensions_and_trailers` | Tricky parser: the engine's chunked streams split JSON across chunks and may carry extensions and trailers. |
+| `apps/disks/tests/safety.rs` `the_startup_disk_and_macos_stay_untouchable_while_a_usb_stick_is_erased_and_ejected` | Security boundary: on an Apple Silicon disk, the startup disk, the partition holding `/` and the macOS containers offer no Erase, Restore or Eject and their commands do nothing; a spare partition there asks with its device, size and a startup-disk warning; erasing a USB stick names it with its device and size and queues exactly one erase, nothing else while it runs. |
 
 `ci/gate.sh` runs all of them on a private session bus. `ci/check-app.sh` and `ci/smoke.sh` check
 packaging statically and on the installed package.
