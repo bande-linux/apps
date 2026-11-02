@@ -11,12 +11,12 @@ use bande_app::View;
 use bande_app_settings::{Stored, settings_folder};
 use bande_spring::{Decay, State as SpringState};
 use bande_terminal::{
-    Axis, Banner, BannerAction, CellPoint, Command, Divider, FULL_SCREEN_LEADING, GridSize,
-    HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, Notice, Painter, Pane,
-    STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings, TabBar,
-    TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed, dropped_text, encode_key,
-    is_openable, mouse_report, next_font_size, reports_mouse, shortcut, tab_menu, terminal_menu,
-    wants_scroll_as_arrows,
+    Axis, Banner, BannerAction, CellPoint, CloseAsk, Command, Divider, FULL_SCREEN_LEADING,
+    GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind,
+    NewTabFolder, Notice, Painter, Pane, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind,
+    Session, Settings, TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed,
+    dropped_text, encode_key, is_openable, mouse_report, next_font_size, reports_mouse, shortcut,
+    tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
 use bande_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
@@ -42,6 +42,7 @@ const LONG_COMMAND: Duration = Duration::from_secs(10);
 const FLASH: Duration = Duration::from_millis(220);
 const FLASH_OPACITY: f32 = 0.14;
 const MIN_PANE: f32 = 64.0;
+const BLINK: Duration = Duration::from_millis(530);
 
 struct Momentum {
     velocity: f64,
@@ -59,13 +60,14 @@ enum Gesture {
     Divider(Divider),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Pending {
     CloseTab(u32),
     ClosePane(u32),
     CloseOtherTabs(u32),
     CloseWindow,
     Quit,
+    Paste(String),
 }
 
 struct Tab {
@@ -150,6 +152,8 @@ pub struct TerminalWindow {
     serial: u32,
     saved: Option<(PathBuf, SavedWindow)>,
     asks: Vec<Ask>,
+    blink_from: Instant,
+    blink_phase: u32,
 }
 
 pub struct Opened {
@@ -202,6 +206,8 @@ impl TerminalWindow {
             serial,
             saved: saved_file.map(|file| (file, SavedWindow::default())),
             asks: Vec::new(),
+            blink_from: Instant::now(),
+            blink_phase: 0,
         };
         for tab in &mut app.tabs {
             for session in &mut tab.sessions {
@@ -230,12 +236,6 @@ impl TerminalWindow {
             .iter()
             .filter(|tab| tab.running_program().is_some())
             .count()
-    }
-
-    pub fn working_directory(&mut self) -> Option<PathBuf> {
-        self.session()
-            .working_directory()
-            .or_else(|| self.home.clone())
     }
 
     fn tab(&self) -> &Tab {
@@ -369,12 +369,13 @@ impl TerminalWindow {
         let metrics = self.painter.metrics;
         let cell_size = metrics.pixel_cell_size();
         let shape = self.settings.cursor.shape();
+        let scrollback = self.settings.scrollback;
         for tab in &mut self.tabs {
             for (id, frame) in tab.layout.frames(area) {
                 let grid = metrics.grid_for(frame.width, frame.height);
                 if let Some(session) = tab.sessions.iter_mut().find(|session| session.id() == id) {
                     session.resize(grid, cell_size);
-                    session.terminal.set_cursor_shape(shape);
+                    session.terminal.set_options(shape, scrollback);
                 }
             }
         }
@@ -518,14 +519,22 @@ impl TerminalWindow {
         window.request_redraw();
     }
 
+    fn new_tab_folder(&mut self) -> Option<PathBuf> {
+        match self.settings.new_tab_folder {
+            NewTabFolder::Same => self
+                .session()
+                .working_directory()
+                .or_else(|| self.home.clone()),
+            NewTabFolder::Home => self.home.clone(),
+        }
+    }
+
     fn spawn_session(&mut self, size: GridSize) -> Option<Session> {
-        let directory = self
-            .session()
-            .working_directory()
-            .or_else(|| self.home.clone());
+        let directory = self.new_tab_folder();
         let mut terminal = Terminal::new(size);
         terminal.resize(size, self.painter.metrics.pixel_cell_size());
-        Session::spawn(terminal, None, directory)
+        terminal.set_options(self.settings.cursor.shape(), self.settings.scrollback);
+        Session::spawn(terminal, self.settings.shell(), directory)
             .inspect_err(|error| tracing::warn!("cannot start a shell: {error}"))
             .ok()
     }
@@ -589,16 +598,33 @@ impl TerminalWindow {
     }
 
     fn new_window(&mut self) {
-        let directory = self.working_directory();
+        let directory = self.new_tab_folder();
         self.asks.push(Ask::NewWindow(directory));
     }
 
+    fn asks_before_closing(&self, running: bool) -> bool {
+        match self.settings.close_ask {
+            CloseAsk::Always => true,
+            CloseAsk::WhenRunning => running,
+            CloseAsk::Never => false,
+        }
+    }
+
     fn request_close_tab(&mut self, window: &mut Window, index: usize) {
-        let Some(program) = self.tabs.get(index).and_then(Tab::running_program) else {
-            return self.close_tab(window, index);
+        let Some(tab) = self.tabs.get(index) else {
+            return;
         };
-        let message = L10N.tr_args("confirm-close-tab", [("program", quoted(program).into())]);
-        let pending = Pending::CloseTab(self.tabs[index].id);
+        let program = tab.running_program();
+        if !self.asks_before_closing(program.is_some()) {
+            return self.close_tab(window, index);
+        }
+        let message = match program {
+            Some(program) => {
+                L10N.tr_args("confirm-close-tab", [("program", quoted(program).into())])
+            }
+            None => L10N.tr("confirm-close-idle-tab"),
+        };
+        let pending = Pending::CloseTab(tab.id);
         self.select_tab(window, index);
         self.ask(window, &message, pending);
     }
@@ -608,14 +634,17 @@ impl TerminalWindow {
             return self.request_close_tab(window, self.active);
         }
         let id = self.tab().focused;
-        match self.tab().focused().running_program() {
-            Some(program) => {
-                let message =
-                    L10N.tr_args("confirm-close-pane", [("program", quoted(program).into())]);
-                self.ask(window, &message, Pending::ClosePane(id));
-            }
-            None => self.close_pane(window, self.active, id),
+        let program = self.tab().focused().running_program();
+        if !self.asks_before_closing(program.is_some()) {
+            return self.close_pane(window, self.active, id);
         }
+        let message = match program {
+            Some(program) => {
+                L10N.tr_args("confirm-close-pane", [("program", quoted(program).into())])
+            }
+            None => L10N.tr("confirm-close-idle-pane"),
+        };
+        self.ask(window, &message, Pending::ClosePane(id));
     }
 
     fn ask(&mut self, window: &mut Window, message: &str, pending: Pending) {
@@ -623,6 +652,7 @@ impl TerminalWindow {
         let appearance = window.appearance();
         let button = match pending {
             Pending::Quit => L10N.tr("quit"),
+            Pending::Paste(_) => L10N.tr("paste"),
             Pending::CloseTab(_)
             | Pending::ClosePane(_)
             | Pending::CloseOtherTabs(_)
@@ -658,6 +688,7 @@ impl TerminalWindow {
                 }
             }
             Some(Pending::Quit) => self.asks.push(Ask::Quit),
+            Some(Pending::Paste(text)) => self.paste_now(&text),
             None => {}
         }
     }
@@ -671,16 +702,22 @@ impl TerminalWindow {
             .iter()
             .filter(|tab| tab.id != keep && tab.running_program().is_some())
             .count();
-        if busy == 0 {
+        if self.tabs.len() == 1 || !self.asks_before_closing(busy > 0) {
             return self.remove_other_tabs(window, keep);
         }
         self.select_tab(window, index);
-        let message = L10N.tr_args("confirm-close-other-tabs", [("count", busy.into())]);
+        let message = match busy {
+            0 => L10N.tr("confirm-close-idle-other-tabs"),
+            busy => L10N.tr_args("confirm-close-other-tabs", [("count", busy.into())]),
+        };
         self.ask(window, &message, Pending::CloseOtherTabs(keep));
     }
 
     pub fn ask_to_quit(&mut self, window: &mut Window, busy: usize) {
-        let message = L10N.tr_args("confirm-quit", [("count", busy.into())]);
+        let message = match busy {
+            0 => L10N.tr("confirm-quit-idle"),
+            busy => L10N.tr_args("confirm-quit", [("count", busy.into())]),
+        };
         self.ask(window, &message, Pending::Quit);
     }
 
@@ -737,9 +774,10 @@ impl TerminalWindow {
         if index < self.active || self.active >= self.tabs.len() {
             self.active -= 1;
         }
-        let stale = match self.pending {
-            Some(Pending::CloseTab(id) | Pending::CloseOtherTabs(id)) => id == closed.id,
-            Some(Pending::ClosePane(id)) => closed.session(id).is_some(),
+        let stale = match &self.pending {
+            Some(Pending::CloseTab(id) | Pending::CloseOtherTabs(id)) => *id == closed.id,
+            Some(Pending::Paste(_)) => was_active,
+            Some(Pending::ClosePane(id)) => closed.session(*id).is_some(),
             Some(Pending::CloseWindow | Pending::Quit) | None => false,
         };
         if stale {
@@ -807,11 +845,15 @@ impl TerminalWindow {
         if shifted_page && !in_alternate_screen {
             return;
         }
-        let modifiers = if matches!(key, Key::PageUp | Key::PageDown) {
-            unshifted
-        } else {
-            modifiers
+        let modifiers = match key {
+            Key::PageUp | Key::PageDown => unshifted,
+            Key::Character(_) if !self.settings.alt_as_meta => Modifiers {
+                alt: false,
+                ..modifiers
+            },
+            _ => modifiers,
         };
+        self.blink_from = Instant::now();
         if let Some(bytes) = encode_key(key, modifiers, mode) {
             self.session().terminal.scroll_to_bottom();
             if key == Key::Enter && modifiers == Modifiers::default() && !in_alternate_screen {
@@ -889,11 +931,14 @@ impl TerminalWindow {
 
     pub fn close_by_button(&mut self, window: &mut Window) -> bool {
         let busy = self.busy_tabs();
-        if busy == 0 {
+        if !self.asks_before_closing(busy > 0) {
             self.forget_window();
             return true;
         }
-        let message = L10N.tr_args("confirm-close-window", [("count", busy.into())]);
+        let message = match busy {
+            0 => L10N.tr("confirm-close-idle-window"),
+            busy => L10N.tr_args("confirm-close-window", [("count", busy.into())]),
+        };
         self.ask(window, &message, Pending::CloseWindow);
         self.settle(window);
         false
@@ -1027,7 +1072,17 @@ impl TerminalWindow {
         self.layout();
     }
 
-    fn paste(&mut self, text: &str) {
+    fn paste(&mut self, window: &mut Window, text: &str) {
+        let lines = text.trim_end_matches(['\r', '\n']).lines().count();
+        let guarded = self.mode().contains(TermMode::BRACKETED_PASTE);
+        if self.settings.paste_warning && lines > 1 && !guarded {
+            let message = L10N.tr_args("confirm-paste", [("count", lines.into())]);
+            return self.ask(window, &message, Pending::Paste(text.to_owned()));
+        }
+        self.paste_now(text);
+    }
+
+    fn paste_now(&mut self, text: &str) {
         let bytes = bracketed(text, self.mode());
         self.session().terminal.scroll_to_bottom();
         self.send(&bytes);
@@ -1063,7 +1118,7 @@ impl TerminalWindow {
                     self.banner_focused = false;
                     self.focus_terminal(self.focused);
                 }
-                self.paste(&dropped_text(&transfer.uris, &transfer.text));
+                self.paste(window, &dropped_text(&transfer.uris, &transfer.text));
                 window.request_redraw();
             }
             DragEvent::Finished(_) => {}
@@ -1122,11 +1177,12 @@ impl TerminalWindow {
         if settings == self.settings {
             return;
         }
-        let old = std::mem::replace(&mut self.settings, settings);
         self.painter.set_profile(settings.profile);
-        if old.font_size != settings.font_size {
+        if self.settings.font_size != settings.font_size {
             self.painter.set_metrics(settings.font_size, window.scale());
         }
+        self.settings = settings;
+        self.blink_from = Instant::now();
         self.layout();
         window.request_redraw();
     }
@@ -1540,11 +1596,21 @@ impl TerminalWindow {
 
     fn focus(&mut self, focused: bool) {
         self.focused = focused;
+        self.blink_from = Instant::now();
         if focused && self.badge > 0 {
             self.badge = 0;
             self.bus.set_badge(self.serial, 0);
         }
         self.focus_terminal(focused && !self.banner_focused);
+    }
+
+    fn blinking(&self) -> bool {
+        self.settings.blink && self.focused && !self.banner_focused
+    }
+
+    fn blink_phase(&self, now: Instant) -> u32 {
+        let phase = now.duration_since(self.blink_from).as_millis() / BLINK.as_millis();
+        u32::try_from(phase).unwrap_or(u32::MAX)
     }
 
     fn flash_opacity(&self, now: Instant) -> Option<f32> {
@@ -1571,6 +1637,8 @@ impl TerminalWindow {
             })
             .collect();
         let dividers = tab.layout.dividers(area);
+        self.blink_phase = self.blink_phase(Instant::now());
+        self.painter.cursor_hidden = self.blinking() && self.blink_phase % 2 == 1;
         self.painter.panes(&panes, &dividers, &highlights)
     }
 }
@@ -1695,7 +1763,7 @@ impl View for TerminalWindow {
                     window.request_redraw();
                 }
             }
-            WindowEvent::Pasted(text) => self.paste(&text),
+            WindowEvent::Pasted(text) => self.paste(window, &text),
             WindowEvent::Drag(drag) => self.drag(window, drag),
             WindowEvent::MenuAction(action) => {
                 self.menu_action(window, &action);
@@ -1750,6 +1818,16 @@ impl View for TerminalWindow {
 
     fn animating(&self) -> bool {
         self.momentum.is_some() || self.flash_opacity(Instant::now()).is_some()
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.blinking()
+            .then(|| self.blink_from + BLINK * self.blink_phase.saturating_add(1))
+    }
+
+    fn tick(&mut self, window: &mut Window, _now: Instant) -> bool {
+        window.request_redraw();
+        true
     }
 
     fn text_input_area(&self) -> Option<Rect> {
