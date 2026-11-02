@@ -232,6 +232,7 @@ pub struct MailView {
     setup: Option<SetupSheet>,
     pub(crate) settings: MailSettings,
     opened: Vec<((PathBuf, usize), PathBuf, std::time::SystemTime)>,
+    held: Vec<(AccountId, Command)>,
     undo: Vec<Vec<Moved>>,
     undoing: Vec<Moved>,
     moved_in: HashMap<(MailboxId, String), Instant>,
@@ -288,6 +289,7 @@ impl MailView {
             setup: None,
             settings,
             opened: Vec::new(),
+            held: Vec::new(),
             undo: Vec::new(),
             undoing: Vec::new(),
             moved_in: HashMap::new(),
@@ -408,6 +410,7 @@ impl MailView {
         for account in restarted {
             self.spawn_worker(account);
         }
+        self.release_held();
         match same {
             true => self.refresh_sidebar(),
             false => self.reload(),
@@ -1389,19 +1392,65 @@ impl MailView {
     }
 
     pub fn save_draft(&mut self, outgoing: Outgoing) -> bool {
-        let Some(account) = self.account_for(&outgoing.draft) else {
-            return false;
-        };
-        self.send_command(account, Command::SaveDraft(Box::new(outgoing)));
-        true
+        self.dispatch(Command::SaveDraft(Box::new(outgoing)))
     }
 
     pub fn send(&mut self, outgoing: Outgoing) -> bool {
-        let Some(account) = self.account_for(&outgoing.draft) else {
+        self.dispatch(Command::Send(Box::new(outgoing)))
+    }
+
+    fn dispatch(&mut self, command: Command) -> bool {
+        let (Command::Send(outgoing) | Command::SaveDraft(outgoing)) = &command else {
             return false;
         };
-        self.send_command(account, Command::Send(Box::new(outgoing)));
+        if let Some(account) = self.account_for(&outgoing.draft) {
+            self.send_command(account, command);
+            return true;
+        }
+        let email = outgoing.draft.from.email.clone();
+        let Some(account) = self
+            .store
+            .accounts()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|account| account.email.eq_ignore_ascii_case(&email))
+        else {
+            return false;
+        };
+        self.held.push((account.id, command));
+        self.tell_held(&[account.id]);
         true
+    }
+
+    fn release_held(&mut self) {
+        let stored = self.store.accounts().unwrap_or_default();
+        for (account, command) in std::mem::take(&mut self.held) {
+            if self.worker(account).is_some() {
+                self.send_command(account, command);
+            } else if stored.iter().any(|known| known.id == account) {
+                self.held.push((account, command));
+            } else if let Command::Send(outgoing) | Command::SaveDraft(outgoing) = command {
+                self.requests.push(Request::NotSent {
+                    error: L10N.tr("account-gone"),
+                    outgoing,
+                });
+            }
+        }
+    }
+
+    fn tell_held(&mut self, accounts: &[AccountId]) {
+        let stored = self.store.accounts().unwrap_or_default();
+        for account in stored.iter().filter(|known| accounts.contains(&known.id)) {
+            let count = self.held.iter().filter(|(id, _)| *id == account.id).count();
+            self.ui.present_sheet(
+                Alert::new(
+                    &L10N.tr_args("held-title", [("count", count.into())]),
+                    &L10N.tr_args("held-message", [("email", account.email.clone().into())]),
+                    |_| {},
+                )
+                .primary(&L10N.tr("button-ok"), "ok"),
+            );
+        }
     }
 
     pub fn finish(&mut self) {
@@ -1565,6 +1614,7 @@ impl MailView {
         let events = self.mailroom.take();
         let mut changed = false;
         let mut stale = false;
+        let mut held = Vec::new();
         for event in events {
             changed |= !matches!(event, MailEvent::Synced(..));
             match event {
@@ -1621,6 +1671,14 @@ impl MailView {
                 MailEvent::NotSent(_, error, outgoing) => {
                     self.requests.push(Request::NotSent { error, outgoing });
                 }
+                MailEvent::Held(account, command) => {
+                    if self.worker(account).is_some() {
+                        self.send_command(account, *command);
+                    } else {
+                        self.held.push((account, *command));
+                        held.push(account);
+                    }
+                }
                 MailEvent::Setup(outcome) => self.setup_checked(*outcome),
                 MailEvent::Pictures(id, pictures) => {
                     if let Some(reading) = self
@@ -1637,6 +1695,10 @@ impl MailView {
                     }
                 }
             }
+        }
+        if !held.is_empty() {
+            held.dedup();
+            self.tell_held(&held);
         }
         if stale {
             self.reload();
@@ -1958,6 +2020,7 @@ impl MailView {
         if let Err(error) = self.store.remove_account(id) {
             tracing::warn!("cannot remove {}: {error}", account.email);
         }
+        self.release_held();
         std::thread::spawn(move || {
             if let Err(error) = Keyring::session_bus()
                 .and_then(|keyring| keyring.forget(&account.email, &account.imap.host))

@@ -62,6 +62,7 @@ pub enum Event {
     Failed(AccountId, String),
     Sent(AccountId),
     NotSent(AccountId, String, Box<Outgoing>),
+    Held(AccountId, Box<Command>),
     Setup(Box<crate::setup::Outcome>),
     Pictures(MessageId, Vec<(String, crate::picture::Picture)>),
     MailboxRefused(String),
@@ -345,12 +346,31 @@ impl Runner {
     }
 
     fn run(mut self) {
+        self.work();
+        while let Ok(command) = self.commands.try_recv() {
+            self.hold(command);
+        }
+        if let Some(session) = self.session.take() {
+            session.logout();
+        }
+    }
+
+    fn hold(&self, command: Command) {
+        if matches!(command, Command::Send(_) | Command::SaveDraft(_)) {
+            self.emit(Event::Held(self.account.id, Box::new(command)));
+        }
+    }
+
+    fn work(&mut self) {
         while let Some(mut command) = self.next_command() {
             if self.stopping.load(Ordering::Relaxed) {
-                break;
+                self.hold(command);
+                return;
             }
             if command == Command::Sync {
-                while let Ok(queued) = self.commands.try_recv() {
+                while !self.stopping.load(Ordering::Relaxed)
+                    && let Ok(queued) = self.commands.try_recv()
+                {
                     match queued {
                         Command::Stop => return,
                         Command::Sync | Command::Refresh(_) | Command::Flush => {}
@@ -369,9 +389,6 @@ impl Runner {
                 command = Command::Sync;
             }
             self.attempt(&command);
-        }
-        if let Some(session) = self.session.take() {
-            session.logout();
         }
     }
 

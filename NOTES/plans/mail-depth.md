@@ -48,7 +48,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 1. Conversations: group by subject when References are missing.
 2. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses
    passwords.
-3. The known gaps below (unsent metadata, silent drops).
+3. The known gaps below.
 4. Rules with several conditions, editing a rule, running rules on a mailbox by hand.
 5. Rich text compose and spelling (both need desktop services first).
 6. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
@@ -57,7 +57,5 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 9. A Password field in Settings → Accounts; a message font apart from the desktop text size.
 
 ## Known gaps in what landed (review, 2026-11-02)
-- Disabling an account or changing its servers drops its queued sends silently; the local copy
-  reopens at the next start.
 - Undo gives up without a word when the moved message does not show up after three syncs of the mailbox it went to.
 - From swaps the signature only when the old account had one.

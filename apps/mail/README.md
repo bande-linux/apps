@@ -71,7 +71,9 @@ apt install bande-mail
   changes. Files are
   attached through the desktop's file chooser (the portal), up to 25 MB each, and a click on an
   attachment removes it. A sent message is kept in Sent and the original is marked answered. If
-  sending fails, the message comes back in a window with the error.
+  sending fails, the message comes back in a window with the error. A message sent or saved from
+  an account that is turned off, or whose servers change before it goes out, stays queued: Mail
+  says so and sends it when the account is on again.
 - **Drafts.** Closing a message that was changed and not sent keeps it in the account's Drafts
   mailbox (also on quit). While a message is written, a copy is kept every few seconds in
   `~/.local/share/bande-mail/unsent/` until the server has it, so a message survives a crash or

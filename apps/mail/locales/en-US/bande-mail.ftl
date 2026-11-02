@@ -199,3 +199,9 @@ rule-description = { $field } contains “{ $pattern }”: { $action }
 security-tls = TLS
 security-starttls = STARTTLS
 security-none = None (this computer only)
+held-title = { $count ->
+    [one] A Message Is Waiting to Be Sent
+   *[other] { $count } Messages Are Waiting to Be Sent
+}
+held-message = { $email } is turned off. Mail sends what is waiting when you turn the account on again in Settings → Accounts. If you quit Mail first, it opens again as an unsent message.
+account-gone = No account sends from this address any more.
