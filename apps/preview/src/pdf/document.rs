@@ -8,7 +8,7 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{Color, Image, Item, Point, Rect, Shape};
 
-use crate::pdf::protocol::{Glyph, MAX_RENDER_PIXELS, Render, Use};
+use bande_content::pdf::protocol::{Glyph, MAX_RENDER_PIXELS, Render, Use};
 
 const MARGIN: f32 = 16.0;
 const GAP: f32 = 14.0;

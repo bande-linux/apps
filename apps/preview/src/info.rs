@@ -7,9 +7,9 @@ use bande_toolkit::{
     WINDOW_HEADER_HEIGHT,
 };
 
-use crate::decode::{Decoded, Kind};
-use crate::pdf::protocol::Opened;
 use crate::{L10N, tr_with};
+use bande_content::pdf::protocol::Opened;
+use bande_content::{Decoded, Kind};
 
 const MARGIN: f32 = 18.0;
 const LABEL_WIDTH: f32 = 112.0;

@@ -19,15 +19,15 @@ use bande_toolkit::{
 
 use crate::canvas::{Canvas, Zoom};
 use crate::copy::encode_png;
-use crate::decode::{Decoded, Failure};
 use crate::files::{mime_of_name, neighbour};
 use crate::loader::{Loader, Opened};
 use crate::pdf::contents::Contents;
 use crate::pdf::document::{Fit, PdfView};
-use crate::pdf::protocol::{Opened as PdfOpened, Render, Use};
-use crate::pdf::session::{Change, Phase, Session};
 use crate::sidebar::{SIDEBAR_WIDTH, Sidebar, Thumb};
 use crate::{L10N, tr_with};
+use bande_content::pdf::protocol::{Opened as PdfOpened, Render, Use};
+use bande_content::pdf::session::{Change, Phase, Session};
+use bande_content::{Decoded, Failure};
 
 const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const SIDE: f32 = 12.0;
@@ -1105,8 +1105,8 @@ fn encode_source(
     frame: Option<usize>,
 ) -> Option<(u32, u32, std::sync::Arc<Vec<u8>>)> {
     let rgba = match &picture.pixels {
-        crate::decode::Pixels::Still(levels) => levels.first().map(|level| level.rgba.clone()),
-        crate::decode::Pixels::Animation(frames) => frames
+        bande_content::Pixels::Still(levels) => levels.first().map(|level| level.rgba.clone()),
+        bande_content::Pixels::Animation(frames) => frames
             .get(frame.unwrap_or(0))
             .map(|frame| frame.rgba.clone()),
     }?;

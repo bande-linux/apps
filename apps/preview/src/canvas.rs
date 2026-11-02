@@ -11,7 +11,7 @@ use bande_toolkit::{
     Color, Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, Transform,
 };
 
-use crate::decode::{Decoded, Level, Pixels};
+use bande_content::{Decoded, Level, Pixels};
 
 const TILE: u32 = 512;
 const OVERLAP: u32 = 2;
@@ -499,7 +499,7 @@ impl Canvas {
         items
     }
 
-    fn frame_items(&self, frames: &[crate::decode::Frame], width: u32, height: u32) -> Vec<Item> {
+    fn frame_items(&self, frames: &[bande_content::Frame], width: u32, height: u32) -> Vec<Item> {
         let index = self.animation.frame.min(frames.len().saturating_sub(1));
         let mut cached = self.frame_image.borrow_mut();
         let image = match cached.as_ref() {

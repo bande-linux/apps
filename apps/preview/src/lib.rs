@@ -1,7 +1,5 @@
 mod canvas;
 mod copy;
-mod decode;
-mod facts;
 mod files;
 mod info;
 mod loader;
@@ -13,12 +11,12 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
+pub use bande_content::pdf::protocol::WORKER_FLAG;
+pub use bande_content::pdf::worker::run as run_pdf_worker;
+pub use bande_content::{Decoded, Failure, Kind, Pixels, decode_file};
 pub use canvas::{Canvas, Orientation, Zoom};
-pub use decode::{Decoded, Failure, Kind, Pixels, decode_file};
 pub use files::{argument_path, is_image_name};
 pub use info::{InfoPanel, Row, document_rows, file_rows, info_ui, picture_rows};
-pub use pdf::protocol::WORKER_FLAG;
-pub use pdf::worker::run as run_pdf_worker;
 pub use view::{PreviewView, Request, SidebarMode, file_name};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-preview.ftl");

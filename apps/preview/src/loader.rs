@@ -6,7 +6,7 @@ use std::thread;
 
 use bande_inbox::{Inbox, Outbox};
 
-use crate::decode::{self, Decoded, Failure, Kind};
+use bande_content::{Decoded, Failure, Kind};
 
 pub enum Opened {
     Image(Box<Decoded>),
@@ -60,11 +60,11 @@ pub struct Loader {
 }
 
 fn load(path: &Path) -> Result<Opened, Failure> {
-    let (kind, bytes) = decode::open(path)?;
+    let (kind, bytes) = bande_content::open(path)?;
     if kind == Kind::Pdf {
         return Ok(Opened::Document);
     }
-    let mut decoded = decode::decode(&bytes, kind)?;
+    let mut decoded = bande_content::decode(&bytes, kind)?;
     decoded.facts.kind = Some(kind);
     Ok(Opened::Image(Box::new(decoded)))
 }

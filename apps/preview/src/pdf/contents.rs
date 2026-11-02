@@ -4,7 +4,7 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{Item, Paragraph, Point, Radius, Rect, Shape, TextStyle};
 
-use crate::pdf::protocol::Heading;
+use bande_content::pdf::protocol::Heading;
 
 const ROW: f32 = 26.0;
 const INDENT: f32 = 12.0;
