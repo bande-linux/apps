@@ -36,7 +36,6 @@ const TERMINAL_NODE: NodeId = NodeId(u64::MAX - 1);
 const TAB_LIST_NODE: NodeId = NodeId(u64::MAX - 2);
 const NEW_TAB_NODE: NodeId = NodeId(u64::MAX - 3);
 const TAB_NODES: u64 = u64::MAX - 1024;
-const WRITE_RETRY: Duration = Duration::from_millis(5);
 const VELOCITY_WINDOW: Duration = Duration::from_millis(100);
 const MIN_MOMENTUM: f64 = 30.0;
 const LONG_COMMAND: Duration = Duration::from_secs(10);
@@ -144,7 +143,6 @@ pub struct TerminalWindow {
     link: Option<Link>,
     samples: VecDeque<(Duration, f32)>,
     momentum: Option<Momentum>,
-    retry_at: Option<Instant>,
     flash: Option<Instant>,
     badge: u32,
     cursor: Cursor,
@@ -197,7 +195,6 @@ impl TerminalWindow {
             link: None,
             samples: VecDeque::new(),
             momentum: None,
-            retry_at: None,
             flash: None,
             badge: 0,
             cursor: Cursor::Default,
@@ -917,7 +914,6 @@ impl TerminalWindow {
         if !self.tabs.is_empty() {
             self.sync_title(window);
         }
-        self.schedule_retry();
     }
 
     fn perform_menu(&mut self, window: &mut Window, command: MenuCommand) {
@@ -1542,19 +1538,6 @@ impl TerminalWindow {
         window.request_redraw();
     }
 
-    fn schedule_retry(&mut self) {
-        let pending = self
-            .tabs
-            .iter()
-            .flat_map(|tab| &tab.sessions)
-            .any(Session::has_pending_output);
-        self.retry_at = match (pending, self.retry_at) {
-            (false, _) => None,
-            (true, Some(at)) => Some(at),
-            (true, None) => Some(Instant::now() + WRITE_RETRY),
-        };
-    }
-
     fn focus(&mut self, focused: bool) {
         self.focused = focused;
         if focused && self.badge > 0 {
@@ -1762,23 +1745,7 @@ impl View for TerminalWindow {
             return true;
         }
         self.sync_title(window);
-        self.schedule_retry();
         tab == self.active || self.has_strip()
-    }
-
-    fn deadline(&self) -> Option<Instant> {
-        self.retry_at
-    }
-
-    fn tick(&mut self, _window: &mut Window, now: Instant) -> bool {
-        if self.retry_at.is_some_and(|at| at <= now) {
-            self.retry_at = None;
-            for session in self.tabs.iter_mut().flat_map(|tab| &mut tab.sessions) {
-                session.flush();
-            }
-            self.schedule_retry();
-        }
-        false
     }
 
     fn animating(&self) -> bool {

@@ -137,10 +137,7 @@ impl ActivityMonitor {
             .measure_wakeups(measured(cx, &windows, |screen| screen.measures_wakeups()));
         let blockers = measured(cx, &windows, |screen| screen.measures_sleep_blockers());
         let battery = measured(cx, &windows, |screen| screen.measures_battery());
-        let watched = windows.iter().any(|window| {
-            cx.window(*window)
-                .is_some_and(|(shown, _)| !shown.toplevel_state().suspended)
-        });
+        let watched = on_screen(cx);
         self.sampler.measure_processes(watched);
         match self.sampler.sample() {
             Ok(mut snapshot) => {
@@ -174,6 +171,7 @@ impl ActivityMonitor {
                 shown.request_redraw();
             }
         }
+        self.sampling = watched;
         self.next_sample = Instant::now() + INTERVAL;
     }
 
@@ -397,16 +395,12 @@ impl Program for ActivityMonitor {
         if self.main == Some(window) {
             self.main = None;
         }
-        self.sampling = cx.windows().next().is_some();
+        self.sampling = on_screen(cx);
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
         self.serve(cx, window);
-        let shown = cx.windows().collect::<Vec<_>>().into_iter().any(|window| {
-            cx.window(window)
-                .is_some_and(|(shown, _)| !shown.toplevel_state().suspended)
-        });
-        if shown && !self.sampler.measures_processes() {
+        if on_screen(cx) && !self.sampling {
             self.sample(cx);
         }
         cx.refresh_menus();
@@ -419,6 +413,13 @@ impl Program for ActivityMonitor {
     fn tick(&mut self, cx: &mut Cx<Self>, _now: Instant) {
         self.sample(cx);
     }
+}
+
+fn on_screen(cx: &mut Cx<ActivityMonitor>) -> bool {
+    cx.windows().collect::<Vec<_>>().into_iter().any(|window| {
+        cx.window(window)
+            .is_some_and(|(shown, _)| !shown.toplevel_state().suspended)
+    })
 }
 
 fn system_bus() -> Option<zbus::blocking::Connection> {
