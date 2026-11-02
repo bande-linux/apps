@@ -30,6 +30,11 @@ release-dated = Version { $version } · { $date }
 info-version = Version
 info-installed-version = Installed Version
 info-size = Size
+info-download = Download
+download-with = { $count ->
+    [one] { $size }, with 1 more package
+   *[other] { $size }, with { $count } more packages
+}
 info-category = Category
 info-license = Licence
 info-source = Source

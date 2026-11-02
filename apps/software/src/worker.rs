@@ -43,6 +43,8 @@ pub struct Facts {
     pub available: Option<String>,
     pub installed: Option<String>,
     pub size: u64,
+    pub download: u64,
+    pub extra: usize,
     pub origin: String,
     pub homepage: String,
 }
@@ -112,7 +114,7 @@ fn install(
     let id = native(&found, package, arch)
         .map(|package| package.id.clone())
         .ok_or_else(|| not_found(format!("{package} is not available for {arch}")))?;
-    client.install(&[id], progress).map(drop)
+    client.install(&[id], Mode::Apply, progress).map(drop)
 }
 
 fn plan_removal(client: &Client, package: &str) -> Result<(String, Vec<String>), Error> {
@@ -138,6 +140,22 @@ fn origin(data: &str) -> String {
     data.rsplit(':').next().unwrap_or(data).to_owned()
 }
 
+fn download(client: &Client, id: &str) -> Result<(u64, usize), Error> {
+    let simulated = client.install(&[id.to_owned()], Mode::Simulate, &|_| {})?;
+    let ids: Vec<String> = simulated
+        .packages
+        .iter()
+        .filter(|package| matches!(package.info, Info::Installing | Info::Updating))
+        .map(|package| package.id.clone())
+        .collect();
+    let size = client
+        .details(&ids)?
+        .iter()
+        .map(|details| details.size)
+        .sum();
+    Ok((size, ids.len().saturating_sub(1)))
+}
+
 fn details(client: &Client, arch: &str, package: &str) -> Result<Facts, Error> {
     let found = client.resolve(&[package.to_owned()])?;
     let installed = found
@@ -149,15 +167,28 @@ fn details(client: &Client, arch: &str, package: &str) -> Result<Facts, Error> {
         .cloned()
         .collect();
     let available = native(&others, package, arch);
-    let Some(chosen) = available.or(installed) else {
+    let Some(chosen) = installed.or(available) else {
         return Ok(Facts::default());
     };
     let details = client.details(std::slice::from_ref(&chosen.id))?;
     let details = details.first();
+    let own = details.map(|details| details.size).unwrap_or(0);
+    let (size, download, extra) = match installed {
+        Some(_) => (own, 0, 0),
+        None => {
+            let (download, extra) = download(client, &chosen.id).unwrap_or_else(|error| {
+                tracing::debug!("cannot work out the download of {package}: {error}");
+                (own, 0)
+            });
+            (0, download, extra)
+        }
+    };
     Ok(Facts {
         available: available.map(|package| package.version.clone()),
         installed: installed.map(|package| package.version.clone()),
-        size: details.map(|details| details.size).unwrap_or(0),
+        size,
+        download,
+        extra,
         origin: origin(&chosen.origin),
         homepage: details
             .map(|details| details.url.clone())
