@@ -276,10 +276,15 @@ impl Mail {
             TextSystem::new(),
         );
         let title = view.title();
-        let opened = cx.open(Kind::Secondary("compose"), &title, COMPOSE_SIZE, |appearance| {
-            view.set_appearance(appearance);
-            Pane::Compose(Box::new(view))
-        });
+        let opened = cx.open(
+            Kind::Secondary("compose"),
+            &title,
+            COMPOSE_SIZE,
+            |appearance| {
+                view.set_appearance(appearance);
+                Pane::Compose(Box::new(view))
+            },
+        );
         opened
             .inspect_err(|error| tracing::warn!("cannot open a message window: {error}"))
             .ok()
