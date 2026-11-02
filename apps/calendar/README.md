@@ -59,8 +59,9 @@ views. Packaged as `bande-calendar`.
   alerts for new events and all-day events, how often accounts and subscriptions refresh, and
   adding, re-signing and removing accounts, and time zone support, which shows each timed
   event's zone in the inspector: its times are shown and typed in that zone, and a new zone
-  keeps the wall times of the whole series (exceptions and the end date move with it). Stored
-  in `~/.config/bande/calendar.conf`.
+  keeps the wall times of the whole series (exceptions and the end date move with it), and
+  View ▸ Time Zone shows the whole calendar in a zone its events use. Stored in
+  `~/.config/bande/calendar.conf`.
 - **Files and links.** `bande-calendar file.ics` or File ▸ Import… offers to add its events;
   File ▸ Export… (or Export… on a calendar's menu) saves a calendar as one `.ics` file, through
   the desktop's file chooser portal; `bande-calendar webcal://…` offers to subscribe. The
@@ -103,5 +104,5 @@ exceptions and end follow. The repo's whole test list and the reason for each is
 - Invitation e-mails (`METHOD:REQUEST`/`REPLY` over iMIP), free/busy, tasks (`VTODO`).
 - OAuth providers (Google, Microsoft); Basic authentication only, so iCloud and Fastmail work with
   an app password.
-- Viewing the whole calendar in another time zone; rules the Custom sheet cannot express
+- Rules the Custom sheet cannot express
   (several month days, `BYSETPOS`) are kept but replaced if edited there. The ranked list is in `NOTES/plans/calendar-depth.md`.

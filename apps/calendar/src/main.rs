@@ -151,8 +151,21 @@ fn entry(label: &str, action: &str) -> Entry {
     Entry::item(&L10N.tr(label), action)
 }
 
-fn app_menus(mode: Mode) -> Vec<Entry> {
-    let mut view: Vec<Entry> = Mode::ALL
+fn zone_menu(view: &CalendarView) -> Entry {
+    let shown = view.shown_zone();
+    let items =
+        std::iter::once(Entry::item(&L10N.tr("zone-system"), "zone:").radio(shown.is_none()))
+            .chain(view.zones().into_iter().map(|zone| {
+                let chosen = shown == Some(zone.as_str());
+                Entry::item(&zone, &format!("zone:{zone}")).radio(chosen)
+            }))
+            .collect();
+    Entry::submenu(&L10N.tr("zone-menu"), items)
+}
+
+fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
+    let mode = view.mode();
+    let mut view_menu: Vec<Entry> = Mode::ALL
         .iter()
         .enumerate()
         .map(|(index, shown)| {
@@ -167,7 +180,10 @@ fn app_menus(mode: Mode) -> Vec<Entry> {
                 .radio(*shown == mode)
         })
         .collect();
-    view.extend([
+    if time_zones {
+        view_menu.extend([Entry::separator(), zone_menu(view)]);
+    }
+    view_menu.extend([
         Entry::separator(),
         entry("go-to-today", "today").shortcut("Ctrl+T"),
         entry("previous-period", "previous"),
@@ -190,7 +206,7 @@ fn app_menus(mode: Mode) -> Vec<Entry> {
             ],
         ),
         edit_submenu(Vec::new()),
-        Entry::submenu(&L10N.tr("menu-view"), view),
+        Entry::submenu(&L10N.tr("menu-view"), view_menu),
     ]
 }
 
@@ -908,7 +924,7 @@ impl Program for CalendarApp {
             menus: self
                 .main
                 .and_then(|main| cx.view(main))
-                .map(|Pane(view)| app_menus(view.mode()))
+                .map(|Pane(view)| app_menus(view, self.settings.time_zones))
                 .unwrap_or_default(),
             window: Vec::new(),
         }
@@ -1010,7 +1026,7 @@ impl Program for CalendarApp {
                             self.zone = TimeZone::get(&name)
                                 .unwrap_or_else(|_| bande_datetime::local_zone());
                             self.with_view(cx, |app, view| {
-                                view.set_zone(app.zone.clone());
+                                view.set_system_zone(app.zone.clone());
                                 app.check_alerts(view);
                             });
                         }
