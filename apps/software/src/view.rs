@@ -145,6 +145,27 @@ fn origin_name(origin: &str) -> String {
     }
 }
 
+fn place_control(
+    intents: &Rc<RefCell<Vec<Intent>>>,
+    place: Place,
+    updates: usize,
+) -> SegmentedControl {
+    let chosen = Rc::clone(intents);
+    let names: Vec<String> = Place::ALL
+        .into_iter()
+        .map(|shown| match (shown, updates) {
+            (Place::Updates, 1..) => L10N.tr_args("updates-counted", [("count", updates.into())]),
+            _ => place_name(shown),
+        })
+        .collect();
+    let selected = Place::ALL.iter().position(|shown| *shown == place);
+    SegmentedControl::new(&L10N.tr("section"), &names, selected, move |index| {
+        if let Some(place) = Place::ALL.get(index) {
+            chosen.borrow_mut().push(Intent::Go(*place));
+        }
+    })
+}
+
 fn open_software_update() {
     let command = [SETTINGS.to_owned(), SOFTWARE_UPDATE_PANE.to_owned()];
     if let Err(error) = bande_xdg::spawn_detached(SETTINGS_ID, &command, None, None) {
@@ -264,6 +285,8 @@ pub struct Software {
     content: WidgetId,
     search: WidgetId,
     places: WidgetId,
+    header: WidgetId,
+    counted: usize,
     finished: Vec<Finished>,
 }
 
@@ -290,22 +313,18 @@ impl Software {
         let search = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
             typed.borrow_mut().push(Intent::Search(query.to_owned()));
         });
-        let chosen = Rc::clone(&intents);
-        let names: Vec<String> = Place::ALL.into_iter().map(place_name).collect();
-        let places = SegmentedControl::new(&L10N.tr("section"), &names, Some(0), move |index| {
-            if let Some(place) = Place::ALL.get(index) {
-                chosen.borrow_mut().push(Intent::Go(*place));
-            }
-        });
+        let places = place_control(&intents, Place::Discover, 0);
         let content = Stack::new(Axis::Vertical, 0.0, 0.0, vec![boxed(Label::new(""))]);
         let id = content.id();
         let search_id = search.id();
         let places_id = places.id();
+        let header = Stack::new(Axis::Horizontal, SPACING, 0.0, vec![boxed(places)]);
+        let header_id = header.id();
         let page = Stack::new(
             Axis::Vertical,
             SPACING,
             PADDING,
-            vec![row(vec![boxed(places)]), boxed(search), boxed(content)],
+            vec![boxed(header), boxed(search), boxed(content)],
         );
         let scroll: Rc<RefCell<ScrollState>> = Rc::default();
         let view = ScrollView::shared(boxed(page), Rc::clone(&scroll));
@@ -339,6 +358,8 @@ impl Software {
             content: id,
             search: search_id,
             places: places_id,
+            header: header_id,
+            counted: 0,
             finished: Vec::new(),
         };
         software.ask(Query::Updates);
@@ -1206,7 +1227,23 @@ impl Software {
         widgets
     }
 
+    fn recount(&mut self) {
+        if self.counted == self.updates.len() {
+            return;
+        }
+        self.counted = self.updates.len();
+        let places = place_control(&self.intents, self.place, self.counted);
+        let id = places.id();
+        if let Some(holder) = self.ui.widget(self.header)
+            && let Some(slot) = holder.children_mut().first_mut()
+        {
+            *slot = boxed(places);
+            self.places = id;
+        }
+    }
+
     fn rebuild(&mut self) {
+        self.recount();
         let mut widgets = if self.loading {
             vec![boxed(Spinner::new(&L10N.tr("loading")))]
         } else if self.apps.is_empty() {
