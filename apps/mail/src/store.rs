@@ -282,6 +282,60 @@ fn thread_of(envelope: &Envelope) -> Option<String> {
         .cloned()
 }
 
+const REPLY_PREFIXES: [&str; 13] = [
+    "re", "fw", "fwd", "aw", "sv", "vs", "wg", "tr", "rif", "antw", "odp", "res", "r",
+];
+const TOPIC_WINDOW: i64 = 30 * 24 * 60 * 60;
+
+fn topic(subject: &str) -> Option<String> {
+    let mut rest = subject.trim();
+    let mut prefixed = false;
+    while let Some((token, after)) = rest.split_once(':') {
+        let word = token
+            .trim_end_matches(|character: char| {
+                character.is_ascii_digit() || matches!(character, '[' | ']' | '(' | ')' | ' ')
+            })
+            .to_lowercase();
+        if !REPLY_PREFIXES.contains(&word.as_str()) {
+            break;
+        }
+        prefixed = true;
+        rest = after.trim_start();
+    }
+    let rest = rest.trim().to_lowercase();
+    (prefixed && !rest.is_empty()).then_some(rest)
+}
+
+fn thread_by_topic(
+    transaction: &rusqlite::Transaction<'_>,
+    mailbox: MailboxId,
+    envelope: &Envelope,
+    date: i64,
+) -> Result<Option<String>> {
+    let Some(wanted) = topic(&envelope.subject).filter(|_| envelope.references.is_empty()) else {
+        return Ok(None);
+    };
+    let mut statement = transaction.prepare(
+        "SELECT m.subject, m.thread FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
+         WHERE b.account = (SELECT account FROM mailboxes WHERE id = ?1) \
+         AND m.thread IS NOT NULL AND m.date BETWEEN ?2 AND ?3 \
+         AND m.subject LIKE ?4 ESCAPE '\\' ORDER BY m.date DESC LIMIT 50",
+    )?;
+    let candidates = statement
+        .query_map(
+            params![mailbox, date - TOPIC_WINDOW, date, like_pattern(&wanted)],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(candidates
+        .into_iter()
+        .find(|(subject, _)| {
+            let subject = subject.trim().to_lowercase();
+            subject == wanted || topic(&subject).as_deref() == Some(wanted.as_str())
+        })
+        .map(|(_, thread)| thread))
+}
+
 fn like_pattern(search: &str) -> String {
     let escaped = search
         .trim()
@@ -610,6 +664,10 @@ impl Store {
                 .join(", ");
             let flags = message.flags.unwrap_or_default();
             let date = envelope.date.or(message.internal_date).unwrap_or_default();
+            let thread = match thread_by_topic(&transaction, mailbox, &envelope, date)? {
+                Some(thread) => Some(thread),
+                None => thread_of(&envelope),
+            };
             transaction.execute(
                 "INSERT INTO messages (mailbox, uid, message_id, subject, sender_name, sender_email, \
                  recipients, date, size, seen, flagged, answered, deleted, draft, header, thread) \
@@ -634,7 +692,7 @@ impl Store {
                     flags.deleted,
                     flags.draft,
                     header,
-                    thread_of(&envelope),
+                    thread,
                 ],
             )?;
         }

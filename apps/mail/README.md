@@ -39,7 +39,8 @@ apt install bande-mail
   accounts, then each account's folders with unread counts. The list shows sender, subject, a
   preview (two lines unless Settings says otherwise), the date, an unread dot, a flag and a
   paperclip. Messages of one conversation (the first `References` entry, else the
-  `Message-ID`) share one row with a count; clicking the count, or Right and Left, shows and
+  `Message-ID`; a reply that has neither joins the latest message of the account with the same
+  subject in the 30 days before it) share one row with a count; clicking the count, or Right and Left, shows and
   hides the earlier ones, and acting on a closed conversation acts on all of it (Settings →
   Viewing turns this off). The reader shows the whole conversation, oldest first, with your
   replies from Sent and the account's other mailboxes (not Trash or Junk): the chosen message and
