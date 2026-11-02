@@ -219,6 +219,12 @@ fn alerts(settings: &Shared<CalendarSettings>) -> Vec<FormLine> {
             .map(|alert| (*alert, alert_title(*alert)))
             .collect()
     };
+    let shared = settings.clone();
+    let when_closed = Toggle::new(
+        &L10N.tr("settings-alerts-when-closed"),
+        current.alerts_when_closed,
+        move |on| shared.borrow_mut().alerts_when_closed = on,
+    );
     vec![
         FormLine::Heading(L10N.tr("settings-alerts")),
         FormLine::Row(
@@ -240,6 +246,10 @@ fn alerts(settings: &Shared<CalendarSettings>) -> Vec<FormLine> {
                 current.all_day_alert,
                 |settings, alert| settings.all_day_alert = alert,
             ),
+        ),
+        FormLine::Row(
+            L10N.tr("settings-alerts-when-closed"),
+            Box::new(when_closed),
         ),
     ]
 }

@@ -54,13 +54,18 @@ views. Packaged as `bande-calendar`.
   `calendar-user-address-set`.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed, with
-  Snooze (5 minutes) and a click that opens Calendar on the event's day. Alerts,
+  Snooze (5 minutes) and a click that opens Calendar on the event's day. As macOS's
+  CalendarAgent, Calendar also shows them when it was never opened or was quit: the autostart
+  entry `/etc/xdg/autostart/org.bande.CalendarAgent.desktop` starts `bande-calendar
+  --background` at login, a process with no window that is not a running app until Calendar is
+  opened, and Quit returns there; both follow "Show alerts when Calendar is closed" (on by
+  default), and with it off `--background` exits at once. Alerts,
   the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
   suspend or a clock change, and the view follows a change of the system time zone at once.
 - **Settings** (Calendar ▸ Settings…, stored in `~/.config/bande/calendar.conf`): default
   calendar, start of the week, the hours the day starts and ends (the rest is shaded and the
   week opens there), hours shown at a time, week numbers, default alerts for events and
-  all-day events, refresh intervals, adding, re-signing and removing accounts, and time zone
+  all-day events, alerts when Calendar is closed, refresh intervals, adding, re-signing and removing accounts, and time zone
   support. With it, the inspector shows each timed event's zone, its times are shown and typed
   in that zone, a new zone keeps the wall times of the whole series (exceptions and end date
   move with it), and View ▸ Time Zone shows the calendar in a zone its events use.
