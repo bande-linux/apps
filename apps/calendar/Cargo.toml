@@ -18,6 +18,7 @@ rustix = { workspace = true, features = ["fs", "time"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
+rustls.workspace = true
 ureq.workspace = true
 zbus.workspace = true
 bande-keyring.workspace = true

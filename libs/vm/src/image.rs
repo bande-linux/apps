@@ -2,8 +2,10 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::ops::ControlFlow;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
+use rustls::crypto::aws_lc_rs;
 use sha2::{Digest, Sha256, Sha512};
 use ureq::tls::{RootCerts, TlsConfig};
 
@@ -127,6 +129,7 @@ impl ImageStore {
     pub fn at(dir: PathBuf) -> Self {
         let tls = TlsConfig::builder()
             .root_certs(RootCerts::PlatformVerifier)
+            .unversioned_rustls_crypto_provider(Arc::new(aws_lc_rs::default_provider()))
             .build();
         let agent = ureq::Agent::config_builder()
             .tls_config(tls)
