@@ -300,7 +300,13 @@ impl CalendarApp {
                                 .is_some_and(|due| now >= due)
                     }
                 };
-                wanted.then(|| (account.kind.clone(), account.id.clone(), calendar.clone()))
+                wanted.then(|| {
+                    (
+                        account.kind.clone(),
+                        account.id.clone(),
+                        calendar.for_sync(),
+                    )
+                })
             })
             .collect();
         if caldav {

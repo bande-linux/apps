@@ -206,7 +206,7 @@ pub fn sync_calendar(client: &Client, calendar: &Calendar) -> Result<Outcome, Er
     push(client, calendar, &mut outcome)?;
     let known = known_etags(calendar, &outcome);
     let (ctag, token) = client.collection_tags(&url)?;
-    if token.is_some() {
+    if token.is_some() && token != outcome.sync_token {
         let delta = match client.sync_collection(&url, outcome.sync_token.as_deref()) {
             Ok(delta) => Some(delta),
             Err(Error::Status {
@@ -236,7 +236,8 @@ pub fn sync_calendar(client: &Client, calendar: &Calendar) -> Result<Outcome, Er
         }
         fetch_changed(client, &url, delta.changed, &known, &mut outcome)?;
         outcome.sync_token = delta.token.or(token);
-    } else if ctag.is_none() || ctag != outcome.ctag || calendar.has_pending() {
+    } else if token.is_none() && (ctag.is_none() || ctag != outcome.ctag || calendar.has_pending())
+    {
         let listed = client.etags(&url)?;
         for href in known.keys() {
             if !listed.iter().any(|(listed, _)| same_resource(listed, href))
