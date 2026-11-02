@@ -7,6 +7,7 @@ menu-back = Back
 discover = Discover
 installed = Installed
 updates = Updates
+updates-counted = Updates ({ $count })
 loading = Loading apps…
 offline = You’re offline. You can browse apps, but installing them and their screenshots need the internet.
 categories = Categories

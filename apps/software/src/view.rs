@@ -28,7 +28,7 @@ const PADDING: f32 = 24.0;
 const PAGE_ROWS: usize = 40;
 const NEW_ROWS: usize = 12;
 const ROW_ICON: f32 = 40.0;
-const PAGE_ICON: f32 = 80.0;
+const PAGE_ICON: f32 = 96.0;
 const SHOT_WIDTH: f32 = 640.0;
 const SHOT_HEIGHT: f32 = 400.0;
 const LISTED_UPDATES: usize = 30;
@@ -145,6 +145,27 @@ fn origin_name(origin: &str) -> String {
     }
 }
 
+fn place_control(
+    intents: &Rc<RefCell<Vec<Intent>>>,
+    place: Place,
+    updates: usize,
+) -> SegmentedControl {
+    let chosen = Rc::clone(intents);
+    let names: Vec<String> = Place::ALL
+        .into_iter()
+        .map(|shown| match (shown, updates) {
+            (Place::Updates, 1..) => L10N.tr_args("updates-counted", [("count", updates.into())]),
+            _ => place_name(shown),
+        })
+        .collect();
+    let selected = Place::ALL.iter().position(|shown| *shown == place);
+    SegmentedControl::new(&L10N.tr("section"), &names, selected, move |index| {
+        if let Some(place) = Place::ALL.get(index) {
+            chosen.borrow_mut().push(Intent::Go(*place));
+        }
+    })
+}
+
 fn open_software_update() {
     let command = [SETTINGS.to_owned(), SOFTWARE_UPDATE_PANE.to_owned()];
     if let Err(error) = bande_xdg::spawn_detached(SETTINGS_ID, &command, None, None) {
@@ -228,6 +249,17 @@ fn latest_release(app: &Component) -> i64 {
         .unwrap_or(0)
 }
 
+fn remote_icon(app: &Component) -> Option<&str> {
+    app.icons
+        .iter()
+        .filter_map(|icon| match icon {
+            Icon::Remote { url, size } if *size as f32 > PAGE_ICON => Some((size, url.as_str())),
+            _ => None,
+        })
+        .max_by_key(|(size, _)| **size)
+        .map(|(_, url)| url)
+}
+
 fn has_local_icon(app: &Component) -> bool {
     app.icons
         .iter()
@@ -264,6 +296,8 @@ pub struct Software {
     content: WidgetId,
     search: WidgetId,
     places: WidgetId,
+    header: WidgetId,
+    counted: usize,
     finished: Vec<Finished>,
 }
 
@@ -290,22 +324,18 @@ impl Software {
         let search = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
             typed.borrow_mut().push(Intent::Search(query.to_owned()));
         });
-        let chosen = Rc::clone(&intents);
-        let names: Vec<String> = Place::ALL.into_iter().map(place_name).collect();
-        let places = SegmentedControl::new(&L10N.tr("section"), &names, Some(0), move |index| {
-            if let Some(place) = Place::ALL.get(index) {
-                chosen.borrow_mut().push(Intent::Go(*place));
-            }
-        });
+        let places = place_control(&intents, Place::Discover, 0);
         let content = Stack::new(Axis::Vertical, 0.0, 0.0, vec![boxed(Label::new(""))]);
         let id = content.id();
         let search_id = search.id();
         let places_id = places.id();
+        let header = Stack::new(Axis::Horizontal, SPACING, 0.0, vec![boxed(places)]);
+        let header_id = header.id();
         let page = Stack::new(
             Axis::Vertical,
             SPACING,
             PADDING,
-            vec![row(vec![boxed(places)]), boxed(search), boxed(content)],
+            vec![boxed(header), boxed(search), boxed(content)],
         );
         let scroll: Rc<RefCell<ScrollState>> = Rc::default();
         let view = ScrollView::shared(boxed(page), Rc::clone(&scroll));
@@ -339,6 +369,8 @@ impl Software {
             content: id,
             search: search_id,
             places: places_id,
+            header: header_id,
+            counted: 0,
             finished: Vec::new(),
         };
         software.ask(Query::Updates);
@@ -498,6 +530,11 @@ impl Software {
             self.shot = 0;
             self.shots.clear();
             self.request_shot();
+            if let Some(url) = self.apps.get(index).and_then(remote_icon)
+                && self.media.shots.send(url.to_owned()).is_err()
+            {
+                tracing::warn!("the screenshot loader stopped");
+            }
             if let Some(app) = self.apps.get(index)
                 && let Some(package) = deb(app)
                 && !self.facts.contains_key(app.key())
@@ -1186,7 +1223,9 @@ impl Software {
             row(vec![boxed(self.button(&L10N.tr("back"), Intent::Back))]),
             row(vec![
                 boxed(Picture::new(
-                    self.icon(app),
+                    remote_icon(app)
+                        .and_then(|url| self.shots.get(url)?.clone().ok())
+                        .or_else(|| self.icon(app)),
                     PAGE_ICON,
                     PAGE_ICON,
                     &app.name,
@@ -1206,7 +1245,23 @@ impl Software {
         widgets
     }
 
+    fn recount(&mut self) {
+        if self.counted == self.updates.len() {
+            return;
+        }
+        self.counted = self.updates.len();
+        let places = place_control(&self.intents, self.place, self.counted);
+        let id = places.id();
+        if let Some(holder) = self.ui.widget(self.header)
+            && let Some(slot) = holder.children_mut().first_mut()
+        {
+            *slot = boxed(places);
+            self.places = id;
+        }
+    }
+
     fn rebuild(&mut self) {
+        self.recount();
         let mut widgets = if self.loading {
             vec![boxed(Spinner::new(&L10N.tr("loading")))]
         } else if self.apps.is_empty() {
