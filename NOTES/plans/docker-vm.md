@@ -472,8 +472,11 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 
 Done: **A1** (2026-11-02), with A2's pending badges and the filter field. **A3** (2026-11-02):
 Overview cards stream stats only while shown (`Informer::watch(owner, ids)`, reusable by A2), and
-Machines cards are left for V1. Docker's Status text
-("Up 3 hours") refreshes on every event and when the window becomes active, never on a timer.
+Machines cards are left for V1. **A2 + A4** (2026-11-02): with the inspector open the table drops
+its Image and Ports columns (both are in the inspector); Logs reattach with `since` after the
+window is hidden or the container restarts; Docker's apt steps use `trixie` on Debian testing.
+Docker's Status text ("Up 3 hours") refreshes on every event and when the window becomes active,
+never on a timer.
 
 D3 (desktop): the theme icon, with A1; the app ships the same SVG for hicolor. **Kernel: none.** If V0 hits a guest timer, PMU or vGIC
 fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
