@@ -399,7 +399,7 @@ impl CalendarView {
     }
 
     pub fn set_now(&mut self, now: Zoned) {
-        self.now = now;
+        self.now = now.with_time_zone(self.zone.clone());
     }
 
     pub fn set_status(&mut self, status: Option<String>) {

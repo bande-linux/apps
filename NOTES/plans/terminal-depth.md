@@ -31,7 +31,9 @@ is what is left. Delete this plan when the list is done.
 | URLs and paths clickable | Have Ctrl+click and the context menu (Open Link, Copy Link, Show in Files) |
 | Drag and drop files | Have: shell-quoted paths |
 | Title from OSC 0/2, current folder from OSC 7 | Have |
+| Edit Title (Shell menu) | Have Shell → Edit Title (Shift+Ctrl+I); an empty title goes back to the program's |
 | Marks and jump between commands | Have Jump to Previous/Next Command (Shift+Ctrl+Up/Down) |
+| Option-click moves the cursor | Have Alt+click on the prompt line (arrow keys sent to the shell); Alt+drag still selects a block |
 | Window restore | Have: windows and tab folders come back after a restart |
 | Big output | Fast: `seq 1 2000000` finishes in 1.2 s (release build, headless); tabs (`\t`) used to draw as missing-glyph boxes, fixed |
 
@@ -40,8 +42,9 @@ is what is left. Delete this plan when the list is done.
 1. Editable profiles: duplicate a built-in profile, change colours, font size and cursor per
    profile, choose a profile per window or tab, import iTerm/Terminal colour schemes.
 2. Font family choice (any installed monospace font).
-3. Drag tabs to reorder and out into a new window.
-4. Edit Title for a tab, and a per-tab profile badge.
-5. Alt+click to move the shell cursor; triple-click selects a command's output.
-6. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
+3. Drag tabs to reorder and out into a new window. Needs the toolkit first: a drag on a header tab
+   always moves the window today (`decorations.rs` `tab_press`); a horizontal drag inside the strip
+   should reach the app, a vertical one should tear the tab off.
+4. Select a whole command's output (macOS: triple-click on output with marks).
+5. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
    password).

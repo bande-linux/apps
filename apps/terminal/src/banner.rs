@@ -34,6 +34,7 @@ pub enum BannerAction {
 enum Kind {
     Find,
     Confirm,
+    Rename,
 }
 
 struct Model {
@@ -90,7 +91,7 @@ impl Widget for BannerView {
             .map(|child| child.measure(cx, bar))
             .collect();
         let model = self.model.borrow();
-        if model.kind == Kind::Find {
+        if model.kind != Kind::Confirm {
             let buttons: f32 = sizes.iter().skip(1).map(|size| size.width).sum();
             let room = width - 2.0 * MARGIN - buttons - SPACING * sizes.len() as f32;
             let scale = cx.text.scale();
@@ -101,7 +102,7 @@ impl Widget for BannerView {
         }
         self.sizes = sizes;
         let (size, color) = match model.kind {
-            Kind::Find => (STATUS_SIZE, cx.palette.ink2),
+            Kind::Find | Kind::Rename => (STATUS_SIZE, cx.palette.ink2),
             Kind::Confirm => (MESSAGE_SIZE, cx.palette.ink),
         };
         self.status = model.status.as_ref().map(|status| {
@@ -165,6 +166,7 @@ impl Widget for BannerView {
         let model = self.model.borrow();
         let (role, label) = match model.kind {
             Kind::Find => (Role::Toolbar, L10N.tr("find-bar")),
+            Kind::Rename => (Role::Toolbar, L10N.tr("menu-edit-title")),
             Kind::Confirm => (Role::Alert, model.status.clone().unwrap_or_default()),
         };
         let mut node = Node::new(role);
@@ -249,6 +251,28 @@ impl Banner {
         Self::new(appearance, text, model, 3, children, focus)
     }
 
+    pub fn rename(appearance: Appearance, text: TextSystem, title: &str) -> Self {
+        let model: Shared = Rc::new(RefCell::new(Model {
+            kind: Kind::Rename,
+            query: title.to_owned(),
+            status: None,
+            actions: Vec::new(),
+            area: Rect::default(),
+            height: BANNER_HEIGHT,
+        }));
+        let changed = model.clone();
+        let field = TextField::new(&L10N.tr("title-placeholder"), title, move |text| {
+            changed.borrow_mut().query = text.to_owned();
+        });
+        let focus = field.id();
+        let children = vec![
+            Box::new(field) as Box<dyn Widget>,
+            action_button(&model, &L10N.tr("cancel"), BannerAction::Dismiss),
+            Box::new(action(&model, &L10N.tr("rename"), BannerAction::Confirm).primary()),
+        ];
+        Self::new(appearance, text, model, 1, children, focus)
+    }
+
     pub fn confirm(appearance: Appearance, text: TextSystem, message: &str, confirm: &str) -> Self {
         let model: Shared = Rc::new(RefCell::new(Model {
             kind: Kind::Confirm,
@@ -272,7 +296,7 @@ impl Banner {
             target_node: self.focus.into(),
             data: None,
         });
-        if self.model.borrow().kind == Kind::Find {
+        if self.model.borrow().kind != Kind::Confirm {
             self.ui.handle(&Event::Key {
                 key: Key::Character('a'),
                 modifiers: Modifiers {
@@ -326,7 +350,7 @@ impl Banner {
             let action = match (kind, key) {
                 (Kind::Find, Key::Enter) if modifiers.shift => Some(BannerAction::Newer),
                 (Kind::Find, Key::Enter) => Some(BannerAction::Older),
-                (Kind::Confirm, Key::Enter) => Some(BannerAction::Confirm),
+                (Kind::Confirm | Kind::Rename, Key::Enter) => Some(BannerAction::Confirm),
                 (_, Key::Escape) => Some(BannerAction::Dismiss),
                 _ => None,
             };

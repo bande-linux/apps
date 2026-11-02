@@ -35,7 +35,8 @@ const APP_ID: &str = "org.bande.Calendar";
 const WINDOW_SIZE: (u32, u32) = (1120, 740);
 const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
-const ALERT_HORIZON: SignedDuration = SignedDuration::from_hours(1);
+const ALERT_HORIZON: SignedDuration = SignedDuration::from_hours(24);
+const FIRED_MEMORY: SignedDuration = SignedDuration::from_hours(24);
 const NOTIFICATION_TIMEOUT: i32 = -1;
 
 static INFO: Info = Info {
@@ -121,7 +122,7 @@ struct CalendarApp {
     next_clock: Option<Timestamp>,
     alert_at: Timestamp,
     alerts_checked: Timestamp,
-    fired: HashSet<String>,
+    fired: HashMap<String, Timestamp>,
     syncing: bool,
     sync_again: bool,
     title: String,
@@ -294,7 +295,14 @@ impl CalendarApp {
         )
     }
 
-    fn caldav_due(&self) -> Option<Timestamp> {
+    fn caldav_due(&self, library: &Library) -> Option<Timestamp> {
+        if !library
+            .accounts
+            .iter()
+            .any(|account| matches!(account.kind, AccountKind::CalDav { .. }))
+        {
+            return None;
+        }
         let every = self.settings.refresh()?;
         Some(
             self.synced
@@ -311,8 +319,11 @@ impl CalendarApp {
         }
         let now = Timestamp::now();
         let push = self.next_push.is_some_and(|at| Instant::now() >= at);
-        let caldav =
-            refresh == Refresh::All || push || self.caldav_due().is_some_and(|due| now >= due);
+        let caldav = refresh == Refresh::All
+            || push
+            || self
+                .caldav_due(view.library())
+                .is_some_and(|due| now >= due);
         let library = view.library();
         let calendars: Vec<_> = library
             .calendars
@@ -378,7 +389,7 @@ impl CalendarApp {
             .filter_map(|calendar| self.subscription_due(view.library(), &calendar.info))
             .min()
             .filter(|_| !syncing);
-        let caldav = self.caldav_due().filter(|_| !syncing);
+        let caldav = self.caldav_due(view.library()).filter(|_| !syncing);
         let at = [Some(self.alert_at), self.next_clock, caldav, subscriptions]
             .into_iter()
             .flatten()
@@ -694,10 +705,12 @@ impl CalendarApp {
             until,
             &self.zone,
         ) {
-            if self.fired.insert(due.key.clone()) {
+            if self.fired.insert(due.key.clone(), due.at).is_none() {
                 notify(&due, &self.zone, &self.formats);
             }
         }
+        let forget = now.saturating_sub(FIRED_MEMORY).unwrap_or(now);
+        self.fired.retain(|_, at| *at >= forget);
         self.alerts_checked = until;
         let horizon = now.saturating_add(ALERT_HORIZON).unwrap_or(now);
         let next = due_between(view.library(), until, horizon, &self.zone)
@@ -911,7 +924,7 @@ impl Program for CalendarApp {
             next_clock: Some(next_minute()),
             alert_at: Timestamp::now(),
             alerts_checked: Timestamp::now(),
-            fired: HashSet::new(),
+            fired: HashMap::new(),
             syncing: false,
             sync_again: false,
             title,
