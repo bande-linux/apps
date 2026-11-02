@@ -10,7 +10,9 @@ use bande_calculator::{
     parse_mode, restore, save,
 };
 use bande_toolkit::ui::{Context, Event, Key, TextView, Ui, Widget, WidgetId};
-use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowError, WindowEvent};
+use bande_toolkit::{
+    Appearance, Rect, Scene, Sizing, TextSystem, Window, WindowError, WindowEvent,
+};
 use bande_xdg::replace_file;
 
 const APP_ID: &str = "org.bande.Calculator";
@@ -157,7 +159,7 @@ impl Calculator {
         let mode = self.engine.borrow().mode;
         let engine = self.engine.clone();
         let opened = cx.open(
-            Kind::Secondary(mode_name(mode)),
+            Kind::Main,
             &L10N.tr("app-name"),
             window_size(mode),
             |appearance| Pane::Keypad {
@@ -166,8 +168,18 @@ impl Calculator {
             },
         );
         match opened {
-            Ok(main) => self.main = Some(main),
+            Ok(main) => {
+                self.main = Some(main);
+                self.fit_main(cx);
+            }
             Err(error) => tracing::warn!("cannot open the calculator: {error}"),
+        }
+    }
+
+    fn fit_main(&mut self, cx: &mut Cx<Self>) {
+        let mode = self.engine.borrow().mode;
+        if let Some((window, _)) = self.main.and_then(|main| cx.window(main)) {
+            window.resize_content(window_size(mode), Sizing::Fixed);
         }
     }
 
@@ -199,10 +211,9 @@ impl Calculator {
             return;
         }
         self.engine.borrow_mut().set_mode(mode);
-        let old = self.main.take();
-        self.open_main(cx);
-        if let Some(old) = old {
-            cx.close(old);
+        match self.main {
+            Some(_) => self.fit_main(cx),
+            None => self.open_main(cx),
         }
     }
 
