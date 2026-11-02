@@ -34,6 +34,8 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
                 item("action-get-mail", "get-mail"),
                 Entry::separator(),
                 item("menu-mark-all-read", "mark-all-read"),
+                Entry::separator(),
+                item("menu-new-mailbox", "new-mailbox"),
             ],
         ),
         Entry::submenu(

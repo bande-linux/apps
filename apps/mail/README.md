@@ -53,7 +53,8 @@ apt install bande-mail
   (Ctrl+A) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then
   act on all of them, and dragging them onto a mailbox in the sidebar moves them. Undo (Ctrl+Z)
   puts the last moved or deleted messages back, and a mailbox that messages were moved to is
-  synced right after the move.
+  synced right after the move. Mailbox → New Mailbox… and a mailbox's menu in the sidebar
+  create, rename and delete mailboxes on the server; the special mailboxes keep their names.
 - **Compose** opens its own window, with From when there are several accounts. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's
   signature goes above the quoted text and changes with From. Files are
@@ -123,8 +124,7 @@ the HTTPS autoconfig fetch are small, synchronous and bounded by timeouts.
 - Rich text, drag and drop of files into Compose. The ranked list
   of what users still need is in `../../NOTES/plans/mail-depth.md`.
 - Remote pictures over plain `http` (they show their alt text), SVG pictures, printing.
-- Conversations (threads), multiple selection, drag and drop to mailboxes, mailbox
-  management (create, rename, delete folders).
+- Conversations (threads).
 - OAuth2 (Gmail and Outlook need app passwords for now), CONDSTORE/QRESYNC for faster flag
   sync on large mailboxes, full-text search on the server.
 - Recognising localised folder names on servers without `SPECIAL-USE`.

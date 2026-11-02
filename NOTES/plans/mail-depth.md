@@ -32,7 +32,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Feature | Bande Mail |
 |---|---|
 | Unified inbox, smart mailboxes | Have: Inbox, Flagged, Drafts, Sent, Archive, Junk, Trash across accounts |
-| Mailboxes and folders | Have: read all folders, Move To any mailbox of the account (message and Message menus); missing create, rename, delete |
+| Mailboxes and folders | Have: read all folders, Move To any mailbox of the account, drag onto a mailbox, New/Rename/Delete Mailbox |
 | Flags | One flag; no colours |
 | Search | Local, over sender, recipients, subject and text; no server search or tokens |
 | Threads | Missing |
@@ -48,11 +48,10 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 1. Redo and more than one level of Undo; dragging messages out to other apps.
 2. Conversations (threads) in the list and the reader.
 3. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses passwords.
-4. Mailbox management: new, rename, delete.
-5. Sort order, flag colours (Mark All as Read is in the Mailbox menu).
-6. Rules (move/flag/mark by sender, subject, account).
-7. Rich text compose and spelling (both need desktop services first).
-8. Enable/disable an account and change its password in Settings.
-9. Per-sender "always load remote content"; a privacy proxy for remote pictures.
-10. Message font and size, fixed-width plain text.
-11. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
+4. Sort order, flag colours (Mark All as Read is in the Mailbox menu).
+5. Rules (move/flag/mark by sender, subject, account).
+6. Rich text compose and spelling (both need desktop services first).
+7. Enable/disable an account and change its password in Settings.
+8. Per-sender "always load remote content"; a privacy proxy for remote pictures.
+9. Message font and size, fixed-width plain text.
+10. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
