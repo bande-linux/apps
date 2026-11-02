@@ -33,7 +33,7 @@ ranked list at the end is what is left. Delete this plan when the list is done.
 | All Processes, Hierarchically | Have (process tree by parent, kernel threads folded) |
 | Update Frequency: 1 s / 2 s / 5 s | Have, remembered; the graph span follows (1, 2 or 5 min) |
 | Columns, Dock Icon (CPU usage/history, memory, network, disk) | Columns have; dock icon is missing |
-| Send Signal to Process | Missing |
+| Send Signal to Process | Have: View menu and the process context menu (HUP, INT, STOP, CONT, USR1, USR2); TERM and KILL are Quit and Force Quit |
 | Show/hide CPU, GPU history windows | Per-core strips in the footer instead |
 
 ## Process actions
@@ -59,14 +59,13 @@ fixed four rows).
 
 1. Per-process network bytes (sock_diag `INET_DIAG_INFO` bytes_acked/received per socket, mapped
    to processes through `/proc/<pid>/fd` socket inodes; only while the Network tab shows).
-2. Send Signal to Process (View menu and context menu: HUP, INT, TERM, KILL, STOP, CONT, USR1/2).
-3. Dock icon modes (CPU usage, CPU history, memory pressure): needs a desktop API for live dock
+2. Dock icon modes (CPU usage, CPU history, memory pressure): needs a desktop API for live dock
    icon content.
-4. Sample Process in the inspector (per-thread `wchan` and `syscall` snapshot, or perf when
+3. Sample Process in the inspector (per-thread `wchan` and `syscall` snapshot, or perf when
    permitted) and a Statistics section (faults, context switches, I/O syscalls).
-5. Selected Processes and Active Processes filters.
-6. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
-7. Ports column (socket count per process) and packets in/out.
-8. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).
-9. Inspector windows could not be opened in the headless capture tool (the compositor stalled after
+4. Selected Processes and Active Processes filters.
+5. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
+6. Ports column (socket count per process) and packets in/out.
+7. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).
+8. Inspector windows could not be opened in the headless capture tool (the compositor stalled after
    Ctrl+I); check Inspect on the machine.

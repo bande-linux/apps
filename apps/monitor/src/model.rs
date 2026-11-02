@@ -580,7 +580,7 @@ fn group_target(group: &Group, processes: &[Process], name: String) -> StopTarge
 pub fn stop_target(target: &StopTarget, how: Stop) -> Result<(), SignalError> {
     match how {
         Stop::Quit => stop_all(&target.roots, how),
-        Stop::ForceQuit => stop_all(&target.processes, how),
+        _ => stop_all(&target.processes, how),
     }
 }
 

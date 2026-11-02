@@ -23,10 +23,11 @@ use crate::model::{
     Tab,
 };
 use crate::sampler::Snapshot;
+use crate::signal::Stop;
 use crate::system::PressureLevel;
 use crate::view::{
     ALERT_ICON, FORCE_QUIT, INSPECT_SYMBOL, Icons, Painter, QUIT, Request, Screen, answer_stop,
-    is_secondary, opens_menu, stop_alert, stop_button, symbol_button,
+    is_secondary, opens_menu, send_signal, stop_alert, stop_button, symbol_button,
 };
 
 pub const TOOLBAR_HEIGHT: f32 = bande_toolkit::WINDOW_HEADER_HEIGHT as f32;
@@ -692,6 +693,22 @@ impl MonitorView {
         });
         self.stopping = Some(target);
         self.list.present_dialog(alert);
+        true
+    }
+
+    fn send_signal(&mut self, how: Stop) -> bool {
+        let Some(target) = self.monitor.stop_target() else {
+            return false;
+        };
+        let icon = self.icons.get(ALERT_ICON);
+        let send = sender(self.list.signals());
+        let denied = send_signal(&target, how, icon, move |choice| {
+            send(Signal::Choice(choice.to_owned()))
+        });
+        self.requests.push(Request::Resample);
+        if let Some(alert) = denied {
+            self.list.present_dialog(alert);
+        }
         true
     }
 
@@ -1413,6 +1430,7 @@ impl Screen for MonitorView {
             }
             Some(MenuCommand::ShowCores) => self.toggle_cores(),
             Some(MenuCommand::Filter(filter)) => self.set_filter(filter),
+            Some(MenuCommand::Signal(how)) => self.send_signal(how),
             Some(MenuCommand::Frequency(frequency)) => {
                 self.monitor.set_frequency(frequency);
                 self.requests.push(Request::SaveState(self.monitor.state()));
