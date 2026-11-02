@@ -204,8 +204,7 @@ impl Program for Disks {
             Entry::item(&L10N.tr("menu-open-image"), OPEN_IMAGE)
                 .shortcut("Ctrl+O")
                 .without_window(),
-            self.item(cx, L10N.tr("menu-image-from"), IMAGE_FROM)
-                .shortcut("Shift+Ctrl+N"),
+            self.item(cx, L10N.tr("menu-image-from"), IMAGE_FROM),
         ];
         let edit = edit_submenu(vec![
             Entry::separator(),
@@ -213,8 +212,7 @@ impl Program for Disks {
             self.item(cx, L10N.tr("menu-add-partition"), ADD_PARTITION),
             self.item(cx, L10N.tr("menu-delete-partition"), DELETE_PARTITION),
             self.item(cx, L10N.tr("menu-resize"), RESIZE),
-            self.item(cx, L10N.tr("menu-erase"), ERASE)
-                .shortcut("Shift+Ctrl+E"),
+            self.item(cx, L10N.tr("menu-erase"), ERASE),
             self.item(cx, L10N.tr("menu-restore"), RESTORE),
             self.item(cx, L10N.tr("menu-rename"), RENAME),
             Entry::separator(),

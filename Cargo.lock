@@ -609,7 +609,7 @@ source = "git+https://github.com/bande-linux/desktop?rev=44f8be26a3746faa979f90a
 
 [[package]]
 name = "bande-disks"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "accesskit",
  "bande-app",
