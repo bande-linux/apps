@@ -130,7 +130,7 @@ pub fn installed(client: &Client, deb: &Deb) -> Result<Option<Package>, Error> {
     Ok(client
         .resolve_installed(&deb.name)?
         .into_iter()
-        .find(|package| package.arch == deb.arch || deb.arch == "all"))
+        .find(|package| package.arch == deb.arch || deb.arch == "all" || package.arch == "all"))
 }
 
 pub fn inspect(client: &Client, path: &Path, machine: &Machine, deb: Option<&Deb>) -> State {

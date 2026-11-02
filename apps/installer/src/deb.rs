@@ -132,11 +132,14 @@ pub struct Identity {
 }
 
 const APPLICATIONS: &str = "usr/share/applications/";
+const ICON_SIDE: u32 = 1024;
+const ICON_BYTES: u64 = 64 << 20;
 const HICOLOR: &str = "usr/share/icons/hicolor/";
 const PIXMAPS: &str = "usr/share/pixmaps/";
 const BLOCK: u64 = 512;
 const FILE_LIMIT: u64 = 4 << 20;
 const TOTAL_LIMIT: u64 = 16 << 20;
+const READ_LIMIT: u64 = 256 << 20;
 const ICON_PIXELS: u32 = 128;
 
 fn wanted(name: &str) -> bool {
@@ -178,8 +181,14 @@ fn discard(reader: &mut impl Read, length: u64) -> io::Result<()> {
     }
 }
 
+fn padded(size: u64) -> io::Result<u64> {
+    size.div_ceil(BLOCK)
+        .checked_mul(BLOCK)
+        .ok_or_else(|| io::ErrorKind::InvalidData.into())
+}
+
 fn skip(reader: &mut impl Read, size: u64) -> io::Result<()> {
-    discard(reader, size.div_ceil(BLOCK) * BLOCK)
+    discard(reader, padded(size)?)
 }
 
 fn read_member(reader: &mut impl Read, size: u64) -> io::Result<Vec<u8>> {
@@ -188,7 +197,7 @@ fn read_member(reader: &mut impl Read, size: u64) -> io::Result<Vec<u8>> {
     if bytes.len() as u64 != size {
         return Err(io::ErrorKind::UnexpectedEof.into());
     }
-    discard(reader, size.div_ceil(BLOCK) * BLOCK - size)?;
+    discard(reader, padded(size)? - size)?;
     Ok(bytes)
 }
 
@@ -210,7 +219,11 @@ fn members(reader: &mut impl Read) -> HashMap<String, Vec<u8>> {
         };
         let kind = header[156];
         let read = match kind {
-            b'L' | b'x' => read_member(reader, size.min(FILE_LIMIT)).map(|data| {
+            b'L' | b'x' if size > FILE_LIMIT => {
+                long_name = None;
+                skip(reader, size)
+            }
+            b'L' | b'x' => read_member(reader, size).map(|data| {
                 long_name = match kind {
                     b'L' => Some(field(&data, 0..data.len()).to_owned()),
                     _ => pax_path(&data),
@@ -255,16 +268,36 @@ fn archive_members(path: &Path) -> Option<HashMap<String, Vec<u8>>> {
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
-    let found = archive.stdout.take().map(|mut stdout| members(&mut stdout));
+    let Some(stdout) = archive.stdout.take() else {
+        let _ = archive.kill();
+        let _ = archive.wait();
+        return None;
+    };
+    let mut limited = stdout.take(READ_LIMIT);
+    let found = members(&mut limited);
+    if limited.limit() == 0 {
+        drop(limited);
+        let _ = archive.kill();
+        let _ = archive.wait();
+        return Some(found);
+    }
     let finished = archive.wait().ok()?;
-    found.filter(|_| finished.success())
+    finished.success().then_some(found)
 }
 
 fn decode_icon(name: &str, bytes: &[u8]) -> Option<Image> {
     if name.ends_with(".svg") {
         return Image::from_svg(bytes, ICON_PIXELS, ICON_PIXELS);
     }
-    let decoded = image::load_from_memory(bytes).ok()?.to_rgba8();
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(ICON_SIDE);
+    limits.max_image_height = Some(ICON_SIDE);
+    limits.max_alloc = Some(ICON_BYTES);
+    let mut reader = image::ImageReader::new(io::Cursor::new(bytes))
+        .with_guessed_format()
+        .ok()?;
+    reader.limits(limits);
+    let decoded = reader.decode().ok()?.to_rgba8();
     let (width, height) = decoded.dimensions();
     Image::from_rgba(width, height, decoded.into_raw())
 }

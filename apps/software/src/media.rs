@@ -17,6 +17,8 @@ use crate::worker::Message;
 pub const ICON_PIXELS: u32 = 128;
 const ICON_FILE_LIMIT: u64 = 4 << 20;
 const SHOT_LIMIT: u64 = 8 << 20;
+const PICTURE_SIDE: u32 = 8192;
+const PICTURE_BYTES: u64 = 256 << 20;
 const TIMEOUT: Duration = Duration::from_secs(20);
 const SYSTEM_APPLICATIONS: &str = "/usr/share/applications";
 const DPKG_STATUS: &str = "/var/lib/dpkg/status";
@@ -43,10 +45,16 @@ pub enum Loaded {
 
 fn decode_jxl(bytes: &[u8]) -> Option<Image> {
     let image = JxlImage::builder().read(bytes).ok()?;
+    if image.width() > PICTURE_SIDE || image.height() > PICTURE_SIDE {
+        return None;
+    }
     let render = image.render_frame(0).ok()?;
     let mut stream = render.stream();
     let (width, height, channels) = (stream.width(), stream.height(), stream.channels());
-    let mut samples = vec![0u8; (width * height * channels) as usize];
+    let size = (width as usize)
+        .checked_mul(height as usize)?
+        .checked_mul(channels as usize)?;
+    let mut samples = vec![0u8; size];
     stream.write_to_buffer(&mut samples);
     let rgba: Vec<u8> = samples
         .chunks_exact(channels as usize)
@@ -68,9 +76,21 @@ fn decode(bytes: &[u8]) -> Option<Image> {
     if bytes.starts_with(JXL_CODESTREAM) || bytes.starts_with(JXL_CONTAINER) {
         return decode_jxl(bytes);
     }
-    let decoded = image::load_from_memory(bytes).ok()?.to_rgba8();
+    let decoded = decode_limited(bytes, PICTURE_SIDE, PICTURE_BYTES)?;
     let (width, height) = decoded.dimensions();
     Image::from_rgba(width, height, decoded.into_raw())
+}
+
+fn decode_limited(bytes: &[u8], side: u32, total: u64) -> Option<image::RgbaImage> {
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(side);
+    limits.max_image_height = Some(side);
+    limits.max_alloc = Some(total);
+    let mut reader = image::ImageReader::new(io::Cursor::new(bytes))
+        .with_guessed_format()
+        .ok()?;
+    reader.limits(limits);
+    Some(reader.decode().ok()?.to_rgba8())
 }
 
 fn read_limited(path: &Path, limit: u64) -> Option<Vec<u8>> {
@@ -139,6 +159,7 @@ fn agent() -> ureq::Agent {
         .build();
     ureq::Agent::config_builder()
         .timeout_global(Some(TIMEOUT))
+        .https_only(true)
         .user_agent(USER_AGENT)
         .tls_config(tls)
         .build()
@@ -150,7 +171,7 @@ fn download(agent: &ureq::Agent, url: &str) -> Result<Vec<u8>, ShotError> {
         return Err(ShotError::Unreadable);
     }
     let response = agent.get(url).call().map_err(|error| match error {
-        ureq::Error::StatusCode(_) => ShotError::Unreadable,
+        ureq::Error::StatusCode(_) | ureq::Error::RequireHttpsOnly(_) => ShotError::Unreadable,
         _ => ShotError::Offline,
     })?;
     let mut bytes = Vec::new();
