@@ -5,7 +5,7 @@ use std::time::Instant;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::edit_submenu;
 use bande_packages::{Client, debian_arch};
-use bande_software::{L10N, Software, WINDOW_SIZE, desktop_ids, installed_keys};
+use bande_software::{L10N, Software, WINDOW_SIZE};
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 
 static INFO: Info = Info {
@@ -83,12 +83,9 @@ impl Program for Store {
     type View = Pane;
 
     fn start(cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
-        let apps = bande_software::catalog::system_catalog();
-        let installed = installed_keys(&apps, &desktop_ids(&bande_xdg::data_dirs()));
         let system = zbus::blocking::Connection::system()?;
         let software = Software::new(
-            apps,
-            installed,
+            Client::new(&system),
             Client::new(&system),
             debian_arch(),
             Appearance::default().palette(),
