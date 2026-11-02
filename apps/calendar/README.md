@@ -43,7 +43,8 @@ views. Packaged as `bande-calendar`.
   recurring event asks whether it is for this event only (an override) or all events.
 - **Invitations** through the server (RFC 6638 implicit scheduling, as iCloud, Fastmail,
   Nextcloud and Google do it): the inspector lists the organizer and invitees with their
-  answers, Accept, Maybe and Decline update your own `PARTSTAT`, and on an event you organise
+  answers, Accept, Maybe and Decline update your own `PARTSTAT` (an invitation's title and
+  times stay read-only), and on an event you organise
   in a CalDAV calendar you can add invitees by address; the server sends the mail.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed. Alerts,
