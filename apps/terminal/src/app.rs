@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::VecDeque;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
@@ -23,7 +24,7 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{
     Appearance, DragAction, DragEvent, FrameRegions, Header, Item, MenuPlacement, Point, Radius,
-    Rect, SHEET_INSET, Scene, Shape, Window, WindowEvent,
+    Rect, SHEET_INSET, Scene, Shape, Transfer, Window, WindowDrag, WindowEvent,
 };
 
 use crate::APP_ID;
@@ -57,7 +58,7 @@ enum Gesture {
     Idle,
     Selecting,
     Reporting(MouseButton),
-    Tab(TabTarget, f32),
+    Tab(TabTarget, Point),
     Reorder { index: usize, grab: f32, left: f32 },
     Banner,
     Divider(Divider),
@@ -123,11 +124,31 @@ impl Tab {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CarriedTab(Box<Tab>);
+
+impl CarriedTab {
+    pub fn id(&self) -> u32 {
+        self.0.id
+    }
+}
+
+pub struct Detached {
+    pub tab: CarriedTab,
+    pub index: usize,
+    pub drag: WindowDrag,
+    pub grab: Point,
+    pub size: (u32, u32),
+}
+
 pub enum Ask {
     NewWindow(Option<PathBuf>),
     Settings,
     Quit,
+    Detach(Detached),
+    Hover(f32),
+    Unhover,
+    Drop,
+    DragEnded { placed: bool },
 }
 
 pub struct TerminalWindow {
@@ -162,6 +183,8 @@ pub struct TerminalWindow {
     serial: u32,
     saved: Option<(PathBuf, SavedWindow)>,
     asks: Vec<Ask>,
+    carrying: Rc<Cell<bool>>,
+    tab_over: bool,
     blink_from: Instant,
     blink_phase: u32,
     alt_click: Option<(usize, usize)>,
@@ -180,6 +203,7 @@ impl TerminalWindow {
         opened: Opened,
         home: Option<PathBuf>,
         bus: Rc<Bus>,
+        carrying: Rc<Cell<bool>>,
         serial: u32,
     ) -> Self {
         let Opened {
@@ -219,6 +243,8 @@ impl TerminalWindow {
             serial,
             saved: saved_file.map(|file| (file, SavedWindow::default())),
             asks: Vec::new(),
+            carrying,
+            tab_over: false,
             blink_from: Instant::now(),
             blink_phase: 0,
             alt_click: None,
@@ -311,6 +337,7 @@ impl TerminalWindow {
         } else {
             (Vec::new(), Vec::new())
         };
+        window.set_detachable_tabs(self.tabs.len() > 1);
         window.set_header(Header {
             title_x,
             items,
@@ -803,14 +830,21 @@ impl TerminalWindow {
     }
 
     fn close_tab(&mut self, window: &mut Window, index: usize) {
+        drop(self.take_tab(window, index));
+    }
+
+    fn take_tab(&mut self, window: &mut Window, index: usize) -> Option<Tab> {
         if index >= self.tabs.len() {
-            return;
+            return None;
         }
         let was_active = index == self.active;
+        if was_active {
+            self.focus_terminal(false);
+        }
         let closed = self.tabs.remove(index);
         if self.tabs.is_empty() {
             self.forget_window();
-            return;
+            return Some(closed);
         }
         if index < self.active || self.active >= self.tabs.len() {
             self.active -= 1;
@@ -833,6 +867,87 @@ impl TerminalWindow {
         self.gesture = Gesture::Idle;
         self.hover = None;
         self.after_tabs_changed(window);
+        self.save_window();
+        Some(closed)
+    }
+
+    pub fn release_tab(&mut self, window: &mut Window, id: u32) -> Option<CarriedTab> {
+        let index = self.tabs.iter().position(|tab| tab.id == id)?;
+        self.take_tab(window, index)
+            .map(|tab| CarriedTab(Box::new(tab)))
+    }
+
+    pub fn insertion_index(&self, x: f32) -> usize {
+        let slots = self.tab_layout().tabs;
+        slots
+            .iter()
+            .position(|slot| x < slot.x + slot.width / 2.0)
+            .unwrap_or(slots.len())
+    }
+
+    pub fn slide_tab_to(&mut self, window: &mut Window, id: u32, x: f32) {
+        let Some(index) = self.tabs.iter().position(|tab| tab.id == id) else {
+            return;
+        };
+        let grab = self
+            .tab_layout()
+            .tabs
+            .get(index)
+            .map_or(0.0, |slot| slot.width / 2.0);
+        self.drag_tab(window, index, grab, x);
+        if let Gesture::Reorder { index, left, .. } = self.gesture {
+            self.settle_tab(window, index, left);
+        }
+        self.gesture = Gesture::Idle;
+    }
+
+    pub fn adopt_tab(&mut self, window: &mut Window, tab: CarriedTab, index: usize) {
+        let index = index.min(self.tabs.len());
+        let mut tab = *tab.0;
+        tab.slide = Animated::points(0.0);
+        tab.bell = false;
+        if !self.tabs.is_empty() {
+            self.focus_terminal(false);
+        }
+        self.tabs.insert(index, tab);
+        self.active = index;
+        self.gesture = Gesture::Idle;
+        self.hover = None;
+        self.after_tabs_changed(window);
+        self.run_find();
+        self.focus_terminal(self.focused && !self.banner_focused);
+        self.sync_title(window);
+    }
+
+    pub fn grab_point(&self, grab: Point) -> Point {
+        let x = self.tab_layout().tabs.first().map_or(0.0, |slot| slot.x);
+        Point::new(x + grab.x, grab.y)
+    }
+
+    fn detach_tab(&mut self, window: &mut Window, index: usize, grab: f32) {
+        let Some(title) = self.tabs.get(index).map(|tab| self.tab_title(tab)) else {
+            return;
+        };
+        let drag = match window.start_window_drag(Transfer::text(&title)) {
+            Ok(drag) => drag,
+            Err(error) => {
+                tracing::warn!("cannot drag the tab out: {error}");
+                return;
+            }
+        };
+        let sheet = self.sheet();
+        let size = (sheet.width.round() as u32, sheet.height.round() as u32);
+        let Some(tab) = self.take_tab(window, index) else {
+            return;
+        };
+        self.carrying.set(true);
+        self.asks.push(Ask::Detach(Detached {
+            tab: CarriedTab(Box::new(tab)),
+            index,
+            drag,
+            grab: Point::new(grab, STRIP_HEIGHT / 2.0),
+            size,
+        }));
     }
 
     fn remove_exited(&mut self, window: &mut Window) {
@@ -1160,6 +1275,9 @@ impl TerminalWindow {
     }
 
     fn drag(&mut self, window: &mut Window, drag: DragEvent) {
+        if self.carrying.get() {
+            return self.tab_drag(window, drag);
+        }
         match drag {
             DragEvent::Entered {
                 position,
@@ -1187,6 +1305,34 @@ impl TerminalWindow {
                 window.request_redraw();
             }
             DragEvent::Finished(_) => {}
+        }
+    }
+
+    fn tab_drag(&mut self, window: &mut Window, drag: DragEvent) {
+        match drag {
+            DragEvent::Entered { position, .. } | DragEvent::Moved(position) => {
+                let over = self.has_strip() && (0.0..STRIP_HEIGHT).contains(&position.y);
+                window.accept_drag_only(over.then_some(DragAction::Move));
+                if over {
+                    self.asks.push(Ask::Hover(position.x));
+                } else if self.tab_over {
+                    self.asks.push(Ask::Unhover);
+                }
+                self.tab_over = over;
+            }
+            DragEvent::Left => {
+                if std::mem::take(&mut self.tab_over) {
+                    self.asks.push(Ask::Unhover);
+                }
+            }
+            DragEvent::Dropped { .. } => {
+                if std::mem::take(&mut self.tab_over) {
+                    self.asks.push(Ask::Drop);
+                }
+            }
+            DragEvent::Finished(action) => self.asks.push(Ask::DragEnded {
+                placed: action.is_some(),
+            }),
         }
     }
 
@@ -1308,10 +1454,20 @@ impl TerminalWindow {
                 window.request_redraw();
             }
             Gesture::Tab(TabTarget::Select(index), from)
-                if (at.x - from).abs() > TAB_DRAG_SLOP && self.has_strip() =>
+                if (at.x - from.x).hypot(at.y - from.y) > TAB_DRAG_SLOP && self.has_strip() =>
             {
-                let grab = from - self.tab_layout().tabs.get(index).map_or(from, |tab| tab.x);
+                let grab = from.x
+                    - self
+                        .tab_layout()
+                        .tabs
+                        .get(index)
+                        .map_or(from.x, |tab| tab.x);
                 self.drag_tab(window, index, grab, at.x);
+            }
+            Gesture::Reorder { index, grab, .. }
+                if self.tabs.len() > 1 && !(0.0..STRIP_HEIGHT).contains(&at.y) =>
+            {
+                self.detach_tab(window, index, grab);
             }
             Gesture::Reorder { index, grab, .. } => self.drag_tab(window, index, grab, at.x),
             Gesture::Tab(..) => {}
@@ -1527,7 +1683,7 @@ impl TerminalWindow {
             if let TabTarget::Select(index) = target {
                 self.select_tab(window, index);
             }
-            self.gesture = Gesture::Tab(target, at.x);
+            self.gesture = Gesture::Tab(target, at);
             return;
         }
         if self.in_banner(at) {

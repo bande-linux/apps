@@ -1,6 +1,7 @@
 mod app;
 mod bus;
 
+use std::cell::Cell;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -14,9 +15,9 @@ use bande_terminal::{
     CLOSE_WINDOW, CloseAsk, Command, GridSize, L10N, MenuCommand, Painter, SETTINGS_SIZE, Session,
     Settings, Terminal, app_menus, claim, left_behind, settings_view, window_file, windows_folder,
 };
-use bande_toolkit::Appearance;
+use bande_toolkit::{Appearance, Point, WindowDrag};
 
-use crate::app::{Arguments, Ask, Opened, TerminalWindow};
+use crate::app::{Arguments, Ask, CarriedTab, Detached, Opened, TerminalWindow};
 use crate::bus::Bus;
 
 const APP_ID: &str = "org.bande.Terminal";
@@ -48,31 +49,29 @@ fn running(pid: u32) -> bool {
         .is_ok_and(|name| name.trim_end() == PROGRAM)
 }
 
+struct Carried {
+    from: WindowId,
+    index: usize,
+    tab: u32,
+    holder: WindowId,
+    floating: bool,
+    drag: WindowDrag,
+    grab: Point,
+    size: (u32, u32),
+}
+
 struct Terminals {
     settings: Settings,
     settings_watch: Option<SettingsWatch>,
     home: Option<PathBuf>,
     bus: Rc<Bus>,
+    carrying: Rc<Cell<bool>>,
+    carried: Option<Carried>,
     next_serial: u32,
 }
 
 impl Terminals {
-    fn open_window(
-        &mut self,
-        cx: &mut Cx<Self>,
-        folders: Vec<Option<PathBuf>>,
-        active: usize,
-        mut command: Option<alacritty_terminal::tty::Shell>,
-    ) -> Result<WindowId, bande_app::Error> {
-        let serial = self.next_serial;
-        self.next_serial += 1;
-        let saved_file = windows_folder()
-            .filter(|_| command.is_none())
-            .map(|folder| window_file(&folder, std::process::id(), serial));
-        let grid = GridSize {
-            columns: self.settings.columns,
-            lines: self.settings.rows,
-        };
+    fn painter(&self) -> Painter {
         let mut painter = Painter::new(
             Appearance::default(),
             self.settings.profile,
@@ -80,6 +79,55 @@ impl Terminals {
             1.0,
         );
         painter.set_font(&self.settings.font);
+        painter
+    }
+
+    fn next_window(&mut self, saved: bool) -> (u32, Option<PathBuf>) {
+        let serial = self.next_serial;
+        self.next_serial += 1;
+        let saved_file = windows_folder()
+            .filter(|_| saved)
+            .map(|folder| window_file(&folder, std::process::id(), serial));
+        (serial, saved_file)
+    }
+
+    fn show(
+        &mut self,
+        cx: &mut Cx<Self>,
+        mut painter: Painter,
+        size: (u32, u32),
+        opened: Opened,
+        serial: u32,
+    ) -> Result<WindowId, bande_app::Error> {
+        let (settings, home, bus, carrying) = (
+            self.settings.clone(),
+            self.home.clone(),
+            Rc::clone(&self.bus),
+            Rc::clone(&self.carrying),
+        );
+        let window = cx.open(Kind::Main, &L10N.tr("title"), size, |appearance| {
+            painter.set_appearance(appearance);
+            TerminalWindow::new(painter, settings, opened, home, bus, carrying, serial)
+        })?;
+        if let Some((shown, view)) = cx.window(window) {
+            view.attach(shown);
+        }
+        Ok(window)
+    }
+
+    fn open_window(
+        &mut self,
+        cx: &mut Cx<Self>,
+        folders: Vec<Option<PathBuf>>,
+        active: usize,
+        mut command: Option<alacritty_terminal::tty::Shell>,
+    ) -> Result<WindowId, bande_app::Error> {
+        let (serial, saved_file) = self.next_window(command.is_none());
+        let grid = GridSize {
+            columns: self.settings.columns,
+            lines: self.settings.rows,
+        };
+        let painter = self.painter();
         let (width, height) = painter.metrics.content_size(grid);
         let size = (width.ceil() as u32, height.ceil() as u32);
         let mut sessions = Vec::new();
@@ -104,19 +152,154 @@ impl Terminals {
             active,
             saved_file,
         };
-        let (settings, home, bus) = (
-            self.settings.clone(),
-            self.home.clone(),
-            Rc::clone(&self.bus),
-        );
-        let window = cx.open(Kind::Main, &L10N.tr("title"), size, |appearance| {
-            painter.set_appearance(appearance);
-            TerminalWindow::new(painter, settings, opened, home, bus, serial)
-        })?;
+        self.show(cx, painter, size, opened, serial)
+    }
+
+    fn detach(&mut self, cx: &mut Cx<Self>, from: WindowId, detached: Detached) {
+        let Detached {
+            tab,
+            index,
+            drag,
+            grab,
+            size,
+        } = detached;
+        let id = tab.id();
+        match self.float(cx, tab, &drag, grab, size) {
+            Ok(holder) => {
+                self.carried = Some(Carried {
+                    from,
+                    index,
+                    tab: id,
+                    holder,
+                    floating: true,
+                    drag,
+                    grab,
+                    size,
+                });
+            }
+            Err(tab) => {
+                self.carrying.set(false);
+                if let Some((shown, view)) = cx.window(from) {
+                    view.adopt_tab(shown, tab, index);
+                }
+            }
+        }
+    }
+
+    fn float(
+        &mut self,
+        cx: &mut Cx<Self>,
+        tab: CarriedTab,
+        drag: &WindowDrag,
+        grab: Point,
+        size: (u32, u32),
+    ) -> Result<WindowId, CarriedTab> {
+        let (serial, saved_file) = self.next_window(true);
+        let opened = Opened {
+            sessions: Vec::new(),
+            active: 0,
+            saved_file,
+        };
+        let window = match self.show(cx, self.painter(), size, opened, serial) {
+            Ok(window) => window,
+            Err(error) => {
+                tracing::warn!("cannot open a window for the tab: {error}");
+                return Err(tab);
+            }
+        };
         if let Some((shown, view)) = cx.window(window) {
-            view.attach(shown);
+            view.adopt_tab(shown, tab, 0);
+            if let Err(error) = shown.attach_to_drag(drag, view.grab_point(grab)) {
+                tracing::warn!("cannot carry the window with the tab: {error}");
+            }
         }
         Ok(window)
+    }
+
+    fn hover(&mut self, cx: &mut Cx<Self>, over: WindowId, x: f32) {
+        let Some(carried) = &mut self.carried else {
+            return;
+        };
+        if carried.holder == over {
+            if let Some((shown, view)) = cx.window(over) {
+                view.slide_tab_to(shown, carried.tab, x);
+            }
+            return;
+        }
+        if !carried.floating {
+            return;
+        }
+        let Some(index) = cx.view(over).map(|view| view.insertion_index(x)) else {
+            return;
+        };
+        let Some(tab) = cx
+            .window(carried.holder)
+            .and_then(|(shown, view)| view.release_tab(shown, carried.tab))
+        else {
+            return;
+        };
+        cx.close(carried.holder);
+        if let Some((shown, view)) = cx.window(over) {
+            view.adopt_tab(shown, tab, index);
+        }
+        carried.holder = over;
+        carried.floating = false;
+    }
+
+    fn unhover(&mut self, cx: &mut Cx<Self>, from: WindowId) {
+        let Some(carried) = self.carried.take() else {
+            return;
+        };
+        if carried.floating || carried.holder != from {
+            self.carried = Some(carried);
+            return;
+        }
+        let Some(tab) = cx
+            .window(from)
+            .and_then(|(shown, view)| view.release_tab(shown, carried.tab))
+        else {
+            self.carried = Some(carried);
+            return;
+        };
+        match self.float(cx, tab, &carried.drag, carried.grab, carried.size) {
+            Ok(holder) => {
+                self.carried = Some(Carried {
+                    holder,
+                    floating: true,
+                    ..carried
+                });
+            }
+            Err(tab) => {
+                if let Some((shown, view)) = cx.window(from) {
+                    view.adopt_tab(shown, tab, 0);
+                }
+                self.carried = Some(carried);
+            }
+        }
+    }
+
+    fn end_carry(&mut self, cx: &mut Cx<Self>, placed: bool) {
+        self.carrying.set(false);
+        let Some(carried) = self.carried.take() else {
+            return;
+        };
+        if placed {
+            cx.raise(carried.holder, None);
+            return;
+        }
+        if carried.holder != carried.from
+            && let Some(tab) = cx
+                .window(carried.holder)
+                .and_then(|(shown, view)| view.release_tab(shown, carried.tab))
+        {
+            if carried.floating {
+                cx.close(carried.holder);
+            }
+            if let Some((shown, view)) = cx.window(carried.from) {
+                view.adopt_tab(shown, tab, carried.index);
+            }
+        }
+        cx.raise(carried.from, None);
     }
 
     fn open_arguments(
@@ -166,6 +349,11 @@ impl Terminals {
                 }
                 Ask::Settings => cx.open_settings(),
                 Ask::Quit => cx.quit(),
+                Ask::Detach(detached) => self.detach(cx, window, detached),
+                Ask::Hover(x) => self.hover(cx, window, x),
+                Ask::Unhover => self.unhover(cx, window),
+                Ask::Drop => self.end_carry(cx, true),
+                Ask::DragEnded { placed } => self.end_carry(cx, placed),
             }
         }
         if cx.view(window).is_some_and(TerminalWindow::finished) {
@@ -186,6 +374,8 @@ impl Program for Terminals {
                 .and_then(|folder| SettingsWatch::start(folder, Settings::FILE)),
             home: std::env::var_os("HOME").map(PathBuf::from),
             bus: Rc::new(Bus::start(APP_ID)),
+            carrying: Rc::new(Cell::new(false)),
+            carried: None,
             next_serial: 0,
         };
         let plain = Arguments::parse(arguments.iter().cloned()).is_plain();

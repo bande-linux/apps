@@ -23,7 +23,7 @@ is what is left. Delete this plan when the list is done.
 
 | macOS | Bande Terminal |
 |---|---|
-| Tabs (Shift+Ctrl+T), select with Alt+1…9, move | Have; tab context menu, Close Other Tabs; a sideways drag reorders tabs with the neighbours sliding aside |
+| Tabs (Shift+Ctrl+T), select with Alt+1…9, move | Have; tab context menu, Close Other Tabs; a sideways drag reorders tabs with the neighbours sliding aside; a tab dragged out of the strip becomes a window of its own that follows the pointer (same shell, scrollback and running programs), joins another Terminal window when it reaches that window's strip, and goes back where it was on Escape |
 | Split panes | Have side by side and stacked, keyboard pane switching |
 | Find (Shift+Ctrl+F, next/previous) | Have, with regex-safe matching and highlights |
 | Copy on select | Off, as macOS: selection fills the primary selection only; middle-click pastes it |
@@ -43,8 +43,5 @@ is what is left. Delete this plan when the list is done.
    profile, choose a profile per window or tab, import iTerm/Terminal colour schemes.
 2. Font choice from every installed monospace family (today a list of common ones; needs a
    monospace query on the font collection).
-3. Drag a tab out of the strip into a window of its own, or into another Terminal window's
-   strip (today a drag that leaves the strip moves the window, as the desktop's
-   `behaviour.md` says). Needs the window to hand the tab's session to a new window.
 
 Not needed: Secure Keyboard Entry (Wayland already keeps other clients from reading keystrokes).
