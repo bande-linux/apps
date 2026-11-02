@@ -419,7 +419,7 @@ impl Thread {
         };
         let frame = Frame {
             title: page.title().filter(|title| !title.is_empty()),
-            list: Arc::new(page.display_list.clone()),
+            list: Arc::clone(&page.display_list),
             links: Arc::new(links(&page, &url)),
             fragment: url.fragment().and_then(|name| page.fragment_y(name)),
             url: url.clone(),
@@ -448,7 +448,7 @@ impl Thread {
                 changed |= shown.page.hover_at(x, y, fonts);
             }
             if changed {
-                let list = Arc::new(shown.page.display_list.clone());
+                let list = Arc::clone(&shown.page.display_list);
                 let links = Arc::new(links(&shown.page, &shown.url));
                 relaid.push((*view, shown.load, list, links));
             }

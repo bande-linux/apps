@@ -4852,7 +4852,7 @@ dependencies = [
 [[package]]
 name = "web-atoms"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=796775b94fba34328e71a68f2ce88337ec1b25e1#796775b94fba34328e71a68f2ce88337ec1b25e1"
+source = "git+https://github.com/bande-linux/web?rev=9cba2772475603adeebc50decdc28dcd01ea1682#9cba2772475603adeebc50decdc28dcd01ea1682"
 dependencies = [
  "hashbrown 0.16.1",
 ]
@@ -4860,7 +4860,7 @@ dependencies = [
 [[package]]
 name = "web-content"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=796775b94fba34328e71a68f2ce88337ec1b25e1#796775b94fba34328e71a68f2ce88337ec1b25e1"
+source = "git+https://github.com/bande-linux/web?rev=9cba2772475603adeebc50decdc28dcd01ea1682#9cba2772475603adeebc50decdc28dcd01ea1682"
 dependencies = [
  "encoding_rs",
  "web-atoms",
@@ -4876,7 +4876,7 @@ dependencies = [
 [[package]]
 name = "web-css"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=796775b94fba34328e71a68f2ce88337ec1b25e1#796775b94fba34328e71a68f2ce88337ec1b25e1"
+source = "git+https://github.com/bande-linux/web?rev=9cba2772475603adeebc50decdc28dcd01ea1682#9cba2772475603adeebc50decdc28dcd01ea1682"
 dependencies = [
  "encoding_rs",
  "web-atoms",
@@ -4885,7 +4885,7 @@ dependencies = [
 [[package]]
 name = "web-dom"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=796775b94fba34328e71a68f2ce88337ec1b25e1#796775b94fba34328e71a68f2ce88337ec1b25e1"
+source = "git+https://github.com/bande-linux/web?rev=9cba2772475603adeebc50decdc28dcd01ea1682#9cba2772475603adeebc50decdc28dcd01ea1682"
 dependencies = [
  "web-atoms",
  "web-html",
@@ -4894,7 +4894,7 @@ dependencies = [
 [[package]]
 name = "web-html"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=796775b94fba34328e71a68f2ce88337ec1b25e1#796775b94fba34328e71a68f2ce88337ec1b25e1"
+source = "git+https://github.com/bande-linux/web?rev=9cba2772475603adeebc50decdc28dcd01ea1682#9cba2772475603adeebc50decdc28dcd01ea1682"
 dependencies = [
  "encoding_rs",
  "web-atoms",
@@ -4903,7 +4903,7 @@ dependencies = [
 [[package]]
 name = "web-layout"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=796775b94fba34328e71a68f2ce88337ec1b25e1#796775b94fba34328e71a68f2ce88337ec1b25e1"
+source = "git+https://github.com/bande-linux/web?rev=9cba2772475603adeebc50decdc28dcd01ea1682#9cba2772475603adeebc50decdc28dcd01ea1682"
 dependencies = [
  "web-atoms",
  "web-dom",
@@ -4914,7 +4914,7 @@ dependencies = [
 [[package]]
 name = "web-net"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=796775b94fba34328e71a68f2ce88337ec1b25e1#796775b94fba34328e71a68f2ce88337ec1b25e1"
+source = "git+https://github.com/bande-linux/web?rev=9cba2772475603adeebc50decdc28dcd01ea1682#9cba2772475603adeebc50decdc28dcd01ea1682"
 dependencies = [
  "brotli-decompressor",
  "encoding_rs",
@@ -4929,7 +4929,7 @@ dependencies = [
 [[package]]
 name = "web-paint"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=796775b94fba34328e71a68f2ce88337ec1b25e1#796775b94fba34328e71a68f2ce88337ec1b25e1"
+source = "git+https://github.com/bande-linux/web?rev=9cba2772475603adeebc50decdc28dcd01ea1682#9cba2772475603adeebc50decdc28dcd01ea1682"
 dependencies = [
  "linebender_resource_handle",
  "web-dom",
@@ -4941,7 +4941,7 @@ dependencies = [
 [[package]]
 name = "web-style"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=796775b94fba34328e71a68f2ce88337ec1b25e1#796775b94fba34328e71a68f2ce88337ec1b25e1"
+source = "git+https://github.com/bande-linux/web?rev=9cba2772475603adeebc50decdc28dcd01ea1682#9cba2772475603adeebc50decdc28dcd01ea1682"
 dependencies = [
  "web-atoms",
  "web-css",
@@ -4961,7 +4961,7 @@ dependencies = [
 [[package]]
 name = "web-text"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=796775b94fba34328e71a68f2ce88337ec1b25e1#796775b94fba34328e71a68f2ce88337ec1b25e1"
+source = "git+https://github.com/bande-linux/web?rev=9cba2772475603adeebc50decdc28dcd01ea1682#9cba2772475603adeebc50decdc28dcd01ea1682"
 dependencies = [
  "fontique",
  "harfrust",
