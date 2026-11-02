@@ -4,10 +4,12 @@ use std::time::Instant;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
+use bande_notify::Urgency;
+use bande_notify::client::{Request as Notification, notify};
 use bande_packages::{Client, debian_arch};
 use bande_software::{
-    COMMAND_BACK, COMMAND_DISCOVER, COMMAND_FIND, COMMAND_INSTALLED, COMMAND_UPDATES, L10N,
-    Software, WINDOW_SIZE,
+    COMMAND_BACK, COMMAND_DISCOVER, COMMAND_FIND, COMMAND_INSTALLED, COMMAND_UPDATES, Finished,
+    L10N, Software, WINDOW_SIZE,
 };
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 
@@ -46,6 +48,7 @@ impl View for Pane {
 
     fn source_ready(&mut self, _window: &mut Window, _index: usize) -> bool {
         self.0.pump();
+        self.0.take_finished();
         true
     }
 
@@ -122,9 +125,37 @@ impl Program for Store {
         self.parked.iter().map(|pane| pane.0.fd()).collect()
     }
 
-    fn source_ready(&mut self, _cx: &mut Cx<Self>, _index: usize) {
-        if let Some(pane) = &mut self.parked {
-            pane.0.pump();
+    fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {
+        let Some(pane) = &mut self.parked else {
+            return;
+        };
+        pane.0.pump();
+        let finished = pane.0.take_finished();
+        let Some(session) = cx.session() else {
+            return;
+        };
+        for done in finished {
+            let summary = match &done {
+                Finished::Installed(name) => {
+                    L10N.tr_args("notify-installed", [("name", name.clone().into())])
+                }
+                Finished::Failed(name) => {
+                    L10N.tr_args("notify-failed", [("name", name.clone().into())])
+                }
+            };
+            let request = Notification {
+                app_name: &L10N.tr("title"),
+                replaces_id: 0,
+                app_icon: INFO.id,
+                summary: &summary,
+                body: "",
+                actions: &[],
+                urgency: Urgency::Normal,
+                sound: None,
+            };
+            if let Err(error) = notify(session, &request) {
+                tracing::warn!("cannot announce the installation: {error}");
+            }
         }
     }
 

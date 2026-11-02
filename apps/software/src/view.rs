@@ -264,6 +264,13 @@ pub struct Software {
     content: WidgetId,
     search: WidgetId,
     places: WidgetId,
+    finished: Vec<Finished>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Finished {
+    Installed(String),
+    Failed(String),
 }
 
 impl Software {
@@ -332,6 +339,7 @@ impl Software {
             content: id,
             search: search_id,
             places: places_id,
+            finished: Vec::new(),
         };
         software.ask(Query::Updates);
         software.rebuild();
@@ -383,6 +391,18 @@ impl Software {
         }
         self.rebuild();
         true
+    }
+
+    pub fn take_finished(&mut self) -> Vec<Finished> {
+        std::mem::take(&mut self.finished)
+    }
+
+    fn name_of(&self, key: &str) -> String {
+        self.apps
+            .iter()
+            .find(|app| app.key() == key)
+            .map(|app| app.name.clone())
+            .unwrap_or_else(|| key.to_owned())
     }
 
     pub fn command(&mut self, command: &str) -> bool {
@@ -527,6 +547,7 @@ impl Software {
                 }
             }
             Message::Installed(key) => {
+                self.finished.push(Finished::Installed(self.name_of(&key)));
                 self.busy.remove(&key);
                 self.facts.remove(&key);
                 self.installed.insert(key);
@@ -551,6 +572,9 @@ impl Software {
             Message::Updates(updates) => self.updates = updates,
             Message::Failed(key, failure) => {
                 if let Some((task, _)) = self.busy.remove(&key) {
+                    if task == Task::Install {
+                        self.finished.push(Finished::Failed(self.name_of(&key)));
+                    }
                     self.failed.insert(key, (task, failure));
                 }
             }
