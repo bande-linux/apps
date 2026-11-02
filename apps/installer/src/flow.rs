@@ -98,7 +98,7 @@ fn download_size(client: &Client, applied: &Applied, own: &str) -> u64 {
     }
     client
         .details(&ids)
-        .map(|details| details.iter().map(|details| details.size).sum())
+        .map(|details| details.iter().map(|details| details.download).sum())
         .unwrap_or_else(|error| {
             tracing::warn!("cannot read the download size: {error}");
             0
@@ -161,8 +161,11 @@ pub fn preview(client: &Client, path: &Path, deb: &Deb) -> State {
     };
     match client.install_files(path, Mode::Simulate, &|_| {}) {
         Ok(applied) => State::Ready(Preview {
+            signed: match action {
+                Action::Downgrade(_) => None,
+                Action::Install | Action::Upgrade(_) => signed(client, deb),
+            },
             action,
-            signed: signed(client, deb),
             also: others(&applied, &deb.name, &INSTALLING),
             download: download_size(client, &applied, &deb.name),
             removes: others(&applied, &deb.name, &[Info::Removing, Info::Obsoleting]),

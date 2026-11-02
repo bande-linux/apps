@@ -18,7 +18,7 @@ this list.
 | `apps/monitor/tests/signal.rs` (2 tests) | Smoke test against real `/proc`: Quit and Force Quit signal a real sampled process, and a reused PID (different start time) is never signalled. |
 | `apps/software/tests/catalog.rs` `a_dep11_file_with_a_syntax_error_is_read_up_to_the_error_and_no_further` | Regression: a YAML syntax error used to make the catalogue loop forever. |
 | `apps/software/tests/catalog.rs` `appstream_xml_that_declares_a_doctype_is_read` | Regression: Debian's AppStream XML declares a DOCTYPE, so the parser refused the file and lost all its apps. |
-| `apps/installer/tests/deb.rs` `a_built_deb_opens_with_its_fields_and_a_truncated_download_is_refused` | End to end with `dpkg-deb` and `tar`: a real `.deb` opens with its fields and its app's name, and a truncated download is refused instead of shown. |
+| `apps/installer/tests/deb.rs` `a_built_deb_opens_with_its_fields_and_a_truncated_download_is_refused` | End to end with `dpkg-deb`: a real `.deb` opens with its fields and its app's name and icon (read from the archive with size caps), and a truncated download is refused instead of shown. |
 
 `ci/gate.sh` runs all of them on a private session bus. `ci/check-app.sh` and `ci/smoke.sh` check
 packaging statically and on the installed package.
