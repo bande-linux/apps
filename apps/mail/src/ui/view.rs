@@ -1513,6 +1513,12 @@ impl MailView {
         }
         let plain = !modifiers.control;
         match key {
+            Key::Character('a' | 'A') if modifiers.control && !modifiers.shift => {
+                self.select_all();
+                true
+            }
+            Key::Up if plain && modifiers.shift => self.extend(-1),
+            Key::Down if plain && modifiers.shift => self.extend(1),
             Key::Up if plain => self.step(-1),
             Key::Down if plain => self.step(1),
             Key::Backspace | Key::Delete => {
@@ -1526,6 +1532,50 @@ impl MailView {
             }
             _ => self.ui.handle(&event),
         }
+    }
+
+    fn select_all(&mut self) {
+        let Some(first) = self
+            .selected
+            .or_else(|| self.messages.first().map(|summary| summary.id))
+        else {
+            return;
+        };
+        if self.selected.is_none() {
+            self.select(first);
+        }
+        self.also = self
+            .messages
+            .iter()
+            .map(|summary| summary.id)
+            .filter(|id| *id != first)
+            .collect();
+        if !self.also.is_empty() {
+            self.reading = None;
+            self.layout = None;
+        }
+    }
+
+    fn extend(&mut self, by: isize) -> bool {
+        let chosen = self
+            .messages
+            .iter()
+            .enumerate()
+            .filter(|(_, summary)| self.is_chosen(summary.id))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let (Some(first), Some(last)) = (chosen.first(), chosen.last()) else {
+            return self.step(by);
+        };
+        let next = match by < 0 {
+            true => first.checked_sub(1),
+            false => Some(last + 1).filter(|next| *next < self.messages.len()),
+        };
+        let Some(id) = next.map(|next| self.messages[next].id) else {
+            return false;
+        };
+        self.select_more(id, false);
+        true
     }
 
     fn step(&mut self, by: isize) -> bool {
