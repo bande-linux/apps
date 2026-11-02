@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -182,29 +182,43 @@ fn screenshot(agent: &ureq::Agent, url: &str) -> Result<Image, ShotError> {
     decode(&bytes).ok_or(ShotError::Unreadable)
 }
 
-fn installed_keys(apps: &[Component], desktop_ids: &HashSet<String>) -> HashSet<String> {
-    apps.iter()
-        .filter(|app| {
-            app.launchable
-                .clone()
-                .unwrap_or_else(|| format!("{}.desktop", app.key()))
-                .split_whitespace()
-                .any(|id| desktop_ids.contains(id))
-        })
-        .map(|app| app.key().to_owned())
-        .collect()
-}
-
-fn desktop_ids(data_dirs: &[PathBuf]) -> HashSet<String> {
-    bande_xdg::applications(data_dirs, None, &bande_xdg::current_desktops())
-        .iter()
-        .filter_map(|entry| entry.path.file_name()?.to_str().map(str::to_owned))
-        .collect()
+fn desktop_id(app: &Component) -> String {
+    app.launchable
+        .clone()
+        .unwrap_or_else(|| format!("{}.desktop", app.key()))
 }
 
 fn catalogue() -> Loaded {
-    let apps = catalog::system_catalog();
-    let installed = installed_keys(&apps, &desktop_ids(&bande_xdg::data_dirs()));
+    let mut apps = catalog::system_catalog();
+    let icons: HashMap<String, Option<String>> = bande_xdg::applications(
+        &bande_xdg::data_dirs(),
+        None,
+        &bande_xdg::current_desktops(),
+    )
+    .into_iter()
+    .filter_map(|entry| {
+        let id = entry.path.file_name()?.to_str()?.to_owned();
+        Some((id, entry.icon))
+    })
+    .collect();
+    let mut installed = HashSet::new();
+    for app in &mut apps {
+        let Some(icon) = desktop_id(app)
+            .split_whitespace()
+            .find_map(|id| icons.get(id))
+        else {
+            continue;
+        };
+        installed.insert(app.key().to_owned());
+        if app.icons.is_empty()
+            && let Some(icon) = icon
+        {
+            app.icons.push(match icon.starts_with('/') {
+                true => Icon::Local(PathBuf::from(icon)),
+                false => Icon::Stock(icon.clone()),
+            });
+        }
+    }
     Loaded::Catalogue { apps, installed }
 }
 

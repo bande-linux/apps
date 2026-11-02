@@ -415,6 +415,7 @@ impl Software {
         self.pages.push((page, ScrollState::default()));
         if let Page::App(index) = page {
             self.shot = 0;
+            self.shots.clear();
             self.request_shot();
             if let Some(app) = self.apps.get(index)
                 && let Some(package) = deb(app)
@@ -705,6 +706,12 @@ impl Software {
         let mut fresh = self.matching(|app| has_local_icon(app) && latest_release(app) > 0);
         fresh.sort_by_key(|index| {
             std::cmp::Reverse(self.apps.get(*index).map(latest_release).unwrap_or(0))
+        });
+        let mut names = HashSet::new();
+        fresh.retain(|index| {
+            self.apps
+                .get(*index)
+                .is_some_and(|app| names.insert(app.name.to_lowercase()))
         });
         let mut widgets = vec![
             boxed(Label::heading(&L10N.tr("categories"))),

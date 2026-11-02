@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use bande_xdg::Locale;
 use flate2::read::MultiGzDecoder;
@@ -24,6 +25,7 @@ pub use xml::{Source, parse as parse_xml};
 pub const SYSTEM_ROOTS: [&str; 2] = ["/usr/share/swcatalog", "/var/lib/swcatalog"];
 pub const FLATPAK_ROOT: &str = "/var/lib/flatpak/appstream";
 pub const APT_LISTS: &str = "/var/lib/apt/lists";
+pub const METAINFO: &str = "/usr/share/metainfo";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
@@ -179,6 +181,60 @@ pub fn flatpak_arch() -> &'static str {
     std::env::consts::ARCH
 }
 
+fn owners(paths: &[PathBuf]) -> HashMap<PathBuf, String> {
+    if paths.is_empty() {
+        return HashMap::new();
+    }
+    let output = match Command::new("dpkg-query").arg("-S").args(paths).output() {
+        Ok(output) => output,
+        Err(error) => {
+            tracing::warn!("cannot run dpkg-query: {error}");
+            return HashMap::new();
+        }
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let (packages, path) = line.rsplit_once(": ")?;
+            let package = packages.split(", ").next()?;
+            let package = package.split(':').next().unwrap_or(package);
+            Some((PathBuf::from(path), package.to_owned()))
+        })
+        .collect()
+}
+
+pub fn local_apps(dir: &Path, locale: Option<&Locale>) -> Vec<Component> {
+    let files: Vec<PathBuf> = sorted_files(dir)
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|extension| extension == "xml"))
+        .collect();
+    let owners = owners(&files);
+    let source = Source {
+        remote: None,
+        icon_root: dir.join("icons"),
+    };
+    files
+        .iter()
+        .flat_map(|path| {
+            let file = CatalogFile {
+                path: path.clone(),
+                format: Format::Xml,
+                source: source.clone(),
+            };
+            let mut apps = parse_file(&file, locale).unwrap_or_else(|error| {
+                tracing::debug!(path = %path.display(), %error, "skipping metainfo");
+                Vec::new()
+            });
+            if let Some(package) = owners.get(path) {
+                for app in apps.iter_mut().filter(|app| app.bundles.is_empty()) {
+                    app.bundles.push(Bundle::Deb(package.clone()));
+                }
+            }
+            apps
+        })
+        .collect()
+}
+
 pub fn system_catalog() -> Vec<Component> {
     let locale = Locale::from_env();
     let mut files: Vec<_> = SYSTEM_ROOTS
@@ -186,7 +242,11 @@ pub fn system_catalog() -> Vec<Component> {
         .flat_map(|root| system_files(Path::new(root)))
         .collect();
     files.extend(flatpak_files(Path::new(FLATPAK_ROOT), flatpak_arch()));
-    let mut apps = load(&files, locale.as_ref());
+    let mut apps = merge(
+        load(&files, locale.as_ref())
+            .into_iter()
+            .chain(local_apps(Path::new(METAINFO), locale.as_ref())),
+    );
     let x11_only: HashSet<String> = package_indexes(Path::new(APT_LISTS))
         .iter()
         .filter_map(|path| read_text(path).ok())
