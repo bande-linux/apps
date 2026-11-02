@@ -3,12 +3,14 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime};
 
 use bande_inbox::Outbox;
 use bande_toolkit::Image;
 use bande_xdg::DesktopEntry;
 use jxl_oxide::JxlImage;
+use sha2::{Digest, Sha256};
 use ureq::tls::{RootCerts, TlsConfig};
 
 use crate::catalog::{self, Bundle, Component, Icon};
@@ -20,6 +22,8 @@ const SHOT_LIMIT: u64 = 8 << 20;
 const PICTURE_SIDE: u32 = 8192;
 const PICTURE_BYTES: u64 = 256 << 20;
 const TIMEOUT: Duration = Duration::from_secs(20);
+const SHOT_UNUSED: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+const SHOT_CACHE_BYTES: u64 = 200 << 20;
 const SYSTEM_APPLICATIONS: &str = "/usr/share/applications";
 const DPKG_STATUS: &str = "/var/lib/dpkg/status";
 const USER_AGENT: &str = concat!("bande-software/", env!("CARGO_PKG_VERSION"));
@@ -132,25 +136,62 @@ pub fn load_icon(icons: &[Icon], data_dirs: &[PathBuf]) -> Option<Image> {
     })
 }
 
-fn cache_file(url: &str) -> Option<PathBuf> {
-    let name: String = url
-        .trim_start_matches("https://")
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '.' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let tail = name.get(name.len().saturating_sub(160)..).unwrap_or(&name);
+fn shot_cache() -> Option<PathBuf> {
     Some(
         bande_xdg::cache_home()?
             .join("bande-software")
-            .join("screenshots")
-            .join(tail),
+            .join("screenshots"),
     )
+}
+
+fn cache_file(url: &str) -> Option<PathBuf> {
+    let name = Sha256::digest(url.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Some(shot_cache()?.join(name))
+}
+
+fn mark_used(path: &Path) {
+    let touched = fs::File::options()
+        .write(true)
+        .open(path)
+        .and_then(|file| file.set_modified(SystemTime::now()));
+    if let Err(error) = touched {
+        tracing::debug!("cannot mark a cached screenshot as used: {error}");
+    }
+}
+
+fn prune_shots() {
+    let Some(folder) = shot_cache() else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(&folder) else {
+        return;
+    };
+    let now = SystemTime::now();
+    let mut kept = entries
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let metadata = entry.metadata().ok()?;
+            let used = metadata.modified().ok()?;
+            Some((used, metadata.len(), entry.path()))
+        })
+        .filter(|(used, _, path)| {
+            let stale = now.duration_since(*used).is_ok_and(|age| age > SHOT_UNUSED);
+            !(stale && fs::remove_file(path).is_ok())
+        })
+        .collect::<Vec<_>>();
+    kept.sort_unstable_by_key(|(used, _, _)| *used);
+    let mut total = kept.iter().map(|(_, size, _)| size).sum::<u64>();
+    for (_, size, path) in kept {
+        if total <= SHOT_CACHE_BYTES {
+            break;
+        }
+        if fs::remove_file(&path).is_ok() {
+            total = total.saturating_sub(size);
+        }
+    }
 }
 
 fn agent() -> ureq::Agent {
@@ -193,6 +234,7 @@ fn screenshot(agent: &ureq::Agent, url: &str) -> Result<Image, ShotError> {
         && let Some(bytes) = read_limited(path, SHOT_LIMIT)
     {
         if let Some(image) = decode(&bytes) {
+            mark_used(path);
             return Ok(image);
         }
         if let Err(error) = fs::remove_file(path) {
@@ -336,9 +378,55 @@ fn load_icons(requests: &Receiver<Request>, out: &Outbox<Message>) {
     }
 }
 
-fn load_shots(requests: &Receiver<String>, out: &Outbox<Message>) {
+#[derive(Default)]
+struct ShotQueue {
+    wanted: Vec<String>,
+    loading: Option<String>,
+    closed: bool,
+}
+
+#[derive(Clone, Default)]
+pub struct Shots(Arc<(Mutex<ShotQueue>, Condvar)>);
+
+impl Shots {
+    fn queue(&self) -> MutexGuard<'_, ShotQueue> {
+        self.0.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub fn want(&self, url: &str) {
+        let mut queue = self.queue();
+        if queue.loading.as_deref() == Some(url) {
+            return;
+        }
+        queue.wanted.retain(|known| known != url);
+        queue.wanted.push(url.to_owned());
+        self.0.1.notify_one();
+    }
+
+    fn next(&self) -> Option<String> {
+        let mut queue = self.queue();
+        queue.loading = None;
+        loop {
+            if queue.closed {
+                return None;
+            }
+            if let Some(url) = queue.wanted.pop() {
+                queue.loading = Some(url.clone());
+                return Some(url);
+            }
+            queue = self.0.1.wait(queue).unwrap_or_else(PoisonError::into_inner);
+        }
+    }
+
+    fn close(&self) {
+        self.queue().closed = true;
+        self.0.1.notify_one();
+    }
+}
+
+fn load_shots(shots: &Shots, out: &Outbox<Message>) {
     let agent = agent();
-    for url in requests {
+    while let Some(url) = shots.next() {
         let image = screenshot(&agent, &url);
         if !out.send(Message::Loaded(Loaded::Shot { url, image })) {
             return;
@@ -353,19 +441,29 @@ pub enum Request {
 
 pub struct Media {
     pub icons: Sender<Request>,
-    pub shots: Sender<String>,
+    pub shots: Shots,
+}
+
+impl Drop for Media {
+    fn drop(&mut self) {
+        self.shots.close();
+    }
 }
 
 pub fn start(out: &Outbox<Message>) -> io::Result<Media> {
     let (icons, icon_requests) = mpsc::channel();
-    let (shots, shot_requests) = mpsc::channel();
+    let shots = Shots::default();
     let icon_out = out.clone();
     std::thread::Builder::new()
         .name("software-icons".to_owned())
         .spawn(move || load_icons(&icon_requests, &icon_out))?;
     let shot_out = out.clone();
+    let loader = shots.clone();
     std::thread::Builder::new()
         .name("software-shots".to_owned())
-        .spawn(move || load_shots(&shot_requests, &shot_out))?;
+        .spawn(move || load_shots(&loader, &shot_out))?;
+    std::thread::Builder::new()
+        .name("software-cache".to_owned())
+        .spawn(prune_shots)?;
     Ok(Media { icons, shots })
 }

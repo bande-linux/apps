@@ -540,10 +540,8 @@ impl Software {
             self.shot = 0;
             self.shots.clear();
             self.request_shot();
-            if let Some(url) = self.apps.get(index).and_then(remote_icon)
-                && self.media.shots.send(url.to_owned()).is_err()
-            {
-                tracing::warn!("the screenshot loader stopped");
+            if let Some(url) = self.apps.get(index).and_then(remote_icon) {
+                self.media.shots.want(url);
             }
         }
     }
@@ -687,11 +685,8 @@ impl Software {
             return;
         };
         let url = shot.thumbnail.clone().unwrap_or_else(|| shot.image.clone());
-        if self.shots.contains_key(&url) {
-            return;
-        }
-        if self.media.shots.send(url).is_err() {
-            tracing::warn!("the screenshot loader stopped");
+        if !self.shots.contains_key(&url) {
+            self.media.shots.want(&url);
         }
     }
 

@@ -12,7 +12,7 @@ done.
 | Places | Discover, Installed, Updates, categories | Have: segmented Discover/Installed/Updates (with the update count); Discover shows the nine categories and New & Updated (latest AppStream releases); category pages |
 | Rows | Icon, name, summary, Get/Open | Have: two-column rows with the AppStream icon (JPEG XL, PNG or SVG, or the desktop entry's icon), Install/Open or the job's status |
 | Search | Instant, ranked | Have: name, keywords, summary (bande-search), Show More pages of 40 |
-| App page | Icon, name, developer, summary, screenshots, description | Have: Debian's 128 px icon, screenshots fetched once and cached in `~/.cache/bande-software`, with Previous/Next and captions |
+| App page | Icon, name, developer, summary, screenshots, description | Have: Debian's 128 px icon, screenshots fetched once each, the current page first, and cached in `~/.cache/bande-software` under a hash of the address (unused for 30 days or past 200 MB, oldest first, they are pruned at start), with Previous/Next and captions |
 | App page | What's New | Have: latest release, its date and notes |
 | App page | Version, size, licence, source, developer, website | Have: available and installed version, download with the packages it pulls in (simulated install) or size on disk, category, licence, Debian suite and component, developer, website link |
 | App page | Ratings and reviews | Missing; no review service (ODRS is the candidate) |
@@ -78,8 +78,7 @@ Software:
    only New & Updated.
 4. OARS age rating and the licence as free/proprietary with a link.
 5. Reviews from ODRS (opt-in, read-only first).
-6. Prune the screenshot cache (oldest first past a size cap).
-7. Move `Picture`/the installer's `Icon` into a toolkit image widget, and share the NetworkManager
+6. Move `Picture`/the installer's `Icon` into a toolkit image widget, and share the NetworkManager
    online follower with Calendar through a desktop library.
 
 Package Installer:
