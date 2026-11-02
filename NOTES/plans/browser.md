@@ -122,8 +122,7 @@ Decided:
 7. **Default browser:** Browser becomes the default and ships with bande-desktop in time, no
    rush.
 8. **Throughput:** 3–4 parallel agent streams (parser and style, layout, net and processes, app).
-
 9. **Widevine:** build full support (W-CDM) now; the owner contacts Google about a licence
-   himself, and testing Netflix is one of the last steps.
+   directly, and testing Netflix is one of the last steps.
 10. **Software fallback without the AVD:** Debian's libavcodec in the sandboxed media process.
 11. **VA-API:** tested later on normal amd64 PCs, together with bande-desktop on amd64.
