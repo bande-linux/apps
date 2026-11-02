@@ -55,6 +55,7 @@ pub const SIDEBAR_WIDTH: f32 = 220.0;
 pub const LIST_WIDTH: f32 = 340.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const NOTIFIED_AT_ONCE: usize = 3;
+const UNDO_TRIES: u8 = 3;
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -88,6 +89,14 @@ pub enum Hit {
 pub(crate) enum Pane {
     Sidebar,
     List,
+}
+
+#[derive(Debug, Clone)]
+struct Moved {
+    message_id: String,
+    from: Mailbox,
+    to: MailboxId,
+    tries: u8,
 }
 
 pub(crate) struct SetupSheet {
@@ -130,6 +139,8 @@ pub struct MailView {
     setup: Option<SetupSheet>,
     pub(crate) settings: MailSettings,
     opened: Vec<(PathBuf, std::time::SystemTime)>,
+    undo: Vec<Moved>,
+    undoing: Vec<Moved>,
 }
 
 fn keyring_password(email: String, host: String) -> crate::worker::PasswordSource {
@@ -181,6 +192,8 @@ impl MailView {
             setup: None,
             settings,
             opened: Vec::new(),
+            undo: Vec::new(),
+            undoing: Vec::new(),
         };
         view.insert_toolbar();
         view.ui.set_sheet_top(TOOLBAR_HEIGHT);
@@ -650,6 +663,23 @@ impl MailView {
     fn move_each(&mut self, moves: Vec<(MessageId, Mailbox)>) -> Vec<MessageId> {
         let mut moved = Vec::new();
         let mut done = Vec::new();
+        self.undo.clear();
+        for (id, target) in &moves {
+            if let (Some(from), Ok(Some(message_id))) = (
+                self.messages
+                    .iter()
+                    .find(|summary| summary.id == *id)
+                    .and_then(|summary| self.mailbox_of(summary)),
+                self.store.message_id(*id),
+            ) {
+                self.undo.push(Moved {
+                    message_id,
+                    from,
+                    to: target.id,
+                    tries: 0,
+                });
+            }
+        }
         for (_, target) in &moves {
             if done.contains(&target.id) {
                 continue;
@@ -718,6 +748,36 @@ impl MailView {
         self.leave_selected(&moved);
     }
 
+    pub fn undo(&mut self) {
+        let moves = std::mem::take(&mut self.undo);
+        self.put_back(moves);
+    }
+
+    fn put_back(&mut self, moves: Vec<Moved>) {
+        let mut waiting = Vec::new();
+        for moved in moves {
+            match self.store.find_message(moved.to, &moved.message_id) {
+                Ok(Some(id)) => match self.store.move_messages(&[id], &moved.from) {
+                    Ok(accounts) => self.flush(&accounts),
+                    Err(error) => tracing::warn!("cannot put the message back: {error}"),
+                },
+                Ok(None) if moved.tries < UNDO_TRIES => {
+                    if !waiting.contains(&moved.to) {
+                        waiting.push(moved.to);
+                        self.send_command(moved.from.account, Command::Refresh(moved.to));
+                    }
+                    self.undoing.push(Moved {
+                        tries: moved.tries + 1,
+                        ..moved
+                    });
+                }
+                Ok(None) => {}
+                Err(error) => tracing::warn!("cannot put the message back: {error}"),
+            }
+        }
+        self.reload();
+    }
+
     pub fn delete_selected(&mut self) {
         let mut moves = Vec::new();
         let mut expunged = Vec::new();
@@ -732,6 +792,7 @@ impl MailView {
         }
         let mut gone = self.move_each(moves);
         if !expunged.is_empty() {
+            self.undo.clear();
             match self.store.expunge(&expunged) {
                 Ok(accounts) => {
                     self.flush(&accounts);
@@ -1097,7 +1158,13 @@ impl MailView {
                     self.statuses.retain(|(known, _)| *known != account);
                     self.statuses.push((account, status));
                 }
-                MailEvent::Changed(_) => stale = true,
+                MailEvent::Changed(_) => {
+                    stale = true;
+                    if !self.undoing.is_empty() {
+                        let moves = std::mem::take(&mut self.undoing);
+                        self.put_back(moves);
+                    }
+                }
                 MailEvent::Arrived(_, ids) => {
                     stale = true;
                     self.notify(&ids);
@@ -1513,6 +1580,10 @@ impl MailView {
         }
         let plain = !modifiers.control;
         match key {
+            Key::Character('z' | 'Z') if modifiers.control && !modifiers.shift => {
+                self.undo();
+                true
+            }
             Key::Character('a' | 'A') if modifiers.control && !modifiers.shift => {
                 self.select_all();
                 true
