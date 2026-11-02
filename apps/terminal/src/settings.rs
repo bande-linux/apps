@@ -2,9 +2,9 @@ use alacritty_terminal::tty::Shell;
 use alacritty_terminal::vte::ansi::CursorShape;
 use bande_app_settings::{Stored, flag, pairs};
 
-use crate::SCROLLBACK;
 use crate::render::DEFAULT_FONT_SIZE;
 use crate::theme::Profile;
+use crate::{COLUMNS, ROWS, SCROLLBACK};
 
 pub const FONT_SIZES: (f32, f32) = (9.0, 32.0);
 
@@ -101,6 +101,9 @@ impl NewTabFolder {
     }
 }
 
+pub const COLUMN_RANGE: (usize, usize) = (20, 400);
+pub const ROW_RANGE: (usize, usize) = (5, 200);
+
 pub const SCROLLBACK_CHOICES: [usize; 4] = [1_000, 10_000, 100_000, 1_000_000];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -110,11 +113,14 @@ pub struct Settings {
     pub cursor: CursorStyle,
     pub blink: bool,
     pub scrollback: usize,
+    pub columns: usize,
+    pub rows: usize,
     pub alt_as_meta: bool,
     pub paste_warning: bool,
     pub close_ask: CloseAsk,
     pub new_tab_folder: NewTabFolder,
     pub shell: String,
+    pub audible_bell: bool,
     pub flash_on_bell: bool,
     pub badge_on_bell: bool,
     pub notify_finished: bool,
@@ -128,11 +134,14 @@ impl Default for Settings {
             cursor: CursorStyle::default(),
             blink: false,
             scrollback: SCROLLBACK,
+            columns: COLUMNS,
+            rows: ROWS,
             alt_as_meta: true,
             paste_warning: true,
             close_ask: CloseAsk::default(),
             new_tab_folder: NewTabFolder::default(),
             shell: String::new(),
+            audible_bell: false,
             flash_on_bell: true,
             badge_on_bell: true,
             notify_finished: true,
@@ -150,6 +159,13 @@ impl Settings {
             )
         })
     }
+}
+
+fn within(value: &str, (low, high): (usize, usize)) -> Option<usize> {
+    value
+        .parse()
+        .ok()
+        .filter(|number| (low..=high).contains(number))
 }
 
 fn named<T: Copy>(all: &[T], name: fn(T) -> &'static str, value: &str) -> Option<T> {
@@ -182,6 +198,10 @@ impl Stored for Settings {
                         .filter(|lines| SCROLLBACK_CHOICES.contains(lines))
                         .unwrap_or(settings.scrollback);
                 }
+                "columns" => {
+                    settings.columns = within(value, COLUMN_RANGE).unwrap_or(settings.columns);
+                }
+                "rows" => settings.rows = within(value, ROW_RANGE).unwrap_or(settings.rows),
                 "alt-as-meta" => settings.alt_as_meta = flag(value).unwrap_or(settings.alt_as_meta),
                 "paste-warning" => {
                     settings.paste_warning = flag(value).unwrap_or(settings.paste_warning);
@@ -195,6 +215,9 @@ impl Stored for Settings {
                         .unwrap_or(settings.new_tab_folder);
                 }
                 "shell" => settings.shell = value.to_owned(),
+                "audible-bell" => {
+                    settings.audible_bell = flag(value).unwrap_or(settings.audible_bell);
+                }
                 "flash-on-bell" => {
                     settings.flash_on_bell = flag(value).unwrap_or(settings.flash_on_bell);
                 }
@@ -217,11 +240,14 @@ impl Stored for Settings {
             format!("cursor = {}", self.cursor.name()),
             format!("blink = {}", self.blink),
             format!("scrollback = {}", self.scrollback),
+            format!("columns = {}", self.columns),
+            format!("rows = {}", self.rows),
             format!("alt-as-meta = {}", self.alt_as_meta),
             format!("paste-warning = {}", self.paste_warning),
             format!("close-ask = {}", self.close_ask.name()),
             format!("new-tab-folder = {}", self.new_tab_folder.name()),
             format!("shell = {}", self.shell.replace(['\n', '\r'], " ")),
+            format!("audible-bell = {}", self.audible_bell),
             format!("flash-on-bell = {}", self.flash_on_bell),
             format!("badge-on-bell = {}", self.badge_on_bell),
             format!("notify-finished = {}", self.notify_finished),

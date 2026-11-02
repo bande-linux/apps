@@ -20,6 +20,7 @@ bande-app-settings.workspace = true
 bande-design.workspace = true
 bande-l10n.workspace = true
 bande-notify.workspace = true
+bande-sound.workspace = true
 bande-spring.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true

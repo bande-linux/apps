@@ -41,6 +41,7 @@ bande-inbox = { git = "https://github.com/bande-linux/desktop", rev = "5eecf7f24
 bande-l10n = { git = "https://github.com/bande-linux/desktop", rev = "5eecf7f248a59504dd7c971da211822df41cfbf4" }
 bande-notify = { git = "https://github.com/bande-linux/desktop", rev = "5eecf7f248a59504dd7c971da211822df41cfbf4" }
 bande-packages = { git = "https://github.com/bande-linux/desktop", rev = "5eecf7f248a59504dd7c971da211822df41cfbf4" }
+bande-sound = { git = "https://github.com/bande-linux/desktop", rev = "5eecf7f248a59504dd7c971da211822df41cfbf4", default-features = false }
 bande-search = { git = "https://github.com/bande-linux/desktop", rev = "5eecf7f248a59504dd7c971da211822df41cfbf4" }
 bande-spring = { git = "https://github.com/bande-linux/desktop", rev = "5eecf7f248a59504dd7c971da211822df41cfbf4" }
 bande-status = { git = "https://github.com/bande-linux/desktop", rev = "5eecf7f248a59504dd7c971da211822df41cfbf4" }

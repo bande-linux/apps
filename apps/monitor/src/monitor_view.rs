@@ -762,6 +762,9 @@ impl MonitorView {
     }
 
     fn set_filter(&mut self, filter: Filter) -> bool {
+        if filter == Filter::Selected && self.monitor.selection().is_empty() {
+            return false;
+        }
         self.monitor.set_filter(filter);
         let focused = self.searching();
         let field = search_field(&self.list, filter, self.monitor.search());

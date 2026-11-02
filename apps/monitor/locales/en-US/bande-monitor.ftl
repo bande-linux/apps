@@ -149,7 +149,10 @@ frequency-normally = Normally ({ $seconds } sec)
 filter-all = All Processes
 filter-hierarchy = All Processes, Hierarchically
 filter-mine = My Processes
+filter-system = System Processes
+filter-active = Active Processes
 filter-apps = Apps
+filter-selected = Selected Processes
 
 inspector-process = { $name } ({ $pid })
 inspector-info = Info
