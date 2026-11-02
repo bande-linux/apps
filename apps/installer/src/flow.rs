@@ -98,7 +98,7 @@ fn download_size(client: &Client, applied: &Applied, own: &str) -> u64 {
     }
     client
         .details(&ids)
-        .map(|details| details.iter().map(|details| details.size).sum())
+        .map(|details| details.iter().map(|details| details.download).sum())
         .unwrap_or_else(|error| {
             tracing::warn!("cannot read the download size: {error}");
             0
