@@ -41,7 +41,9 @@ is what is left. Delete this plan when the list is done.
 1. Editable profiles: duplicate a built-in profile, change colours, font size and cursor per
    profile, choose a profile per window or tab, import iTerm/Terminal colour schemes.
 2. Font family choice (any installed monospace font).
-3. Drag tabs to reorder and out into a new window.
+3. Drag tabs to reorder and out into a new window. Needs the toolkit first: a drag on a header tab
+   always moves the window today (`decorations.rs` `tab_press`); a horizontal drag inside the strip
+   should reach the app, a vertical one should tear the tab off.
 4. Edit Title for a tab, and a per-tab profile badge.
 5. Select a whole command's output (macOS: triple-click on output with marks).
 6. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
