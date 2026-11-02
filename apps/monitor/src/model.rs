@@ -623,6 +623,7 @@ pub struct Monitor {
     rows: Vec<Row>,
     unresponsive: Unresponsive,
     chosen: [Vec<Column>; Tab::ALL.len()],
+    sorts: [Option<(Column, bool)>; Tab::ALL.len()],
     cpu: VecDeque<(f32, f32)>,
     memory: VecDeque<(f32, PressureLevel)>,
     disk: VecDeque<(f64, f64)>,
@@ -654,6 +655,9 @@ pub struct CoreGroup {
 const CORES_STATE: &str = "cores";
 const FILTER_STATE: &str = "filter";
 const FREQUENCY_STATE: &str = "frequency";
+const SORT_STATE: &str = "sort";
+const ASCENDING: &str = "ascending";
+const DESCENDING: &str = "descending";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Frequency {
@@ -758,6 +762,7 @@ impl Monitor {
             rows: Vec::new(),
             unresponsive: Unresponsive::default(),
             chosen: Tab::ALL.map(|tab| tab.columns().to_vec()),
+            sorts: [None; Tab::ALL.len()],
             cpu: VecDeque::new(),
             memory: VecDeque::new(),
             disk: VecDeque::new(),
@@ -851,11 +856,7 @@ impl Monitor {
     pub fn set_tab(&mut self, tab: Tab) {
         if self.tab != tab {
             self.tab = tab;
-            let sort = tab.default_sort();
-            (self.sort, self.descending) = match self.chosen[tab.index()].contains(&sort) {
-                true => (sort, true),
-                false => (Column::Name, false),
-            };
+            (self.sort, self.descending) = self.tab_sort(tab);
             self.rebuild();
         }
     }
@@ -914,6 +915,16 @@ impl Monitor {
         if !matches!(self.filter, Filter::All | Filter::Selected) {
             state.push_str(&format!("{FILTER_STATE} {}\n", self.filter.id()));
         }
+        for (tab, sort) in Tab::ALL.iter().zip(&self.sorts) {
+            if let Some((column, descending)) = sort {
+                let order = if *descending { DESCENDING } else { ASCENDING };
+                state.push_str(&format!(
+                    "{SORT_STATE} {} {} {order}\n",
+                    tab.id(),
+                    column.id()
+                ));
+            }
+        }
         if self.frequency != Frequency::default() {
             state.push_str(&format!("{FREQUENCY_STATE} {}\n", self.frequency.id()));
         }
@@ -942,6 +953,18 @@ impl Monitor {
             .unwrap_or_default();
         for line in text.lines() {
             let mut words = line.split_whitespace();
+            if words.clone().next() == Some(SORT_STATE) {
+                let mut words = words.skip(1);
+                let tab = words
+                    .next()
+                    .and_then(|id| Tab::ALL.into_iter().find(|tab| tab.id() == id));
+                let column = words.next().and_then(Column::parse);
+                let descending = words.next() == Some(DESCENDING);
+                if let (Some(tab), Some(column)) = (tab, column) {
+                    self.sorts[tab.index()] = Some((column, descending));
+                }
+                continue;
+            }
             let Some(tab) = words
                 .next()
                 .and_then(|id| Tab::ALL.into_iter().find(|tab| tab.id() == id))
@@ -957,11 +980,17 @@ impl Monitor {
             );
             self.chosen[tab.index()] = columns;
         }
-        if !self.columns().contains(&self.sort) {
-            self.sort = Column::Name;
-            self.descending = false;
-        }
+        (self.sort, self.descending) = self.tab_sort(self.tab);
         self.rebuild();
+    }
+
+    fn tab_sort(&self, tab: Tab) -> (Column, bool) {
+        let chosen = &self.chosen[tab.index()];
+        [self.sorts[tab.index()], Some((tab.default_sort(), true))]
+            .into_iter()
+            .flatten()
+            .find(|(column, _)| chosen.contains(column))
+            .unwrap_or((Column::Name, false))
     }
 
     pub fn sort(&self) -> (Column, bool) {
@@ -971,6 +1000,7 @@ impl Monitor {
     pub fn set_sort(&mut self, column: Column, descending: bool) {
         self.sort = column;
         self.descending = descending;
+        self.sorts[self.tab.index()] = Some((column, descending));
         self.rebuild();
     }
 

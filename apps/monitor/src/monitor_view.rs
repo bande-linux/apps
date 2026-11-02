@@ -343,6 +343,7 @@ impl MonitorView {
                 if let Some(column) = self.monitor.columns().get(sort.column) {
                     self.monitor.set_sort(*column, !sort.ascending);
                     self.sync();
+                    self.requests.push(Request::SaveState(self.monitor.state()));
                 }
             }
             Signal::Tab(index) => {
