@@ -5,10 +5,11 @@ use bande_toolkit::ui::{
 };
 use jiff::ToSpan;
 use jiff::civil::{Date, DateTime, Time};
+use jiff::tz::TimeZone;
 
 use super::panel::{Arrow, Line, Panel, Width};
 use super::{L10N, Signal, Signals, sender};
-use crate::edit::{Alert, Details, Repeat};
+use crate::edit::{Alert, Details, EndRepeat, Repeat};
 use crate::ical::Event;
 use crate::store::Found;
 
@@ -25,6 +26,8 @@ pub struct Inspector {
     pub original: Details,
     details: Details,
     texts: [String; 4],
+    end_kind: usize,
+    end_text: String,
     calendars: Vec<usize>,
     calendar_choice: usize,
     original_calendar: usize,
@@ -121,7 +124,15 @@ pub(crate) fn alert_title(alert: Alert) -> String {
     }
 }
 
-fn details_of(found: &Found, event: &Event) -> Details {
+fn end_of(end: EndRepeat) -> (usize, String) {
+    match end {
+        EndRepeat::Never => (0, String::new()),
+        EndRepeat::After(count) => (1, count.to_string()),
+        EndRepeat::On(day) => (2, date_text(day)),
+    }
+}
+
+fn details_of(found: &Found, event: &Event, local: &TimeZone) -> Details {
     let start = found.occurrence.start.datetime();
     let end = found.occurrence.end.datetime();
     let all_day = found.occurrence.all_day;
@@ -133,6 +144,7 @@ fn details_of(found: &Found, event: &Event) -> Details {
         start,
         end,
         repeat: Repeat::of(event.rule.as_ref()),
+        end_repeat: EndRepeat::of(event.rule.as_ref(), &event.start, local),
         alert: Alert::of(&event.alarms, all_day),
     }
 }
@@ -153,8 +165,10 @@ impl Inspector {
         read_only: bool,
         calendars: Vec<(usize, String)>,
         anchor: Option<Rect>,
+        local: &TimeZone,
     ) -> (Panel, Self) {
-        let details = details_of(&found, event);
+        let details = details_of(&found, event, local);
+        let (end_kind, end_text) = end_of(details.end_repeat);
         let last_day = match details.all_day {
             true => details
                 .end
@@ -272,6 +286,28 @@ impl Inspector {
                 ROW,
             ));
             let send = sender(signals);
+            let ends: Vec<String> = ["end-repeat-never", "end-repeat-after", "end-repeat-on"]
+                .iter()
+                .map(|message| L10N.tr(message))
+                .collect();
+            let end_choice = panel.add(PopUpButton::new(
+                &L10N.tr("end-repeat"),
+                &ends,
+                end_kind,
+                move |index| send(Signal::EndRepeatKind(index)),
+            ));
+            let send = sender(signals);
+            let end_field = panel.add(TextField::new(
+                &L10N.tr("end-repeat-placeholder"),
+                &end_text,
+                move |text| send(Signal::EndRepeatText(text.to_owned())),
+            ));
+            panel.line(Line::new(
+                Some(&L10N.tr("end-repeat")),
+                vec![(end_choice, Width::Fill), (end_field, Width::Fixed(96.0))],
+                ROW,
+            ));
+            let send = sender(signals);
             let titles: Vec<String> = alerts.iter().map(|alert| alert_title(*alert)).collect();
             let selected = alerts
                 .iter()
@@ -336,6 +372,8 @@ impl Inspector {
             original_calendar: selected,
             details,
             texts,
+            end_kind,
+            end_text,
             calendars: calendars.into_iter().map(|(index, _)| index).collect(),
             calendar_choice: selected,
             repeats,
@@ -401,6 +439,8 @@ impl Inspector {
                 self.details.alert = self.alerts.get(*index).copied().unwrap_or(Alert::None)
             }
             Signal::Calendar(index) => self.calendar_choice = *index,
+            Signal::EndRepeatKind(index) => self.end_kind = *index,
+            Signal::EndRepeatText(text) => self.end_text = text.clone(),
             _ => {}
         }
     }
@@ -442,9 +482,22 @@ impl Inspector {
             }
             _ => (start, end),
         };
+        let end_repeat = match self.end_kind {
+            1 => EndRepeat::After(
+                self.end_text
+                    .trim()
+                    .parse()
+                    .ok()
+                    .filter(|count| *count > 0)
+                    .unwrap_or(1),
+            ),
+            2 => EndRepeat::On(parse_date(&self.end_text).unwrap_or(start.date())),
+            _ => EndRepeat::Never,
+        };
         let details = Details {
             start,
             end,
+            end_repeat,
             ..self.details.clone()
         };
         (details != self.original || self.calendar_choice != self.original_calendar)

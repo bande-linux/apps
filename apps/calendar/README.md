@@ -34,9 +34,9 @@ views. Packaged as `bande-calendar`.
   more than fit readably, a "+N" chip opens that day in the Day view.
 - **Editing.** Drag on empty time to create, drag an event to move it (also between days in the
   month view and into the all-day row), drag its bottom edge to change its length, and an
-  inspector popover with title, location, all-day, start and end, repeat, alert, calendar and
-  notes. Changing a recurring event asks whether it is for this event only (an override) or
-  all events.
+  inspector popover with title, location, all-day, start and end, repeat and when it ends
+  (never, after a number of times, or on a date), alert, calendar and notes. Changing a
+  recurring event asks whether it is for this event only (an override) or all events.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed. Alerts,
   the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
