@@ -475,6 +475,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-clock"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-app-menu",
+ "bande-datetime",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-sound",
+ "bande-toolkit",
+ "bande-xdg",
+ "jiff",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
 name = "bande-datetime"
 version = "0.1.1"
 source = "git+https://github.com/bande-linux/desktop?rev=003cd7005d8c243191f02988ec21e378fa9d8616#003cd7005d8c243191f02988ec21e378fa9d8616"

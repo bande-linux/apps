@@ -81,7 +81,6 @@ bande-* app and service, bande-screenshot's GStreamer recommends, firefox-esr fo
 |---|---:|---|
 | gnome-calculator | 288 MB from today's install (601 MB on the lean base) | drop from `[debian]`; a Bande Calculator replaces it |
 | papers, loupe, gnome-text-editor, showtime | together with the calculator and Firefox, 943 MB on the lean base | drop from `[debian]` as each Bande app lands; showtime only when there is a media stack |
-| gnome-clocks | (only Suggests) | drop the Suggests; the Clock menu gets timers |
 | xdg-utils' recommends | 68 MB, all the X11 tools, alacritty | Bande's `xdg-open` callers (config, screenshot, captive portal, terminal) open through Bande's own handler (bande-xdg's mimeapps), then drop `Recommends: xdg-utils` from bande-config. Until then `bande-terminal` should `Provides: x-terminal-emulator`, which stops apt picking alacritty |
 | qt6-xdgdesktopportal-platformtheme | 107 MB with no Qt app installed | move to Suggests; a Qt app brings Qt, and Software (or a small `Enhances` package) adds the plugin with the first Qt app |
 | xdg-desktop-portal-gtk | GTK3 once the keyring is gone | xdg-desktop-portal-bande `Provides: xdg-desktop-portal-backend` (flatpak recommends `-gtk \| -backend`; without it apt pulls `-lomiri`, which brings Qt) and drops `Recommends: -gtk`; keep `-gtk` as the fallback for interfaces Bande lacks (Print, AppChooser, Inhibit…) only after a check of which ones Firefox and Flatpak apps call |
@@ -107,7 +106,6 @@ resvg).
 | 1 | Calculator (basic, scientific, programmer, paper tape, like macOS) | S | 288 MB today, the biggest single cut | pure logic: parser, decimal arithmetic, a keypad grid; scientific mode is a second keypad |
 | 2 | Preview: images | S–M | 93 MB (loupe), and the default image handler | zoom, pan, rotate, next/previous in the folder, slideshow, copy; decoders from bande-preview (add HEIC/AVIF later) |
 | 3 | TextEdit | M | 115 MB, the default text handler | the editor widget exists; needed: open/save with encodings and line endings, find and replace, autosave and restore, plain text only first (RTF later) |
-| 4 | Clock: timers, alarms, stopwatch, world clock in the Clock menu | S | small (gnome-clocks is only a Suggests) | in the shell's Clock menu with bande-datetime and bande-notify, no separate app |
 | 5 | Preview: PDF | L | 153 MB (papers), the default PDF handler | needs a renderer: a pure-Rust one (hayro) or Debian's poppler-cpp/MuPDF without GTK; then text selection, search, thumbnails, annotations, forms. Same app as images, as on macOS |
 | 6 | Video player | L, later | 65 MB (showtime) | waits for the browser's media stack (`web/NOTES/plans/browser/media.md`: web-media, V4L2 AVD) |
 
