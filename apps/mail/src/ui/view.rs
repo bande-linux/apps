@@ -300,10 +300,18 @@ impl MailView {
 
     pub fn set_settings(&mut self, settings: MailSettings) {
         let regroup = settings.conversations != self.settings.conversations;
+        let reread = (settings.plain_text, settings.fixed_width)
+            != (self.settings.plain_text, self.settings.fixed_width);
         self.settings = settings;
         self.layout = None;
         if regroup {
             self.reload();
+        }
+        if reread
+            && self.also.is_empty()
+            && let Some(summary) = self.selected_summary()
+        {
+            self.load_reading(&summary);
         }
     }
 
@@ -653,7 +661,7 @@ impl MailView {
     fn load_reading(&mut self, summary: &Summary) {
         let body = self.store.body(summary.id).ok().flatten();
         let reading = match body {
-            Some(raw) => Reading::new(Content::parse(&raw), true),
+            Some(raw) => Reading::new(Content::parse(&raw), true, &self.settings),
             None => {
                 let header = self
                     .store
@@ -668,6 +676,7 @@ impl MailView {
                         ..Content::default()
                     },
                     false,
+                    &self.settings,
                 )
             }
         };
