@@ -55,6 +55,8 @@ pub const SIDEBAR_WIDTH: f32 = 220.0;
 pub const LIST_WIDTH: f32 = 340.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const NOTIFIED_AT_ONCE: usize = 3;
+const UNDO_TRIES: u8 = 3;
+const DRAG_THRESHOLD: f32 = 6.0;
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -62,6 +64,7 @@ pub enum Request {
     Compose(Box<Outgoing>),
     OpenLink(String),
     OpenAttachment(PathBuf),
+    SaveAttachment(String, Vec<u8>),
     Notify {
         summary: String,
         body: String,
@@ -90,6 +93,23 @@ pub(crate) enum Pane {
     List,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Drag {
+    pub(crate) from: Point,
+    pub(crate) at: Point,
+    pub(crate) moving: bool,
+    pub(crate) over: Option<usize>,
+    collapse: Option<MessageId>,
+}
+
+#[derive(Debug, Clone)]
+struct Moved {
+    message_id: String,
+    from: Mailbox,
+    to: MailboxId,
+    tries: u8,
+}
+
 pub(crate) struct SetupSheet {
     pub(crate) state: Shared,
     pub(crate) mode: Mode,
@@ -108,6 +128,7 @@ pub struct MailView {
     pub(crate) place: Place,
     pub(crate) messages: Vec<Summary>,
     pub(crate) selected: Option<MessageId>,
+    pub(crate) also: Vec<MessageId>,
     pub(crate) reading: Option<Reading>,
     pub(crate) layout: Option<(f32, Layout)>,
     pub(crate) search: String,
@@ -129,6 +150,9 @@ pub struct MailView {
     setup: Option<SetupSheet>,
     pub(crate) settings: MailSettings,
     opened: Vec<(PathBuf, std::time::SystemTime)>,
+    undo: Vec<Moved>,
+    undoing: Vec<Moved>,
+    pub(crate) drag: Option<Drag>,
 }
 
 fn keyring_password(email: String, host: String) -> crate::worker::PasswordSource {
@@ -158,6 +182,7 @@ impl MailView {
             place: Place::All(Role::Inbox),
             messages: Vec::new(),
             selected: None,
+            also: Vec::new(),
             reading: None,
             layout: None,
             search: String::new(),
@@ -179,6 +204,9 @@ impl MailView {
             setup: None,
             settings,
             opened: Vec::new(),
+            undo: Vec::new(),
+            undoing: Vec::new(),
+            drag: None,
         };
         view.insert_toolbar();
         view.ui.set_sheet_top(TOOLBAR_HEIGHT);
@@ -402,11 +430,15 @@ impl MailView {
             .store
             .summaries(&self.place.scope(), &self.search)
             .unwrap_or_default();
+        let messages = &self.messages;
+        self.also
+            .retain(|id| messages.iter().any(|summary| summary.id == *id));
         if self
             .selected
             .is_some_and(|id| !self.messages.iter().any(|summary| summary.id == id))
         {
             self.selected = None;
+            self.also.clear();
             self.reading = None;
             self.layout = None;
         }
@@ -418,6 +450,7 @@ impl MailView {
         }
         self.place = place;
         self.selected = None;
+        self.also.clear();
         self.reading = None;
         self.layout = None;
         self.scrolls[1] = ScrollState::default();
@@ -440,6 +473,7 @@ impl MailView {
             return;
         };
         self.selected = Some(id);
+        self.also.clear();
         self.focus = Pane::List;
         self.scrolls[2] = ScrollState::default();
         self.load_reading(&summary);
@@ -447,6 +481,52 @@ impl MailView {
             self.set_flag_on(&[id], Flag::Seen, true);
         }
         self.reveal_selected();
+    }
+
+    fn select_more(&mut self, id: MessageId, range: bool) {
+        let Some(anchor) = self.selected else {
+            return self.select(id);
+        };
+        let position = |id: MessageId| self.messages.iter().position(|summary| summary.id == id);
+        if range {
+            let (Some(from), Some(to)) = (position(anchor), position(id)) else {
+                return;
+            };
+            self.also = self.messages[from.min(to)..=from.max(to)]
+                .iter()
+                .map(|summary| summary.id)
+                .filter(|known| *known != anchor)
+                .collect();
+        } else if id == anchor {
+            if self.also.is_empty() {
+                return;
+            }
+            self.selected = Some(self.also.remove(0));
+        } else if let Some(index) = self.also.iter().position(|known| *known == id) {
+            self.also.remove(index);
+        } else {
+            self.also.push(id);
+        }
+        self.focus = Pane::List;
+        match (self.also.is_empty(), self.selected_summary()) {
+            (true, Some(summary)) => self.load_reading(&summary),
+            _ => {
+                self.reading = None;
+                self.layout = None;
+            }
+        }
+    }
+
+    pub(crate) fn is_chosen(&self, id: MessageId) -> bool {
+        self.selected == Some(id) || self.also.contains(&id)
+    }
+
+    pub(crate) fn chosen(&self) -> Vec<Summary> {
+        self.messages
+            .iter()
+            .filter(|summary| self.is_chosen(summary.id))
+            .cloned()
+            .collect()
     }
 
     fn load_reading(&mut self, summary: &Summary) {
@@ -507,10 +587,17 @@ impl MailView {
         self.refresh_sidebar();
     }
 
+    fn toggle(&mut self, flag: Flag, is_set: fn(&Summary) -> bool) {
+        let chosen = self.chosen();
+        let Some(first) = self.selected_summary().or_else(|| chosen.first().cloned()) else {
+            return;
+        };
+        let ids = chosen.iter().map(|summary| summary.id).collect::<Vec<_>>();
+        self.set_flag_on(&ids, flag, !is_set(&first));
+    }
+
     pub fn toggle_flag(&mut self) {
-        if let Some(summary) = self.selected_summary() {
-            self.set_flag_on(&[summary.id], Flag::Flagged, !summary.flags.flagged);
-        }
+        self.toggle(Flag::Flagged, |summary| summary.flags.flagged);
     }
 
     pub fn mark_all_read(&mut self) {
@@ -528,9 +615,7 @@ impl MailView {
     }
 
     pub fn toggle_read(&mut self) {
-        if let Some(summary) = self.selected_summary() {
-            self.set_flag_on(&[summary.id], Flag::Seen, !summary.flags.seen);
-        }
+        self.toggle(Flag::Seen, |summary| summary.flags.seen);
     }
 
     fn mailbox_with_role(&self, account: AccountId, role: Role) -> Option<Mailbox> {
@@ -554,16 +639,23 @@ impl MailView {
     }
 
     pub fn can_move_to(&self, role: Role) -> bool {
-        self.selected_summary().is_some_and(|summary| {
+        self.chosen().iter().any(|summary| {
             self.mailbox_with_role(summary.account, role)
                 .is_some_and(|target| target.id != summary.mailbox)
         })
     }
 
-    fn leave_selected(&mut self, id: MessageId) {
-        let position = self.messages.iter().position(|summary| summary.id == id);
-        self.messages.retain(|summary| summary.id != id);
+    fn leave_selected(&mut self, ids: &[MessageId]) {
+        if ids.is_empty() {
+            return;
+        }
+        let position = self
+            .messages
+            .iter()
+            .position(|summary| ids.contains(&summary.id));
+        self.messages.retain(|summary| !ids.contains(&summary.id));
         self.selected = None;
+        self.also.clear();
         self.reading = None;
         self.layout = None;
         let next = position
@@ -581,13 +673,58 @@ impl MailView {
         self.refresh_sidebar();
     }
 
-    pub fn move_selected(&mut self, role: Role) {
-        let target = self
-            .selected_summary()
-            .and_then(|summary| self.mailbox_with_role(summary.account, role));
-        if let Some(target) = target {
-            self.move_selected_to(&target);
+    fn move_each(&mut self, moves: Vec<(MessageId, Mailbox)>) -> Vec<MessageId> {
+        let mut moved = Vec::new();
+        let mut done = Vec::new();
+        self.undo.clear();
+        for (id, target) in &moves {
+            if let (Some(from), Ok(Some(message_id))) = (
+                self.messages
+                    .iter()
+                    .find(|summary| summary.id == *id)
+                    .and_then(|summary| self.mailbox_of(summary)),
+                self.store.message_id(*id),
+            ) {
+                self.undo.push(Moved {
+                    message_id,
+                    from,
+                    to: target.id,
+                    tries: 0,
+                });
+            }
         }
+        for (_, target) in &moves {
+            if done.contains(&target.id) {
+                continue;
+            }
+            done.push(target.id);
+            let ids = moves
+                .iter()
+                .filter(|(_, known)| known.id == target.id)
+                .map(|(id, _)| *id)
+                .collect::<Vec<_>>();
+            match self.store.move_messages(&ids, target) {
+                Ok(accounts) => {
+                    self.flush(&accounts);
+                    moved.extend(ids);
+                }
+                Err(error) => tracing::warn!("cannot move the messages: {error}"),
+            }
+        }
+        moved
+    }
+
+    pub fn move_selected(&mut self, role: Role) {
+        let moves = self
+            .chosen()
+            .into_iter()
+            .filter_map(|summary| {
+                let target = self.mailbox_with_role(summary.account, role)?;
+                (target.id != summary.mailbox).then_some((summary.id, target))
+            })
+            .collect();
+        let moved = self.move_each(moves);
+        self.leave_selected(&moved);
     }
 
     pub fn move_targets(&self) -> Vec<(String, MailboxId)> {
@@ -614,36 +751,70 @@ impl MailView {
     }
 
     fn move_selected_to(&mut self, target: &Mailbox) {
-        let Some(summary) = self.selected_summary() else {
-            return;
-        };
-        if target.id == summary.mailbox || target.account != summary.account {
-            return;
+        let moves = self
+            .chosen()
+            .into_iter()
+            .filter(|summary| target.id != summary.mailbox && target.account == summary.account)
+            .map(|summary| (summary.id, target.clone()))
+            .collect();
+        let moved = self.move_each(moves);
+        self.leave_selected(&moved);
+    }
+
+    pub fn undo(&mut self) {
+        let moves = std::mem::take(&mut self.undo);
+        self.put_back(moves);
+    }
+
+    fn put_back(&mut self, moves: Vec<Moved>) {
+        let mut waiting = Vec::new();
+        for moved in moves {
+            match self.store.find_message(moved.to, &moved.message_id) {
+                Ok(Some(id)) => match self.store.move_messages(&[id], &moved.from) {
+                    Ok(accounts) => self.flush(&accounts),
+                    Err(error) => tracing::warn!("cannot put the message back: {error}"),
+                },
+                Ok(None) if moved.tries < UNDO_TRIES => {
+                    if !waiting.contains(&moved.to) {
+                        waiting.push(moved.to);
+                        self.send_command(moved.from.account, Command::Refresh(moved.to));
+                    }
+                    self.undoing.push(Moved {
+                        tries: moved.tries + 1,
+                        ..moved
+                    });
+                }
+                Ok(None) => {}
+                Err(error) => tracing::warn!("cannot put the message back: {error}"),
+            }
         }
-        match self.store.move_messages(&[summary.id], target) {
-            Ok(accounts) => self.flush(&accounts),
-            Err(error) => tracing::warn!("cannot move the message: {error}"),
-        }
-        self.leave_selected(summary.id);
+        self.reload();
     }
 
     pub fn delete_selected(&mut self) {
-        let Some(summary) = self.selected_summary() else {
-            return;
-        };
-        let in_trash = self
-            .mailbox_of(&summary)
-            .is_some_and(|mailbox| mailbox.role == Some(Role::Trash));
-        let trash = self.mailbox_with_role(summary.account, Role::Trash);
-        if trash.is_some() && !in_trash {
-            self.move_selected(Role::Trash);
-            return;
+        let mut moves = Vec::new();
+        let mut expunged = Vec::new();
+        for summary in self.chosen() {
+            let in_trash = self
+                .mailbox_of(&summary)
+                .is_some_and(|mailbox| mailbox.role == Some(Role::Trash));
+            match self.mailbox_with_role(summary.account, Role::Trash) {
+                Some(trash) if !in_trash => moves.push((summary.id, trash)),
+                _ => expunged.push(summary.id),
+            }
         }
-        match self.store.expunge(&[summary.id]) {
-            Ok(accounts) => self.flush(&accounts),
-            Err(error) => tracing::warn!("cannot delete the message: {error}"),
+        let mut gone = self.move_each(moves);
+        if !expunged.is_empty() {
+            self.undo.clear();
+            match self.store.expunge(&expunged) {
+                Ok(accounts) => {
+                    self.flush(&accounts);
+                    gone.extend(expunged);
+                }
+                Err(error) => tracing::warn!("cannot delete the messages: {error}"),
+            }
         }
-        self.leave_selected(summary.id);
+        self.leave_selected(&gone);
     }
 
     fn default_account(&self) -> Option<Account> {
@@ -1000,7 +1171,13 @@ impl MailView {
                     self.statuses.retain(|(known, _)| *known != account);
                     self.statuses.push((account, status));
                 }
-                MailEvent::Changed(_) => stale = true,
+                MailEvent::Changed(_) => {
+                    stale = true;
+                    if !self.undoing.is_empty() {
+                        let moves = std::mem::take(&mut self.undoing);
+                        self.put_back(moves);
+                    }
+                }
                 MailEvent::Arrived(_, ids) => {
                     stale = true;
                     self.notify(&ids);
@@ -1375,7 +1552,12 @@ impl MailView {
                 self.ui.clear_focus();
                 self.click(pointer)
             }
+            Event::PointerUp(_) if self.drag.is_some() => {
+                self.drop_messages();
+                true
+            }
             Event::PointerUp(_) => self.ui.handle(event),
+            Event::PointerMove(pointer) if self.drag.is_some() => self.drag_to(pointer.position),
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
                 let ui = self.ui.handle(event);
                 let hover = self.hit(pointer.position);
@@ -1383,12 +1565,90 @@ impl MailView {
                 self.hover = hover;
                 ui | changed
             }
-            Event::PointerLeave => self.ui.handle(event) | self.hover.take().is_some(),
+            Event::PointerLeave => {
+                self.ui.handle(event) | self.hover.take().is_some() | self.drag.take().is_some()
+            }
             Event::Scroll(scroll) => {
                 self.ui.handle(event)
                     || (!self.over_control(scroll.position) && self.scroll(scroll))
             }
             _ => self.ui.handle(event),
+        }
+    }
+
+    fn drop_target(&self, index: usize) -> bool {
+        match self.sidebar.get(index) {
+            Some(Row::Place { place, .. }) if *place == self.place => false,
+            Some(Row::Place {
+                place: Place::Mailbox(id),
+                ..
+            }) => self
+                .accounts
+                .iter()
+                .flat_map(|(_, mailboxes)| mailboxes)
+                .any(|mailbox| mailbox.id == *id && mailbox.selectable),
+            Some(Row::Place {
+                place: Place::All(role),
+                ..
+            }) => *role != Role::Drafts && *role != Role::Sent,
+            _ => false,
+        }
+    }
+
+    fn drag_to(&mut self, at: Point) -> bool {
+        let over = match self.hit(at) {
+            Some(Hit::Place(index)) if self.drop_target(index) => Some(index),
+            _ => None,
+        };
+        let Some(drag) = self.drag.as_mut() else {
+            return false;
+        };
+        let moving =
+            drag.moving || (at.x - drag.from.x).abs() + (at.y - drag.from.y).abs() > DRAG_THRESHOLD;
+        let changed = moving && (drag.at != at || drag.over != over || !drag.moving);
+        *drag = Drag {
+            at,
+            moving,
+            over: over.filter(|_| moving),
+            ..*drag
+        };
+        changed
+    }
+
+    fn drop_messages(&mut self) {
+        let Some(drag) = self.drag.take() else {
+            return;
+        };
+        if let (false, Some(id)) = (drag.moving, drag.collapse) {
+            self.select(id);
+        }
+        let (true, Some(index)) = (drag.moving, drag.over) else {
+            return;
+        };
+        match self.sidebar.get(index).cloned() {
+            Some(Row::Place {
+                place: Place::Mailbox(id),
+                ..
+            }) => {
+                let target = self
+                    .accounts
+                    .iter()
+                    .flat_map(|(_, mailboxes)| mailboxes)
+                    .find(|mailbox| mailbox.id == id)
+                    .cloned();
+                if let Some(target) = target {
+                    self.move_selected_to(&target);
+                }
+            }
+            Some(Row::Place {
+                place: Place::All(Role::Trash),
+                ..
+            }) => self.delete_selected(),
+            Some(Row::Place {
+                place: Place::All(role),
+                ..
+            }) => self.move_selected(role),
+            _ => {}
         }
     }
 
@@ -1416,6 +1676,16 @@ impl MailView {
         }
         let plain = !modifiers.control;
         match key {
+            Key::Character('z' | 'Z') if modifiers.control && !modifiers.shift => {
+                self.undo();
+                true
+            }
+            Key::Character('a' | 'A') if modifiers.control && !modifiers.shift => {
+                self.select_all();
+                true
+            }
+            Key::Up if plain && modifiers.shift => self.extend(-1),
+            Key::Down if plain && modifiers.shift => self.extend(1),
             Key::Up if plain => self.step(-1),
             Key::Down if plain => self.step(1),
             Key::Backspace | Key::Delete => {
@@ -1429,6 +1699,50 @@ impl MailView {
             }
             _ => self.ui.handle(&event),
         }
+    }
+
+    fn select_all(&mut self) {
+        let Some(first) = self
+            .selected
+            .or_else(|| self.messages.first().map(|summary| summary.id))
+        else {
+            return;
+        };
+        if self.selected.is_none() {
+            self.select(first);
+        }
+        self.also = self
+            .messages
+            .iter()
+            .map(|summary| summary.id)
+            .filter(|id| *id != first)
+            .collect();
+        if !self.also.is_empty() {
+            self.reading = None;
+            self.layout = None;
+        }
+    }
+
+    fn extend(&mut self, by: isize) -> bool {
+        let chosen = self
+            .messages
+            .iter()
+            .enumerate()
+            .filter(|(_, summary)| self.is_chosen(summary.id))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let (Some(first), Some(last)) = (chosen.first(), chosen.last()) else {
+            return self.step(by);
+        };
+        let next = match by < 0 {
+            true => first.checked_sub(1),
+            false => Some(last + 1).filter(|next| *next < self.messages.len()),
+        };
+        let Some(id) = next.map(|next| self.messages[next].id) else {
+            return false;
+        };
+        self.select_more(id, false);
+        true
     }
 
     fn step(&mut self, by: isize) -> bool {
@@ -1456,8 +1770,7 @@ impl MailView {
         let Some(hit) = self.hit(pointer.position) else {
             return false;
         };
-        let secondary = pointer.button == PointerButton::Secondary
-            || (pointer.button == PointerButton::Primary && pointer.modifiers.control);
+        let secondary = pointer.button == PointerButton::Secondary;
         match hit {
             Hit::Place(index) => {
                 self.focus = Pane::Sidebar;
@@ -1465,9 +1778,24 @@ impl MailView {
                     self.choose_place(place);
                 }
             }
+            Hit::Message(id)
+                if !secondary && (pointer.modifiers.control || pointer.modifiers.shift) =>
+            {
+                self.select_more(id, pointer.modifiers.shift);
+            }
             Hit::Message(id) => {
-                if self.selected != Some(id) {
+                let collapse = !secondary && self.is_chosen(id) && !self.also.is_empty();
+                if !self.is_chosen(id) {
                     self.select(id);
+                }
+                if !secondary && pointer.count == 1 {
+                    self.drag = Some(Drag {
+                        from: pointer.position,
+                        at: pointer.position,
+                        moving: false,
+                        over: None,
+                        collapse: collapse.then_some(id),
+                    });
                 }
                 if pointer.count >= 2 && !secondary {
                     self.continue_draft();
@@ -1484,6 +1812,10 @@ impl MailView {
                     MenuItem::new(
                         &L10N.tr("attachment-open"),
                         &format!("attachment-open:{index}"),
+                    ),
+                    MenuItem::new(
+                        &L10N.tr("attachment-save-as"),
+                        &format!("attachment-save-as:{index}"),
                     ),
                     MenuItem::new(
                         &L10N.tr("attachment-save"),
@@ -1580,6 +1912,17 @@ impl MailView {
                 match parsed {
                     Some(("attachment-open", index)) => self.open_attachment(index),
                     Some(("attachment-save", index)) => self.save_attachment(index),
+                    Some(("attachment-save-as", index)) => {
+                        if let (Some(name), Some(data)) = (
+                            self.attachment_name(index),
+                            self.reading
+                                .as_ref()
+                                .and_then(|reading| reading.content.attachments.get(index))
+                                .map(|attachment| attachment.data.clone()),
+                        ) {
+                            self.requests.push(Request::SaveAttachment(name, data));
+                        }
+                    }
                     _ => {}
                 }
             }

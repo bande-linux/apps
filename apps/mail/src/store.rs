@@ -627,6 +627,29 @@ impl Store {
             .optional()?)
     }
 
+    pub fn message_id(&self, id: MessageId) -> Result<Option<String>> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT message_id FROM messages WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten())
+    }
+
+    pub fn find_message(&self, mailbox: MailboxId, message_id: &str) -> Result<Option<MessageId>> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT id FROM messages WHERE mailbox = ?1 AND message_id = ?2",
+                params![mailbox, message_id],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
     fn located(&self, ids: &[MessageId]) -> Result<Vec<(Mailbox, u32, u32, MessageId)>> {
         let mut found = Vec::new();
         for id in ids {

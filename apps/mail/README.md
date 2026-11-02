@@ -36,7 +36,8 @@ apt install bande-mail
   preview (two lines unless Settings says otherwise), the date, an unread dot, a flag and a
   paperclip. The reader shows the headers, the plain text or sanitised HTML, and the
   attachments. Clicking an attachment opens a private copy in `~/.cache/bande-mail/attachments/`,
-  removed when Mail quits unless it was edited; its menu also saves it to the Downloads folder.
+  removed when Mail quits unless it was edited; its menu also saves it where you choose (the
+  desktop's file chooser) or to the Downloads folder.
 - **HTML** is never rendered as a web page: it is turned into paragraphs, headings, lists,
   quotes, links and pictures. Scripts, styles, forms and frames are dropped, and only `http`,
   `https` and `mailto` links survive. Pictures sent inside the message (`cid:`) show at once;
@@ -48,7 +49,11 @@ apt install bande-mail
   Forward (Shift+Ctrl+F), Flag (Shift+Ctrl+L), Mark as Read or Unread (Shift+Ctrl+U), Send
   (Shift+Ctrl+D), Close Window (Ctrl+W), Quit (Ctrl+Q) and Search (Ctrl+F), which searches
   sender, recipients, subject and text. Mailbox → Mark All as Read marks the shown mailbox read, and Message → Move To files the
-  message in any mailbox of its account.
+  message in any mailbox of its account. Ctrl+click, Shift+click, Shift+Up/Down and Select All
+  (Ctrl+A) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then
+  act on all of them, and dragging them onto a mailbox in the sidebar moves them. Undo (Ctrl+Z)
+  puts the last moved or deleted messages back, and a mailbox that messages were moved to is
+  synced right after the move.
 - **Compose** opens its own window, with From when there are several accounts. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's
   signature goes above the quoted text and changes with From. Files are

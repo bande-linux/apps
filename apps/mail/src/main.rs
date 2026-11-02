@@ -13,6 +13,7 @@ use bande_inbox::Inbox;
 use bande_mail::L10N;
 use bande_mail::compose::{Outgoing, from_mailto, keep_unsent, left_unsent};
 use bande_mail::message::Attachment;
+use bande_mail::portal::choose_save_path;
 use bande_mail::settings::{Change, MailSettings, listen};
 use bande_mail::ui::{
     COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Mode, Request, SETTINGS_SIZE,
@@ -210,6 +211,25 @@ fn announce(summary: String, body: String, sound: bool) {
         });
     if let Err(error) = spawned {
         tracing::warn!("cannot notify: {error}");
+    }
+}
+
+fn save_attachment(name: String, data: Vec<u8>) {
+    let spawned = std::thread::Builder::new()
+        .name("save-attachment".to_owned())
+        .spawn(
+            move || match choose_save_path(&L10N.tr("attachment-save-title"), &name) {
+                Ok(Some(path)) => {
+                    if let Err(error) = std::fs::write(&path, &data) {
+                        tracing::warn!("cannot save {}: {error}", path.display());
+                    }
+                }
+                Ok(None) => {}
+                Err(error) => tracing::warn!("cannot choose where to save {name}: {error}"),
+            },
+        );
+    if let Err(error) = spawned {
+        tracing::warn!("cannot save an attachment: {error}");
     }
 }
 
@@ -445,6 +465,7 @@ impl Mail {
                 }
                 Request::OpenLink(url) => self.open_url(cx, window, &url),
                 Request::OpenAttachment(path) => self.open_file(cx, window, &path),
+                Request::SaveAttachment(name, data) => save_attachment(name, data),
                 Request::Notify {
                     summary,
                     body,

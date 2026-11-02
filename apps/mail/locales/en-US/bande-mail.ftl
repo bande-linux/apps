@@ -15,6 +15,8 @@ account-offline = Offline
 no-messages = No Messages
 no-results = No Results
 no-message-selected = No Message Selected
+messages-selected = { $count } Messages Selected
+messages-dragged = { $count } messages
 no-sender = No Sender
 no-subject = No Subject
 header-to = To: { $names }
@@ -110,6 +112,8 @@ compose-too-large = { $name } is larger than { $limit } and was not attached.
 load-remote-content = Load Remote Content
 attachment-open = Open Attachment
 attachment-save = Save to Downloads Folder
+attachment-save-as = Save Attachment…
+attachment-save-title = Save Attachment
 remote-content-loading = Loading remote content…
 
 settings-title = Settings

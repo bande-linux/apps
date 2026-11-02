@@ -424,8 +424,15 @@ impl Runner {
                 Ok(())
             }
             Command::Flush => {
-                if self.flush()? {
-                    self.emit(Event::Changed(self.account.id));
+                let Some(targets) = self.flush()? else {
+                    return Ok(());
+                };
+                self.emit(Event::Changed(self.account.id));
+                let mailboxes = self.store.mailboxes(self.account.id)?;
+                for target in targets {
+                    if let Some(mailbox) = mailboxes.iter().find(|mailbox| mailbox.path == target) {
+                        self.sync_one(mailbox)?;
+                    }
                 }
                 Ok(())
             }
@@ -440,7 +447,7 @@ impl Runner {
         }
     }
 
-    fn flush(&mut self) -> Result<bool> {
+    fn flush(&mut self) -> Result<Option<Vec<String>>> {
         let account = self.account.id;
         let (session, store) = self.connected()?;
         flush(session, store, account)
