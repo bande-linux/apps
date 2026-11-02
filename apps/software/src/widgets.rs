@@ -1,6 +1,6 @@
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId, focus_ring};
-use bande_toolkit::{Image, Item, Paragraph, Point, Radius, Rect, Shape, TextStyle};
+use bande_toolkit::{Color, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextStyle};
 
 const ROW_PADDING: f32 = 8.0;
 const ROW_GAP: f32 = 12.0;
@@ -190,6 +190,8 @@ impl Widget for Picture {
     }
 }
 
+type TextKey = (f32, Color, f32);
+
 pub struct AppRow {
     id: WidgetId,
     icon: Option<Image>,
@@ -199,7 +201,7 @@ pub struct AppRow {
     on_open: Box<dyn FnMut()>,
     action: Vec<Box<dyn Widget>>,
     action_size: Size,
-    texts: Option<(Paragraph, Paragraph)>,
+    texts: Option<(TextKey, Paragraph, Paragraph)>,
     hovered: bool,
     pressed: bool,
     frame: Rect,
@@ -260,21 +262,27 @@ impl Widget for AppRow {
                 false => 0.0,
             };
         let room = (available.width - used).max(0.0);
-        let name = cx.text.fitted(
-            &self.name,
-            TextStyle::new(NAME_SIZE, cx.palette.ink).weight(TextStyle::SEMIBOLD),
-            room,
-        );
-        let summary = cx.text.fitted(
-            &self.summary,
-            TextStyle::new(SUMMARY_SIZE, cx.palette.ink2),
-            room,
-        );
+        let key = (room, cx.palette.ink, cx.text.scale());
+        let (name, summary) = match self.texts.take().filter(|(kept, ..)| *kept == key) {
+            Some((_, name, summary)) => (name, summary),
+            None => (
+                cx.text.fitted(
+                    &self.name,
+                    TextStyle::new(NAME_SIZE, cx.palette.ink).weight(TextStyle::SEMIBOLD),
+                    room,
+                ),
+                cx.text.fitted(
+                    &self.summary,
+                    TextStyle::new(SUMMARY_SIZE, cx.palette.ink2),
+                    room,
+                ),
+            ),
+        };
         let height = (name.height() + summary.height())
             .max(self.icon_size)
             .max(self.action_size.height)
             + 2.0 * ROW_PADDING;
-        self.texts = Some((name, summary));
+        self.texts = Some((key, name, summary));
         Size::new(available.width, height.ceil())
     }
 
@@ -310,7 +318,7 @@ impl Widget for AppRow {
             focus_ring(cx, shape, items);
         }
         paint_image(cx, self.icon.as_ref(), self.icon_rect(), items);
-        if let Some((name, summary)) = &self.texts {
+        if let Some((_, name, summary)) = &self.texts {
             let x = self.frame.x + ROW_PADDING + self.icon_size + ROW_GAP;
             let top = self.frame.y
                 + ((self.frame.height - name.height() - summary.height()) / 2.0).round();
