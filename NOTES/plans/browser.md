@@ -20,6 +20,54 @@ finish.
 | [browser/app.md](browser/app.md) | the Safari-like app on bande-app, packaging |
 | [browser/roadmap.md](browser/roadmap.md) | phases, milestones and done-criteria, desktop work |
 
+## DRM, Premium Streaming and Video Playback
+
+The browser must aim for the highest possible DRM security level and streaming quality, with Netflix 4K playback on Linux as a primary compatibility target.
+
+### Primary objectives
+
+Design the architecture to support:
+
+- Widevine L1 integration, subject to Google's licensing and provisioning.
+- Hardware-backed DRM and trusted execution environments.
+- Secure video decoding and protected media paths.
+- Linux VA-API hardware acceleration.
+- HEVC, AV1, VP9 and H.264 codec support.
+- HDCP 2.2/2.3 output protection where supported by hardware and operating system.
+- Encrypted Media Extensions (EME).
+- Netflix 4K compatibility, subject to Netflix authorization.
+- DRM capability detection, reporting and diagnostics.
+
+### Adaptive fallback strategy
+
+The browser must automatically determine the highest available combination of DRM security, codec, resolution and video acceleration. Establish a fallback hierarchy:
+
+1. Widevine L1 with hardware-backed secure decoding and 4K playback.
+2. Widevine L1 with lower-resolution playback.
+3. Widevine L3 with hardware-accelerated decoding where permitted.
+4. Widevine L3 with software decoding where permitted.
+5. Lower resolutions and alternative supported codecs.
+6. Unprotected playback when DRM is not required.
+
+The browser must never falsely report DRM capabilities or circumvent content-provider security restrictions.
+
+### Architectural requirements
+
+- Keep DRM integration modular and independent of the rendering engine.
+- Support multiple DRM systems in the future.
+- Separate DRM authorization from codec and hardware capabilities.
+- Detect hardware, driver, OS and display limitations.
+- Expose detailed diagnostics explaining why a higher quality level is unavailable.
+- Make it possible to upgrade DRM components without redesigning the browser.
+
+### Acceptance criteria
+
+The browser should achieve the highest officially authorized streaming quality available on each supported platform.
+
+Netflix 4K on Linux is the aspirational target, not a guaranteed capability. Where licensing, hardware, operating system or provider restrictions prevent it, the browser must gracefully fall back to the highest permitted quality.
+
+Do not sacrifice security or violate DRM requirements to achieve higher resolution.
+
 ## The size of it, honestly
 
 Full parity with Chromium and Firefox is **22–32 engineer-years** of focused work, then a
