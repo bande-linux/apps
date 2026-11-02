@@ -124,16 +124,6 @@ dependencies = [
 
 [[package]]
 name = "annotate-snippets"
-version = "0.11.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "710e8eae58854cdc1790fcb56cca04d712a17be849eeb81da2a724bf4bae2bc4"
-dependencies = [
- "anstyle",
- "unicode-width",
-]
-
-[[package]]
-name = "annotate-snippets"
 version = "0.12.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2a5b0a5ab8561c603f16c3b78c24a386b1f70e7fc1b1b1e8c15738828e4a176"
@@ -362,7 +352,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 [[package]]
 name = "bande-app"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "accesskit",
  "bande-app-menu",
@@ -380,7 +370,7 @@ dependencies = [
 [[package]]
 name = "bande-app-menu"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "bande-inbox",
  "bande-l10n",
@@ -390,7 +380,7 @@ dependencies = [
 [[package]]
 name = "bande-app-settings"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -402,19 +392,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "bande-audio"
-version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
-dependencies = [
- "pipewire",
- "serde_json",
- "tracing",
-]
-
-[[package]]
 name = "bande-bluetooth"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "blocking",
  "zbus",
@@ -423,7 +403,7 @@ dependencies = [
 [[package]]
 name = "bande-bus"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "zbus",
 ]
@@ -458,7 +438,7 @@ dependencies = [
 [[package]]
 name = "bande-datetime"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "icu_calendar",
  "icu_datetime",
@@ -472,12 +452,12 @@ dependencies = [
 [[package]]
 name = "bande-design"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 
 [[package]]
 name = "bande-fs"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "bande-datetime",
  "bande-l10n",
@@ -495,7 +475,7 @@ dependencies = [
 [[package]]
 name = "bande-graphics"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "bande-design",
  "fontique",
@@ -514,7 +494,7 @@ dependencies = [
 [[package]]
 name = "bande-inbox"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "rustix",
 ]
@@ -547,7 +527,7 @@ dependencies = [
 [[package]]
 name = "bande-l10n"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "fluent-bundle",
  "tracing",
@@ -557,7 +537,7 @@ dependencies = [
 [[package]]
 name = "bande-log"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "rustix",
  "tracing",
@@ -614,7 +594,7 @@ dependencies = [
 [[package]]
 name = "bande-network"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "zbus",
 ]
@@ -622,7 +602,7 @@ dependencies = [
 [[package]]
 name = "bande-notify"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "bande-bus",
  "bande-datetime",
@@ -637,7 +617,7 @@ dependencies = [
 [[package]]
 name = "bande-packages"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "rustix",
  "serde",
@@ -648,7 +628,7 @@ dependencies = [
 [[package]]
 name = "bande-power"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "bande-bus",
  "bande-l10n",
@@ -666,7 +646,7 @@ dependencies = [
 [[package]]
 name = "bande-protocols"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "wayland-backend",
  "wayland-client",
@@ -677,7 +657,7 @@ dependencies = [
 [[package]]
 name = "bande-search"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "bande-inbox",
  "bande-watch",
@@ -719,7 +699,7 @@ dependencies = [
 [[package]]
 name = "bande-sound"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "tracing",
  "zbus",
@@ -728,15 +708,14 @@ dependencies = [
 [[package]]
 name = "bande-spring"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 
 [[package]]
 name = "bande-status"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "bande-app-menu",
- "bande-audio",
  "bande-bluetooth",
  "bande-datetime",
  "bande-inbox",
@@ -786,7 +765,7 @@ dependencies = [
 [[package]]
 name = "bande-toolkit"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "accesskit",
  "bande-graphics",
@@ -797,7 +776,7 @@ dependencies = [
 [[package]]
 name = "bande-toolkit-platform"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -821,7 +800,7 @@ dependencies = [
 [[package]]
 name = "bande-watch"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "rustix",
 ]
@@ -829,7 +808,7 @@ dependencies = [
 [[package]]
 name = "bande-widgets"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "accesskit",
  "bande-graphics",
@@ -842,7 +821,7 @@ dependencies = [
 [[package]]
 name = "bande-xdg"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/desktop?rev=978d5b3edb2b766496c132e2cba38b790b689e08#978d5b3edb2b766496c132e2cba38b790b689e08"
+source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"
 dependencies = [
  "bande-bus",
  "bande-inbox",
@@ -864,25 +843,6 @@ name = "base64"
 version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
-
-[[package]]
-name = "bindgen"
-version = "0.72.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
-dependencies = [
- "annotate-snippets 0.11.5",
- "bitflags 2.13.2",
- "cexpr",
- "clang-sys",
- "itertools 0.13.0",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash 2.1.3",
- "shlex 1.3.0",
- "syn 2.0.119",
-]
 
 [[package]]
 name = "bit-set"
@@ -1031,26 +991,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86e055fa6e3e40ad6187ba25b6855eeb635d5271f8e0f0e1e9a5826b8d75bea0"
 dependencies = [
  "find-msvc-tools",
- "shlex 2.0.1",
-]
-
-[[package]]
-name = "cexpr"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766"
-dependencies = [
- "nom 7.1.3",
-]
-
-[[package]]
-name = "cfg-expr"
-version = "0.20.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ba9e9ec16c447027685b1f897b720e18e9a8afd00bd7332c483537e38086c9f"
-dependencies = [
- "smallvec",
- "target-lexicon",
+ "shlex",
 ]
 
 [[package]]
@@ -1073,17 +1014,6 @@ checksum = "f1f927b07c74ba84c7e5fe4db2baeb3e996ab2688992e39ac68ce3220a677c7e"
 dependencies = [
  "base64 0.22.1",
  "encoding_rs",
-]
-
-[[package]]
-name = "clang-sys"
-version = "1.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "157a8ba7b480713b56f4c09fd13fc3e0a22a5dfab8097ba61cbc5feef950788a"
-dependencies = [
- "glob",
- "libc",
- "libloading",
 ]
 
 [[package]]
@@ -1143,12 +1073,6 @@ checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
 dependencies = [
  "unicode-segmentation",
 ]
-
-[[package]]
-name = "cookie-factory"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9885fa71e26b8ab7855e2ec7cae6e9b380edff76cd052e07c683a0319d51b3a2"
 
 [[package]]
 name = "core-foundation"
@@ -1771,12 +1695,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "glob"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
-
-[[package]]
 name = "gpu-allocator"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1850,12 +1768,6 @@ checksum = "a596f1b20ed2cc5ecac41a164aaebc7258057060f06c0cf7a2ba3991ee7990fb"
 dependencies = [
  "hashbrown 0.17.1",
 ]
-
-[[package]]
-name = "heck"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hermit-abi"
@@ -2229,15 +2141,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -2577,7 +2480,7 @@ dependencies = [
  "ascii-canvas",
  "bit-set 0.8.0",
  "ena",
- "itertools 0.14.0",
+ "itertools",
  "lalrpop-util",
  "petgraph",
  "regex",
@@ -2698,33 +2601,6 @@ name = "libm"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
-
-[[package]]
-name = "libspa"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "882f7427e7989dcc9d388b7f05c4630390a1d7696f9ffa469cd4a7a48f0b4c40"
-dependencies = [
- "bitflags 2.13.2",
- "cc",
- "cookie-factory",
- "libc",
- "libspa-sys",
- "nom 8.0.0",
- "rustix",
- "system-deps",
-]
-
-[[package]]
-name = "libspa-sys"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b6e17bdaf63ed0d5e4144022624032b41fd9733112e8c74ac26fc9bf1291924"
-dependencies = [
- "bindgen",
- "cc",
- "system-deps",
-]
 
 [[package]]
 name = "libsqlite3-sys"
@@ -2863,12 +2739,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "minimal-lexical"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
-
-[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2984,25 +2854,6 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
-]
-
-[[package]]
-name = "nom"
-version = "7.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
-dependencies = [
- "memchr",
- "minimal-lexical",
-]
-
-[[package]]
-name = "nom"
-version = "8.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
-dependencies = [
- "memchr",
 ]
 
 [[package]]
@@ -3360,31 +3211,6 @@ dependencies = [
  "atomic-waker",
  "fastrand",
  "futures-io",
-]
-
-[[package]]
-name = "pipewire"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bde71084c4e25959d68f1ea54daa75e5ecdb338e5caf0b5510143b79baa32d5c"
-dependencies = [
- "bitflags 2.13.2",
- "libc",
- "libspa",
- "libspa-sys",
- "pipewire-sys",
- "rustix",
-]
-
-[[package]]
-name = "pipewire-sys"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ce653f53e63e5b93853218092ee9a8906a5d082c92f3f1db26316955dd63ce0"
-dependencies = [
- "bindgen",
- "libspa-sys",
- "system-deps",
 ]
 
 [[package]]
@@ -3937,15 +3763,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_spanned"
-version = "1.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e7523beb55eece201a2356bee0bbca0d1ab466c14c07703b2e0ee6d42cb0c2c"
-dependencies = [
- "serde_core",
-]
-
-[[package]]
 name = "serde_yaml_ng"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3987,12 +3804,6 @@ checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
 ]
-
-[[package]]
-name = "shlex"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shlex"
@@ -4205,19 +4016,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "system-deps"
-version = "7.0.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "396a35feb67335377e0251fcbc1092fc85c484bd4e3a7a54319399da127796e7"
-dependencies = [
- "cfg-expr",
- "heck",
- "pkg-config",
- "toml",
- "version-compare",
-]
-
-[[package]]
 name = "tar"
 version = "0.4.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4227,12 +4025,6 @@ dependencies = [
  "libc",
  "xattr",
 ]
-
-[[package]]
-name = "target-lexicon"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "tempfile"
@@ -4341,21 +4133,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "toml"
-version = "1.1.8+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20489e00e4d8741d6be680764cc12e270655e375a20d1011e844a9c3379e678d"
-dependencies = [
- "indexmap",
- "serde_core",
- "serde_spanned",
- "toml_datetime",
- "toml_parser",
- "toml_writer",
- "winnow",
-]
-
-[[package]]
 name = "toml_datetime"
 version = "1.1.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4384,12 +4161,6 @@ checksum = "baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c"
 dependencies = [
  "winnow",
 ]
-
-[[package]]
-name = "toml_writer"
-version = "1.1.3+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
 
 [[package]]
 name = "tracing"
@@ -4693,12 +4464,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "version-compare"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03c2856837ef78f57382f06b2b8563a2f512f7185d732608fd9176cb3b8edf0e"
-
-[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4916,10 +4681,10 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc3857a39e7220245e4ec1e2f6230e1b5ccd3542545bc1ee5c13d79597e6d193"
 dependencies = [
- "annotate-snippets 0.12.17",
+ "annotate-snippets",
  "derive_more",
  "half",
- "itertools 0.14.0",
+ "itertools",
  "num-traits",
  "thiserror",
  "wesl-macros",
@@ -4933,7 +4698,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8662ee0b2ef199c31f486b869e5272ac364898c09d352483370d37b8c3abf9f9"
 dependencies = [
- "itertools 0.14.0",
+ "itertools",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -5077,9 +4842,9 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2141e2425fbb5aefd13e875adc7247e5dc889a3bbbe5a016dd1546211405f89f"
 dependencies = [
- "annotate-snippets 0.12.17",
+ "annotate-snippets",
  "derive_more",
- "itertools 0.14.0",
+ "itertools",
  "lalrpop",
  "lalrpop-util",
  "lexical",
@@ -5095,7 +4860,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3cf8623d173060d5a9e1465b89954ea42f3ac21af2f533c7975d003f8d82b98"
 dependencies = [
  "half",
- "itertools 0.14.0",
+ "itertools",
  "num-traits",
 ]
 

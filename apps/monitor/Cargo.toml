@@ -16,7 +16,7 @@ zbus.workspace = true
 bande-app.workspace = true
 bande-app-menu.workspace = true
 bande-l10n.workspace = true
-bande-status.workspace = true
+bande-status = { workspace = true, default-features = false }
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 
