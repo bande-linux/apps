@@ -50,5 +50,5 @@ occurrence cache per shown range; slim sync jobs; unchanged sync-token skip.
 2. **Subscription URL edit and published TTL**: honour `REFRESH-INTERVAL` / `X-PUBLISHED-TTL`
    as a subscription's default interval, and let its URL be changed.
 3. **Invitee autocomplete and free/busy** (needs Contacts and CalDAV scheduling outbox POST).
-5. **Birthdays calendar** from Contacts.
-6. **Shared file chooser helper**: `portal.rs` repeats Mail's; move it to a desktop crate.
+4. **Birthdays calendar** from Contacts.
+5. **Shared file chooser helper**: `portal.rs` repeats Mail's; move it to a desktop crate.

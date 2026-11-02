@@ -44,8 +44,8 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 
 ## Remaining, ranked by how much users rely on it
 
-2. Rich text compose and spelling (both need desktop services first).
-3. Server-side search; CONDSTORE/QRESYNC (release review).
-4. A privacy proxy for remote pictures.
-5. Redo; dragging messages out to other apps.
-6. A Password field in Settings → Accounts; a message font apart from the desktop text size.
+1. Rich text compose and spelling (both need desktop services first).
+2. Server-side search; CONDSTORE/QRESYNC (release review).
+3. A privacy proxy for remote pictures.
+4. Redo; dragging messages out to other apps.
+5. A Password field in Settings → Accounts; a message font apart from the desktop text size.
