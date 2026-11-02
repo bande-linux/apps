@@ -5,6 +5,7 @@ use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
+use bande_datetime::DateFormats;
 use bande_fs::format_size;
 use bande_inbox::Inbox;
 use bande_packages::{Canceller, Client, Package, Progress, Status};
@@ -17,6 +18,7 @@ use bande_toolkit::{Image, Palette, Rect, TextSystem};
 use crate::L10N;
 use crate::catalog::{Block, Bundle, Category, Component, Icon, search};
 use crate::media::{self, Loaded, Media, ShotError};
+use crate::online;
 use crate::widgets::{AppRow, Grid, Picture};
 use crate::worker::{self, Facts, Failure, Job, Message, Problem, Query};
 
@@ -202,6 +204,17 @@ fn problem_text(problem: Problem, task: Task, name: &str) -> String {
     L10N.tr_args(id, [("name", name.to_owned().into())])
 }
 
+fn block_text(block: &Block) -> String {
+    match block {
+        Block::Paragraph(text) => text.clone(),
+        Block::List(items) => items
+            .iter()
+            .map(|item| format!("• {item}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    }
+}
+
 fn latest_release(app: &Component) -> i64 {
     app.releases
         .iter()
@@ -219,6 +232,8 @@ fn has_local_icon(app: &Component) -> bool {
 pub struct Software {
     apps: Vec<Component>,
     loading: bool,
+    online: bool,
+    dates: DateFormats,
     installed: HashSet<String>,
     icons: HashMap<String, Option<Image>>,
     requested: HashSet<String>,
@@ -255,6 +270,7 @@ impl Software {
         let canceller = transactions.canceller();
         let workers = worker::start(transactions, queries, arch)?;
         let media = media::start(&workers.inbox.outbox())?;
+        online::watch(workers.inbox.outbox());
         let intents: Rc<RefCell<Vec<Intent>>> = Rc::default();
         let typed = Rc::clone(&intents);
         let search = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
@@ -280,6 +296,8 @@ impl Software {
         let mut software = Self {
             apps: Vec::new(),
             loading: true,
+            online: true,
+            dates: DateFormats::from_env(),
             installed: HashSet::new(),
             icons: HashMap::new(),
             requested: HashSet::new(),
@@ -415,6 +433,7 @@ impl Software {
         self.pages.push((page, ScrollState::default()));
         if let Page::App(index) = page {
             self.shot = 0;
+            self.shots.clear();
             self.request_shot();
             if let Some(app) = self.apps.get(index)
                 && let Some(package) = deb(app)
@@ -448,6 +467,14 @@ impl Software {
                 self.apps = apps.into_iter().filter(|app| !app.needs_x11).collect();
                 self.installed = installed;
                 self.loading = false;
+            }
+            Message::Online(online) => {
+                self.online = online;
+                if online {
+                    self.shots
+                        .retain(|_, shot| !matches!(shot, Err(ShotError::Offline)));
+                    self.request_shot();
+                }
             }
             Message::Loaded(Loaded::Icons(icons)) => {
                 for (key, image) in icons {
@@ -706,6 +733,12 @@ impl Software {
         fresh.sort_by_key(|index| {
             std::cmp::Reverse(self.apps.get(*index).map(latest_release).unwrap_or(0))
         });
+        let mut names = HashSet::new();
+        fresh.retain(|index| {
+            self.apps
+                .get(*index)
+                .is_some_and(|app| names.insert(app.name.to_lowercase()))
+        });
         let mut widgets = vec![
             boxed(Label::heading(&L10N.tr("categories"))),
             boxed(Grid::new(3, SPACING / 2.0, tiles)),
@@ -935,6 +968,44 @@ impl Software {
         widgets
     }
 
+    fn whats_new(&self, app: &Component) -> Widgets {
+        let Some(release) = app
+            .releases
+            .first()
+            .filter(|release| !release.notes.is_empty())
+        else {
+            return Vec::new();
+        };
+        let date = release
+            .timestamp
+            .and_then(|seconds| jiff::Timestamp::from_second(seconds).ok())
+            .map(|at| {
+                self.dates
+                    .date(&at.to_zoned(jiff::tz::TimeZone::system()), true)
+            });
+        let version = match date {
+            Some(date) => L10N.tr_args(
+                "release-dated",
+                [
+                    ("version", release.version.clone().into()),
+                    ("date", date.into()),
+                ],
+            ),
+            None => L10N.tr_args("release", [("version", release.version.clone().into())]),
+        };
+        let mut widgets = vec![
+            boxed(Label::heading(&L10N.tr("whats-new"))),
+            boxed(Label::new(&version).secondary()),
+        ];
+        widgets.extend(
+            release
+                .notes
+                .iter()
+                .map(|block| boxed(Label::new(&block_text(block)))),
+        );
+        widgets
+    }
+
     fn information(&self, app: &Component) -> Widgets {
         let facts = self.facts.get(app.key());
         let fact = |title: &str, value: Box<dyn Widget>| {
@@ -1027,23 +1098,18 @@ impl Software {
         ];
         widgets.extend(self.actions(index, app));
         widgets.extend(self.screenshots(app));
-        for block in &app.description {
-            let text = match block {
-                Block::Paragraph(text) => text.clone(),
-                Block::List(items) => items
-                    .iter()
-                    .map(|item| format!("• {item}"))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            };
-            widgets.push(boxed(Label::new(&text)));
-        }
+        widgets.extend(
+            app.description
+                .iter()
+                .map(|block| boxed(Label::new(&block_text(block)))),
+        );
+        widgets.extend(self.whats_new(app));
         widgets.extend(self.information(app));
         widgets
     }
 
     fn rebuild(&mut self) {
-        let widgets = if self.loading {
+        let mut widgets = if self.loading {
             vec![boxed(Spinner::new(&L10N.tr("loading")))]
         } else if self.apps.is_empty() {
             vec![boxed(Label::new(&L10N.tr("no-catalogue")))]
@@ -1059,6 +1125,9 @@ impl Software {
                 },
             }
         };
+        if !self.online {
+            widgets.insert(0, boxed(Label::new(&L10N.tr("offline")).secondary()));
+        }
         let page = boxed(Stack::new(Axis::Vertical, SPACING, 0.0, widgets));
         if let Some(holder) = self.ui.widget(self.content)
             && let Some(slot) = holder.children_mut().first_mut()

@@ -50,6 +50,7 @@ pub struct Facts {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Loaded(Loaded),
+    Online(bool),
     Progress(String, Progress),
     Installed(String),
     Removed(String),

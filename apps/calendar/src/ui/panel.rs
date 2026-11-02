@@ -27,6 +27,7 @@ pub struct Line {
     pub height: f32,
     pub separated: bool,
     pub trailing: bool,
+    pub hidden: bool,
 }
 
 impl Line {
@@ -37,6 +38,7 @@ impl Line {
             height,
             separated: false,
             trailing: false,
+            hidden: false,
         }
     }
 
@@ -121,8 +123,26 @@ impl Panel {
         }
     }
 
-    pub fn line(&mut self, line: Line) {
+    pub fn line(&mut self, line: Line) -> usize {
         self.lines.push(line);
+        self.lines.len() - 1
+    }
+
+    pub fn show_line(&mut self, line: usize, shown: bool) {
+        if let Some(line) = self.lines.get_mut(line) {
+            line.hidden = !shown;
+        }
+    }
+
+    fn shown(&self) -> impl Iterator<Item = &Line> {
+        self.lines.iter().filter(|line| !line.hidden)
+    }
+
+    fn hidden_child(&self, index: usize) -> bool {
+        self.lines
+            .iter()
+            .filter(|line| line.hidden)
+            .any(|line| line.cells.iter().any(|(cell, _)| *cell == index))
     }
 
     pub fn set_arrow(&mut self, arrow: Arrow) {
@@ -139,8 +159,7 @@ impl Panel {
             None => 0.0,
         };
         let lines: f32 = self
-            .lines
-            .iter()
+            .shown()
             .map(|line| line.height + ROW_GAP + if line.separated { SEPARATOR_GAP } else { 0.0 })
             .sum();
         (2.0 * PADDING + title + lines - ROW_GAP).ceil()
@@ -198,6 +217,14 @@ impl Widget for Panel {
         };
         let end = frame.x + frame.width - PADDING;
         for line in &self.lines {
+            if line.hidden {
+                for (index, _) in &line.cells {
+                    if let Some(child) = self.children.get_mut(*index) {
+                        child.place(cx, Rect::default());
+                    }
+                }
+                continue;
+            }
             if line.separated {
                 y += SEPARATOR_GAP;
             }
@@ -292,6 +319,9 @@ impl Widget for Panel {
         }
         let mut y = self.lines_top();
         for (line, label) in self.lines.iter().zip(&self.labels) {
+            if line.hidden {
+                continue;
+            }
             if line.separated {
                 items.push(Item::Line {
                     from: Point::new(
@@ -318,8 +348,10 @@ impl Widget for Panel {
             }
             y += line.height + ROW_GAP;
         }
-        for child in &self.children {
-            child.paint(cx, items);
+        for (index, child) in self.children.iter().enumerate() {
+            if !self.hidden_child(index) {
+                child.paint(cx, items);
+            }
         }
     }
 

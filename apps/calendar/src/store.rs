@@ -32,6 +32,10 @@ pub enum AccountKind {
     },
     Subscription {
         url: String,
+        #[serde(default)]
+        refresh_minutes: Option<u32>,
+        #[serde(default)]
+        alerts: bool,
     },
 }
 
@@ -502,6 +506,35 @@ impl Library {
         }
         self.calendars
             .retain(|calendar| calendar.info.account != id);
+        self.save_accounts();
+    }
+
+    pub fn set_subscription(&mut self, id: &str, refresh: Option<Option<u32>>, keep: Option<bool>) {
+        let Some(AccountKind::Subscription {
+            refresh_minutes,
+            alerts,
+            ..
+        }) = self
+            .accounts
+            .iter_mut()
+            .find(|account| account.id == id)
+            .map(|account| &mut account.kind)
+        else {
+            return;
+        };
+        if let Some(refresh) = refresh {
+            *refresh_minutes = refresh;
+        }
+        if let Some(keep) = keep.filter(|keep| keep != alerts) {
+            *alerts = keep;
+            for calendar in self
+                .calendars
+                .iter_mut()
+                .filter(|calendar| calendar.info.account == id)
+            {
+                calendar.info.refreshed = None;
+            }
+        }
         self.save_accounts();
     }
 

@@ -17,7 +17,9 @@ views. Packaged as `bande-calendar`.
   (also from Password… in Settings) and keeps every offline change meanwhile.
 - **Subscriptions.** `webcal:` / `webcals:` links and plain `https:` `.ics` URLs, read-only,
   refreshed on a wall-clock deadline kept across restarts (every 5 minutes to every week, or
-  never); the name and colour come from `X-WR-CALNAME` and `X-APPLE-CALENDAR-COLOR`.
+  never; for all of them or one by one in Settings); their alerts are dropped unless turned on
+  for that subscription, as on macOS; the name and colour come from `X-WR-CALNAME` and
+  `X-APPLE-CALENDAR-COLOR`.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
   without a network and pushes changes as soon as NetworkManager says the network is back. Sync is incremental with `sync-token`
   (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
@@ -38,8 +40,10 @@ views. Packaged as `bande-calendar`.
   more than fit readably, a "+N" chip opens that day in the Day view.
 - **Editing.** Drag on empty time to create, drag an event to move it (also between days in the
   month view and into the all-day row), drag its bottom edge to change its length, and an
-  inspector popover with title, location, all-day, start and end, repeat and when it ends
-  (never, after a number of times, or on a date), alert, calendar and notes. Changing a
+  inspector popover with title, location, all-day, start and end, repeat (the usual choices
+  or Custom…: every N days, weeks on chosen weekdays, months on a day or on the first…last
+  weekday, or years) and when it ends (never, after a number of times, or on a date), alert,
+  calendar and notes. Changing a
   recurring event asks whether it is for this event only (an override) or all events.
 - **Invitations** through the server (RFC 6638 implicit scheduling, as iCloud, Fastmail,
   Nextcloud and Google do it): the inspector lists the organizer and invitees with their
@@ -99,5 +103,5 @@ exceptions and end follow. The repo's whole test list and the reason for each is
 - Invitation e-mails (`METHOD:REQUEST`/`REPLY` over iMIP), free/busy, tasks (`VTODO`).
 - OAuth providers (Google, Microsoft); Basic authentication only, so iCloud and Fastmail work with
   an app password.
-- Custom repeat rules (they are kept and shown as Custom, but not edited); viewing the whole
-  calendar in another time zone. The ranked list is in `NOTES/plans/calendar-depth.md`.
+- Viewing the whole calendar in another time zone; rules the Custom sheet cannot express
+  (several month days, `BYSETPOS`) are kept but replaced if edited there. The ranked list is in `NOTES/plans/calendar-depth.md`.

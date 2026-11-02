@@ -1,5 +1,6 @@
 pub mod catalog;
 mod media;
+mod online;
 mod view;
 mod widgets;
 mod worker;

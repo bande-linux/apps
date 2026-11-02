@@ -195,12 +195,17 @@ fn component(node: Node, source: &Source, locale: Option<&Locale>) -> Option<Com
             .map(text),
         releases: children(node, "releases")
             .flat_map(|list| children(list, "release"))
-            .filter_map(|release| {
+            .enumerate()
+            .filter_map(|(index, release)| {
                 Some(Release {
                     version: release.attribute("version")?.to_owned(),
                     timestamp: release
                         .attribute("timestamp")
                         .and_then(|value| value.parse().ok()),
+                    notes: match index {
+                        0 => description(release, locale),
+                        _ => Vec::new(),
+                    },
                 })
             })
             .collect(),

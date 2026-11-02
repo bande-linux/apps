@@ -251,8 +251,18 @@ fn host_of(url: &str) -> &str {
 }
 
 impl CalendarApp {
-    fn subscription_due(&self, info: &CalendarInfo) -> Option<Timestamp> {
-        let every = self.settings.subscription_refresh()?;
+    fn subscription_due(&self, library: &Library, info: &CalendarInfo) -> Option<Timestamp> {
+        let every = match library.account(&info.account).map(|account| &account.kind) {
+            Some(AccountKind::Subscription {
+                refresh_minutes: Some(0),
+                ..
+            }) => None,
+            Some(AccountKind::Subscription {
+                refresh_minutes: Some(minutes),
+                ..
+            }) => Some(Duration::from_secs(u64::from(*minutes) * 60)),
+            _ => self.settings.subscription_refresh(),
+        }?;
         let refreshed = info
             .refreshed
             .and_then(|second| Timestamp::from_second(second).ok())
@@ -298,7 +308,7 @@ impl CalendarApp {
                     AccountKind::Subscription { .. } => {
                         refresh == Refresh::All
                             || self
-                                .subscription_due(&calendar.info)
+                                .subscription_due(library, &calendar.info)
                                 .is_some_and(|due| now >= due)
                     }
                 };
@@ -348,7 +358,7 @@ impl CalendarApp {
                     .account(&calendar.info.account)
                     .is_some_and(|account| matches!(account.kind, AccountKind::Subscription { .. }))
             })
-            .filter_map(|calendar| self.subscription_due(&calendar.info))
+            .filter_map(|calendar| self.subscription_due(view.library(), &calendar.info))
             .min()
             .filter(|_| !syncing);
         let caldav = self.caldav_due().filter(|_| !syncing);
@@ -458,12 +468,16 @@ impl CalendarApp {
             sync_token: None,
             refreshed: Some(Timestamp::now().as_second()),
         };
-        let outcome = subscription_outcome(&info, data);
+        let outcome = subscription_outcome(&info, data, false);
         view.library_mut().add_account(
             Account {
                 id: account,
                 name,
-                kind: AccountKind::Subscription { url },
+                kind: AccountKind::Subscription {
+                    url,
+                    refresh_minutes: None,
+                    alerts: false,
+                },
             },
             vec![info],
         );
@@ -504,9 +518,15 @@ impl CalendarApp {
                 Reply::Refreshed { calendar, data } => {
                     let library = view.library_mut();
                     let outcome = library.calendar_index(&calendar).and_then(|index| {
+                        let alerts = matches!(
+                            library
+                                .account(&library.calendars[index].info.account)
+                                .map(|account| &account.kind),
+                            Some(AccountKind::Subscription { alerts: true, .. })
+                        );
                         let info = &mut library.calendars[index].info;
                         info.refreshed = Some(Timestamp::now().as_second());
-                        subscription_outcome(info, &data)
+                        subscription_outcome(info, &data, alerts)
                     });
                     self.retry.remove(&calendar);
                     match outcome {
@@ -771,11 +791,23 @@ impl CalendarApp {
     }
 
     fn apply_change(&mut self, cx: &mut Cx<Self>, change: Change) {
-        self.raise(cx);
+        if matches!(
+            change,
+            Change::AddAccount | Change::RemoveAccount(_) | Change::Password(_)
+        ) {
+            self.raise(cx);
+        }
         self.with_view(cx, |_, view| match &change {
             Change::AddAccount => view.open_account_setup(),
             Change::RemoveAccount(id) => view.ask_remove_account(id),
             Change::Password(id) => view.ask_password(id),
+            Change::SubscriptionRefresh(id, minutes) => {
+                view.library_mut()
+                    .set_subscription(id, Some(*minutes), None)
+            }
+            Change::SubscriptionAlerts(id, alerts) => {
+                view.library_mut().set_subscription(id, None, Some(*alerts))
+            }
         });
     }
 

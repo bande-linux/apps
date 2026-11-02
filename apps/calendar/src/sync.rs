@@ -252,8 +252,16 @@ pub fn sync_calendar(client: &Client, calendar: &Calendar) -> Result<Outcome, Er
     Ok(outcome)
 }
 
-pub fn subscription_outcome(info: &CalendarInfo, data: &str) -> Option<Outcome> {
-    let objects = CalendarObject::parse(data).ok()?;
+pub fn subscription_outcome(info: &CalendarInfo, data: &str, alerts: bool) -> Option<Outcome> {
+    let mut objects = CalendarObject::parse(data).ok()?;
+    if !alerts {
+        for event in objects
+            .iter_mut()
+            .flat_map(|object| object.events.iter_mut())
+        {
+            event.alarms.clear();
+        }
+    }
     let stamp = Timestamp::now();
     Some(Outcome {
         calendar: info.id.clone(),
