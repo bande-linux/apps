@@ -1,0 +1,50 @@
+[package]
+name = "bande-textedit"
+description = "Bande TextEdit: a simple editor for text documents"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+accesskit.workspace = true
+encoding_rs.workspace = true
+html5ever.workspace = true
+regex.workspace = true
+rustix = { workspace = true, features = ["fs"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+bande-app.workspace = true
+bande-app-menu.workspace = true
+bande-inbox.workspace = true
+bande-l10n.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+copyright = "2026 Mikael Hug"
+section = "editors"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+extended-description = """\
+The text editor of the Bande desktop, in the spirit of macOS TextEdit: \
+plain text in any encoding and line ending, rich text, RTF, Markdown and \
+HTML, find and replace with regular \
+expressions, and documents that are saved automatically and come back after \
+a crash or quit."""
+assets = [
+    ["target/release/bande-textedit", "usr/bin/", "755"],
+    ["data/org.bande.TextEdit.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.TextEdit.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["data/org.bande.TextEdit.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+]

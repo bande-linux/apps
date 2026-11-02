@@ -1,0 +1,50 @@
+[package]
+name = "bande-disks"
+description = "Disk Utility: drives, volumes and disk images on Bande"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+accesskit.workspace = true
+rustix = { workspace = true, features = ["fs"] }
+serde.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+zeroize.workspace = true
+bande-app.workspace = true
+bande-app-menu.workspace = true
+bande-design.workspace = true
+bande-fs.workspace = true
+bande-l10n.workspace = true
+bande-toolkit.workspace = true
+bande-volumes.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+copyright = "2026 Mikael Hug"
+section = "admin"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, udisks2"
+recommends = "dosfstools, e2fsprogs, exfatprogs"
+suggests = "ntfs-3g"
+extended-description = """\
+Disk Utility shows the computer's internal and external disks, their \
+partitions and volumes and the disk images that are open, with their \
+capacity, format, connection and S.M.A.R.T. health. It mounts, unmounts and \
+ejects them, erases and partitions disks, checks and repairs volumes with \
+First Aid, renames volumes, creates and restores disk images and writes an \
+image to a USB drive. Every change goes through UDisks2 and asks for \
+authorization. The disk the computer started up from and Apple's own \
+partitions on a Mac are shown read-only."""
+assets = [
+    ["target/release/bande-disks", "usr/bin/", "755"],
+    ["data/org.bande.DiskUtility.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.DiskUtility.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["data/org.bande.DiskUtility.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+]

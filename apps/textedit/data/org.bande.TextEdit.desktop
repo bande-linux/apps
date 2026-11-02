@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=TextEdit
+GenericName=Text Editor
+Comment=Write and edit text documents
+Icon=org.bande.TextEdit
+Exec=bande-textedit %U
+StartupNotify=true
+Terminal=false
+Categories=Utility;TextEditor;
+Keywords=text;editor;plain;notes;log;
+MimeType=text/plain;text/rtf;application/rtf;text/markdown;text/x-markdown;text/x-log;text/x-csrc;text/x-chdr;text/x-c++src;text/x-c++hdr;text/x-python;text/x-rust;text/x-java;text/x-go;text/x-makefile;text/x-script.python;text/javascript;text/css;text/csv;text/x-tex;text/x-patch;text/x-diff;text/x-readme;application/x-shellscript;application/json;application/xml;application/x-yaml;application/toml;

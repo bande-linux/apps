@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.DiskUtility</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Disk Utility</name>
+  <summary>Erase, partition and repair disks, and work with disk images</summary>
+  <description>
+    <p>Disk Utility shows the internal and external disks, their partitions and volumes, and the disk images that are open, with their capacity, format, connection and S.M.A.R.T. health.</p>
+    <p>It mounts, unmounts and ejects volumes, erases disks as ext4, encrypted ext4, ExFAT, FAT32 or NTFS with a GUID or MBR partition map, adds, deletes and resizes partitions, checks and repairs volumes with First Aid, creates and restores disk images, and writes an image to a USB drive. Every change asks for authorization; the startup disk and a Mac's own partitions stay read-only.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.DiskUtility.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+</component>
