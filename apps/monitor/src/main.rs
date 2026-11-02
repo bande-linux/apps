@@ -213,7 +213,7 @@ impl ActivityMonitor {
         );
         screen.update(self.snapshot.clone());
         let title = screen.title();
-        let opened = cx.open(Kind::Utility, &title, INSPECTOR_SIZE, |appearance| {
+        let opened = cx.open(Kind::Utility("inspector"), &title, INSPECTOR_SIZE, |appearance| {
             screen.set_appearance(appearance);
             Pane(Box::new(screen))
         });

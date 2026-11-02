@@ -276,7 +276,7 @@ impl Mail {
             TextSystem::new(),
         );
         let title = view.title();
-        let opened = cx.open(Kind::Main, &title, COMPOSE_SIZE, |appearance| {
+        let opened = cx.open(Kind::Secondary("compose"), &title, COMPOSE_SIZE, |appearance| {
             view.set_appearance(appearance);
             Pane::Compose(Box::new(view))
         });
