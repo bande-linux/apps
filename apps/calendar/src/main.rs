@@ -10,6 +10,7 @@ use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_calendar::alerts::{Due, due_between};
 use bande_calendar::caldav::Discovered;
 use bande_calendar::ical::{CalendarObject, read_file};
+use bande_calendar::online::System;
 use bande_calendar::portal::{Choose, choose_file};
 use bande_calendar::settings::{CalendarSettings, Change, listen};
 use bande_calendar::store::{Account, AccountKind, CalendarInfo, Library, data_dir, new_uid};
@@ -108,7 +109,7 @@ struct CalendarApp {
     alarm: WallAlarm,
     changes: Inbox<Change>,
     chosen: Inbox<Chosen>,
-    online: Inbox<()>,
+    online: Inbox<System>,
     settings: CalendarSettings,
     settings_watch: Option<SettingsWatch>,
     zone: TimeZone,
@@ -849,7 +850,7 @@ impl Program for CalendarApp {
     type View = Pane;
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
-        let zone = TimeZone::try_system().unwrap_or(TimeZone::UTC);
+        let zone = bande_datetime::local_zone();
         let library = Library::load(data_dir());
         let formats = DateFormats::from_env();
         let settings = load_settings();
@@ -999,9 +1000,22 @@ impl Program for CalendarApp {
                 }
             }
             4 => {
-                self.online.drain();
-                self.retry.clear();
-                self.push_soon(Duration::ZERO);
+                for change in self.online.drain() {
+                    match change {
+                        System::Online => {
+                            self.retry.clear();
+                            self.push_soon(Duration::ZERO);
+                        }
+                        System::Zone(name) => {
+                            self.zone = TimeZone::get(&name)
+                                .unwrap_or_else(|_| bande_datetime::local_zone());
+                            self.with_view(cx, |app, view| {
+                                view.set_zone(app.zone.clone());
+                                app.check_alerts(view);
+                            });
+                        }
+                    }
+                }
             }
             _ => self.follow_settings(cx),
         }

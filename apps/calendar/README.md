@@ -53,7 +53,7 @@ views. Packaged as `bande-calendar`.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed. Alerts,
   the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
-  suspend or a clock change.
+  suspend or a clock change, and the view follows a change of the system time zone at once.
 - **Settings** (Calendar ▸ Settings…): default calendar, start of the week, the hours the day
   starts and ends (the rest is shaded, and the week opens at the start), week numbers, default
   alerts for new events and all-day events, how often accounts and subscriptions refresh, and
