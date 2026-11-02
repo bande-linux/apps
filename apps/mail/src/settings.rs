@@ -13,16 +13,26 @@ pub enum SortBy {
     Date,
     From,
     Subject,
+    Size,
+    Unread,
 }
 
 impl SortBy {
-    pub const ALL: [Self; 3] = [Self::Date, Self::From, Self::Subject];
+    pub const ALL: [Self; 5] = [
+        Self::Date,
+        Self::From,
+        Self::Subject,
+        Self::Size,
+        Self::Unread,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             Self::Date => "date",
             Self::From => "from",
             Self::Subject => "subject",
+            Self::Size => "size",
+            Self::Unread => "unread",
         }
     }
 }

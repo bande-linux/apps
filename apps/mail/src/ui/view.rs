@@ -584,6 +584,8 @@ impl MailView {
             SortBy::Date => {}
             SortBy::From => all.sort_by_cached_key(|summary| summary.sender.shown().to_lowercase()),
             SortBy::Subject => all.sort_by_cached_key(|summary| summary.subject.to_lowercase()),
+            SortBy::Size => all.sort_by_key(|summary| std::cmp::Reverse(summary.size)),
+            SortBy::Unread => all.sort_by_key(|summary| summary.flags.seen),
         }
         if self.settings.ascending {
             all.reverse();

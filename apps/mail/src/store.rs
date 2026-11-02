@@ -140,6 +140,7 @@ pub struct Summary {
     pub attachments: bool,
     pub downloaded: bool,
     pub thread: Option<String>,
+    pub size: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -244,7 +245,7 @@ fn account_from(row: &Row<'_>) -> rusqlite::Result<Account> {
 
 const SUMMARY_COLUMNS: &str = "m.id, m.mailbox, b.account, m.uid, m.subject, m.sender_name, \
     m.sender_email, m.date, m.preview, m.seen, m.flagged, m.answered, m.deleted, m.draft, \
-    m.attachments, m.body IS NOT NULL, m.thread";
+    m.attachments, m.body IS NOT NULL, m.thread, m.size";
 
 fn summary_from(row: &Row<'_>) -> rusqlite::Result<Summary> {
     Ok(Summary {
@@ -269,6 +270,7 @@ fn summary_from(row: &Row<'_>) -> rusqlite::Result<Summary> {
         attachments: row.get(14)?,
         downloaded: row.get(15)?,
         thread: row.get(16)?,
+        size: row.get(17)?,
     })
 }
 
@@ -812,7 +814,7 @@ impl Store {
         let mut statement = self.connection.prepare(&query)?;
         let found = statement
             .query_map(params![of.account, key, of.mailbox, of.id], |row| {
-                Ok((summary_from(row)?, row.get::<_, Option<String>>(17)?))
+                Ok((summary_from(row)?, row.get::<_, Option<String>>(18)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let mut seen = std::collections::HashSet::new();
