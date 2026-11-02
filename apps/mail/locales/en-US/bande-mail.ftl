@@ -142,6 +142,7 @@ settings-preview-lines = { $lines ->
     [one] 1 line
    *[other] { $lines } lines
 }
+settings-conversations = Organize by conversation
 settings-privacy = Privacy
 settings-load-remote = Load remote content in messages
 settings-load-remote-note = Remote pictures can tell the sender when and where you read a message. When this is off, a message shows Load Remote Content instead.

@@ -367,6 +367,15 @@ impl SettingsView {
             vec![
                 heading("settings-message-list"),
                 row("settings-preview", preview),
+                row(
+                    "settings-conversations",
+                    toggle(
+                        &self.state,
+                        &L10N.tr("settings-conversations"),
+                        settings.conversations,
+                        |settings, on| settings.conversations = on,
+                    ),
+                ),
                 heading("settings-privacy"),
                 row(
                     "settings-load-remote",
