@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use bande_toolkit::{
-    Image, Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle, TextSystem,
+    Color, Image, Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle,
+    TextSystem,
 };
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -737,24 +738,32 @@ pub fn lay_out(
             }
         }
         let card = Rect::new(0.0, top, width, writer.y - top);
-        if many && thread.focus == id {
-            writer.layout.items.push(Item::Fill {
-                shape: Shape::rounded(
-                    Rect::new(
-                        ((MARGIN - FOCUS_BAR) / 2.0).round(),
-                        top + SECTION_GAP / 2.0,
-                        FOCUS_BAR,
-                        card.height - SECTION_GAP,
-                    ),
-                    FOCUS_BAR / 2.0,
-                ),
-                paint: palette.accent.into(),
-            });
-        }
         let inner = std::mem::replace(&mut writer.layout.targets, targets);
         writer.layout.targets.push((card, Target::Card(id)));
         writer.layout.targets.extend(inner);
     }
     writer.layout.height = writer.y + MARGIN;
     writer.layout
+}
+
+pub fn focus_bar(thread: &Thread, layout: &Layout, color: Color) -> Option<Item> {
+    if thread.entries.len() < 2 {
+        return None;
+    }
+    let card = layout
+        .targets
+        .iter()
+        .find_map(|(rect, target)| (*target == Target::Card(thread.focus)).then_some(*rect))?;
+    Some(Item::Fill {
+        shape: Shape::rounded(
+            Rect::new(
+                ((MARGIN - FOCUS_BAR) / 2.0).round(),
+                card.y + SECTION_GAP / 2.0,
+                FOCUS_BAR,
+                card.height - SECTION_GAP,
+            ),
+            FOCUS_BAR / 2.0,
+        ),
+        paint: color.into(),
+    })
 }

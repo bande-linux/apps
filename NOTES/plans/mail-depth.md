@@ -35,7 +35,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Mailboxes and folders | Have: read all folders, Move To any mailbox of the account, drag onto a mailbox, New/Rename/Delete Mailbox |
 | Flags | Have: seven colours (Message → Flag), kept on the server as `$MailFlagBit0-2` like macOS |
 | Search | Local, every word over sender, recipients, subject and text, with from:/to:/subject: and quoted phrases; no server search |
-| Threads | Grouped by the first References entry, or by subject for a reply without one; the reader stacks the whole conversation with Sent replies, earlier messages folded to a line, quoted text folded |
+| Threads | Grouped by the first References entry, or by subject for a reply without one; the reader stacks the whole conversation with Sent replies, earlier messages folded to a line, quoted text folded; message commands act on the reader's message while it has focus |
 | Attachments | Show, open (private copy), Save Attachment…, Save to Downloads Folder, add from the portal; no Save All, no Quick Look |
 | Reply / forward | Have, with threading headers |
 | Drafts | Kept in Drafts when a message window closes or Mail quits; a local copy is saved while typing and reopens after a crash or an offline quit |

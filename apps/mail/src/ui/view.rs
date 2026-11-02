@@ -105,6 +105,7 @@ pub enum Hit {
 pub(crate) enum Pane {
     Sidebar,
     List,
+    Reader,
 }
 
 #[derive(Debug, Default)]
@@ -781,6 +782,27 @@ impl MailView {
             .collect()
     }
 
+    fn reader_target(&self) -> Option<&Summary> {
+        let thread = self
+            .thread
+            .as_ref()
+            .filter(|_| self.focus == Pane::Reader)?;
+        thread.entry(thread.focus).map(|entry| &entry.summary)
+    }
+
+    pub(crate) fn targets(&self) -> Vec<Summary> {
+        match self.reader_target() {
+            Some(summary) => vec![summary.clone()],
+            None => self.chosen(),
+        }
+    }
+
+    fn first_target(&self) -> Option<Summary> {
+        self.reader_target()
+            .cloned()
+            .or_else(|| self.selected_summary())
+    }
+
     fn reading_of(&self, summary: &Summary) -> Reading {
         let body = self.store.body(summary.id).ok().flatten();
         match body {
@@ -927,23 +949,30 @@ impl MailView {
             .earlier
             .values_mut()
             .flat_map(|(_, earlier)| earlier.iter_mut());
+        let entries = self
+            .thread
+            .iter_mut()
+            .flat_map(|thread| thread.entries.iter_mut())
+            .map(|entry| &mut entry.summary);
         for summary in self
             .messages
             .iter_mut()
             .chain(earlier)
+            .chain(entries)
             .filter(|summary| ids.contains(&summary.id))
         {
             summary.flags.set(flag, value);
         }
+        self.layout = None;
         self.refresh_sidebar();
     }
 
     fn toggle(&mut self, flag: Flag, is_set: fn(&Summary) -> bool) {
-        let chosen = self.chosen();
-        let Some(first) = self.selected_summary().or_else(|| chosen.first().cloned()) else {
+        let targets = self.targets();
+        let Some(first) = self.first_target().or_else(|| targets.first().cloned()) else {
             return;
         };
-        let ids = chosen.iter().map(|summary| summary.id).collect::<Vec<_>>();
+        let ids = targets.iter().map(|summary| summary.id).collect::<Vec<_>>();
         self.set_flag_on(&ids, flag, !is_set(&first));
     }
 
@@ -953,7 +982,7 @@ impl MailView {
 
     fn flag_with(&mut self, color: u8) {
         let ids = self
-            .chosen()
+            .targets()
             .iter()
             .map(|summary| summary.id)
             .collect::<Vec<_>>();
@@ -1013,7 +1042,7 @@ impl MailView {
     }
 
     pub fn can_move_to(&self, role: Role) -> bool {
-        self.chosen().iter().any(|summary| {
+        self.targets().iter().any(|summary| {
             self.mailbox_with_role(summary.account, role)
                 .is_some_and(|target| target.id != summary.mailbox)
         })
@@ -1045,6 +1074,65 @@ impl MailView {
             self.select(next);
         }
         self.refresh_sidebar();
+    }
+
+    fn leave_targets(&mut self, gone: &[MessageId]) {
+        if gone.is_empty() {
+            return;
+        }
+        let Some(row) = self.selected.filter(|_| self.reader_target().is_some()) else {
+            return self.leave_selected(gone);
+        };
+        let members = std::iter::once(row)
+            .chain(
+                self.conversations
+                    .earlier
+                    .get(&row)
+                    .into_iter()
+                    .flat_map(|(_, earlier)| earlier.iter().map(|summary| summary.id)),
+            )
+            .filter(|id| !gone.contains(id))
+            .collect::<Vec<_>>();
+        if members.is_empty() {
+            return self.leave_selected(&[row]);
+        }
+        let mut thread = self.thread.take();
+        if let Some(thread) = thread.as_mut()
+            && let Some(at) = thread
+                .entries
+                .iter()
+                .position(|entry| entry.summary.id == thread.focus)
+        {
+            let (before, after) = thread.entries.split_at(at);
+            if let Some(next) = after
+                .iter()
+                .chain(before.iter().rev())
+                .find(|entry| !gone.contains(&entry.summary.id))
+            {
+                thread.focus = next.summary.id;
+                thread.reveal = true;
+            }
+        }
+        self.reload();
+        let conversations = &self.conversations;
+        self.selected = self
+            .messages
+            .iter()
+            .find(|summary| {
+                members.contains(&summary.id)
+                    || conversations
+                        .earlier
+                        .get(&summary.id)
+                        .is_some_and(|(_, earlier)| {
+                            earlier.iter().any(|summary| members.contains(&summary.id))
+                        })
+            })
+            .map(|summary| summary.id);
+        if self.selected.is_some() {
+            self.thread = thread;
+            self.layout = None;
+            self.refresh_thread();
+        }
     }
 
     fn move_each(&mut self, moves: Vec<(MessageId, Mailbox)>) -> Vec<MessageId> {
@@ -1100,7 +1188,7 @@ impl MailView {
 
     pub fn move_selected(&mut self, role: Role) {
         let moves = self
-            .chosen()
+            .targets()
             .into_iter()
             .filter_map(|summary| {
                 let target = self.mailbox_with_role(summary.account, role)?;
@@ -1108,11 +1196,11 @@ impl MailView {
             })
             .collect();
         let moved = self.move_each(moves);
-        self.leave_selected(&moved);
+        self.leave_targets(&moved);
     }
 
     pub fn move_targets(&self) -> Vec<(String, MailboxId)> {
-        let Some(summary) = self.selected_summary() else {
+        let Some(summary) = self.first_target() else {
             return Vec::new();
         };
         self.accounts
@@ -1136,13 +1224,13 @@ impl MailView {
 
     fn move_selected_to(&mut self, target: &Mailbox) {
         let moves = self
-            .chosen()
+            .targets()
             .into_iter()
             .filter(|summary| target.id != summary.mailbox && target.account == summary.account)
             .map(|summary| (summary.id, target.clone()))
             .collect();
         let moved = self.move_each(moves);
-        self.leave_selected(&moved);
+        self.leave_targets(&moved);
     }
 
     pub fn undo(&mut self) {
@@ -1220,7 +1308,7 @@ impl MailView {
     pub fn delete_selected(&mut self) {
         let mut moves = Vec::new();
         let mut expunged = Vec::new();
-        for summary in self.chosen() {
+        for summary in self.targets() {
             let in_trash = self
                 .mailbox_of(&summary)
                 .is_some_and(|mailbox| mailbox.role == Some(Role::Trash));
@@ -1239,7 +1327,7 @@ impl MailView {
                 Err(error) => tracing::warn!("cannot delete the messages: {error}"),
             }
         }
-        self.leave_selected(&gone);
+        self.leave_targets(&gone);
     }
 
     fn default_account(&self) -> Option<Account> {
@@ -1767,7 +1855,7 @@ impl MailView {
 
     fn apply_rules_to_chosen(&mut self) {
         let mut accounts: Vec<(AccountId, Vec<MessageId>)> = Vec::new();
-        for summary in self.chosen() {
+        for summary in self.targets() {
             match accounts
                 .iter_mut()
                 .find(|(account, _)| *account == summary.account)
@@ -2334,6 +2422,7 @@ impl MailView {
         if self.selected.is_none() {
             self.select(first);
         }
+        self.focus = Pane::List;
         self.also = self
             .messages
             .iter()
@@ -2412,6 +2501,7 @@ impl MailView {
                 self.select_more(id, pointer.modifiers.shift);
             }
             Hit::Message(id) => {
+                self.focus = Pane::List;
                 let collapse = !secondary && self.is_chosen(id) && !self.also.is_empty();
                 if !self.is_chosen(id) {
                     self.select(id);
@@ -2435,9 +2525,13 @@ impl MailView {
                 }
             }
             Hit::Conversation(id) => {
+                self.focus = Pane::List;
                 self.toggle_conversation(id);
             }
-            Hit::Reader(target) => self.click_reader(target, pointer),
+            Hit::Reader(target) => {
+                self.focus = Pane::Reader;
+                self.click_reader(target, pointer);
+            }
         }
         true
     }
@@ -2676,7 +2770,7 @@ impl MailView {
     }
 
     pub fn message_menu(&self) -> Menu {
-        let summary = self.selected_summary();
+        let summary = self.first_target();
         let read = summary.as_ref().is_some_and(|summary| summary.flags.seen);
         let flagged = summary
             .as_ref()

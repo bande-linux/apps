@@ -47,7 +47,10 @@ apt install bande-mail
   unread ones open, the others as a line that opens on a click. Each open message shows its
   headers, the plain text or sanitised HTML, quoted text folded behind Show Quoted Text, and the
   attachments; Reply, Reply All and Forward (in the message or the toolbar) act on the message
-  last clicked. Clicking an attachment opens a private copy in `~/.cache/bande-mail/attachments/`,
+  last clicked, marked with a bar in the accent colour while the reader has focus. Delete, Flag,
+  Mark as Read or Unread, Move, Junk, Archive and Apply Rules act on that message too when the
+  reader has focus (after a click in it), and on the selected rows when the list has focus; a
+  message moved out of the reader leaves the rest of the conversation open. Clicking an attachment opens a private copy in `~/.cache/bande-mail/attachments/`,
   removed when Mail quits unless it was edited; its menu also saves it where you choose (the
   desktop's file chooser) or to the Downloads folder.
 - **HTML** is never rendered as a web page: it is turned into paragraphs, headings, lists,

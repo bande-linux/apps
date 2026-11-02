@@ -8,7 +8,7 @@ use jiff::Timestamp;
 use crate::L10N;
 use crate::store::Summary;
 use crate::ui::format::list_date;
-use crate::ui::reader::{Clock, lay_out};
+use crate::ui::reader::{Clock, focus_bar, lay_out};
 use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
@@ -655,6 +655,13 @@ impl MailView {
             scroll.offset(self.ui.context())
         };
         let origin = Point::new(frame.x, frame.y - offset);
+        let bar = match self.focus == Pane::Reader
+            && !self.ui.has_sheet()
+            && self.ui.context().window_active
+        {
+            true => palette.accent,
+            false => palette.ink3,
+        };
         let Some((_, layout)) = &self.layout else {
             return;
         };
@@ -676,7 +683,16 @@ impl MailView {
             shape: Shape::rect(frame),
             items: vec![Item::Translate {
                 offset: origin,
-                items: layout.items.clone(),
+                items: layout
+                    .items
+                    .iter()
+                    .cloned()
+                    .chain(
+                        self.thread
+                            .as_ref()
+                            .and_then(|thread| focus_bar(thread, layout, bar)),
+                    )
+                    .collect(),
             }],
         });
         self.hits.extend(targets);
