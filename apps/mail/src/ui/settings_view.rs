@@ -234,7 +234,8 @@ pub struct SettingsView {
     accounts: Vec<Account>,
     account: usize,
     status: Option<(String, bool)>,
-    checking: Option<Account>,
+    checking: Option<AccountId>,
+    store_path: PathBuf,
     mailroom: Option<Mailroom>,
     network: Network,
     width: f32,
@@ -281,6 +282,7 @@ impl SettingsView {
             account: 0,
             status: None,
             checking: None,
+            store_path: store_path.clone(),
             mailroom: Mailroom::new()
                 .inspect_err(|error| tracing::warn!("cannot check servers: {error}"))
                 .ok(),
@@ -761,19 +763,15 @@ impl SettingsView {
             self.status = Some((L10N.tr("setup-missing-servers"), true));
             return;
         };
-        let changed = Account {
-            user: servers.user.clone(),
-            imap: servers.imap.clone(),
-            smtp: servers.smtp.clone(),
-            ..account.clone()
-        };
-        if changed == *account {
+        if (&servers.user, &servers.imap, &servers.smtp)
+            == (&account.user, &account.imap, &account.smtp)
+        {
             return;
         }
         self.status = Some((L10N.tr("checking-account"), false));
-        self.checking = Some(changed);
-        let (email, old_host) = (account.email.clone(), account.imap.host.clone());
-        let network = self.network.clone();
+        self.checking = Some(account.id);
+        let (id, email, old_host) = (account.id, account.email.clone(), account.imap.host.clone());
+        let (network, store_path) = (self.network.clone(), self.store_path.clone());
         let notifier = mailroom.notifier();
         let spawned = std::thread::Builder::new()
             .name("check-servers".to_owned())
@@ -788,16 +786,28 @@ impl SettingsView {
                             password,
                             servers: Some(servers.clone()),
                         };
-                        let outcome = check(&request, &network);
-                        if matches!(outcome, Outcome::Ready(_))
-                            && servers.imap.host != old_host
-                            && let Err(error) = keyring
-                                .save(&email, &servers.imap.host, &request.password)
-                                .and_then(|()| keyring.forget(&email, &old_host))
-                        {
-                            tracing::warn!("cannot move the password: {error}");
+                        match check(&request, &network) {
+                            Outcome::Ready(checked) => {
+                                let kept = Store::open(&store_path)
+                                    .and_then(|store| store.update_servers(id, &servers))
+                                    .and_then(|()| match servers.imap.host == old_host {
+                                        true => Ok(()),
+                                        false => keyring
+                                            .save(&email, &servers.imap.host, &request.password)
+                                            .and_then(|()| keyring.forget(&email, &old_host)),
+                                    });
+                                match kept {
+                                    Ok(()) => {
+                                        announce(Change::Accounts);
+                                        Outcome::Ready(checked)
+                                    }
+                                    Err(error) => {
+                                        Outcome::NeedsServers(Some(servers), error.to_string())
+                                    }
+                                }
+                            }
+                            outcome => outcome,
                         }
-                        outcome
                     }
                     Ok((None, _)) => {
                         Outcome::WrongPassword(servers, "no saved password".to_owned())
@@ -813,30 +823,17 @@ impl SettingsView {
     }
 
     fn checked(&mut self, outcome: Outcome) {
-        let Some(changed) = self.checking.take() else {
+        let Some(id) = self.checking.take() else {
             return;
         };
         self.status = Some(match outcome {
-            Outcome::Ready(_) => {
-                let saved = self
-                    .store
-                    .as_ref()
-                    .map(|store| store.update_account(&changed));
-                match saved {
-                    Some(Ok(())) => {
-                        if let Some(account) = self
-                            .accounts
-                            .iter_mut()
-                            .find(|account| account.id == changed.id)
-                        {
-                            *account = changed;
-                        }
-                        announce(Change::Accounts);
-                        (L10N.tr("settings-servers-saved"), false)
-                    }
-                    Some(Err(error)) => (error.to_string(), true),
-                    None => return,
+            Outcome::Ready(servers) => {
+                if let Some(account) = self.accounts.iter_mut().find(|account| account.id == id) {
+                    account.user = servers.user;
+                    account.imap = servers.imap;
+                    account.smtp = servers.smtp;
                 }
+                (L10N.tr("settings-servers-saved"), false)
             }
             Outcome::WrongPassword(..) => (L10N.tr("setup-wrong-password"), true),
             Outcome::NeedsServers(_, reason) => (

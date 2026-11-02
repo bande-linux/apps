@@ -57,7 +57,7 @@ pub const SIDEBAR_WIDTH: f32 = 220.0;
 pub const LIST_WIDTH: f32 = 340.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const NOTIFIED_AT_ONCE: usize = 3;
-const UNDO_TRIES: u8 = 3;
+const UNDO_TRIES: u8 = 6;
 const UNDO_LEVELS: usize = 20;
 const DRAG_THRESHOLD: f32 = 6.0;
 const MAX_PICTURE_BYTES: usize = 10 << 20;
@@ -216,6 +216,7 @@ pub struct MailView {
     opened: Vec<(PathBuf, std::time::SystemTime)>,
     undo: Vec<Vec<Moved>>,
     undoing: Vec<Moved>,
+    moved_in: HashSet<String>,
     pub(crate) drag: Option<Drag>,
     pub(crate) conversations: Conversations,
 }
@@ -271,6 +272,7 @@ impl MailView {
             opened: Vec::new(),
             undo: Vec::new(),
             undoing: Vec::new(),
+            moved_in: HashSet::new(),
             drag: None,
             conversations: Conversations::default(),
         };
@@ -616,13 +618,8 @@ impl MailView {
         self.focus = Pane::List;
         self.scrolls[2] = ScrollState::default();
         self.load_reading(&summary);
-        let unread = std::iter::once(&summary)
-            .chain(self.conversations.collapsed(id).unwrap_or_default())
-            .filter(|summary| !summary.flags.seen)
-            .map(|summary| summary.id)
-            .collect::<Vec<_>>();
-        if !unread.is_empty() {
-            self.set_flag_on(&unread, Flag::Seen, true);
+        if !summary.flags.seen {
+            self.set_flag_on(&[id], Flag::Seen, true);
         }
         self.reveal_selected();
     }
@@ -837,6 +834,11 @@ impl MailView {
         let mut done = Vec::new();
         let mut undo = Vec::new();
         for (id, target) in &moves {
+            if target.role == Some(Role::Inbox)
+                && let Ok(Some(message_id)) = self.store.message_id(*id)
+            {
+                self.moved_in.insert(message_id);
+            }
             if let (Some(from), Ok(Some(message_id))) = (
                 self.store
                     .summary(*id)
@@ -936,12 +938,17 @@ impl MailView {
         let mut waiting = Vec::new();
         for moved in moves {
             match self.store.find_message(moved.to, &moved.message_id) {
-                Ok(Some(id)) => match self.store.move_messages(&[id], &moved.from) {
-                    Ok(accounts) => self.flush(&accounts),
-                    Err(error) => tracing::warn!("cannot put the message back: {error}"),
-                },
+                Ok(Some(id)) => {
+                    if moved.from.role == Some(Role::Inbox) {
+                        self.moved_in.insert(moved.message_id.clone());
+                    }
+                    match self.store.move_messages(&[id], &moved.from) {
+                        Ok(accounts) => self.flush(&accounts),
+                        Err(error) => tracing::warn!("cannot put the message back: {error}"),
+                    }
+                }
                 Ok(None) if moved.tries < UNDO_TRIES => {
-                    if !waiting.contains(&moved.to) {
+                    if moved.tries == 0 && !waiting.contains(&moved.to) {
                         waiting.push(moved.to);
                         self.send_command(moved.from.account, Command::Refresh(moved.to));
                     }
@@ -1221,39 +1228,43 @@ impl MailView {
         })
     }
 
-    pub fn open_attachment(&mut self, index: usize) {
-        let (Some(id), Some(name)) = (self.selected, self.attachment_name(index)) else {
-            return;
-        };
-        let Some(data) = self
-            .reading
+    fn attachment_data(&self, index: usize) -> Option<Vec<u8>> {
+        self.reading
             .as_ref()
             .and_then(|reading| reading.content.attachments.get(index))
             .map(|attachment| attachment.data.clone())
-        else {
+    }
+
+    pub fn open_attachment(&mut self, index: usize) {
+        let (Some(summary), Some(name), Some(data)) = (
+            self.selected_summary(),
+            self.attachment_name(index),
+            self.attachment_data(index),
+        ) else {
             return;
         };
-        let Some(folder) = bande_xdg::cache_home()
-            .map(|cache| cache.join("bande-mail/attachments").join(id.to_string()))
-        else {
+        let Some(folder) = bande_xdg::cache_home().map(|cache| {
+            cache
+                .join("bande-mail/attachments")
+                .join(format!("{}-{}", summary.mailbox, summary.uid))
+        }) else {
             return;
         };
         let path = folder.join(&name);
-        let current =
-            std::fs::metadata(&path).is_ok_and(|metadata| metadata.len() == data.len() as u64);
-        let written = match current {
-            true => Ok(()),
-            false => std::fs::DirBuilder::new()
-                .recursive(true)
-                .mode(0o700)
-                .create(&folder)
-                .and_then(|()| std::fs::write(&path, &data)),
-        };
+        let ours = self.opened.iter().any(|(known, _)| *known == path);
+        if ours || std::fs::read(&path).is_ok_and(|kept| kept == data) {
+            self.requests.push(Request::OpenAttachment(path));
+            return;
+        }
+        let written = std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&folder)
+            .and_then(|()| write_new(&folder, &name, &data));
         match written {
-            Ok(()) => {
-                let modified = std::fs::metadata(&path).and_then(|metadata| metadata.modified());
-                if let Ok(modified) = modified
-                    && !self.opened.iter().any(|(known, _)| *known == path)
+            Ok(path) => {
+                if let Ok(modified) =
+                    std::fs::metadata(&path).and_then(|metadata| metadata.modified())
                 {
                     self.opened.push((path.clone(), modified));
                 }
@@ -1264,14 +1275,7 @@ impl MailView {
     }
 
     pub fn save_attachment(&mut self, index: usize) {
-        let Some(name) = self.attachment_name(index) else {
-            return;
-        };
-        let Some(data) = self
-            .reading
-            .as_ref()
-            .and_then(|reading| reading.content.attachments.get(index))
-            .map(|attachment| attachment.data.clone())
+        let (Some(name), Some(data)) = (self.attachment_name(index), self.attachment_data(index))
         else {
             return;
         };
@@ -1282,30 +1286,8 @@ impl MailView {
             .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
         let folder =
             bande_xdg::user_dir(&home, user_dirs.as_deref(), bande_xdg::UserDir::Downloads);
-        let (stem, extension) = match name.rsplit_once('.') {
-            Some((stem, extension)) if !stem.is_empty() => {
-                (stem.to_owned(), format!(".{extension}"))
-            }
-            _ => (name.clone(), String::new()),
-        };
-        let saved = std::fs::create_dir_all(&folder).and_then(|()| {
-            for copy in 0..1000 {
-                let path = match copy {
-                    0 => folder.join(&name),
-                    copy => folder.join(format!("{stem} {}{extension}", copy + 1)),
-                };
-                match std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&path)
-                {
-                    Ok(mut file) => return file.write_all(&data),
-                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                    Err(error) => return Err(error),
-                }
-            }
-            Err(std::io::Error::other("no free file name"))
-        });
+        let saved =
+            std::fs::create_dir_all(&folder).and_then(|()| write_new(&folder, &name, &data));
         if let Err(error) = saved {
             tracing::warn!("cannot save {name}: {error}");
         }
@@ -1336,15 +1318,25 @@ impl MailView {
                     self.statuses.retain(|(known, _)| *known != account);
                     self.statuses.push((account, status));
                 }
-                MailEvent::Changed(_) => {
+                MailEvent::Changed(account) => {
                     stale = true;
-                    if !self.undoing.is_empty() {
-                        let moves = std::mem::take(&mut self.undoing);
+                    let (moves, waiting) = std::mem::take(&mut self.undoing)
+                        .into_iter()
+                        .partition(|moved| moved.from.account == account);
+                    self.undoing = waiting;
+                    if !moves.is_empty() {
                         self.put_back(moves);
                     }
                 }
-                MailEvent::Arrived(account, ids) => {
+                MailEvent::Arrived(account, mut ids) => {
                     stale = true;
+                    ids.retain(|id| {
+                        self.store
+                            .message_id(*id)
+                            .ok()
+                            .flatten()
+                            .is_none_or(|message_id| !self.moved_in.remove(&message_id))
+                    });
                     let left = self.apply_rules(account, ids);
                     self.notify(&left);
                 }
@@ -1698,7 +1690,13 @@ impl MailView {
     }
 
     pub fn remove_account(&mut self, id: AccountId) {
-        let Some(account) = self.account(id).cloned() else {
+        let Some(account) = self
+            .store
+            .accounts()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|account| account.id == id)
+        else {
             return;
         };
         self.workers.retain(|worker| worker.account != id);
@@ -2345,13 +2343,9 @@ impl MailView {
                     Some(("attachment-open", index)) => self.open_attachment(index),
                     Some(("attachment-save", index)) => self.save_attachment(index),
                     Some(("attachment-save-as", index)) => {
-                        if let (Some(name), Some(data)) = (
-                            self.attachment_name(index),
-                            self.reading
-                                .as_ref()
-                                .and_then(|reading| reading.content.attachments.get(index))
-                                .map(|attachment| attachment.data.clone()),
-                        ) {
+                        if let (Some(name), Some(data)) =
+                            (self.attachment_name(index), self.attachment_data(index))
+                        {
                             self.requests.push(Request::SaveAttachment(name, data));
                         }
                     }
@@ -2375,6 +2369,29 @@ impl MailView {
             .find(|(rect, _)| rect.contains(at))
             .map(|(_, hit)| hit.clone())
     }
+}
+
+fn write_new(folder: &std::path::Path, name: &str, data: &[u8]) -> std::io::Result<PathBuf> {
+    let (stem, extension) = match name.rsplit_once('.') {
+        Some((stem, extension)) if !stem.is_empty() => (stem, format!(".{extension}")),
+        _ => (name, String::new()),
+    };
+    for copy in 0..1000 {
+        let path = match copy {
+            0 => folder.join(name),
+            copy => folder.join(format!("{stem} {}{extension}", copy + 1)),
+        };
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut file) => return file.write_all(data).map(|()| path),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Err(std::io::Error::other("no free file name"))
 }
 
 fn app_password_hint(host: &str) -> Option<&'static str> {

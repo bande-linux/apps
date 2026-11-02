@@ -45,13 +45,21 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 
 ## Remaining, ranked by how much users rely on it
 
-1. Redo; dragging messages out to other apps.
-2. Conversations: show the whole conversation in the reader and include replies from Sent; group by subject when References are missing.
-3. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses passwords.
-4. Flag colours; sorting by size or unread first.
-5. Rules with several conditions, editing a rule, running rules on a mailbox by hand.
-6. Rich text compose and spelling (both need desktop services first).
-7. A Password field in Settings → Accounts.
-8. Per-sender "always load remote content"; a privacy proxy for remote pictures.
-9. A message font choice apart from the desktop text size.
-10. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
+1. Conversations: show the whole conversation in the reader and include replies from Sent; group
+   by subject when References are missing.
+2. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses
+   passwords.
+3. The known gaps below (unsent metadata, silent drops).
+4. Rules with several conditions, editing a rule, running rules on a mailbox by hand.
+5. Rich text compose and spelling (both need desktop services first).
+6. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
+7. Per-sender "always load remote content"; a privacy proxy for remote pictures.
+8. Redo; dragging messages out to other apps; flag colours; sorting by size or unread first.
+9. A Password field in Settings → Accounts; a message font apart from the desktop text size.
+
+## Known gaps in what landed (review, 2026-11-02)
+- A reopened unsent message forgets the draft it replaces, the message it answers and its Bcc.
+- Disabling an account or changing its servers drops its queued sends silently; the local copy
+  reopens at the next start.
+- Undo gives up without a word when the moved message does not show up after six syncs.
+- From swaps the signature only when the old account had one.

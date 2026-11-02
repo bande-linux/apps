@@ -409,6 +409,44 @@ impl Store {
         Ok(())
     }
 
+    pub fn update_servers(&self, id: AccountId, servers: &crate::discover::Settings) -> Result<()> {
+        self.connection.execute(
+            "UPDATE accounts SET user = ?2, imap_host = ?3, imap_port = ?4, imap_security = ?5, \
+             smtp_host = ?6, smtp_port = ?7, smtp_security = ?8 WHERE id = ?1",
+            params![
+                id,
+                servers.user,
+                servers.imap.host,
+                servers.imap.port,
+                servers.imap.security.name(),
+                servers.smtp.host,
+                servers.smtp.port,
+                servers.smtp.security.name(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn rename_mailbox(
+        &self,
+        account: AccountId,
+        from: &str,
+        to: &str,
+        delimiter: Option<char>,
+    ) -> Result<()> {
+        let escaped = from
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        let children = delimiter.map(|delimiter| format!("{escaped}{delimiter}%"));
+        self.connection.execute(
+            "UPDATE mailboxes SET path = ?3 || substr(path, length(?2) + 1) \
+             WHERE account = ?1 AND (path = ?2 OR path LIKE ?4 ESCAPE '\\')",
+            params![account, from, to, children],
+        )?;
+        Ok(())
+    }
+
     pub fn remove_account(&self, id: AccountId) -> Result<()> {
         self.connection
             .execute("DELETE FROM accounts WHERE id = ?1", [id])?;
@@ -730,7 +768,8 @@ impl Store {
         Ok(self
             .connection
             .query_row(
-                "SELECT id FROM messages WHERE mailbox = ?1 AND message_id = ?2",
+                "SELECT id FROM messages WHERE mailbox = ?1 AND message_id = ?2 \
+                 ORDER BY id DESC LIMIT 1",
                 params![mailbox, message_id],
                 |row| row.get(0),
             )
