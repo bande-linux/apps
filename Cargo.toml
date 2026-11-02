@@ -13,6 +13,7 @@ accesskit = "=0.25.2"
 alacritty_terminal = { version = "=0.26.0", default-features = false }
 base64 = "=0.22.1"
 data-encoding = "2.11"
+fatfs = { version = "=0.3.6", default-features = false, features = ["std", "alloc"] }
 flate2 = "=1.1.10"
 html5ever = "0.40"
 image = { version = "=0.25.10", default-features = false, features = ["gif", "jpeg", "png"] }
@@ -33,6 +34,7 @@ ureq = { version = "=3.5.0", features = ["platform-verifier"] }
 zbus = "=5.19.0"
 zeroize = "=1.8.1"
 bande-keyring = { path = "libs/keyring" }
+bande-vm = { path = "libs/vm" }
 bande-app = { git = "https://github.com/bande-linux/desktop", rev = "b198daa8f78bfa4c326c5580bf80e952f3be9276" }
 bande-app-menu = { git = "https://github.com/bande-linux/desktop", rev = "b198daa8f78bfa4c326c5580bf80e952f3be9276" }
 bande-app-settings = { git = "https://github.com/bande-linux/desktop", rev = "b198daa8f78bfa4c326c5580bf80e952f3be9276" }

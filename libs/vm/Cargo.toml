@@ -1,0 +1,25 @@
+[package]
+name = "bande-vm"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Virtual machines on QEMU, QMP and systemd user units for the Bande apps"
+publish = false
+
+[dependencies]
+bande-xdg.workspace = true
+fatfs.workspace = true
+rustix = { workspace = true, features = ["event", "fs", "process", "rand"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+ureq.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true
