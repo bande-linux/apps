@@ -789,6 +789,12 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
         }
         Signal::Choice(action) => choose(view, &action),
         Signal::SetupSubmit => submit_setup(view),
+        Signal::SetupKind(_) => {
+            if let Some(setup) = &mut view.setup {
+                let hint = setup.preset.hint();
+                setup.show_note(&mut view.ui, &hint);
+            }
+        }
         Signal::NameSubmit => view.submit_naming(),
         Signal::NameCancel => view.cancel_naming(),
         Signal::SetupCancel => {
@@ -814,7 +820,7 @@ fn submit_setup(view: &mut CalendarView) {
     let request = match setup.kind {
         super::setup::Kind::CalDav if setup.user.is_empty() => None,
         super::setup::Kind::CalDav => Some(Request::AddAccount {
-            server: setup.server.clone(),
+            server: setup.server(),
             user: setup.user.clone(),
             password,
         }),
