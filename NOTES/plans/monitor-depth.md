@@ -11,7 +11,7 @@ ranked list at the end is what is left. Delete this plan when the list is done.
 | Memory: Memory, Compressed, Threads, Ports, PID, User | Find what holds memory | Have Memory (footprint from `bande_status::memory::footprint`: PSS anon + swap PSS), Compressed (swap PSS), Resident, Threads, PID, User. No Ports column |
 | Energy: Energy Impact, 12 hr Power, App Nap, Preventing Sleep | Find battery drains | Have Energy Impact (CPU + GPU + wake-ups, 30 s average), wake-ups, Preventing Sleep (logind inhibitors). No 12 hr average |
 | Disk: Bytes Written/Read, Kind, PID | Find what hits the disk | Have rates and totals per process |
-| Network: Sent/Rcvd Bytes and Packets per process | Find what uses the network | Have bytes per process for TCP (sock_diag `tcp_info` per socket, matched to `/proc/<pid>/fd`, only while the tab shows). UDP/QUIC has no kernel byte counters and other users' sockets cannot be matched, so those show –. No packet counts |
+| Network: Sent/Rcvd Bytes and Packets per process | Find what uses the network | Have bytes per process for TCP (sock_diag `tcp_info` per socket, matched to `/proc/<pid>/fd`, only while the tab shows). A socket held by several processes (inherited across fork, passed over a Unix socket) counts once, for its earliest-started holder, the one that most likely made it, as nettop charges a socket to its owning process rather than to every holder. UDP/QUIC has no kernel byte counters and other users' sockets cannot be matched, so those show –. No packet counts |
 | Column chooser (right-click a header) | Pick columns | Have, remembered per tab |
 | GPU (window) | GPU use | Have a GPU tab when a DRM device reports per-client use |
 

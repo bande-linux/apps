@@ -242,10 +242,16 @@ impl Sampler {
         self.network = measure;
     }
 
-    fn traffic(&self, folder: &Path, seconds: f64) -> Option<Traffic> {
-        let inodes = socket_inodes(folder);
-        let counted = inodes
+    fn traffic(
+        &self,
+        pid: u32,
+        held: &[u64],
+        owners: &HashMap<u64, (u64, u32)>,
+        seconds: f64,
+    ) -> Option<Traffic> {
+        let counted = held
             .iter()
+            .filter(|inode| owners.get(inode).is_some_and(|(_, owner)| *owner == pid))
             .filter_map(|inode| Some((*inode, *self.sockets.get(inode)?)))
             .collect::<Vec<_>>();
         if counted.is_empty() {
@@ -333,7 +339,7 @@ impl Sampler {
         }
     }
 
-    fn process(&mut self, pid: u32, seconds: f64, first: bool) -> Option<Process> {
+    fn process(&mut self, pid: u32, seconds: f64, first: bool) -> Option<(Process, Vec<u64>)> {
         let folder = self.root.join("proc").join(pid.to_string());
         let stat = parse_stat(self.read(&folder.join("stat")).ok()?)?;
         if self
@@ -383,9 +389,13 @@ impl Sampler {
                 }),
             false => (None, None),
         };
-        let network = (self.network && !kernel_thread)
-            .then(|| self.traffic(&folder, seconds))
-            .flatten();
+        let held = match self.network && !kernel_thread {
+            true => socket_inodes(&folder)
+                .into_iter()
+                .filter(|inode| self.sockets.contains_key(inode))
+                .collect(),
+            false => Vec::new(),
+        };
         let switches = (self.wakeups && !kernel_thread)
             .then(|| self.switches(&folder))
             .flatten();
@@ -417,7 +427,7 @@ impl Sampler {
         known.io = io;
         known.reads_io &= !self.disk || io.is_some();
         known.reads_rollup &= !self.footprint || footprint.is_some();
-        Some(Process {
+        let process = Process {
             pid,
             ppid: stat.ppid,
             start_ticks: stat.start_ticks,
@@ -429,12 +439,13 @@ impl Sampler {
             swapped,
             resident,
             disk,
-            network,
+            network: None,
             gpu,
             wakeups,
             energy: None,
             preventing_sleep: None,
-        })
+        };
+        Some((process, held))
     }
 
     fn read_capacities(&mut self, cores: usize) {
@@ -485,9 +496,26 @@ impl Sampler {
                 .filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok())
                 .collect::<Vec<_>>();
             pids.sort_unstable();
-            let processes = pids
+            let sampled = pids
                 .iter()
                 .filter_map(|pid| self.process(*pid, seconds, baseline))
+                .collect::<Vec<_>>();
+            let mut owners = HashMap::<u64, (u64, u32)>::new();
+            for (process, held) in &sampled {
+                for inode in held {
+                    let holder = (process.start_ticks, process.pid);
+                    owners
+                        .entry(*inode)
+                        .and_modify(|owner| *owner = (*owner).min(holder))
+                        .or_insert(holder);
+                }
+            }
+            let processes = sampled
+                .into_iter()
+                .map(|(mut process, held)| {
+                    process.network = self.traffic(process.pid, &held, &owners, seconds);
+                    process
+                })
                 .collect::<Vec<_>>();
             self.known.retain(|pid, _| pids.binary_search(pid).is_ok());
             processes
