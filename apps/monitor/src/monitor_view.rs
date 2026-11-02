@@ -73,7 +73,8 @@ fn column_width(column: Column) -> f32 {
         Column::Name => NAME_WIDTH,
         Column::Cpu | Column::Gpu => 72.0,
         Column::Pid | Column::Threads => 80.0,
-        Column::CpuTime | Column::User => 96.0,
+        Column::CpuTime => 96.0,
+        Column::User => 112.0,
         _ => 112.0,
     }
 }
