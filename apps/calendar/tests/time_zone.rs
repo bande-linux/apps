@@ -34,24 +34,12 @@ fn a_series_moved_to_another_zone_keeps_its_times_exceptions_and_end() {
         time_zone: Some("America/New_York".into()),
     };
     let moved = apply_details(&object, 0, first, &details, Scope::Series, &local);
-    let starts: Vec<String> = moved
+    let starts: Vec<_> = moved
         .occurrences(from, to, &local)
         .iter()
-        .map(|found| {
-            found
-                .start
-                .with_time_zone(new_york.clone())
-                .datetime()
-                .to_string()
-        })
+        .map(|found| found.start.with_time_zone(new_york.clone()).datetime())
         .collect();
-    assert_eq!(
-        starts,
-        [
-            "2026-11-03T10:00:00",
-            "2026-11-17T10:00:00",
-            "2026-11-24T10:00:00",
-            "2026-12-01T10:00:00"
-        ]
-    );
+    let expected = [(11, 3), (11, 17), (11, 24), (12, 1)]
+        .map(|(month, day)| date(2026, month, day).at(10, 0, 0, 0));
+    assert_eq!(starts, expected);
 }
