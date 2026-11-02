@@ -1,0 +1,336 @@
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::PathBuf;
+use std::time::{Instant, SystemTime};
+
+use bande_vm::{Accel, ActiveState};
+
+use super::backend::{Act, Listed, Phase, Update};
+use super::readiness::Blocker;
+use crate::L10N;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Status {
+    Probing,
+    Blocked(Blocker),
+    Ready(Accel),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Power {
+    Stopped,
+    Starting,
+    Running,
+    Paused,
+    Stopping,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Usage {
+    pub cpu: f32,
+    pub memory: u64,
+}
+
+pub struct Entry {
+    pub listed: Listed,
+    pub unit: ActiveState,
+    pub paused: bool,
+    pub pending: Option<Act>,
+    pub usage: Option<Usage>,
+    cpu_sample: Option<(Instant, u64)>,
+}
+
+pub struct Job {
+    pub name: String,
+    pub os: String,
+    pub phase: Phase,
+}
+
+pub struct Notice {
+    pub id: Option<String>,
+    pub title: String,
+    pub message: String,
+}
+
+pub struct Fleet {
+    pub status: Status,
+    pub entries: BTreeMap<String, Entry>,
+    pub jobs: BTreeMap<u64, Job>,
+    pub created: Vec<(u64, String)>,
+    pub notices: Vec<Notice>,
+    pub focus: Option<String>,
+}
+
+impl Entry {
+    pub fn id(&self) -> &str {
+        &self.listed.manifest.id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.listed.manifest.name
+    }
+
+    pub fn power(&self) -> Power {
+        match (self.unit, self.paused) {
+            (ActiveState::Activating, _) => Power::Starting,
+            (ActiveState::Active, true) => Power::Paused,
+            (ActiveState::Active, false) => Power::Running,
+            (ActiveState::Deactivating, _) => Power::Stopping,
+            (ActiveState::Inactive, _) => Power::Stopped,
+            (ActiveState::Failed, _) => Power::Failed,
+        }
+    }
+
+    pub fn running(&self) -> bool {
+        self.unit.is_running()
+    }
+
+    pub fn ssh_port(&self) -> Option<u16> {
+        self.listed.manifest.ssh_port()
+    }
+
+    pub fn can(&self, act: Act) -> bool {
+        let pending = self.pending;
+        match act {
+            Act::Start => pending.is_none() && !self.running(),
+            Act::ShutDown | Act::Restart => pending.is_none() && self.power() == Power::Running,
+            Act::ForceStop => {
+                self.running() && matches!(pending, None | Some(Act::ShutDown | Act::Restart))
+            }
+            Act::Delete => pending.is_none() && !self.running(),
+        }
+    }
+
+    pub fn ssh_command(&self) -> Option<Vec<String>> {
+        let port = self.ssh_port()?;
+        let login = &self.listed.login;
+        let mut command = vec![
+            "ssh".to_owned(),
+            "-p".to_owned(),
+            port.to_string(),
+            "-o".to_owned(),
+            format!(
+                "UserKnownHostsFile={}",
+                self.listed.dir.join("known_hosts").display()
+            ),
+        ];
+        if let Some(identity) = &login.identity {
+            command.extend(["-i".to_owned(), identity.display().to_string()]);
+        }
+        let user = match login.user.is_empty() {
+            true => String::new(),
+            false => format!("{}@", login.user),
+        };
+        command.push(format!("{user}localhost"));
+        Some(command)
+    }
+
+    fn sample(&mut self, now: Instant) {
+        let usage = cgroup(&format!("velox-vm-{}.service", self.id())).and_then(|folder| {
+            let stat = fs::read_to_string(folder.join("cpu.stat")).ok()?;
+            let used = stat
+                .lines()
+                .find_map(|line| line.strip_prefix("usage_usec "))?
+                .trim()
+                .parse::<u64>()
+                .ok()?;
+            let memory = fs::read_to_string(folder.join("memory.current"))
+                .ok()?
+                .trim()
+                .parse()
+                .ok()?;
+            let cpu = match self.cpu_sample.replace((now, used)) {
+                Some((then, before)) if now > then => {
+                    used.saturating_sub(before) as f32
+                        / now.duration_since(then).as_micros().max(1) as f32
+                        * 100.0
+                }
+                _ => return self.usage.map(|usage| Usage { memory, ..usage }),
+            };
+            Some(Usage { cpu, memory })
+        });
+        self.usage = usage;
+    }
+}
+
+fn cgroup(unit: &str) -> Option<PathBuf> {
+    let uid = rustix::process::getuid().as_raw();
+    let manager = PathBuf::from(format!(
+        "/sys/fs/cgroup/user.slice/user-{uid}.slice/user@{uid}.service"
+    ));
+    [manager.join("app.slice").join(unit), manager.join(unit)]
+        .into_iter()
+        .find(|folder| folder.is_dir())
+}
+
+fn settled(entry: &Entry) -> bool {
+    match entry.pending {
+        Some(Act::Start) => entry.unit == ActiveState::Active,
+        _ => false,
+    }
+}
+
+impl Default for Fleet {
+    fn default() -> Self {
+        Self {
+            status: Status::Probing,
+            entries: BTreeMap::new(),
+            jobs: BTreeMap::new(),
+            created: Vec::new(),
+            notices: Vec::new(),
+            focus: None,
+        }
+    }
+}
+
+impl Fleet {
+    pub fn ready(&self) -> bool {
+        matches!(self.status, Status::Ready(_))
+    }
+
+    pub fn running(&self) -> usize {
+        self.entries
+            .values()
+            .filter(|entry| entry.running())
+            .count()
+    }
+
+    pub fn entry(&self, id: &str) -> Option<&Entry> {
+        self.entries.get(id)
+    }
+
+    pub fn add_job(&mut self, job: u64, name: String, os: String) {
+        self.jobs.insert(
+            job,
+            Job {
+                name,
+                os,
+                phase: Phase::Downloading(None),
+            },
+        );
+    }
+
+    pub fn mark(&mut self, id: &str, act: Act) {
+        if let Some(entry) = self.entries.get_mut(id) {
+            entry.pending = Some(act);
+        }
+    }
+
+    pub fn sample(&mut self, now: Instant) {
+        for entry in self.entries.values_mut() {
+            match entry.running() {
+                true => entry.sample(now),
+                false => {
+                    entry.usage = None;
+                    entry.cpu_sample = None;
+                }
+            }
+        }
+    }
+
+    pub fn apply(&mut self, update: Update) {
+        match update {
+            Update::Ready(accel) => self.status = Status::Ready(accel),
+            Update::Blocked(blocker) => {
+                self.status = Status::Blocked(blocker);
+                self.entries.clear();
+            }
+            Update::Listed(listed) => {
+                let mut previous = std::mem::take(&mut self.entries);
+                for listed in listed {
+                    let id = listed.manifest.id.clone();
+                    let entry = match previous.remove(&id) {
+                        Some(mut entry) => {
+                            if entry.unit != listed.unit && !listed.unit.is_running() {
+                                entry.paused = false;
+                            }
+                            entry.unit = listed.unit;
+                            entry.listed = listed;
+                            entry
+                        }
+                        None => Entry {
+                            unit: listed.unit,
+                            listed,
+                            paused: false,
+                            pending: None,
+                            usage: None,
+                            cpu_sample: None,
+                        },
+                    };
+                    self.entries.insert(id, entry);
+                }
+                for (job, id) in &self.created {
+                    self.jobs.remove(job);
+                    if let Some(entry) = self.entries.get_mut(id) {
+                        entry.pending.get_or_insert(Act::Start);
+                    }
+                }
+                let entries = &self.entries;
+                self.created.retain(|(_, id)| !entries.contains_key(id));
+            }
+            Update::Unit(id, state) => {
+                if let Some(entry) = self.entries.get_mut(&id) {
+                    entry.unit = state;
+                    if !state.is_running() {
+                        entry.paused = false;
+                        entry.listed.since = None;
+                    } else if entry.listed.since.is_none() {
+                        entry.listed.since = Some(SystemTime::now());
+                    }
+                    if settled(entry) {
+                        entry.pending = None;
+                    }
+                }
+            }
+            Update::Paused(id, paused) => {
+                if let Some(entry) = self.entries.get_mut(&id) {
+                    entry.paused = paused;
+                }
+            }
+            Update::Settled(id) => {
+                if let Some(entry) = self.entries.get_mut(&id) {
+                    entry.pending = None;
+                }
+            }
+            Update::Job(job, phase) => {
+                if let Some(entry) = self.jobs.get_mut(&job) {
+                    entry.phase = phase;
+                }
+            }
+            Update::Created(job, id) => {
+                self.focus = Some(id.clone());
+                self.created.push((job, id));
+            }
+            Update::JobFailed(job, message) => {
+                if let Some(entry) = self.jobs.remove(&job)
+                    && !message.is_empty()
+                {
+                    self.notices.push(Notice {
+                        id: None,
+                        title: L10N.tr_args("machine-cannot-create", [("name", entry.name.into())]),
+                        message,
+                    });
+                }
+            }
+            Update::Failed { id, act, message } => {
+                let name = self
+                    .entries
+                    .get(&id)
+                    .map_or_else(|| id.clone(), |entry| entry.name().to_owned());
+                let title = match act {
+                    Act::Start => "machine-cannot-start",
+                    Act::ShutDown => "machine-cannot-shut-down",
+                    Act::ForceStop => "machine-cannot-force-stop",
+                    Act::Restart => "machine-cannot-restart",
+                    Act::Delete => "machine-cannot-delete",
+                };
+                self.notices.push(Notice {
+                    id: Some(id),
+                    title: L10N.tr_args(title, [("name", name.into())]),
+                    message,
+                });
+            }
+        }
+    }
+}

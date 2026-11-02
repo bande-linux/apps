@@ -38,3 +38,126 @@ steps-start-podman = Start Podman
 steps-access = Add yourself to the docker group, then log out and back in
 docker-group-note = The docker group is root-equivalent.
 podman-rootless = Podman, rootless
+menu-file = File
+machine-pane = Machines
+machine-sidebar = Virtual Machines
+machine-menu = Machine
+machine-new = New Virtual Machine…
+machine-new-ellipsis = New Virtual Machine…
+machine-new-title = New Virtual Machine
+machine-filter = Filter machines
+machine-inspector = Show Inspector
+machine-column-os = OS
+machine-column-address = IP / SSH
+machine-column-usage = CPU / MEM
+machine-shut-down = Shut Down
+machine-force-stop = Force Stop
+machine-restart = Restart
+machine-connect = Connect via SSH
+machine-open = Show Machine Window
+machine-copy-ssh = Copy SSH Command
+machine-delete = Delete
+machine-delete-ellipsis = Delete…
+machine-cancel-job = Cancel
+machine-cancel-download = Cancel Download
+machine-pending-shut-down = Shutting Down…
+machine-pending-restart = Restarting…
+machine-pending-delete = Deleting…
+machine-running = Running
+machine-running-for = Running · { $uptime }
+machine-uptime-seconds = just started
+machine-uptime-minutes = { $count ->
+    [one] 1 minute
+   *[other] { $count } minutes
+}
+machine-uptime-hours = { $count ->
+    [one] 1 hour
+   *[other] { $count } hours
+}
+machine-uptime-days = { $count ->
+    [one] 1 day
+   *[other] { $count } days
+}
+machine-paused = Paused
+machine-stopped = Stopped
+machine-failed = Failed
+machine-downloading = Downloading…
+machine-downloading-percent = Downloading… { $percent } %
+machine-creating = Creating…
+machine-cannot-create = Cannot create “{ $name }”
+machine-cannot-start = Cannot start “{ $name }”
+machine-cannot-shut-down = Cannot shut down “{ $name }”
+machine-cannot-force-stop = Cannot force “{ $name }” to stop
+machine-cannot-restart = Cannot restart “{ $name }”
+machine-cannot-delete = Cannot delete “{ $name }”
+machine-delete-title = Delete “{ $name }”?
+machine-delete-message = Its disk, firmware settings and snapshots are deleted. This can’t be undone.
+machine-delete-confirm = Delete
+machine-cancel = Cancel
+machine-back = Back
+machine-continue = Continue
+machine-create = Create
+machine-step-image = Choose a cloud image.
+machine-step-resources = Choose the machine’s processors, memory and disk.
+machine-step-identity = Name the machine and choose how you sign in.
+machine-image = Cloud image
+machine-cpus = CPUs
+machine-memory = Memory
+machine-disk-size = Disk
+machine-disk-used = Used on disk
+machine-gigabytes = { $count } GB
+machine-name = Name
+machine-user = User
+machine-ssh-key = SSH key
+machine-ssh-port = SSH port on this computer
+machine-no-key = No SSH key in ~/.ssh. Make one with ssh-keygen.
+machine-invalid-name = Use lowercase letters, digits and hyphens for the name.
+machine-name-taken = A machine named “{ $name }” already exists.
+machine-invalid-user = Use lowercase letters, digits, hyphens and underscores for the user, and not root.
+machine-invalid-port = Choose a port from 1024 to 65535.
+machine-port-taken = Port { $port } is in use.
+machine-empty-title = No Virtual Machines
+machine-empty-hint = Make one from a Debian, Ubuntu or Fedora cloud image.
+machine-install = Install virtualization to continue
+machine-missing = Missing: { $packages }
+machine-install-steps = Install QEMU, its firmware and passt
+machine-no-kvm = No access to KVM
+machine-no-kvm-why = Virtual machines run on /dev/kvm. It is open to the person signed in at this computer; over SSH you need the kvm group.
+machine-kvm-steps = Add yourself to the kvm group, then log out and back in
+machine-relogin-why = You joined the kvm group after your session started. Your services keep running after you log out, so restart the computer if logging out isn’t enough.
+machine-emulation-note = Without KVM, machines run emulated and much slower.
+machine-use-emulation = Use Emulation
+machine-no-manager = No systemd user manager
+machine-no-manager-why = Virtual machines run as systemd user services, and the session has no user manager.
+machine-section-machine = Machine
+machine-section-disk = Disk
+machine-section-network = Network
+machine-section-usage = Usage
+machine-os = OS
+machine-created = Created
+machine-created-today = Today
+machine-created-days = { $count ->
+    [one] Yesterday
+   *[other] { $count } days ago
+}
+machine-acceleration = Acceleration
+machine-kvm = KVM
+machine-emulated = Emulated
+machine-forward = Forward
+machine-forward-value = localhost:{ $host } → { $guest }
+machine-ssh = SSH
+machine-cpu-usage = CPU
+machine-memory-usage = Memory
+machine-tabs = Machine
+machine-tab-console = Console
+machine-tab-info = Info
+machine-tab-snapshots = Snapshots
+machine-tab-settings = Settings
+machine-window-title = { $name } — { $status }
+machine-gone = This machine was deleted.
+machine-no-display = No display
+machine-console-later = The console comes in a later version of Velox. Connect via SSH meanwhile.
+machine-snapshots-later = Snapshots come in a later version of Velox.
+machine-take-snapshot = Take Snapshot…
+machine-revert = Revert…
+machine-shut-down-to-change = Shut down to change

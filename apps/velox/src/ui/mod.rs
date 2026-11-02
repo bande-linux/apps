@@ -1,6 +1,6 @@
 mod containers;
 mod not_ready;
-mod widgets;
+pub(crate) mod widgets;
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -17,13 +17,14 @@ pub use self::widgets::SIDEBAR_WIDTH;
 use self::widgets::{Centered, Light, Pill, Root, symbol};
 use crate::L10N;
 use crate::engine::{Action, Container, Engine, EngineInfo, Flavor, Update};
+use crate::machines::{Hub, MACHINES_KEY, MachinesPane};
 use crate::readiness::Readiness;
 
 const START_SYMBOL: &str = include_str!("../../data/symbols/start.svg");
 const STOP_SYMBOL: &str = include_str!("../../data/symbols/stop.svg");
 const CONTAINERS_SYMBOL: &str = include_str!("../../data/symbols/containers.svg");
 const CONTAINERS_KEY: &str = "containers";
-const COUNT_WIDTH: f32 = 48.0;
+const COUNT_WIDTH: f32 = 40.0;
 const TITLE_INSET: f32 = 16.0;
 const EMPTY_WIDTH: f32 = 360.0;
 
@@ -43,6 +44,7 @@ enum Intent {
     Copy(&'static str),
     Open(&'static str),
     Alternative(bool),
+    Navigate(Vec<String>),
 }
 
 type Intents = Rc<RefCell<Vec<Intent>>>;
@@ -73,8 +75,16 @@ struct Tools {
     search: WidgetId,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pane {
+    Containers,
+    Machines,
+}
+
 pub struct VeloxView {
     ui: Ui,
+    pane: Pane,
+    machines: MachinesPane,
     root: WidgetId,
     sidebar: WidgetId,
     table: Option<WidgetId>,
@@ -121,12 +131,14 @@ impl VeloxView {
     pub fn new(appearance: Appearance) -> Self {
         let palette = appearance.palette();
         let intents = Intents::default();
+        let navigate = Rc::clone(&intents);
         let sidebar = Table::new(vec![
             Column::new("", SIDEBAR_WIDTH).flexible(),
             Column::new("", COUNT_WIDTH).numeric(),
         ])
         .without_header()
-        .sidebar();
+        .sidebar()
+        .on_selection(move |keys| push(&navigate, Intent::Navigate(keys.to_vec())));
         let sidebar_id = sidebar.id();
         let root = Root::new(
             boxed(sidebar),
@@ -139,6 +151,8 @@ impl VeloxView {
         ui.set_sheet_top(widgets::TOOLBAR_HEIGHT);
         let mut view = Self {
             ui,
+            pane: Pane::Containers,
+            machines: MachinesPane::new(Rc::default(), palette),
             root: root_id,
             sidebar: sidebar_id,
             table: None,
@@ -171,8 +185,12 @@ impl VeloxView {
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.palette = appearance.palette();
         self.ui.set_appearance(appearance);
+        self.machines.set_palette(self.palette);
         self.shown = Shown::Nothing;
         self.tools = None;
+        if self.pane == Pane::Machines {
+            self.show_machines();
+        }
         self.refresh();
     }
 
@@ -187,7 +205,60 @@ impl VeloxView {
     }
 
     pub fn title(&self) -> String {
-        L10N.tr("pane-containers")
+        match self.pane {
+            Pane::Containers => L10N.tr("pane-containers"),
+            Pane::Machines => self.machines.title(),
+        }
+    }
+
+    pub fn pane(&self) -> Pane {
+        self.pane
+    }
+
+    pub fn set_hub(&mut self, hub: &Hub) {
+        self.machines.set_fleet(hub.fleet());
+        self.refresh();
+    }
+
+    pub fn machines(&mut self) -> (&mut MachinesPane, &mut Ui) {
+        (&mut self.machines, &mut self.ui)
+    }
+
+    pub fn machines_ref(&self) -> &MachinesPane {
+        &self.machines
+    }
+
+    pub fn navigate(&mut self, pane: Pane) {
+        if pane == self.pane {
+            return;
+        }
+        self.pane = pane;
+        self.shown = Shown::Nothing;
+        self.tools = None;
+        self.table = None;
+        self.selected.clear();
+        self.machines.hide();
+        if pane == Pane::Machines {
+            self.show_machines();
+        }
+        self.refresh();
+    }
+
+    pub fn machines_changed(&mut self) {
+        self.refresh();
+    }
+
+    pub fn present_notice(&mut self, title: &str, message: &str) {
+        self.ui
+            .present_sheet(Alert::new(title, message, |_| {}).primary(&L10N.tr("button-ok"), "ok"));
+    }
+
+    fn show_machines(&mut self) {
+        let (content, tools) = self.machines.show();
+        if let Some(root) = self.ui.widget_as::<Root>(self.root) {
+            root.set_content(content);
+            root.set_tools(tools);
+        }
     }
 
     pub fn header(&self) -> Header {
@@ -262,6 +333,9 @@ impl VeloxView {
     }
 
     pub fn focus_filter(&mut self) {
+        if self.pane == Pane::Machines {
+            return self.machines.focus_filter(&mut self.ui);
+        }
         if let Some(tools) = self.tools {
             self.ui.set_focus(tools.search);
         }
@@ -337,7 +411,11 @@ impl VeloxView {
     pub fn pump(&mut self) -> bool {
         let intents: Vec<Intent> = self.intents.borrow_mut().drain(..).collect();
         if intents.is_empty() {
-            return false;
+            let pumped = self.machines.pump(&mut self.ui);
+            if pumped {
+                self.refresh();
+            }
+            return pumped;
         }
         for intent in intents {
             match intent {
@@ -355,8 +433,14 @@ impl VeloxView {
                 Intent::Copy(text) => self.ui.context().copy(text),
                 Intent::Open(link) => self.requests.push(Request::OpenLink(link)),
                 Intent::Alternative(open) => self.alternative = open,
+                Intent::Navigate(keys) => match keys.first().map(String::as_str) {
+                    Some(MACHINES_KEY) => self.navigate(Pane::Machines),
+                    Some(CONTAINERS_KEY) => self.navigate(Pane::Containers),
+                    _ => {}
+                },
             }
         }
+        self.machines.pump(&mut self.ui);
         self.refresh();
         true
     }
@@ -371,7 +455,7 @@ impl VeloxView {
             Connection::Ready(_) => format!("{running}/{}", self.containers.len()),
             _ => String::new(),
         };
-        vec![
+        let mut rows = vec![
             Row::new(
                 "heading",
                 vec![Cell::new(L10N.tr("sidebar-containers")).muted().label()],
@@ -384,7 +468,9 @@ impl VeloxView {
                     Cell::new(count).muted().tabular(),
                 ],
             ),
-        ]
+        ];
+        rows.extend(self.machines.sidebar_rows(&self.palette));
+        rows
     }
 
     fn pill(&self) -> Pill {
@@ -446,11 +532,22 @@ impl VeloxView {
 
     fn refresh(&mut self) {
         let rows = self.sidebar_rows();
+        let selected = match self.pane {
+            Pane::Containers => CONTAINERS_KEY,
+            Pane::Machines => MACHINES_KEY,
+        };
         if let Some(sidebar) = self.ui.widget_as::<Table>(self.sidebar) {
             sidebar.set_rows(rows);
-            sidebar.select(&[CONTAINERS_KEY.to_owned()]);
+            sidebar.select(&[selected.to_owned()]);
         }
         let pill = self.pill();
+        if self.pane == Pane::Machines {
+            if let Some(root) = self.ui.widget_as::<Root>(self.root) {
+                root.set_pill(boxed(pill));
+            }
+            self.machines.refresh(&mut self.ui);
+            return;
+        }
         let wanted = match &self.connection {
             Connection::Connecting => Shown::Nothing,
             Connection::Blocked(_) => Shown::Page,

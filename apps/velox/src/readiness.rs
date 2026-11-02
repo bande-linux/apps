@@ -134,7 +134,7 @@ fn status_field(name: &str) -> Vec<u32> {
         .unwrap_or_default()
 }
 
-fn listed_in_group(gid: u32) -> bool {
+pub(crate) fn listed_in_group(gid: u32) -> bool {
     let Ok(user) = std::env::var("USER") else {
         return false;
     };

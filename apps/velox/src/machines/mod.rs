@@ -1,0 +1,153 @@
+mod backend;
+mod fleet;
+mod page;
+mod pane;
+mod present;
+mod readiness;
+mod sheet;
+mod widgets;
+mod window;
+
+use std::cell::RefCell;
+use std::os::fd::BorrowedFd;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
+
+pub use self::backend::Act;
+use self::backend::{Backend, Change, Plan};
+pub use self::fleet::{Fleet, Notice};
+pub use self::pane::{MACHINES_KEY, MachinesPane};
+use self::sheet::Field;
+pub use self::window::{MACHINE_WINDOW_SIZE, MachineWindow};
+
+const SAMPLE_INTERVAL: Duration = Duration::from_secs(2);
+const MACHINES_SYMBOL: &str = include_str!("symbols/machines.svg");
+
+#[derive(Debug, Clone, PartialEq)]
+enum Intent {
+    Select(Vec<String>),
+    Activate(Vec<String>),
+    Filter(String),
+    Act(Act),
+    New,
+    Inspector,
+    Menu(String, Vec<String>),
+    Emulate,
+    Copy(&'static str),
+    Field(Field),
+    Sheet(String),
+    Delete(String, bool),
+    Tab(usize),
+    Change(Change),
+    Connect,
+}
+
+type Intents = Rc<RefCell<Vec<Intent>>>;
+
+fn push(intents: &Intents, intent: Intent) {
+    intents.borrow_mut().push(intent);
+}
+
+pub enum Request {
+    Act(String, Act),
+    Create(Box<Plan>),
+    Cancel(u64),
+    Open(String),
+    Connect(String),
+    Emulate,
+    Change(String, Change),
+}
+
+pub enum Effect {
+    Open(String),
+    Connect(Vec<String>),
+}
+
+pub struct Hub {
+    backend: Backend,
+    fleet: Rc<RefCell<Fleet>>,
+    sample_at: Option<Instant>,
+}
+
+impl Hub {
+    pub fn start() -> std::io::Result<Self> {
+        Ok(Self {
+            backend: Backend::start()?,
+            fleet: Rc::default(),
+            sample_at: None,
+        })
+    }
+
+    pub(crate) fn fleet(&self) -> Rc<RefCell<Fleet>> {
+        Rc::clone(&self.fleet)
+    }
+
+    pub fn fd(&self) -> BorrowedFd<'_> {
+        self.backend.fd()
+    }
+
+    pub fn drain(&self) -> bool {
+        let updates = self.backend.drain();
+        let changed = !updates.is_empty();
+        let mut fleet = self.fleet.borrow_mut();
+        for update in updates {
+            fleet.apply(update);
+        }
+        changed
+    }
+
+    pub fn take_notices(&self) -> Vec<Notice> {
+        std::mem::take(&mut self.fleet.borrow_mut().notices)
+    }
+
+    pub fn serve(&mut self, request: Request) -> Option<Effect> {
+        let mut fleet = self.fleet.borrow_mut();
+        match request {
+            Request::Act(id, act) => {
+                fleet.mark(&id, act);
+                self.backend.act(id, act);
+            }
+            Request::Create(plan) => {
+                let (name, os) = (plan.new.name.clone(), plan.new.os.clone());
+                let job = self.backend.create(*plan);
+                fleet.add_job(job, name, os);
+                fleet.focus = Some(format!("{}{job}", present::JOB_PREFIX));
+            }
+            Request::Cancel(job) => self.backend.cancel(job),
+            Request::Open(id) => return Some(Effect::Open(id)),
+            Request::Connect(id) => {
+                return fleet
+                    .entry(&id)
+                    .and_then(|entry| entry.ssh_command())
+                    .map(Effect::Connect);
+            }
+            Request::Emulate => self.backend.emulate(),
+            Request::Change(id, change) => self.backend.change(id, change),
+        }
+        None
+    }
+
+    pub fn schedule(&mut self, wanted: bool) {
+        let wanted = wanted && self.fleet.borrow().running() > 0;
+        self.sample_at = match (wanted, self.sample_at) {
+            (false, _) => None,
+            (true, None) => Some(Instant::now()),
+            (true, at) => at,
+        };
+    }
+
+    pub fn deadline(&self) -> Option<Instant> {
+        self.sample_at
+    }
+
+    pub fn tick(&mut self, now: Instant) -> bool {
+        match self.sample_at {
+            Some(at) if at <= now => {
+                self.fleet.borrow_mut().sample(now);
+                self.sample_at = Some(now + SAMPLE_INTERVAL);
+                true
+            }
+            _ => false,
+        }
+    }
+}
