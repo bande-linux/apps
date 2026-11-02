@@ -103,6 +103,8 @@ pub(crate) enum Signal {
     EndDate(String),
     EndTime(String),
     Repeat(usize),
+    EndRepeatKind(usize),
+    EndRepeatText(String),
     Alert(usize),
     Calendar(usize),
     Notes(String),
@@ -1005,8 +1007,15 @@ impl CalendarView {
             .iter()
             .find(|(_, hit)| matches!(hit, Hit::Event(index, Part::Body) if self.shown.get(*index) == Some(&found)))
             .map(|(rect, _)| *rect);
-        let (panel, inspector) =
-            inspector::Inspector::build(&self.signals, found, &event, read_only, calendars, anchor);
+        let (panel, inspector) = inspector::Inspector::build(
+            &self.signals,
+            found,
+            &event,
+            read_only,
+            calendars,
+            anchor,
+            &self.zone,
+        );
         if let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) {
             host.insert(panel, Rect::default());
         }
