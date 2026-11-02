@@ -56,6 +56,7 @@ pub const LIST_WIDTH: f32 = 340.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const NOTIFIED_AT_ONCE: usize = 3;
 const UNDO_TRIES: u8 = 3;
+const DRAG_THRESHOLD: f32 = 6.0;
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -90,6 +91,15 @@ pub enum Hit {
 pub(crate) enum Pane {
     Sidebar,
     List,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Drag {
+    pub(crate) from: Point,
+    pub(crate) at: Point,
+    pub(crate) moving: bool,
+    pub(crate) over: Option<usize>,
+    collapse: Option<MessageId>,
 }
 
 #[derive(Debug, Clone)]
@@ -142,6 +152,7 @@ pub struct MailView {
     opened: Vec<(PathBuf, std::time::SystemTime)>,
     undo: Vec<Moved>,
     undoing: Vec<Moved>,
+    pub(crate) drag: Option<Drag>,
 }
 
 fn keyring_password(email: String, host: String) -> crate::worker::PasswordSource {
@@ -195,6 +206,7 @@ impl MailView {
             opened: Vec::new(),
             undo: Vec::new(),
             undoing: Vec::new(),
+            drag: None,
         };
         view.insert_toolbar();
         view.ui.set_sheet_top(TOOLBAR_HEIGHT);
@@ -509,7 +521,7 @@ impl MailView {
         self.selected == Some(id) || self.also.contains(&id)
     }
 
-    fn chosen(&self) -> Vec<Summary> {
+    pub(crate) fn chosen(&self) -> Vec<Summary> {
         self.messages
             .iter()
             .filter(|summary| self.is_chosen(summary.id))
@@ -1540,7 +1552,12 @@ impl MailView {
                 self.ui.clear_focus();
                 self.click(pointer)
             }
+            Event::PointerUp(_) if self.drag.is_some() => {
+                self.drop_messages();
+                true
+            }
             Event::PointerUp(_) => self.ui.handle(event),
+            Event::PointerMove(pointer) if self.drag.is_some() => self.drag_to(pointer.position),
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
                 let ui = self.ui.handle(event);
                 let hover = self.hit(pointer.position);
@@ -1548,12 +1565,90 @@ impl MailView {
                 self.hover = hover;
                 ui | changed
             }
-            Event::PointerLeave => self.ui.handle(event) | self.hover.take().is_some(),
+            Event::PointerLeave => {
+                self.ui.handle(event) | self.hover.take().is_some() | self.drag.take().is_some()
+            }
             Event::Scroll(scroll) => {
                 self.ui.handle(event)
                     || (!self.over_control(scroll.position) && self.scroll(scroll))
             }
             _ => self.ui.handle(event),
+        }
+    }
+
+    fn drop_target(&self, index: usize) -> bool {
+        match self.sidebar.get(index) {
+            Some(Row::Place { place, .. }) if *place == self.place => false,
+            Some(Row::Place {
+                place: Place::Mailbox(id),
+                ..
+            }) => self
+                .accounts
+                .iter()
+                .flat_map(|(_, mailboxes)| mailboxes)
+                .any(|mailbox| mailbox.id == *id && mailbox.selectable),
+            Some(Row::Place {
+                place: Place::All(role),
+                ..
+            }) => *role != Role::Drafts && *role != Role::Sent,
+            _ => false,
+        }
+    }
+
+    fn drag_to(&mut self, at: Point) -> bool {
+        let over = match self.hit(at) {
+            Some(Hit::Place(index)) if self.drop_target(index) => Some(index),
+            _ => None,
+        };
+        let Some(drag) = self.drag.as_mut() else {
+            return false;
+        };
+        let moving =
+            drag.moving || (at.x - drag.from.x).abs() + (at.y - drag.from.y).abs() > DRAG_THRESHOLD;
+        let changed = moving && (drag.at != at || drag.over != over || !drag.moving);
+        *drag = Drag {
+            at,
+            moving,
+            over: over.filter(|_| moving),
+            ..*drag
+        };
+        changed
+    }
+
+    fn drop_messages(&mut self) {
+        let Some(drag) = self.drag.take() else {
+            return;
+        };
+        if let (false, Some(id)) = (drag.moving, drag.collapse) {
+            self.select(id);
+        }
+        let (true, Some(index)) = (drag.moving, drag.over) else {
+            return;
+        };
+        match self.sidebar.get(index).cloned() {
+            Some(Row::Place {
+                place: Place::Mailbox(id),
+                ..
+            }) => {
+                let target = self
+                    .accounts
+                    .iter()
+                    .flat_map(|(_, mailboxes)| mailboxes)
+                    .find(|mailbox| mailbox.id == id)
+                    .cloned();
+                if let Some(target) = target {
+                    self.move_selected_to(&target);
+                }
+            }
+            Some(Row::Place {
+                place: Place::All(Role::Trash),
+                ..
+            }) => self.delete_selected(),
+            Some(Row::Place {
+                place: Place::All(role),
+                ..
+            }) => self.move_selected(role),
+            _ => {}
         }
     }
 
@@ -1689,8 +1784,18 @@ impl MailView {
                 self.select_more(id, pointer.modifiers.shift);
             }
             Hit::Message(id) => {
-                if !self.is_chosen(id) || (!secondary && !self.also.is_empty()) {
+                let collapse = !secondary && self.is_chosen(id) && !self.also.is_empty();
+                if !self.is_chosen(id) {
                     self.select(id);
+                }
+                if !secondary && pointer.count == 1 {
+                    self.drag = Some(Drag {
+                        from: pointer.position,
+                        at: pointer.position,
+                        moving: false,
+                        over: None,
+                        collapse: collapse.then_some(id),
+                    });
                 }
                 if pointer.count >= 2 && !secondary {
                     self.continue_draft();

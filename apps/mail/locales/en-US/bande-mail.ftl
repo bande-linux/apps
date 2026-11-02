@@ -16,6 +16,7 @@ no-messages = No Messages
 no-results = No Results
 no-message-selected = No Message Selected
 messages-selected = { $count } Messages Selected
+messages-dragged = { $count } messages
 no-sender = No Sender
 no-subject = No Subject
 header-to = To: { $names }

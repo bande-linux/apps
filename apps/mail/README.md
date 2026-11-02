@@ -51,8 +51,9 @@ apt install bande-mail
   sender, recipients, subject and text. Mailbox → Mark All as Read marks the shown mailbox read, and Message → Move To files the
   message in any mailbox of its account. Ctrl+click, Shift+click, Shift+Up/Down and Select All
   (Ctrl+A) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then
-  act on all of them. Undo (Ctrl+Z) puts the last moved or deleted messages back, and a mailbox
-  that messages were moved to is synced right after the move.
+  act on all of them, and dragging them onto a mailbox in the sidebar moves them. Undo (Ctrl+Z)
+  puts the last moved or deleted messages back, and a mailbox that messages were moved to is
+  synced right after the move.
 - **Compose** opens its own window, with From when there are several accounts. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's
   signature goes above the quoted text and changes with From. Files are
