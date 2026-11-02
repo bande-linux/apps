@@ -7,7 +7,7 @@ is what is left. Delete this plan when the list is done.
 
 | macOS | User need | Bande Terminal |
 |---|---|---|
-| Profiles: text, colours, background | Readable, familiar colours | Five built-in profiles (Datum follows light/dark, Paper, Ink, Midnight, High Contrast) with a live preview. Profiles cannot be edited, duplicated or imported |
+| Profiles: text, colours, background | Readable, familiar colours | Twelve built-in profiles with a live preview: Datum (follows light/dark), Paper, Ink, Midnight, High Contrast and the classic Solarized Light/Dark, Dracula, Nord, Gruvbox, Tokyo Night and Catppuccin Mocha. Profiles cannot be edited, duplicated or imported |
 | Font and size | Comfortable text | Size 9–32 pt (Ctrl+= / Ctrl+-); the font is fixed (JetBrains Mono) |
 | Cursor: block / underline / bar, blink | See the cursor | Have shape and Blink the cursor (blinks only while focused, so idle windows stay asleep) |
 | Scrollback: limit lines | Keep enough history | Have: 1 000, 10 000, 100 000 or 1 000 000 lines |
