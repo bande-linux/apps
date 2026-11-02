@@ -1,20 +1,19 @@
 mod address;
 mod page;
+mod renderer;
 mod view;
 
-use std::cell::RefCell;
 use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::process::ExitCode;
-use std::rc::Rc;
 use std::sync::LazyLock;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
 use bande_app_menu::Entry;
 use bande_l10n::Localizer;
-use web_content::Fonts;
-use web_net::{Fetcher, Url};
+use web_net::Url;
 
+use crate::renderer::{Renderer, ViewId};
 use crate::view::BrowserView;
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-browser.ftl");
@@ -38,8 +37,8 @@ const BACK: &str = "back";
 const FORWARD: &str = "forward";
 
 struct Browser {
-    fetcher: Fetcher,
-    fonts: Rc<RefCell<Fonts>>,
+    renderer: Renderer,
+    next_view: u64,
 }
 
 fn addresses(arguments: &[String]) -> Vec<Url> {
@@ -55,8 +54,9 @@ impl Browser {
             Kind::Main,
             &L10N.tr("app-name"),
             WINDOW_SIZE,
-            |appearance| BrowserView::new(appearance, Rc::clone(&self.fonts)),
+            |appearance| BrowserView::new(appearance, ViewId(self.next_view), self.renderer.link()),
         );
+        self.next_view += 1;
         let window = match opened {
             Ok(window) => window,
             Err(error) => return tracing::warn!("cannot open a window: {error}"),
@@ -67,7 +67,7 @@ impl Browser {
                 None => view.focus_address(),
             }
         }
-        self.changed(cx, window);
+        cx.refresh_menus();
     }
 
     fn open_all(&mut self, cx: &mut Cx<Self>, urls: Vec<Url>) {
@@ -85,8 +85,8 @@ impl Program for Browser {
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let mut browser = Self {
-            fetcher: Fetcher::new()?,
-            fonts: Rc::default(),
+            renderer: Renderer::new()?,
+            next_view: 0,
         };
         browser.open_all(cx, addresses(&arguments));
         Ok(browser)
@@ -152,45 +152,27 @@ impl Program for Browser {
     }
 
     fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, view: BrowserView) {
-        if let Some(fetch) = view.fetch() {
-            self.fetcher.cancel(fetch);
-        }
+        view.close();
     }
 
-    fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
-        let Some((shown, view)) = cx.window(window) else {
-            return;
-        };
-        let Some(request) = view.take_request() else {
-            return;
-        };
-        if let Some(previous) = request.cancel {
-            self.fetcher.cancel(previous);
-        }
-        if let Some(url) = request.load {
-            view.loading(self.fetcher.fetch(url));
-        }
-        shown.request_redraw();
+    fn changed(&mut self, cx: &mut Cx<Self>, _window: WindowId) {
         cx.refresh_menus();
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.fetcher.fd()]
+        vec![self.renderer.fd()]
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {
-        for (fetch, result) in self.fetcher.completed() {
-            let fetching = cx
-                .windows()
-                .find(|window| cx.view(*window).and_then(BrowserView::fetch) == Some(fetch));
-            let Some(window) = fetching else {
-                continue;
-            };
-            if let Some((shown, view)) = cx.window(window) {
-                view.loaded(result);
+        for update in self.renderer.updates() {
+            let target = cx.windows().find(|window| {
+                cx.view(*window)
+                    .is_some_and(|view| view.id() == update.view)
+            });
+            if let Some((shown, view)) = target.and_then(|window| cx.window(window)) {
+                view.update(update);
                 shown.request_redraw();
             }
-            self.changed(cx, window);
         }
         cx.refresh_menus();
     }
