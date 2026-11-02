@@ -227,3 +227,8 @@ held-title = { $count ->
 }
 held-message = { $email } is turned off. Mail sends what is waiting when you turn the account on again in Settings → Accounts. If you quit Mail first, it opens again as an unsent message.
 account-gone = No account sends from this address any more.
+undo-lost-title = { $count ->
+    [one] A Message Could Not Be Put Back
+   *[other] { $count } Messages Could Not Be Put Back
+}
+undo-lost-message = Mail did not find it in { $mailbox } on the server. It may have been moved or deleted there.

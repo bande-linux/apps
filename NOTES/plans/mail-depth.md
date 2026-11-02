@@ -47,12 +47,8 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 
 1. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses
    passwords.
-2. The known gaps below.
-3. Rich text compose and spelling (both need desktop services first).
-4. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
-5. A privacy proxy for remote pictures.
-6. Redo; dragging messages out to other apps; flag colours; sorting by size or unread first.
-7. A Password field in Settings → Accounts; a message font apart from the desktop text size.
-
-## Known gaps in what landed (review, 2026-11-02)
-- Undo gives up without a word when the moved message does not show up after three syncs of the mailbox it went to.
+2. Rich text compose and spelling (both need desktop services first).
+3. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
+4. A privacy proxy for remote pictures.
+5. Redo; dragging messages out to other apps; flag colours; sorting by size or unread first.
+6. A Password field in Settings → Accounts; a message font apart from the desktop text size.

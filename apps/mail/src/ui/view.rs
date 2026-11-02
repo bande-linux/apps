@@ -1135,6 +1135,7 @@ impl MailView {
 
     fn put_back(&mut self, moves: Vec<Moved>) {
         let mut waiting = Vec::new();
+        let mut lost = Vec::new();
         for moved in moves {
             match self.store.find_message(moved.to, &moved.message_id) {
                 Ok(Some(id)) => {
@@ -1162,9 +1163,19 @@ impl MailView {
                         ..moved
                     });
                 }
-                Ok(None) => {}
+                Ok(None) => lost.push(moved.to),
                 Err(error) => tracing::warn!("cannot put the message back: {error}"),
             }
+        }
+        if let Some(mailbox) = lost.first().and_then(|id| self.mailbox(*id)) {
+            self.ui.present_sheet(
+                Alert::new(
+                    &L10N.tr_args("undo-lost-title", [("count", lost.len().into())]),
+                    &L10N.tr_args("undo-lost-message", [("mailbox", mailbox.name.into())]),
+                    |_| {},
+                )
+                .primary(&L10N.tr("button-ok"), "ok"),
+            );
         }
         self.reload();
     }
