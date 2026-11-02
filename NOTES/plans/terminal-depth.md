@@ -11,7 +11,7 @@ is what is left. Delete this plan when the list is done.
 | Font and size | Comfortable text | Size 9–32 pt (Ctrl+= / Ctrl+-); the font is fixed (JetBrains Mono) |
 | Cursor: block / underline / bar, blink | See the cursor | Have shape and Blink the cursor (blinks only while focused, so idle windows stay asleep) |
 | Scrollback: limit lines | Keep enough history | Have: 1 000, 10 000, 100 000 or 1 000 000 lines |
-| Bell: audible / visual, badge | Notice a bell | Have Flash the window and a badge in the bar. No audible bell |
+| Bell: audible / visual, badge | Notice a bell | Have Play the alert sound (the desktop's alert through bande-sound, at most four a second, off by default), Flash the window, and a badge in the bar |
 | Use Option as Meta key | Alt-word movement in shells and Emacs | Have Use Alt as Meta (on by default); off sends the character the layout produces |
 | Shell: run command, startup | Use another shell or tmux | Have Run command (through `/bin/sh -c exec …`; empty = login shell) |
 | When the shell exits, Ask before closing: Always / Never / Only if processes other than the shell run | Don't lose a running job | Have Always / When a program is running / Never, for panes, tabs, windows and quit |
@@ -40,10 +40,9 @@ is what is left. Delete this plan when the list is done.
 1. Editable profiles: duplicate a built-in profile, change colours, font size and cursor per
    profile, choose a profile per window or tab, import iTerm/Terminal colour schemes.
 2. Font family choice (any installed monospace font).
-3. Audible bell (the desktop sound service's alert sound), with a setting.
-4. Default window size in columns × rows.
-5. Drag tabs to reorder and out into a new window.
-6. Edit Title for a tab, and a per-tab profile badge.
-7. Alt+click to move the shell cursor; triple-click selects a command's output.
-8. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
+3. Default window size in columns × rows.
+4. Drag tabs to reorder and out into a new window.
+5. Edit Title for a tab, and a per-tab profile badge.
+6. Alt+click to move the shell cursor; triple-click selects a command's output.
+7. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
    password).

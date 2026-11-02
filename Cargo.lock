@@ -754,6 +754,7 @@ dependencies = [
  "bande-design",
  "bande-l10n",
  "bande-notify",
+ "bande-sound",
  "bande-spring",
  "bande-toolkit",
  "bande-xdg",

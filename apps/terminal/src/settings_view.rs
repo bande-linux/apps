@@ -189,6 +189,12 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
             shared.borrow_mut().cursor = CursorStyle::ALL.get(index).copied().unwrap_or_default();
         },
     );
+    let audible = toggle(
+        settings,
+        &L10N.tr("settings-audible"),
+        current.audible_bell,
+        |settings, on| settings.audible_bell = on,
+    );
     let flash = toggle(
         settings,
         &L10N.tr("settings-flash"),
@@ -280,6 +286,7 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
             row("settings-paste-warning", Box::new(paste)),
             row("settings-scrollback", Box::new(scrollback)),
             heading("settings-bell"),
+            row("settings-audible", Box::new(audible)),
             row("settings-flash", Box::new(flash)),
             row("settings-badge", Box::new(badge)),
             heading("settings-notifications"),

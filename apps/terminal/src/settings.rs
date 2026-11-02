@@ -115,6 +115,7 @@ pub struct Settings {
     pub close_ask: CloseAsk,
     pub new_tab_folder: NewTabFolder,
     pub shell: String,
+    pub audible_bell: bool,
     pub flash_on_bell: bool,
     pub badge_on_bell: bool,
     pub notify_finished: bool,
@@ -133,6 +134,7 @@ impl Default for Settings {
             close_ask: CloseAsk::default(),
             new_tab_folder: NewTabFolder::default(),
             shell: String::new(),
+            audible_bell: false,
             flash_on_bell: true,
             badge_on_bell: true,
             notify_finished: true,
@@ -195,6 +197,9 @@ impl Stored for Settings {
                         .unwrap_or(settings.new_tab_folder);
                 }
                 "shell" => settings.shell = value.to_owned(),
+                "audible-bell" => {
+                    settings.audible_bell = flag(value).unwrap_or(settings.audible_bell);
+                }
                 "flash-on-bell" => {
                     settings.flash_on_bell = flag(value).unwrap_or(settings.flash_on_bell);
                 }
@@ -222,6 +227,7 @@ impl Stored for Settings {
             format!("close-ask = {}", self.close_ask.name()),
             format!("new-tab-folder = {}", self.new_tab_folder.name()),
             format!("shell = {}", self.shell.replace(['\n', '\r'], " ")),
+            format!("audible-bell = {}", self.audible_bell),
             format!("flash-on-bell = {}", self.flash_on_bell),
             format!("badge-on-bell = {}", self.badge_on_bell),
             format!("notify-finished = {}", self.notify_finished),

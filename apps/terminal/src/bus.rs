@@ -1,7 +1,8 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use bande_notify::Urgency;
 use bande_notify::client::{Request, notify};
@@ -10,16 +11,20 @@ use zbus::zvariant::Value;
 
 const LAUNCHER_INTERFACE: &str = "com.canonical.Unity.LauncherEntry";
 const LAUNCHER_PATH: &str = "/org/bande/Terminal";
+const BELL: &str = "bell";
+const BELL_GAP: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Outgoing {
     Badge(u32),
     Notify { summary: String, body: String },
+    Bell,
 }
 
 pub struct Bus {
     sender: Option<Sender<Outgoing>>,
     badges: RefCell<HashMap<u32, u32>>,
+    rung: Cell<Option<Instant>>,
 }
 
 impl Bus {
@@ -34,6 +39,7 @@ impl Bus {
         Self {
             sender: started.ok().map(|_| sender),
             badges: RefCell::new(HashMap::new()),
+            rung: Cell::new(None),
         }
     }
 
@@ -55,6 +61,18 @@ impl Bus {
 
     pub fn notify(&self, summary: String, body: String) {
         self.send(Outgoing::Notify { summary, body });
+    }
+
+    pub fn ring(&self) {
+        let now = Instant::now();
+        if self
+            .rung
+            .get()
+            .is_none_or(|rung| now.duration_since(rung) >= BELL_GAP)
+        {
+            self.rung.set(Some(now));
+            self.send(Outgoing::Bell);
+        }
     }
 
     fn send(&self, outgoing: Outgoing) {
@@ -89,6 +107,10 @@ fn serve(app_id: &str, receiver: &Receiver<Outgoing>) {
                         &(uri.as_str(), properties),
                     )
                     .map(|_| ())
+            }
+            Outgoing::Bell => {
+                bande_sound::play(&connection, BELL);
+                Ok(())
             }
             Outgoing::Notify { summary, body } => notify(
                 &connection,

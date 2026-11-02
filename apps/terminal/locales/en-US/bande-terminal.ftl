@@ -80,6 +80,7 @@ settings-font-size = Text size
 settings-points = { $size } pt
 settings-cursor = Cursor
 settings-bell = Bell
+settings-audible = Play the alert sound
 settings-flash = Flash the window
 settings-badge = Show a badge in the bar
 settings-notifications = Notifications
