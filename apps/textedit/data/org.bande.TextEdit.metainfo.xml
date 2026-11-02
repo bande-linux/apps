@@ -9,6 +9,8 @@
     <p>A simple editor for text documents, in the spirit of macOS TextEdit.</p>
     <ul>
       <li>Opens plain text in any common encoding and keeps its line endings</li>
+      <li>Rich text with fonts, colours, alignment and lists; RTF, Markdown and HTML</li>
+      <li>Opens and saves Word (.docx) and OpenDocument (.odt) documents</li>
       <li>Find and replace, with regular expressions</li>
       <li>Documents are saved automatically and come back after a crash or quit</li>
       <li>Opens large log files without stalling</li>

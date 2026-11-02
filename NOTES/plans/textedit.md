@@ -19,6 +19,16 @@ macOS TextEdit. Delete this plan when the gaps below are done.
   ones included, as macOS does. Closing an edited window asks Save / Don't Save / Cancel; only
   then is its record dropped. Saves go to a temporary file in the same folder, keep the mode,
   are synced and renamed over the original (through symlinks).
+- **Rich text.** New documents are rich text (RTF), as on macOS. Format has Bold, Italic,
+  Underline, Strikethrough, Bigger/Smaller, typeface (System, Serif, Display, Monospaced), colour,
+  alignment, bullet and numbered lists with indent levels, and Title/Heading/Subheading/Body
+  styles; Make Plain Text and Make Rich Text convert. RTF, Markdown and HTML open as styled text
+  and save back in their own format; a Markdown file can be shown as its source with Make Plain
+  Text.
+- **Office documents.** `.docx` and `.odt` open with text, bold/italic/underline/strike, size,
+  colour, typeface, alignment, headings, bullet and numbered lists and links; tables become
+  tab-separated lines and pictures `[image]`. They save back as `.docx`/`.odt`, except when the
+  file had pictures or tables: then Save offers a rich-text copy instead of losing them.
 
 ## Libraries
 
@@ -27,11 +37,19 @@ macOS TextEdit. Delete this plan when the gaps below are done.
   Detection is our own few lines (BOM, UTF-16 zero bytes, UTF-8 validity); `chardetng` would add a
   dependency for legacy CJK and Cyrillic guessing that Reopen with Encoding covers.
 - `regex`: find and replace; patterns are limited to 16 MB compiled.
+- RTF, Markdown and HTML are small parsers and writers of our own (`src/formats`): the subset
+  TextEdit writes and macOS/Word produce, linear in the input, with nesting capped. HTML reuses
+  `html5ever`'s tokenizer (as Mail does), so entities and broken markup are handled by the
+  standard algorithm; scripts and styles are skipped.
+- `.docx` and `.odt`: `zip` (the desktop's, with `deflate-flate2`) and `roxmltree` (already used),
+  with each part capped at 64 MB, DTDs refused and at most 4 million XML nodes. A full office
+  library (`docx-rs`) would bring a large dependency for a reader we need only a few hundred lines
+  of.
 
 ## Gaps
 
 - Windows only, no tabs in one window (the Window menu lists the documents).
 - No spell checking: the desktop has no spell service yet.
-- Plain text only: rich text, Markdown, HTML and office documents come next.
-- No page setup or printing.
+- No format bar: styles are in the Format menu.
+- Pictures and tables are not shown; there is no page setup or printing.
 - A file changed by another program while open is not noticed.

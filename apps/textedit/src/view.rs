@@ -8,18 +8,20 @@ use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_inbox::Outbox;
 use bande_toolkit::ui::{
-    Alert, BUTTON_HEIGHT, Button, CheckState, Checkbox, Context, Event, FreeLayout, Key, Label,
-    Modifiers, SearchField, TEXT_FIELD_HEIGHT, TextField, TextView, Ui, Widget, WidgetId,
+    Alert, Alignment, BUTTON_HEIGHT, Button, CheckState, Checkbox, Context, Event, FreeLayout, Key,
+    Label, ListMarker, Modifiers, ParagraphAttributes, RichText, SearchField, TEXT_FIELD_HEIGHT,
+    TextAttributes, TextField, TextView, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
-    Appearance, Rect, Scene, TextAlign, TextStyle, TextSystem, Window, WindowEvent,
+    Appearance, Color, Rect, Scene, TextAlign, TextStyle, TextSystem, Window, WindowEvent,
 };
 
 use crate::L10N;
-use crate::document::{Loaded, encode};
+use crate::document::{Content, Format, Loaded, encode};
 use crate::encoding::{LineEnding, TextEncoding};
 use crate::file::write_atomically;
 use crate::find::{self, Query};
+use crate::formats::{heading, markdown, rtf};
 use crate::session::{Record, Session};
 use crate::worker::{Message, WriteError, spawn};
 
@@ -35,6 +37,24 @@ pub const MONOSPACE_SIZE: f32 = 13.0;
 pub const PROPORTIONAL_SIZE: f32 = 14.0;
 const MIN_SIZE: f32 = 8.0;
 const MAX_SIZE: f32 = 72.0;
+const SIZE_STEP: f32 = 2.0;
+const MAX_LEVEL: u8 = 8;
+pub const FAMILIES: [(&str, Option<&str>); 4] = [
+    ("default", None),
+    ("serif", Some("Noto Serif")),
+    ("display", Some("Manrope")),
+    ("monospace", Some(crate::formats::MONOSPACE)),
+];
+pub const COLORS: [(&str, Option<u32>); 8] = [
+    ("default", None),
+    ("red", Some(0xD7263D)),
+    ("orange", Some(0xE8710A)),
+    ("green", Some(0x2E8B57)),
+    ("blue", Some(0x1F6FD1)),
+    ("purple", Some(0x7B3FB5)),
+    ("brown", Some(0x8B5A2B)),
+    ("gray", Some(0x7A7A7A)),
+];
 
 #[derive(Debug, Clone, PartialEq)]
 enum Signal {
@@ -57,6 +77,8 @@ enum Asking {
     SaveAsUnicode,
     GoToLine,
     Failed,
+    MakePlain,
+    Lossy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,6 +115,11 @@ impl Settings {
         page: false,
         size: MONOSPACE_SIZE,
     };
+    pub const RICH: Self = Self {
+        monospace: false,
+        page: false,
+        size: PROPORTIONAL_SIZE,
+    };
 }
 
 pub struct Opening {
@@ -101,6 +128,7 @@ pub struct Opening {
     pub untitled: String,
     pub opened: u128,
     pub settings: Settings,
+    pub format: Format,
 }
 
 pub struct DocumentView {
@@ -124,6 +152,9 @@ pub struct DocumentView {
     pub encoding: TextEncoding,
     pub line_ending: LineEnding,
     pub settings: Settings,
+    pub format: Format,
+    pub rich: bool,
+    lossy: bool,
     pub loading: bool,
     saved: Option<u64>,
     format_changed: bool,
@@ -160,6 +191,7 @@ impl DocumentView {
             untitled,
             opened,
             settings,
+            format,
         } = opening;
         let mut host = FreeLayout::new();
         let host_id = Widget::id(&host);
@@ -192,6 +224,9 @@ impl DocumentView {
             encoding: TextEncoding::UTF8,
             line_ending: LineEnding::Lf,
             settings,
+            format,
+            rich: format.is_rich(),
+            lossy: false,
             loading: false,
             saved: None,
             format_changed: false,
@@ -242,6 +277,18 @@ impl DocumentView {
         );
         self.snapshot = Some((revision, Arc::clone(&text)));
         text
+    }
+
+    fn content(&mut self) -> Content {
+        match self.rich {
+            true => Content::Rich(
+                self.ui
+                    .widget_ref::<TextView>(self.editor)
+                    .map(TextView::rich_text)
+                    .unwrap_or_default(),
+            ),
+            false => Content::Plain(self.text()),
+        }
     }
 
     pub fn name(&self) -> String {
@@ -342,6 +389,8 @@ impl DocumentView {
             page: self.settings.page,
             size: self.settings.size,
             opened: self.opened,
+            format: self.format.name().to_owned(),
+            rich: self.rich,
         }
     }
 
@@ -353,17 +402,29 @@ impl DocumentView {
     pub fn loaded(&mut self, loaded: Loaded) {
         let Loaded {
             text,
+            rich,
+            format,
             encoding,
             line_ending,
             damaged,
+            lossy,
             from_disk,
             words,
             characters,
         } = loaded;
+        self.lossy = lossy && from_disk;
         self.loading = false;
         if from_disk {
             self.encoding = encoding;
             self.line_ending = line_ending;
+            if self.rich != rich.is_some() {
+                self.settings = match rich.is_some() {
+                    true => Settings::RICH,
+                    false => Settings::PLAIN,
+                };
+                self.apply_settings();
+            }
+            self.format = format;
         }
         self.note = damaged.then(|| {
             L10N.tr_args(
@@ -371,9 +432,18 @@ impl DocumentView {
                 [("encoding", crate::encoding_name(encoding).into())],
             )
         });
-        if let Some(editor) = self.editor() {
-            editor.set_text(&text);
-        }
+        self.rich = rich.is_some();
+        let text = match (rich, self.editor()) {
+            (Some(rich), Some(editor)) => {
+                editor.set_rich_text(&rich);
+                rich.text
+            }
+            (None, Some(editor)) => {
+                editor.set_text(&text);
+                text
+            }
+            (_, None) => text,
+        };
         let revision = self.revision();
         self.seen = revision;
         self.snapshot = Some((revision, Arc::new(text)));
@@ -413,13 +483,14 @@ impl DocumentView {
         }
         let record = self.record();
         let id = self.id.clone();
-        let text = (edited && self.stored != Some((revision, true))).then(|| self.text());
+        let text = (edited && self.stored != Some((revision, true))).then(|| self.content());
         self.stored = Some((revision, edited));
         let counted = (self.counted != revision).then(|| self.text());
         self.counted = revision;
         let (outbox, token) = (self.outbox.clone(), self.token);
         spawn("autosave", move || {
-            if let Err(error) = session.store(&id, &record, text.as_deref().map(String::as_str)) {
+            let text = text.map(|content| autosaved(&content));
+            if let Err(error) = session.store(&id, &record, text.as_deref()) {
                 tracing::warn!("cannot autosave {}: {error}", record.title);
             }
             if let Some(text) = counted {
@@ -445,9 +516,9 @@ impl DocumentView {
         if self.stored == Some((revision, edited)) && self.settle_at.is_none() {
             return;
         }
-        let text = edited.then(|| self.text());
+        let text = edited.then(|| autosaved(&self.content()));
         let record = self.record();
-        if let Err(error) = session.store(&self.id, &record, text.as_deref().map(String::as_str)) {
+        if let Err(error) = session.store(&self.id, &record, text.as_deref()) {
             tracing::warn!("cannot autosave {}: {error}", record.title);
         }
         self.stored = Some((revision, edited));
@@ -468,6 +539,14 @@ impl DocumentView {
 
     pub fn save(&mut self, close: bool) {
         self.close_after_save = close;
+        if self.lossy && self.path.is_some() {
+            return self.ask(
+                Asking::Lossy,
+                &L10N.tr_args("lossy-title", [("name", self.name().into())]),
+                &L10N.tr("lossy-message"),
+                &[("save-copy", true), ("cancel", false)],
+            );
+        }
         match self.path.clone() {
             Some(path) => self.save_to(path),
             None => self.requests.push(Request::SaveAs),
@@ -483,14 +562,27 @@ impl DocumentView {
             return;
         }
         self.saving = true;
-        let text = self.text();
+        match (self.rich, Format::by_extension(&path)) {
+            (true, Some(chosen))
+                if chosen != Format::Markdown || self.format == Format::Markdown =>
+            {
+                self.format = chosen;
+            }
+            (false, Some(Format::Markdown)) => self.format = Format::Markdown,
+            (false, _) if self.format != Format::Markdown => self.format = Format::Plain,
+            _ => {}
+        }
+        let content = self.content();
         let revision = self.revision();
-        let (encoding, line_ending) = (self.encoding, self.line_ending);
+        let (encoding, line_ending, format) = (self.encoding, self.line_ending, self.format);
+        let title = self.name();
         let (outbox, token) = (self.outbox.clone(), self.token);
         spawn("save", move || {
-            let outcome = encode(&text, encoding, line_ending).and_then(|bytes| {
-                write_atomically(&path, &bytes).map_err(|error| WriteError::Io(error.to_string()))
-            });
+            let outcome =
+                encode(&content, format, encoding, line_ending, &title).and_then(|bytes| {
+                    write_atomically(&path, &bytes)
+                        .map_err(|error| WriteError::Io(error.to_string()))
+                });
             outbox.send(Message::Written {
                 token,
                 revision,
@@ -504,6 +596,7 @@ impl DocumentView {
         self.saving = false;
         match outcome {
             Ok(()) => {
+                self.lossy &= self.path.as_ref() == Some(&path);
                 self.path = Some(path.clone());
                 self.saved = Some(revision);
                 self.format_changed = false;
@@ -611,6 +704,13 @@ impl DocumentView {
                 self.ui.set_focus(self.editor);
             }
             (Some(Asking::Failed), _) if self.unloaded => self.requests.push(Request::Close),
+            (Some(Asking::MakePlain), "make-plain-confirm") => self.make_plain(true),
+            (Some(Asking::Lossy), "save-copy") => {
+                self.lossy = false;
+                self.retarget(Format::Rtf);
+                self.changed_format();
+                self.requests.push(Request::SaveAs);
+            }
             _ => self.close_after_save = false,
         }
     }
@@ -837,6 +937,195 @@ impl DocumentView {
         self.find_message = L10N.tr_args("replaced", [("count", count.into())]);
     }
 
+    pub fn attributes(&self) -> (TextAttributes, ParagraphAttributes) {
+        self.ui
+            .widget_ref::<TextView>(self.editor)
+            .map(|editor| (editor.attributes(), editor.paragraph_attributes()))
+            .unwrap_or_default()
+    }
+
+    fn paragraph_range(&mut self) -> Option<std::ops::Range<usize>> {
+        let selection = self.ui.widget_ref::<TextView>(self.editor)?.selection();
+        let text = self.text();
+        let start = text[..selection.start].rfind('\n').map_or(0, |at| at + 1);
+        let end = text[selection.end..]
+            .find('\n')
+            .map_or(text.len(), |at| selection.end + at);
+        Some(start..end)
+    }
+
+    pub fn style(&mut self, command: &str) -> bool {
+        if !self.rich {
+            return false;
+        }
+        let (attributes, _) = self.attributes();
+        let (name, value) = command.split_once(':').unwrap_or((command, ""));
+        let Some(editor) = self.ui.widget_as::<TextView>(self.editor) else {
+            return false;
+        };
+        match name {
+            "bold" => editor.change_attributes(|span| span.bold = !attributes.bold),
+            "italic" => editor.change_attributes(|span| span.italic = !attributes.italic),
+            "underline" => editor.change_attributes(|span| span.underline = !attributes.underline),
+            "strikethrough" => {
+                editor.change_attributes(|span| span.strikethrough = !attributes.strikethrough);
+            }
+            "family" => {
+                let family = FAMILIES
+                    .iter()
+                    .find(|(key, _)| *key == value)
+                    .and_then(|(_, family)| *family)
+                    .map(Arc::from);
+                editor.change_attributes(|span| span.family = family.clone());
+            }
+            "color" => {
+                let color = COLORS
+                    .iter()
+                    .find(|(key, _)| *key == value)
+                    .and_then(|(_, color)| *color)
+                    .map(Color::hex);
+                editor.change_attributes(|span| span.color = color);
+            }
+            "bigger" | "smaller" => {
+                let step = match name {
+                    "bigger" => SIZE_STEP,
+                    _ => -SIZE_STEP,
+                };
+                editor.change_attributes(|span| {
+                    let size = span.size.unwrap_or(PROPORTIONAL_SIZE) + step;
+                    span.size = Some(size.clamp(MIN_SIZE, MAX_SIZE))
+                        .filter(|size| (size - PROPORTIONAL_SIZE).abs() > 0.1);
+                });
+            }
+            "align" => {
+                let alignment = match value {
+                    "center" => Alignment::Center,
+                    "end" => Alignment::End,
+                    "justify" => Alignment::Justify,
+                    _ => Alignment::Start,
+                };
+                editor.change_paragraphs(|attributes| attributes.alignment = alignment);
+            }
+            "list" => {
+                let list = match value {
+                    "bullet" => Some(ListMarker::Bullet),
+                    "number" => Some(ListMarker::Number),
+                    _ => None,
+                };
+                editor.change_paragraphs(|attributes| {
+                    attributes.list = list;
+                    if list.is_none() {
+                        attributes.level = 0;
+                    }
+                });
+            }
+            "indent" => editor.change_paragraphs(|attributes| {
+                attributes.level = (attributes.level + 1).min(MAX_LEVEL);
+            }),
+            "outdent" => editor.change_paragraphs(|attributes| {
+                attributes.level = attributes.level.saturating_sub(1);
+            }),
+            "heading" => {
+                let level: usize = value.parse().unwrap_or(0);
+                let selection = editor.selection();
+                let Some(range) = self.paragraph_range() else {
+                    return false;
+                };
+                let Some(editor) = self.ui.widget_as::<TextView>(self.editor) else {
+                    return false;
+                };
+                editor.select(range);
+                let styled = match level {
+                    0 => TextAttributes::default(),
+                    level => heading(level),
+                };
+                editor.change_attributes(|span| {
+                    span.bold = styled.bold;
+                    span.size = styled.size;
+                });
+                editor.select(selection);
+            }
+            _ => return false,
+        }
+        self.after_edit();
+        true
+    }
+
+    pub fn make_plain(&mut self, confirmed: bool) {
+        if !self.rich {
+            return;
+        }
+        if !confirmed && self.format != Format::Markdown {
+            return self.ask(
+                Asking::MakePlain,
+                &L10N.tr("make-plain-title"),
+                &L10N.tr("make-plain-message"),
+                &[("make-plain-confirm", true), ("cancel", false)],
+            );
+        }
+        let rich = self
+            .ui
+            .widget_ref::<TextView>(self.editor)
+            .map(TextView::rich_text)
+            .unwrap_or_default();
+        let text = match self.format {
+            Format::Markdown => markdown::write(&rich),
+            _ => rich.text,
+        };
+        if let Some(editor) = self.editor() {
+            editor.set_text(&text);
+        }
+        self.rich = false;
+        if self.format != Format::Markdown {
+            self.retarget(Format::Plain);
+        }
+        self.settings = Settings::PLAIN;
+        self.apply_settings();
+        self.changed_format();
+    }
+
+    pub fn make_rich(&mut self) {
+        if self.rich {
+            return;
+        }
+        let text = self.text();
+        let rich = match self.format {
+            Format::Markdown => markdown::read(&text),
+            _ => RichText {
+                text: text.to_string(),
+                runs: Vec::new(),
+                paragraphs: Vec::new(),
+            },
+        };
+        if let Some(editor) = self.editor() {
+            editor.set_rich_text(&rich);
+        }
+        self.rich = true;
+        if self.format != Format::Markdown {
+            self.retarget(Format::Rtf);
+        }
+        self.settings = Settings::RICH;
+        self.apply_settings();
+        self.changed_format();
+    }
+
+    fn retarget(&mut self, format: Format) {
+        self.format = format;
+        if let Some(path) = self.path.take() {
+            let stem = path
+                .file_stem()
+                .map_or_else(String::new, |stem| stem.to_string_lossy().into_owned());
+            self.untitled = format!("{stem}.{}", format.extension());
+        }
+    }
+
+    fn changed_format(&mut self) {
+        self.format_changed = true;
+        self.saved = None;
+        self.after_edit();
+        self.persist();
+    }
+
     fn take_signals(&mut self) -> bool {
         let signals: Vec<Signal> = self.signals.borrow_mut().drain(..).collect();
         let any = !signals.is_empty();
@@ -879,8 +1168,13 @@ impl DocumentView {
             (false, None) => String::new(),
         };
         let mut parts = vec![counts];
-        parts.push(crate::encoding_name(self.encoding));
-        parts.push(L10N.tr(&format!("line-ending-{}", self.line_ending.name())));
+        if self.format != Format::Plain {
+            parts.push(L10N.tr(&format!("format-{}", self.format.name())));
+        }
+        if self.format.is_text() {
+            parts.push(crate::encoding_name(self.encoding));
+            parts.push(L10N.tr(&format!("line-ending-{}", self.line_ending.name())));
+        }
         parts.extend(self.note.clone());
         parts.retain(|part| !part.is_empty());
         parts.join("   ·   ")
@@ -1138,5 +1432,12 @@ impl View for DocumentView {
 
     fn text_input_area(&self) -> Option<bande_toolkit::Rect> {
         self.ui.text_input_area()
+    }
+}
+
+fn autosaved(content: &Content) -> String {
+    match content {
+        Content::Plain(text) => text.to_string(),
+        Content::Rich(rich) => rtf::write(rich),
     }
 }

@@ -2,6 +2,7 @@ mod document;
 mod encoding;
 mod file;
 mod find;
+mod formats;
 mod portal;
 mod session;
 mod view;
@@ -11,12 +12,12 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
-pub use document::{Loaded, read};
+pub use document::{Format, Loaded, open, read};
 pub use encoding::{CHOICES, LineEnding, TextEncoding};
 pub use file::{MAX_FILE_BYTES, read_bounded};
 pub use portal::{choose_files, choose_save_path};
 pub use session::{Record, Session, new_id, now};
-pub use view::{DocumentView, Opening, Request, Settings};
+pub use view::{COLORS, DocumentView, FAMILIES, Opening, Request, Settings};
 pub use worker::{Message, spawn};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-textedit.ftl");
