@@ -3,9 +3,12 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
-use bande_app_menu::edit_submenu;
+use bande_app_menu::{Entry, edit_submenu};
 use bande_packages::{Client, debian_arch};
-use bande_software::{L10N, Software, WINDOW_SIZE};
+use bande_software::{
+    COMMAND_BACK, COMMAND_DISCOVER, COMMAND_FIND, COMMAND_INSTALLED, COMMAND_UPDATES, L10N,
+    Software, WINDOW_SIZE,
+};
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 
 static INFO: Info = Info {
@@ -126,9 +129,32 @@ impl Program for Store {
     }
 
     fn menus(&self, _cx: &Cx<Self>) -> Menus {
+        let item = |label: &str, action: &str, shortcut: &str| {
+            Entry::item(&L10N.tr(label), action).shortcut(shortcut)
+        };
         Menus {
-            menus: vec![edit_submenu(Vec::new())],
+            menus: vec![
+                edit_submenu(vec![item("menu-find", COMMAND_FIND, "Ctrl+F")]),
+                Entry::submenu(
+                    &L10N.tr("menu-view"),
+                    vec![
+                        item("menu-back", COMMAND_BACK, "Ctrl+["),
+                        Entry::separator(),
+                        item("discover", COMMAND_DISCOVER, "Ctrl+1"),
+                        item("installed", COMMAND_INSTALLED, "Ctrl+2"),
+                        item("updates", COMMAND_UPDATES, "Ctrl+3"),
+                    ],
+                ),
+            ],
             window: Vec::new(),
+        }
+    }
+
+    fn command(&mut self, cx: &mut Cx<Self>, _window: Option<WindowId>, command: &str) {
+        if let Some((window, pane)) = self.main.and_then(|main| cx.window(main))
+            && pane.0.command(command)
+        {
+            window.request_redraw();
         }
     }
 }

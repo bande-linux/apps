@@ -32,6 +32,11 @@ const PAGE_ICON: f32 = 80.0;
 const SHOT_WIDTH: f32 = 640.0;
 const SHOT_HEIGHT: f32 = 400.0;
 const LISTED_UPDATES: usize = 30;
+pub const COMMAND_FIND: &str = "find";
+pub const COMMAND_BACK: &str = "back";
+pub const COMMAND_DISCOVER: &str = "discover";
+pub const COMMAND_INSTALLED: &str = "installed";
+pub const COMMAND_UPDATES: &str = "updates";
 const SETTINGS: &str = "bande-settings";
 const SETTINGS_ID: &str = "org.bande.Settings";
 const SOFTWARE_UPDATE_PANE: &str = "software-update";
@@ -257,6 +262,8 @@ pub struct Software {
     scroll: Rc<RefCell<ScrollState>>,
     ui: Ui,
     content: WidgetId,
+    search: WidgetId,
+    places: WidgetId,
 }
 
 impl Software {
@@ -285,6 +292,8 @@ impl Software {
         });
         let content = Stack::new(Axis::Vertical, 0.0, 0.0, vec![boxed(Label::new(""))]);
         let id = content.id();
+        let search_id = search.id();
+        let places_id = places.id();
         let page = Stack::new(
             Axis::Vertical,
             SPACING,
@@ -321,6 +330,8 @@ impl Software {
             scroll,
             ui: Ui::new(Box::new(view), Context::new(text, palette)),
             content: id,
+            search: search_id,
+            places: places_id,
         };
         software.ask(Query::Updates);
         software.rebuild();
@@ -372,6 +383,31 @@ impl Software {
         }
         self.rebuild();
         true
+    }
+
+    pub fn command(&mut self, command: &str) -> bool {
+        let place = match command {
+            COMMAND_FIND => {
+                self.ui.set_focus(self.search);
+                return true;
+            }
+            COMMAND_BACK => {
+                self.intents.borrow_mut().push(Intent::Back);
+                return self.pump();
+            }
+            COMMAND_DISCOVER => Place::Discover,
+            COMMAND_INSTALLED => Place::Installed,
+            COMMAND_UPDATES => Place::Updates,
+            _ => return false,
+        };
+        if let Some(index) = Place::ALL.iter().position(|shown| *shown == place) {
+            self.ui
+                .update_widget(self.places, |control: &mut SegmentedControl, cx| {
+                    control.set_selected(cx, index);
+                });
+        }
+        self.intents.borrow_mut().push(Intent::Go(place));
+        self.pump()
     }
 
     fn ask(&self, query: Query) {

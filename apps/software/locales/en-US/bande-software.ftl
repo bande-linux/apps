@@ -1,6 +1,9 @@
 title = Software
 search = Search apps
 section = Show
+menu-find = Find
+menu-view = View
+menu-back = Back
 discover = Discover
 installed = Installed
 updates = Updates
