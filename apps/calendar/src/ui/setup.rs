@@ -21,8 +21,68 @@ pub enum Kind {
     Subscription,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Preset {
+    ICloud,
+    Fastmail,
+    Google,
+    Nextcloud,
+    Other,
+    Subscription,
+}
+
+impl Preset {
+    const ALL: [Self; 6] = [
+        Self::ICloud,
+        Self::Fastmail,
+        Self::Google,
+        Self::Nextcloud,
+        Self::Other,
+        Self::Subscription,
+    ];
+
+    fn title(self) -> String {
+        L10N.tr(match self {
+            Self::ICloud => "account-icloud",
+            Self::Fastmail => "account-fastmail",
+            Self::Google => "account-google",
+            Self::Nextcloud => "account-nextcloud",
+            Self::Other => "account-caldav",
+            Self::Subscription => "account-subscription",
+        })
+    }
+
+    pub fn hint(self) -> String {
+        L10N.tr(match self {
+            Self::ICloud => "account-icloud-hint",
+            Self::Fastmail => "account-fastmail-hint",
+            Self::Google => "account-google-hint",
+            Self::Nextcloud => "account-nextcloud-hint",
+            Self::Other => "account-caldav-hint",
+            Self::Subscription => "account-subscription-hint",
+        })
+    }
+
+    fn kind(self) -> Kind {
+        match self {
+            Self::Google | Self::Subscription => Kind::Subscription,
+            _ => Kind::CalDav,
+        }
+    }
+
+    fn server(self) -> Option<&'static str> {
+        match self {
+            Self::ICloud => Some("caldav.icloud.com"),
+            Self::Fastmail => Some("caldav.fastmail.com"),
+            _ => None,
+        }
+    }
+}
+
 pub struct Setup {
     pub kind: Kind,
+    pub preset: Preset,
+    pub account: Option<String>,
     pub user: String,
     pub server: String,
     pub password: Option<String>,
@@ -39,7 +99,7 @@ impl Setup {
     pub fn build(signals: &Signals) -> (Panel, Self) {
         let mut panel = Panel::new(Some(&L10N.tr("account-title")), WIDTH, LABEL_WIDTH).sheet();
         let send = sender(signals);
-        let kinds = [L10N.tr("account-caldav"), L10N.tr("account-subscription")];
+        let kinds: Vec<String> = Preset::ALL.iter().map(|preset| preset.title()).collect();
         let kind = panel.add(PopUpButton::new(
             &L10N.tr("account-kind"),
             &kinds,
@@ -81,6 +141,57 @@ impl Setup {
             vec![(server, Width::Fill)],
             ROW,
         ));
+        let note = panel.add(Label::new(&Preset::ICloud.hint()));
+        panel.line(Line::new(None, vec![(note, Width::Fill)], 36.0));
+        let send = sender(signals);
+        let cancel =
+            panel.add(Button::new(&L10N.tr("cancel"), move || send(Signal::SetupCancel)).cancel());
+        let send = sender(signals);
+        let sign_in = panel
+            .add(Button::new(&L10N.tr("sign-in"), move || send(Signal::SetupSubmit)).primary());
+        panel.line(
+            Line::new(
+                None,
+                vec![(cancel, Width::Fixed(96.0)), (sign_in, Width::Fixed(96.0))],
+                ROW,
+            )
+            .trailing(),
+        );
+        let setup = Self {
+            kind: Kind::CalDav,
+            preset: Preset::ICloud,
+            account: None,
+            user: String::new(),
+            server: String::new(),
+            password: None,
+            password_field: panel.id_of(password),
+            collecting: false,
+            note: panel.id_of(note).unwrap_or_else(WidgetId::next),
+            cancel: panel.id_of(cancel).unwrap_or_else(WidgetId::next),
+            panel: bande_toolkit::ui::Widget::id(&panel),
+            dismissed: panel.dismisser(),
+            busy: false,
+        };
+        (panel, setup)
+    }
+
+    pub fn sign_in(signals: &Signals, account: &str, name: &str, user: &str) -> (Panel, Self) {
+        let title = L10N.tr_args("sign-in-title", [("name", name.to_owned().into())]);
+        let mut panel = Panel::new(Some(&title), WIDTH, LABEL_WIDTH).sheet();
+        let message = panel.add(Label::new(
+            &L10N.tr_args("sign-in-message", [("user", user.to_owned().into())]),
+        ));
+        panel.line(Line::new(None, vec![(message, Width::Fill)], 36.0));
+        let (send, submit) = (sender(signals), sender(signals));
+        let password = panel.add(SecureField::new("", 13.0, move |secret| {
+            send(Signal::SetupPassword(secret.to_owned()));
+            submit(Signal::SetupSubmit);
+        }));
+        panel.line(Line::new(
+            Some(&L10N.tr("account-password")),
+            vec![(password, Width::Fill)],
+            ROW,
+        ));
         let note = panel.add(Label::new(""));
         panel.line(Line::new(None, vec![(note, Width::Fill)], 18.0));
         let send = sender(signals);
@@ -99,7 +210,9 @@ impl Setup {
         );
         let setup = Self {
             kind: Kind::CalDav,
-            user: String::new(),
+            preset: Preset::Other,
+            account: Some(account.to_owned()),
+            user: user.to_owned(),
             server: String::new(),
             password: None,
             password_field: panel.id_of(password),
@@ -115,8 +228,10 @@ impl Setup {
 
     pub fn apply(&mut self, signal: &Signal) {
         match signal {
-            Signal::SetupKind(0) => self.kind = Kind::CalDav,
-            Signal::SetupKind(_) => self.kind = Kind::Subscription,
+            Signal::SetupKind(index) => {
+                self.preset = Preset::ALL.get(*index).copied().unwrap_or(Preset::Other);
+                self.kind = self.preset.kind();
+            }
             Signal::SetupUser(text) => self.user = text.trim().to_owned(),
             Signal::SetupServer(text) => self.server = text.trim().to_owned(),
             Signal::SetupPassword(secret) => {
@@ -124,6 +239,17 @@ impl Setup {
                 self.collecting = false;
             }
             _ => {}
+        }
+    }
+
+    pub fn password_field(&self) -> Option<WidgetId> {
+        self.password_field
+    }
+
+    pub fn server(&self) -> String {
+        match (self.server.is_empty(), self.preset.server()) {
+            (true, Some(server)) => server.to_owned(),
+            _ => self.server.clone(),
         }
     }
 

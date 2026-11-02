@@ -10,7 +10,11 @@ views. Packaged as `bande-calendar`.
   address. It tries `_caldavs._tcp` DNS SRV records, `/.well-known/caldav`, then
   `current-user-principal` → `calendar-home-set` → the calendars in the home set. Passwords go to
   the Secret Service (gnome-keyring), never to disk, and are sent only over HTTPS (or to this
-  computer, for a local server). Several accounts, plus a local calendar.
+  computer, for a local server). Several accounts, plus a local calendar. The account sheet
+  has iCloud, Fastmail, Google and Nextcloud presets that fill in the server and say which
+  password to use (Google needs OAuth, so it offers a subscription to the calendar's secret
+  iCal address instead). When the server refuses the password, Calendar asks for it again
+  (also from Password… in Settings) and keeps every offline change meanwhile.
 - **Subscriptions.** `webcal:` / `webcals:` links and plain `https:` `.ics` URLs, read-only,
   refreshed on a wall-clock deadline kept across restarts (every 5 minutes to every week, or
   never); the name and colour come from `X-WR-CALNAME` and `X-APPLE-CALENDAR-COLOR`.

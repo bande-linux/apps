@@ -6,7 +6,8 @@ use bande_app::View;
 use bande_app_settings::{SettingsWatch, SettingsWindow, Shared, settings_folder};
 use bande_datetime::DateFormats;
 use bande_toolkit::ui::{
-    Button, Context, Form, FormLine, Label, PopUpButton, ScrollView, Toggle, Ui, Widget,
+    Axis, Button, Context, Form, FormLine, Label, PopUpButton, ScrollView, Stack, Toggle, Ui,
+    Widget,
 };
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 use jiff::civil::{Date, Time};
@@ -239,6 +240,15 @@ fn accounts(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormL
         ),
     ];
     for account in &summary.accounts {
+        let password = match &account.kind {
+            AccountKind::CalDav { .. } => {
+                let id = account.id.clone();
+                Some(Button::new(&L10N.tr("change-password"), move || {
+                    announce(Change::Password(id.clone()))
+                }))
+            }
+            _ => None,
+        };
         let kind = match &account.kind {
             AccountKind::Local => continue,
             AccountKind::CalDav { server, .. } => {
@@ -253,7 +263,15 @@ fn accounts(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormL
             announce(Change::RemoveAccount(id.clone()))
         })
         .tooltip(&kind);
-        lines.push(FormLine::Row(account.name.clone(), Box::new(remove)));
+        let buttons: Vec<Box<dyn Widget>> = password
+            .into_iter()
+            .map(|button| Box::new(button) as Box<dyn Widget>)
+            .chain([Box::new(remove) as Box<dyn Widget>])
+            .collect();
+        lines.push(FormLine::Row(
+            account.name.clone(),
+            Box::new(Stack::new(Axis::Horizontal, 8.0, 0.0, buttons).trailing()),
+        ));
     }
     let add = Button::new(&L10N.tr("add-account"), || announce(Change::AddAccount));
     lines.push(FormLine::Row(String::new(), Box::new(add)));
