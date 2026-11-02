@@ -13,7 +13,6 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | General | Downloads folder, remove unedited downloads | Opened attachments are private copies removed on quit unless edited or still open in another app; Save Attachment… and Save to Downloads Folder in their menu |
 | Accounts | Add, edit, remove IMAP/SMTP accounts | Have: list, Add Account… (setup sheet in the viewer), Remove… with confirmation, full name, server settings (user, hosts, ports, TLS/STARTTLS) checked against the servers before they are saved |
 | Accounts | Provider presets (Gmail, Outlook, iCloud, Fastmail) | Autodiscovery (provider autoconfig, ISPDB, SRV, MX) finds them; a refused password names the provider's app-password page |
-| Accounts | OAuth sign-in | Missing: Gmail and Outlook need app passwords |
 | Accounts | Enable/disable an account, change its password | Have "Use this account"; the password is changed in the sheet that appears when the server refuses it |
 | Junk | Junk filtering | Server-side only; Move to Junk files a message |
 | Fonts & Colors | Message font and size, fixed-width plain text | Fixed-width plain text and "show plain text" in Viewing; sizes follow the desktop text size |
@@ -45,8 +44,6 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 
 ## Remaining, ranked by how much users rely on it
 
-1. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses
-   passwords.
 2. Rich text compose and spelling (both need desktop services first).
 3. Server-side search; CONDSTORE/QRESYNC (release review).
 4. A privacy proxy for remote pictures.
