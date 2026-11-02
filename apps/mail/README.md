@@ -22,7 +22,7 @@ apt install bande-mail
   plain text over HTML, a fixed-width font for plain text, whether remote content loads by
   itself (off by default), and Forget for the senders Mail loads it for because you chose Load
   Remote Content in one of their messages. Composing: the account new messages are sent from and whether replies
-  quote the original. Rules: if any or all of several conditions hold (From, To or Cc, or
+  quote the original. Rules (each can be edited or removed): if any or all of several conditions hold (From, To or Cc, or
   Subject contains a text), move new unread Inbox mail to a mailbox, flag it or mark it read,
   while Mail is open; Message → Apply Rules (Alt+Ctrl+L) runs them on the chosen messages. They are kept in
   `~/.config/bande/mail.conf`; signatures, servers and rules in the offline store.

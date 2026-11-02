@@ -25,7 +25,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Composing | Quote original, default send account | Have: quote toggle, "Send new messages from" |
 | Composing | Check spelling | Missing (no desktop spell service) |
 | Signatures | Per-account signature | Have: in Accounts, added to new messages, replies and forwards above the quote, swapped when From changes |
-| Rules | Filters | Have: any or all of several From/To/Subject contains conditions → move, flag or mark read, on new unread Inbox mail while Mail runs, or on chosen messages with Apply Rules; no editing in place |
+| Rules | Filters | Have: any or all of several From/To/Subject contains conditions → move, flag or mark read, on new unread Inbox mail while Mail runs, or on chosen messages with Apply Rules; Edit and Remove each rule |
 
 ## Core features
 
@@ -49,12 +49,11 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 2. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses
    passwords.
 3. The known gaps below.
-4. Editing a rule in place.
-5. Rich text compose and spelling (both need desktop services first).
-6. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
-7. A privacy proxy for remote pictures.
-8. Redo; dragging messages out to other apps; flag colours; sorting by size or unread first.
-9. A Password field in Settings → Accounts; a message font apart from the desktop text size.
+4. Rich text compose and spelling (both need desktop services first).
+5. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
+6. A privacy proxy for remote pictures.
+7. Redo; dragging messages out to other apps; flag colours; sorting by size or unread first.
+8. A Password field in Settings → Accounts; a message font apart from the desktop text size.
 
 ## Known gaps in what landed (review, 2026-11-02)
 - Undo gives up without a word when the moved message does not show up after three syncs of the mailbox it went to.

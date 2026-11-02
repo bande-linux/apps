@@ -1049,17 +1049,37 @@ impl Store {
     }
 
     pub fn add_rule(&mut self, rule: &Rule) -> Result<()> {
+        self.keep_rule(rule, None)
+    }
+
+    pub fn replace_rule(&mut self, rule: &Rule) -> Result<()> {
+        self.keep_rule(rule, Some(rule.id))
+    }
+
+    fn keep_rule(&mut self, rule: &Rule, replaces: Option<i64>) -> Result<()> {
         let (action, mailbox) = match rule.action {
             RuleAction::Move(mailbox) => ("move", Some(mailbox)),
             RuleAction::Flag => ("flag", None),
             RuleAction::Read => ("read", None),
         };
         let transaction = self.connection.transaction()?;
-        transaction.execute(
-            "INSERT INTO rules (every, action, mailbox) VALUES (?1, ?2, ?3)",
-            params![rule.every, action, mailbox],
-        )?;
-        let id = transaction.last_insert_rowid();
+        let id = match replaces {
+            Some(id) => {
+                transaction.execute(
+                    "UPDATE rules SET every = ?2, action = ?3, mailbox = ?4 WHERE id = ?1",
+                    params![id, rule.every, action, mailbox],
+                )?;
+                transaction.execute("DELETE FROM rule_conditions WHERE rule = ?1", [id])?;
+                id
+            }
+            None => {
+                transaction.execute(
+                    "INSERT INTO rules (every, action, mailbox) VALUES (?1, ?2, ?3)",
+                    params![rule.every, action, mailbox],
+                )?;
+                transaction.last_insert_rowid()
+            }
+        };
         for (field, pattern) in &rule.conditions {
             transaction.execute(
                 "INSERT INTO rule_conditions (rule, field, pattern) VALUES (?1, ?2, ?3)",

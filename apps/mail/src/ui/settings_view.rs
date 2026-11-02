@@ -70,6 +70,8 @@ enum Signal {
     Remove(AccountId),
     AddRule,
     RemoveRule(i64),
+    EditRule(i64),
+    CancelRule,
     AddCondition,
     RemoveCondition,
     Matching(bool),
@@ -126,6 +128,7 @@ impl Editing {
 
 #[derive(Debug, Clone)]
 struct NewRule {
+    editing: Option<i64>,
     every: bool,
     conditions: Vec<(usize, String)>,
     action: usize,
@@ -134,6 +137,7 @@ struct NewRule {
 impl Default for NewRule {
     fn default() -> Self {
         Self {
+            editing: None,
             every: false,
             conditions: vec![(0, String::new())],
             action: 0,
@@ -547,14 +551,28 @@ impl SettingsView {
             );
             lines.push(FormLine::Row(
                 description,
-                Box::new(Button::new(
-                    &L10N.tr("button-remove"),
-                    sender(&self.state, Signal::RemoveRule(rule.id)),
+                Box::new(Stack::new(
+                    Axis::Horizontal,
+                    8.0,
+                    0.0,
+                    vec![
+                        Box::new(Button::new(
+                            &L10N.tr("button-edit"),
+                            sender(&self.state, Signal::EditRule(rule.id)),
+                        )),
+                        Box::new(Button::new(
+                            &L10N.tr("button-remove"),
+                            sender(&self.state, Signal::RemoveRule(rule.id)),
+                        )),
+                    ],
                 )),
             ));
         }
         let rule = self.state.borrow().rule.clone();
-        lines.push(heading("settings-new-rule"));
+        lines.push(heading(match rule.editing {
+            Some(_) => "settings-edit-rule",
+            None => "settings-new-rule",
+        }));
         if rule.conditions.len() > 1 {
             let state = Rc::clone(&self.state);
             let every = PopUpButton::new(
@@ -610,15 +628,59 @@ impl SettingsView {
         let action = PopUpButton::new(&L10N.tr("rule-then"), &titles, rule.action, move |index| {
             state.borrow_mut().rule.action = index;
         });
-        lines.extend([
-            row("rule-then", action),
-            buttons(vec![Button::new(
+        let finish = match rule.editing {
+            Some(_) => vec![
+                Button::new(
+                    &L10N.tr("button-cancel"),
+                    sender(&self.state, Signal::CancelRule),
+                ),
+                Button::new(&L10N.tr("rule-save"), sender(&self.state, Signal::AddRule)),
+            ],
+            None => vec![Button::new(
                 &L10N.tr("rule-add"),
                 sender(&self.state, Signal::AddRule),
-            )]),
+            )],
+        };
+        lines.extend([
+            row("rule-then", action),
+            buttons(finish),
             note("settings-rules-note"),
         ]);
         Form::new(&Tab::Rules.title(), lines)
+    }
+
+    fn edit_rule(&mut self, id: i64) {
+        let actions = self.rule_actions();
+        let Some(rule) = self
+            .store
+            .as_ref()
+            .and_then(|store| store.rules().ok())
+            .and_then(|rules| rules.into_iter().find(|rule| rule.id == id))
+        else {
+            return;
+        };
+        let Some(action) = actions
+            .iter()
+            .position(|(_, action)| *action == rule.action)
+        else {
+            return;
+        };
+        self.state.borrow_mut().rule = NewRule {
+            editing: Some(id),
+            every: rule.every,
+            conditions: rule
+                .conditions
+                .into_iter()
+                .map(|(field, pattern)| {
+                    let index = RuleField::ALL
+                        .iter()
+                        .position(|known| *known == field)
+                        .unwrap_or_default();
+                    (index, pattern)
+                })
+                .collect(),
+            action,
+        };
     }
 
     fn add_rule(&mut self) {
@@ -638,13 +700,18 @@ impl SettingsView {
         if conditions.is_empty() {
             return;
         }
+        let editing = rule.editing;
         let rule = Rule {
-            id: 0,
+            id: editing.unwrap_or_default(),
             every: rule.every,
             conditions,
             action: *action,
         };
-        match store.add_rule(&rule) {
+        let saved = match editing {
+            Some(_) => store.replace_rule(&rule),
+            None => store.add_rule(&rule),
+        };
+        match saved {
             Ok(()) => self.state.borrow_mut().rule = NewRule::default(),
             Err(error) => tracing::warn!("cannot add the rule: {error}"),
         }
@@ -1016,6 +1083,18 @@ impl SettingsView {
                     {
                         tracing::warn!("cannot remove the rule: {error}");
                     }
+                    let mut state = self.state.borrow_mut();
+                    if state.rule.editing == Some(id) {
+                        state.rule = NewRule::default();
+                    }
+                    rebuild = true;
+                }
+                Signal::EditRule(id) => {
+                    self.edit_rule(id);
+                    rebuild = true;
+                }
+                Signal::CancelRule => {
+                    self.state.borrow_mut().rule = NewRule::default();
                     rebuild = true;
                 }
                 Signal::ForgetSenders => {
