@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Calculator
+GenericName=Calculator
+Comment=Basic, scientific and programmer calculations with a paper tape
+Icon=org.bande.Calculator
+Exec=bande-calculator
+StartupNotify=true
+Categories=Utility;Calculator;
+Keywords=calculate;math;arithmetic;scientific;programmer;hex;binary;rpn;

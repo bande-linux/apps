@@ -448,6 +448,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-calculator"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-app-menu",
+ "bande-l10n",
+ "bande-toolkit",
+ "bande-xdg",
+ "tracing",
+]
+
+[[package]]
 name = "bande-calendar"
 version = "0.1.0"
 dependencies = [
