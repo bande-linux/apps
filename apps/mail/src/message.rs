@@ -260,8 +260,16 @@ impl Content {
 
 pub fn preview(text: &str) -> String {
     let mut preview = String::new();
-    for line in text.lines() {
-        let line = line.trim();
+    let lines = text.lines().map(str::trim).collect::<Vec<_>>();
+    for (index, line) in lines.iter().copied().enumerate() {
+        let attribution = line.ends_with(':')
+            && lines[index + 1..]
+                .iter()
+                .find(|next| !next.is_empty())
+                .is_some_and(|next| next.starts_with('>'));
+        if attribution {
+            continue;
+        }
         if line.starts_with('>') || line == "--" || line.is_empty() {
             if line == "--" {
                 break;

@@ -55,7 +55,19 @@ impl Document {
                 let listed = previous.kind == BlockKind::Item && block.kind == BlockKind::Item;
                 text.push_str(if listed { "\n" } else { "\n\n" });
             }
-            text.push_str(&block.text);
+            match block.quote {
+                0 => text.push_str(&block.text),
+                depth => {
+                    let marker = "> ".repeat(usize::from(depth));
+                    let quoted = block
+                        .text
+                        .lines()
+                        .map(|line| format!("{marker}{line}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    text.push_str(&quoted);
+                }
+            }
             previous = Some(block);
         }
         text
