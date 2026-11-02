@@ -34,7 +34,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Unified inbox, smart mailboxes | Have: Inbox, Flagged, Drafts, Sent, Archive, Junk, Trash across accounts |
 | Mailboxes and folders | Have: read all folders, Move To any mailbox of the account, drag onto a mailbox, New/Rename/Delete Mailbox |
 | Flags | One flag; no colours |
-| Search | Local, over sender, recipients, subject and text; no server search or tokens |
+| Search | Local, every word over sender, recipients, subject and text, with from:/to:/subject: and quoted phrases; no server search |
 | Threads | Grouped by the first References entry, or by subject for a reply without one; the reader stacks the whole conversation with Sent replies, earlier messages folded to a line, quoted text folded |
 | Attachments | Show, open (private copy), Save Attachment…, Save to Downloads Folder, add from the portal; no Save All, no Quick Look |
 | Reply / forward | Have, with threading headers |
@@ -48,7 +48,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 1. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses
    passwords.
 2. Rich text compose and spelling (both need desktop services first).
-3. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
+3. Server-side search; CONDSTORE/QRESYNC (release review).
 4. A privacy proxy for remote pictures.
 5. Redo; dragging messages out to other apps; flag colours.
 6. A Password field in Settings → Accounts; a message font apart from the desktop text size.

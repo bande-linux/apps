@@ -338,6 +338,31 @@ fn thread_by_topic(
         .map(|(_, thread)| thread))
 }
 
+fn search_terms(search: &str) -> Vec<(Option<RuleField>, String)> {
+    let mut terms = Vec::new();
+    let mut rest = search.trim();
+    while !rest.is_empty() {
+        let (field, after) = match rest.split_once(':') {
+            Some((name, after))
+                if !name.contains(char::is_whitespace)
+                    && RuleField::named(&name.to_lowercase()).is_some() =>
+            {
+                (RuleField::named(&name.to_lowercase()), after.trim_start())
+            }
+            _ => (None, rest),
+        };
+        let (term, remaining) = match after.strip_prefix('"') {
+            Some(quoted) => quoted.split_once('"').unwrap_or((quoted, "")),
+            None => after.split_once(char::is_whitespace).unwrap_or((after, "")),
+        };
+        if !term.trim().is_empty() {
+            terms.push((field, term.to_owned()));
+        }
+        rest = remaining.trim_start();
+    }
+    terms
+}
+
 fn like_pattern(search: &str) -> String {
     let escaped = search
         .trim()
@@ -776,24 +801,35 @@ impl Store {
 
     pub fn summaries(&self, scope: &Scope, search: &str) -> Result<Vec<Summary>> {
         let (filter, scope_value) = scope_filter(scope);
-        let searching = !search.trim().is_empty();
-        let search_filter = match searching {
-            true => {
-                " AND (m.subject LIKE ?2 ESCAPE '\\' OR m.sender_name LIKE ?2 ESCAPE '\\' \
-                 OR m.sender_email LIKE ?2 ESCAPE '\\' OR m.recipients LIKE ?2 ESCAPE '\\' \
-                 OR m.text LIKE ?2 ESCAPE '\\')"
-            }
-            false => "",
-        };
+        let terms = search_terms(search);
+        let search_filter = terms
+            .iter()
+            .enumerate()
+            .map(|(index, (field, _))| {
+                let slot = index + 2;
+                match field {
+                    Some(field) => format!(" AND {}", field.columns(slot)),
+                    None => format!(
+                        " AND (m.subject LIKE ?{slot} ESCAPE '\\' \
+                         OR m.sender_name LIKE ?{slot} ESCAPE '\\' \
+                         OR m.sender_email LIKE ?{slot} ESCAPE '\\' \
+                         OR m.recipients LIKE ?{slot} ESCAPE '\\' \
+                         OR m.text LIKE ?{slot} ESCAPE '\\')"
+                    ),
+                }
+            })
+            .collect::<String>();
         let query = format!(
             "SELECT {SUMMARY_COLUMNS} FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
              WHERE {filter} AND m.deleted = 0{search_filter}{ENABLED} ORDER BY m.date DESC, m.id DESC"
         );
         let mut statement = self.connection.prepare(&query)?;
         let mut values: Vec<Box<dyn rusqlite::ToSql>> = vec![scope_value];
-        if searching {
-            values.push(Box::new(like_pattern(search)));
-        }
+        values.extend(
+            terms
+                .iter()
+                .map(|(_, term)| Box::new(like_pattern(term)) as Box<dyn rusqlite::ToSql>),
+        );
         let summaries = statement
             .query_map(params_from_iter(values.iter()), summary_from)?
             .collect::<rusqlite::Result<_>>()?;
