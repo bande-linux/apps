@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
@@ -8,9 +9,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::ical::{CalendarObject, Event, Occurrence};
 
-const ACCOUNTS_FILE: &str = "accounts.json";
+pub const ACCOUNTS_FILE: &str = "accounts.json";
 const CALENDARS_DIR: &str = "calendars";
 pub const LOCAL_ACCOUNT: &str = "local";
+const PROGRAM: &str = "bande-calendar";
+
+pub fn data_dir() -> PathBuf {
+    bande_xdg::data_home()
+        .unwrap_or_else(std::env::temp_dir)
+        .join(PROGRAM)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AccountKind {
@@ -43,6 +51,8 @@ pub struct CalendarInfo {
     pub visible: bool,
     pub ctag: Option<String>,
     pub sync_token: Option<String>,
+    #[serde(default)]
+    pub refreshed: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,6 +60,23 @@ pub enum Pending {
     Create,
     Update,
     Delete,
+}
+
+type Expansion = (Timestamp, Timestamp, TimeZone, Vec<Occurrence>);
+
+#[derive(Debug, Default)]
+pub struct Expanded(RefCell<Option<Expansion>>);
+
+impl Clone for Expanded {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for Expanded {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -60,6 +87,8 @@ pub struct Stored {
     pub pending: Option<Pending>,
     #[serde(skip)]
     pub parsed: Option<CalendarObject>,
+    #[serde(skip)]
+    expanded: Expanded,
 }
 
 impl Stored {
@@ -71,11 +100,35 @@ impl Stored {
             data,
             pending,
             parsed,
+            expanded: Expanded::default(),
         }
     }
 
     fn reparse(&mut self) {
-        self.parsed = parse_one(&self.data);
+        self.set_parsed(parse_one(&self.data));
+    }
+
+    fn set_parsed(&mut self, parsed: Option<CalendarObject>) {
+        self.parsed = parsed;
+        self.expanded = Expanded::default();
+    }
+
+    fn occurrences(&self, from: Timestamp, to: Timestamp, local: &TimeZone) -> Vec<Occurrence> {
+        let Some(object) = &self.parsed else {
+            return Vec::new();
+        };
+        let Ok(mut memo) = self.expanded.0.try_borrow_mut() else {
+            return object.occurrences(from, to, local);
+        };
+        if let Some((start, end, zone, found)) = memo.as_ref()
+            && (*start, *end) == (from, to)
+            && zone == local
+        {
+            return found.clone();
+        }
+        let found = object.occurrences(from, to, local);
+        *memo = Some((from, to, local.clone(), found.clone()));
+        found
     }
 }
 
@@ -111,8 +164,83 @@ impl Calendar {
         })
     }
 
+    pub fn for_sync(&self) -> Self {
+        Self {
+            info: self.info.clone(),
+            objects: self
+                .objects
+                .iter()
+                .map(|stored| Stored {
+                    href: stored.href.clone(),
+                    etag: stored.etag.clone(),
+                    data: match stored.pending {
+                        Some(_) => stored.data.clone(),
+                        None => String::new(),
+                    },
+                    pending: stored.pending,
+                    parsed: None,
+                    expanded: Expanded::default(),
+                })
+                .collect(),
+        }
+    }
+
     pub fn has_pending(&self) -> bool {
         self.objects.iter().any(|stored| stored.pending.is_some())
+    }
+}
+
+#[derive(Deserialize)]
+struct Head {
+    info: CalendarInfo,
+}
+
+#[derive(Debug, Default)]
+pub struct Summary {
+    pub accounts: Vec<Account>,
+    pub calendars: Vec<CalendarInfo>,
+}
+
+impl Summary {
+    pub fn load(dir: &Path) -> Self {
+        let accounts: Vec<Account> = std::fs::read_to_string(dir.join(ACCOUNTS_FILE))
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default();
+        let mut calendars: Vec<CalendarInfo> = std::fs::read_dir(dir.join(CALENDARS_DIR))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|entry| std::fs::read_to_string(entry.path()).ok())
+            .filter_map(|text| serde_json::from_str::<Head>(&text).ok())
+            .map(|head| head.info)
+            .filter(|info| accounts.iter().any(|account| account.id == info.account))
+            .collect();
+        calendars.sort_by(|a, b| a.name.cmp(&b.name));
+        Self {
+            accounts,
+            calendars,
+        }
+    }
+
+    pub fn writable(&self) -> impl Iterator<Item = (&CalendarInfo, Option<&str>)> {
+        self.calendars
+            .iter()
+            .filter(|info| !info.read_only)
+            .map(|info| {
+                let account = self
+                    .accounts
+                    .iter()
+                    .find(|account| account.id == info.account && account.id != LOCAL_ACCOUNT)
+                    .map(|account| account.name.as_str());
+                (info, account)
+            })
+    }
+
+    pub fn automatic(&self) -> Option<usize> {
+        self.writable()
+            .position(|(info, _)| info.url.is_some())
+            .or_else(|| self.writable().next().map(|_| 0))
     }
 }
 
@@ -286,6 +414,7 @@ impl Library {
                 visible: true,
                 ctag: None,
                 sync_token: None,
+                refreshed: None,
             });
             self.calendars.push(calendar);
             self.save(self.calendars.len() - 1);
@@ -401,11 +530,8 @@ impl Library {
                 if stored.pending == Some(Pending::Delete) {
                     continue;
                 }
-                let Some(object) = &stored.parsed else {
-                    continue;
-                };
                 found.extend(
-                    object
+                    stored
                         .occurrences(from, to, local)
                         .into_iter()
                         .map(|occurrence| Found {
@@ -511,14 +637,14 @@ impl Library {
                     (false, _) => Some(Pending::Update),
                 };
                 stored.data = data;
-                stored.parsed = Some(object);
+                stored.set_parsed(Some(object));
                 index
             }
             None => {
                 let href = href_for(&info, object.uid());
                 let pending = (!local).then_some(Pending::Create);
                 let mut stored = Stored::new(href, None, data, pending);
-                stored.parsed = Some(object);
+                stored.set_parsed(Some(object));
                 target.objects.push(stored);
                 target.objects.len() - 1
             }

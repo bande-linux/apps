@@ -1,6 +1,8 @@
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::os::fd::BorrowedFd;
+use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
@@ -8,7 +10,7 @@ use std::time::Instant;
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
     Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
-    Pointer, PointerButton, ScrollState, Ui, Widget, WidgetId, shortcut_pressed,
+    Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
@@ -18,22 +20,24 @@ use jiff::tz::TimeZone;
 use zeroize::Zeroizing;
 
 use crate::L10N;
-use crate::compose::{Draft, Outgoing, forward, reply};
+use crate::compose::{Draft, Outgoing, forward, reply, signed};
 use crate::discover::Settings;
 use crate::error::Result;
 use crate::imap::{Flag, Role};
 use crate::message::{Content, Envelope};
 use crate::net::Network;
 use crate::secrets::Keyring;
+use crate::settings::{MailSettings, SortBy};
 use crate::setup::{Outcome, Request as SetupRequest, check};
-use crate::store::{Account, AccountId, Mailbox, MessageId, Store, Summary};
+use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary};
 use crate::ui::format::full_date;
 use crate::ui::reader::{Layout, Reading, Remote};
 use crate::ui::setup_sheet::{AccountSheet, Action, Field, Mode, Shared, SheetState};
 use crate::ui::sidebar::{Place, Row, rows};
 use crate::ui::symbols::Symbols;
 use crate::ui::toolbar::{Signal, Signals, Toolbar};
-use crate::worker::{Command, Event as MailEvent, Mailroom, Status, Worker};
+use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status, Worker};
+use bande_app_settings::{Stored, settings_folder};
 
 pub const SHORTCUTS: [(&str, &str); 12] = [
     ("compose", "Ctrl+N"),
@@ -53,6 +57,9 @@ pub const SIDEBAR_WIDTH: f32 = 220.0;
 pub const LIST_WIDTH: f32 = 340.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const NOTIFIED_AT_ONCE: usize = 3;
+const UNDO_TRIES: u8 = 3;
+const UNDO_LEVELS: usize = 20;
+const DRAG_THRESHOLD: f32 = 6.0;
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -60,9 +67,11 @@ pub enum Request {
     Compose(Box<Outgoing>),
     OpenLink(String),
     OpenAttachment(PathBuf),
+    SaveAttachment(String, Vec<u8>),
     Notify {
         summary: String,
         body: String,
+        sound: bool,
     },
     NotSent {
         error: String,
@@ -76,6 +85,7 @@ pub enum Request {
 pub enum Hit {
     Place(usize),
     Message(MessageId),
+    Conversation(MessageId),
     Link(String),
     Attachment(usize),
     LoadRemote,
@@ -85,6 +95,83 @@ pub enum Hit {
 pub(crate) enum Pane {
     Sidebar,
     List,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct Conversations {
+    pub(crate) earlier: HashMap<MessageId, (String, Vec<Summary>)>,
+    pub(crate) children: HashSet<MessageId>,
+    expanded: HashSet<String>,
+}
+
+impl Conversations {
+    fn group(&mut self, all: Vec<Summary>) -> Vec<Summary> {
+        self.earlier.clear();
+        self.children.clear();
+        let mut order: Vec<Vec<Summary>> = Vec::new();
+        let mut index: HashMap<String, usize> = HashMap::new();
+        for summary in all {
+            match summary
+                .thread
+                .clone()
+                .and_then(|key| index.get(&key).copied())
+            {
+                Some(group) => order[group].push(summary),
+                None => {
+                    if let Some(key) = summary.thread.clone() {
+                        index.insert(key, order.len());
+                    }
+                    order.push(vec![summary]);
+                }
+            }
+        }
+        let mut shown = Vec::new();
+        for mut group in order {
+            let head = group.remove(0);
+            let key = head.thread.clone().unwrap_or_default();
+            if !group.is_empty() {
+                if self.expanded.contains(&key) {
+                    self.children.extend(group.iter().map(|summary| summary.id));
+                    shown.push(head.clone());
+                    shown.extend(group.iter().cloned());
+                } else {
+                    shown.push(head.clone());
+                }
+                self.earlier.insert(head.id, (key, group));
+            } else {
+                shown.push(head);
+            }
+        }
+        shown
+    }
+
+    pub(crate) fn collapsed(&self, id: MessageId) -> Option<&[Summary]> {
+        self.earlier
+            .get(&id)
+            .filter(|(key, _)| !self.expanded.contains(key))
+            .map(|(_, earlier)| earlier.as_slice())
+    }
+
+    pub(crate) fn count(&self, id: MessageId) -> Option<usize> {
+        self.earlier.get(&id).map(|(_, earlier)| earlier.len() + 1)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Drag {
+    pub(crate) from: Point,
+    pub(crate) at: Point,
+    pub(crate) moving: bool,
+    pub(crate) over: Option<usize>,
+    collapse: Option<MessageId>,
+}
+
+#[derive(Debug, Clone)]
+struct Moved {
+    message_id: String,
+    from: Mailbox,
+    to: MailboxId,
+    tries: u8,
 }
 
 pub(crate) struct SetupSheet {
@@ -105,6 +192,7 @@ pub struct MailView {
     pub(crate) place: Place,
     pub(crate) messages: Vec<Summary>,
     pub(crate) selected: Option<MessageId>,
+    pub(crate) also: Vec<MessageId>,
     pub(crate) reading: Option<Reading>,
     pub(crate) layout: Option<(f32, Layout)>,
     pub(crate) search: String,
@@ -124,7 +212,12 @@ pub struct MailView {
     pub(crate) now: Option<Timestamp>,
     requests: Vec<Request>,
     setup: Option<SetupSheet>,
-    pressed_ui: bool,
+    pub(crate) settings: MailSettings,
+    opened: Vec<(PathBuf, std::time::SystemTime)>,
+    undo: Vec<Vec<Moved>>,
+    undoing: Vec<Moved>,
+    pub(crate) drag: Option<Drag>,
+    pub(crate) conversations: Conversations,
 }
 
 fn keyring_password(email: String, host: String) -> crate::worker::PasswordSource {
@@ -132,7 +225,12 @@ fn keyring_password(email: String, host: String) -> crate::worker::PasswordSourc
 }
 
 impl MailView {
-    pub fn new(store_path: PathBuf, palette: Palette, text: TextSystem) -> Result<Self> {
+    pub fn new(
+        store_path: PathBuf,
+        settings: MailSettings,
+        palette: Palette,
+        text: TextSystem,
+    ) -> Result<Self> {
         let store = Store::open(&store_path)?;
         let signals: Signals = Rc::new(RefCell::new(Vec::new()));
         let host = FreeLayout::new();
@@ -149,6 +247,7 @@ impl MailView {
             place: Place::All(Role::Inbox),
             messages: Vec::new(),
             selected: None,
+            also: Vec::new(),
             reading: None,
             layout: None,
             search: String::new(),
@@ -168,7 +267,12 @@ impl MailView {
             now: None,
             requests: Vec::new(),
             setup: None,
-            pressed_ui: false,
+            settings,
+            opened: Vec::new(),
+            undo: Vec::new(),
+            undoing: Vec::new(),
+            drag: None,
+            conversations: Conversations::default(),
         };
         view.insert_toolbar();
         view.ui.set_sheet_top(TOOLBAR_HEIGHT);
@@ -177,18 +281,110 @@ impl MailView {
     }
 
     pub fn start(&mut self) {
-        for (account, _) in &self.accounts {
-            let source = keyring_password(account.email.clone(), account.imap.host.clone());
-            self.workers.push(Worker::spawn(
-                account.clone(),
-                self.store_path.clone(),
-                source,
-                self.network.clone(),
-                self.mailroom.notifier(),
-            ));
+        for account in self.accounts() {
+            self.spawn_worker(account);
         }
         if self.accounts.is_empty() {
             self.present_setup(Mode::Add);
+        }
+    }
+
+    fn spawn_worker(&mut self, account: Account) {
+        let source = keyring_password(account.email.clone(), account.imap.host.clone());
+        self.workers.push(Worker::spawn(
+            account,
+            self.store_path.clone(),
+            source,
+            self.network.clone(),
+            self.mailroom.notifier(),
+        ));
+    }
+
+    pub fn settings(&self) -> &MailSettings {
+        &self.settings
+    }
+
+    pub fn set_settings(&mut self, settings: MailSettings) {
+        let regroup = settings.conversations != self.settings.conversations;
+        let reread = (settings.plain_text, settings.fixed_width)
+            != (self.settings.plain_text, self.settings.fixed_width);
+        self.settings = settings;
+        self.layout = None;
+        if regroup {
+            self.reload();
+        }
+        if reread
+            && self.also.is_empty()
+            && let Some(summary) = self.selected_summary()
+        {
+            self.load_reading(&summary);
+        }
+    }
+
+    fn keep_settings(&mut self) {
+        if let Some(folder) = settings_folder()
+            && let Err(error) = self.settings.save(&folder)
+        {
+            tracing::warn!("cannot save the settings: {error}");
+        }
+        self.reload();
+    }
+
+    pub fn toggle_conversation(&mut self, id: MessageId) -> bool {
+        let head = self
+            .conversations
+            .earlier
+            .iter()
+            .find(|(head, (_, earlier))| {
+                **head == id || earlier.iter().any(|summary| summary.id == id)
+            })
+            .map(|(head, (key, _))| (*head, key.clone()));
+        let Some((head, key)) = head else {
+            return false;
+        };
+        if !self.conversations.expanded.remove(&key) {
+            self.conversations.expanded.insert(key);
+        } else if self.selected != Some(head) && self.is_chosen(id) {
+            self.select(head);
+        }
+        self.reload();
+        true
+    }
+
+    pub fn accounts_changed(&mut self) {
+        let stored = self
+            .store
+            .accounts()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|account| account.enabled)
+            .collect::<Vec<_>>();
+        let known = self.accounts();
+        let connects_alike = |a: &Account, b: &Account| {
+            (&a.email, &a.user, &a.imap, &a.smtp) == (&b.email, &b.user, &b.imap, &b.smtp)
+        };
+        let restarted = stored
+            .iter()
+            .filter(|account| {
+                !known
+                    .iter()
+                    .any(|old| old.id == account.id && connects_alike(old, account))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        self.workers.retain(|worker| {
+            stored.iter().any(|account| account.id == worker.account)
+                && !restarted.iter().any(|account| account.id == worker.account)
+        });
+        self.statuses
+            .retain(|(id, _)| stored.iter().any(|account| account.id == *id));
+        let same = restarted.is_empty() && stored.len() == known.len();
+        for account in restarted {
+            self.spawn_worker(account);
+        }
+        match same {
+            true => self.refresh_sidebar(),
+            false => self.reload(),
         }
     }
 
@@ -266,7 +462,9 @@ impl MailView {
 
     pub fn cursor(&self) -> Cursor {
         match self.hover {
-            Some(Hit::Link(_) | Hit::Attachment(_) | Hit::LoadRemote) => Cursor::Pointer,
+            Some(Hit::Link(_) | Hit::Attachment(_) | Hit::LoadRemote | Hit::Conversation(_)) => {
+                Cursor::Pointer
+            }
             _ => self.ui.cursor(),
         }
     }
@@ -330,6 +528,7 @@ impl MailView {
         let accounts = self.store.accounts().unwrap_or_default();
         self.accounts = accounts
             .into_iter()
+            .filter(|account| account.enabled)
             .map(|account| {
                 let mailboxes = self.store.mailboxes(account.id).unwrap_or_default();
                 (account, mailboxes)
@@ -348,15 +547,37 @@ impl MailView {
         if !exists {
             self.place = Place::All(Role::Inbox);
         }
-        self.messages = self
+        let mut all = self
             .store
             .summaries(&self.place.scope(), &self.search)
             .unwrap_or_default();
+        match self.settings.sort {
+            SortBy::Date => {}
+            SortBy::From => all.sort_by_cached_key(|summary| summary.sender.shown().to_lowercase()),
+            SortBy::Subject => all.sort_by_cached_key(|summary| summary.subject.to_lowercase()),
+        }
+        if self.settings.ascending {
+            all.reverse();
+        }
+        self.messages = match self.settings.conversations {
+            true => self.conversations.group(all),
+            false => {
+                self.conversations = Conversations {
+                    expanded: std::mem::take(&mut self.conversations.expanded),
+                    ..Conversations::default()
+                };
+                all
+            }
+        };
+        let messages = &self.messages;
+        self.also
+            .retain(|id| messages.iter().any(|summary| summary.id == *id));
         if self
             .selected
             .is_some_and(|id| !self.messages.iter().any(|summary| summary.id == id))
         {
             self.selected = None;
+            self.also.clear();
             self.reading = None;
             self.layout = None;
         }
@@ -368,6 +589,7 @@ impl MailView {
         }
         self.place = place;
         self.selected = None;
+        self.also.clear();
         self.reading = None;
         self.layout = None;
         self.scrolls[1] = ScrollState::default();
@@ -390,19 +612,79 @@ impl MailView {
             return;
         };
         self.selected = Some(id);
+        self.also.clear();
         self.focus = Pane::List;
         self.scrolls[2] = ScrollState::default();
         self.load_reading(&summary);
-        if !summary.flags.seen {
-            self.set_flag_on(&[id], Flag::Seen, true);
+        let unread = std::iter::once(&summary)
+            .chain(self.conversations.collapsed(id).unwrap_or_default())
+            .filter(|summary| !summary.flags.seen)
+            .map(|summary| summary.id)
+            .collect::<Vec<_>>();
+        if !unread.is_empty() {
+            self.set_flag_on(&unread, Flag::Seen, true);
         }
         self.reveal_selected();
+    }
+
+    fn select_more(&mut self, id: MessageId, range: bool) {
+        let Some(anchor) = self.selected else {
+            return self.select(id);
+        };
+        let position = |id: MessageId| self.messages.iter().position(|summary| summary.id == id);
+        if range {
+            let (Some(from), Some(to)) = (position(anchor), position(id)) else {
+                return;
+            };
+            self.also = self.messages[from.min(to)..=from.max(to)]
+                .iter()
+                .map(|summary| summary.id)
+                .filter(|known| *known != anchor)
+                .collect();
+        } else if id == anchor {
+            if self.also.is_empty() {
+                return;
+            }
+            self.selected = Some(self.also.remove(0));
+        } else if let Some(index) = self.also.iter().position(|known| *known == id) {
+            self.also.remove(index);
+        } else {
+            self.also.push(id);
+        }
+        self.focus = Pane::List;
+        match (self.also.is_empty(), self.selected_summary()) {
+            (true, Some(summary)) => self.load_reading(&summary),
+            _ => {
+                self.reading = None;
+                self.layout = None;
+            }
+        }
+    }
+
+    pub(crate) fn is_chosen(&self, id: MessageId) -> bool {
+        self.selected == Some(id) || self.also.contains(&id)
+    }
+
+    pub(crate) fn chosen(&self) -> Vec<Summary> {
+        self.messages
+            .iter()
+            .filter(|summary| self.is_chosen(summary.id))
+            .flat_map(|summary| {
+                std::iter::once(summary.clone()).chain(
+                    self.conversations
+                        .collapsed(summary.id)
+                        .unwrap_or_default()
+                        .iter()
+                        .cloned(),
+                )
+            })
+            .collect()
     }
 
     fn load_reading(&mut self, summary: &Summary) {
         let body = self.store.body(summary.id).ok().flatten();
         let reading = match body {
-            Some(raw) => Reading::new(Content::parse(&raw), true),
+            Some(raw) => Reading::new(Content::parse(&raw), true, &self.settings),
             None => {
                 let header = self
                     .store
@@ -417,11 +699,16 @@ impl MailView {
                         ..Content::default()
                     },
                     false,
+                    &self.settings,
                 )
             }
         };
+        let remote = reading.downloaded && reading.document.remote_images > 0;
         self.reading = Some(reading);
         self.layout = None;
+        if remote && self.settings.load_remote {
+            self.load_remote();
+        }
     }
 
     fn selected_summary(&self) -> Option<Summary> {
@@ -437,9 +724,15 @@ impl MailView {
             Ok(accounts) => self.flush(&accounts),
             Err(error) => tracing::warn!("cannot change a flag: {error}"),
         }
+        let earlier = self
+            .conversations
+            .earlier
+            .values_mut()
+            .flat_map(|(_, earlier)| earlier.iter_mut());
         for summary in self
             .messages
             .iter_mut()
+            .chain(earlier)
             .filter(|summary| ids.contains(&summary.id))
         {
             match flag {
@@ -453,16 +746,35 @@ impl MailView {
         self.refresh_sidebar();
     }
 
+    fn toggle(&mut self, flag: Flag, is_set: fn(&Summary) -> bool) {
+        let chosen = self.chosen();
+        let Some(first) = self.selected_summary().or_else(|| chosen.first().cloned()) else {
+            return;
+        };
+        let ids = chosen.iter().map(|summary| summary.id).collect::<Vec<_>>();
+        self.set_flag_on(&ids, flag, !is_set(&first));
+    }
+
     pub fn toggle_flag(&mut self) {
-        if let Some(summary) = self.selected_summary() {
-            self.set_flag_on(&[summary.id], Flag::Flagged, !summary.flags.flagged);
+        self.toggle(Flag::Flagged, |summary| summary.flags.flagged);
+    }
+
+    pub fn mark_all_read(&mut self) {
+        let unread = self
+            .store
+            .summaries(&self.place.scope(), "")
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|summary| !summary.flags.seen)
+            .map(|summary| summary.id)
+            .collect::<Vec<_>>();
+        if !unread.is_empty() {
+            self.set_flag_on(&unread, Flag::Seen, true);
         }
     }
 
     pub fn toggle_read(&mut self) {
-        if let Some(summary) = self.selected_summary() {
-            self.set_flag_on(&[summary.id], Flag::Seen, !summary.flags.seen);
-        }
+        self.toggle(Flag::Seen, |summary| summary.flags.seen);
     }
 
     fn mailbox_with_role(&self, account: AccountId, role: Role) -> Option<Mailbox> {
@@ -486,16 +798,23 @@ impl MailView {
     }
 
     pub fn can_move_to(&self, role: Role) -> bool {
-        self.selected_summary().is_some_and(|summary| {
+        self.chosen().iter().any(|summary| {
             self.mailbox_with_role(summary.account, role)
                 .is_some_and(|target| target.id != summary.mailbox)
         })
     }
 
-    fn leave_selected(&mut self, id: MessageId) {
-        let position = self.messages.iter().position(|summary| summary.id == id);
-        self.messages.retain(|summary| summary.id != id);
+    fn leave_selected(&mut self, ids: &[MessageId]) {
+        if ids.is_empty() {
+            return;
+        }
+        let position = self
+            .messages
+            .iter()
+            .position(|summary| ids.contains(&summary.id));
+        self.messages.retain(|summary| !ids.contains(&summary.id));
         self.selected = None;
+        self.also.clear();
         self.reading = None;
         self.layout = None;
         let next = position
@@ -513,40 +832,154 @@ impl MailView {
         self.refresh_sidebar();
     }
 
+    fn move_each(&mut self, moves: Vec<(MessageId, Mailbox)>) -> Vec<MessageId> {
+        let mut moved = Vec::new();
+        let mut done = Vec::new();
+        let mut undo = Vec::new();
+        for (id, target) in &moves {
+            if let (Some(from), Ok(Some(message_id))) = (
+                self.store
+                    .summary(*id)
+                    .ok()
+                    .flatten()
+                    .and_then(|summary| self.mailbox_of(&summary)),
+                self.store.message_id(*id),
+            ) {
+                undo.push(Moved {
+                    message_id,
+                    from,
+                    to: target.id,
+                    tries: 0,
+                });
+            }
+        }
+        if !undo.is_empty() {
+            if self.undo.len() == UNDO_LEVELS {
+                self.undo.remove(0);
+            }
+            self.undo.push(undo);
+        }
+        for (_, target) in &moves {
+            if done.contains(&target.id) {
+                continue;
+            }
+            done.push(target.id);
+            let ids = moves
+                .iter()
+                .filter(|(_, known)| known.id == target.id)
+                .map(|(id, _)| *id)
+                .collect::<Vec<_>>();
+            match self.store.move_messages(&ids, target) {
+                Ok(accounts) => {
+                    self.flush(&accounts);
+                    moved.extend(ids);
+                }
+                Err(error) => tracing::warn!("cannot move the messages: {error}"),
+            }
+        }
+        moved
+    }
+
     pub fn move_selected(&mut self, role: Role) {
+        let moves = self
+            .chosen()
+            .into_iter()
+            .filter_map(|summary| {
+                let target = self.mailbox_with_role(summary.account, role)?;
+                (target.id != summary.mailbox).then_some((summary.id, target))
+            })
+            .collect();
+        let moved = self.move_each(moves);
+        self.leave_selected(&moved);
+    }
+
+    pub fn move_targets(&self) -> Vec<(String, MailboxId)> {
         let Some(summary) = self.selected_summary() else {
-            return;
+            return Vec::new();
         };
-        let Some(target) = self.mailbox_with_role(summary.account, role) else {
-            return;
-        };
-        if target.id == summary.mailbox {
-            return;
+        self.accounts
+            .iter()
+            .filter(|(account, _)| account.id == summary.account)
+            .flat_map(|(_, mailboxes)| mailboxes)
+            .filter(|mailbox| mailbox.selectable && mailbox.id != summary.mailbox)
+            .map(|mailbox| {
+                let name = match mailbox.delimiter {
+                    Some(delimiter) => mailbox.path.replace(delimiter, " / "),
+                    None => mailbox.path.clone(),
+                };
+                let name = match mailbox.role {
+                    Some(Role::Inbox) => L10N.tr("mailbox-inbox"),
+                    _ => name,
+                };
+                (name, mailbox.id)
+            })
+            .collect()
+    }
+
+    fn move_selected_to(&mut self, target: &Mailbox) {
+        let moves = self
+            .chosen()
+            .into_iter()
+            .filter(|summary| target.id != summary.mailbox && target.account == summary.account)
+            .map(|summary| (summary.id, target.clone()))
+            .collect();
+        let moved = self.move_each(moves);
+        self.leave_selected(&moved);
+    }
+
+    pub fn undo(&mut self) {
+        let moves = self.undo.pop().unwrap_or_default();
+        self.put_back(moves);
+    }
+
+    fn put_back(&mut self, moves: Vec<Moved>) {
+        let mut waiting = Vec::new();
+        for moved in moves {
+            match self.store.find_message(moved.to, &moved.message_id) {
+                Ok(Some(id)) => match self.store.move_messages(&[id], &moved.from) {
+                    Ok(accounts) => self.flush(&accounts),
+                    Err(error) => tracing::warn!("cannot put the message back: {error}"),
+                },
+                Ok(None) if moved.tries < UNDO_TRIES => {
+                    if !waiting.contains(&moved.to) {
+                        waiting.push(moved.to);
+                        self.send_command(moved.from.account, Command::Refresh(moved.to));
+                    }
+                    self.undoing.push(Moved {
+                        tries: moved.tries + 1,
+                        ..moved
+                    });
+                }
+                Ok(None) => {}
+                Err(error) => tracing::warn!("cannot put the message back: {error}"),
+            }
         }
-        match self.store.move_messages(&[summary.id], &target) {
-            Ok(accounts) => self.flush(&accounts),
-            Err(error) => tracing::warn!("cannot move the message: {error}"),
-        }
-        self.leave_selected(summary.id);
+        self.reload();
     }
 
     pub fn delete_selected(&mut self) {
-        let Some(summary) = self.selected_summary() else {
-            return;
-        };
-        let in_trash = self
-            .mailbox_of(&summary)
-            .is_some_and(|mailbox| mailbox.role == Some(Role::Trash));
-        let trash = self.mailbox_with_role(summary.account, Role::Trash);
-        if trash.is_some() && !in_trash {
-            self.move_selected(Role::Trash);
-            return;
+        let mut moves = Vec::new();
+        let mut expunged = Vec::new();
+        for summary in self.chosen() {
+            let in_trash = self
+                .mailbox_of(&summary)
+                .is_some_and(|mailbox| mailbox.role == Some(Role::Trash));
+            match self.mailbox_with_role(summary.account, Role::Trash) {
+                Some(trash) if !in_trash => moves.push((summary.id, trash)),
+                _ => expunged.push(summary.id),
+            }
         }
-        match self.store.expunge(&[summary.id]) {
-            Ok(accounts) => self.flush(&accounts),
-            Err(error) => tracing::warn!("cannot delete the message: {error}"),
+        let mut gone = self.move_each(moves);
+        if !expunged.is_empty() {
+            match self.store.expunge(&expunged) {
+                Ok(accounts) => {
+                    self.flush(&accounts);
+                    gone.extend(expunged);
+                }
+                Err(error) => tracing::warn!("cannot delete the messages: {error}"),
+            }
         }
-        self.leave_selected(summary.id);
+        self.leave_selected(&gone);
     }
 
     fn default_account(&self) -> Option<Account> {
@@ -566,18 +999,32 @@ impl MailView {
             .or_else(|| self.accounts.first().map(|(account, _)| account.clone()))
     }
 
+    fn sending_account(&self) -> Option<Account> {
+        self.accounts
+            .iter()
+            .map(|(account, _)| account)
+            .find(|account| account.email.eq_ignore_ascii_case(&self.settings.send_from))
+            .cloned()
+            .or_else(|| self.default_account())
+    }
+
     pub fn compose(&mut self, mut draft: Draft) {
-        let Some(account) = self.default_account() else {
+        let Some(account) = self.sending_account() else {
             self.present_setup(Mode::Add);
             return;
         };
         if draft.from.email.is_empty() {
             draft.from = account.address();
         }
+        draft.body = match draft.body.trim_end() {
+            "" => signed("", &account.signature),
+            body => format!("{body}{}", signed("", &account.signature)),
+        };
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
             answering: None,
             replaces: None,
+            unsent: None,
         })));
     }
 
@@ -604,11 +1051,14 @@ impl MailView {
                 ("name", envelope.sender().shown().to_owned().into()),
             ],
         );
-        let draft = reply(&reading.content, &account.address(), all, &attribution);
+        let quote = self.settings.quote.then_some(attribution.as_str());
+        let mut draft = reply(&reading.content, &account.address(), all, quote);
+        draft.body = signed(&draft.body, &account.signature);
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
             answering: Some(summary.id),
             replaces: None,
+            unsent: None,
         })));
     }
 
@@ -643,6 +1093,7 @@ impl MailView {
             draft,
             answering: None,
             replaces: Some(summary.id),
+            unsent: None,
         })));
     }
 
@@ -678,11 +1129,13 @@ impl MailView {
                 ("to", names(&envelope.to).into()),
             ],
         );
-        let draft = forward(&reading.content, &account.address(), &heading);
+        let mut draft = forward(&reading.content, &account.address(), &heading);
+        draft.body = signed(&draft.body, &account.signature);
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
             answering: None,
             replaces: None,
+            unsent: None,
         })));
     }
 
@@ -721,6 +1174,7 @@ impl MailView {
         for worker in self.workers.drain(..) {
             worker.finish(deadline);
         }
+        self.remove_unedited_attachments();
     }
 
     pub fn load_remote(&mut self) {
@@ -754,11 +1208,70 @@ impl MailView {
         }
     }
 
+    fn attachment_name(&self, index: usize) -> Option<String> {
+        let attachment = self.reading.as_ref()?.content.attachments.get(index)?;
+        let name = attachment
+            .name
+            .replace(['/', '\\', '\0'], "_")
+            .trim_start_matches('.')
+            .to_owned();
+        Some(match name.is_empty() {
+            true => "attachment".to_owned(),
+            false => name,
+        })
+    }
+
     pub fn open_attachment(&mut self, index: usize) {
-        let Some(attachment) = self
+        let (Some(id), Some(name)) = (self.selected, self.attachment_name(index)) else {
+            return;
+        };
+        let Some(data) = self
             .reading
             .as_ref()
             .and_then(|reading| reading.content.attachments.get(index))
+            .map(|attachment| attachment.data.clone())
+        else {
+            return;
+        };
+        let Some(folder) = bande_xdg::cache_home()
+            .map(|cache| cache.join("bande-mail/attachments").join(id.to_string()))
+        else {
+            return;
+        };
+        let path = folder.join(&name);
+        let current =
+            std::fs::metadata(&path).is_ok_and(|metadata| metadata.len() == data.len() as u64);
+        let written = match current {
+            true => Ok(()),
+            false => std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&folder)
+                .and_then(|()| std::fs::write(&path, &data)),
+        };
+        match written {
+            Ok(()) => {
+                let modified = std::fs::metadata(&path).and_then(|metadata| metadata.modified());
+                if let Ok(modified) = modified
+                    && !self.opened.iter().any(|(known, _)| *known == path)
+                {
+                    self.opened.push((path.clone(), modified));
+                }
+                self.requests.push(Request::OpenAttachment(path));
+            }
+            Err(error) => tracing::warn!("cannot open {name}: {error}"),
+        }
+    }
+
+    pub fn save_attachment(&mut self, index: usize) {
+        let Some(name) = self.attachment_name(index) else {
+            return;
+        };
+        let Some(data) = self
+            .reading
+            .as_ref()
+            .and_then(|reading| reading.content.attachments.get(index))
+            .map(|attachment| attachment.data.clone())
         else {
             return;
         };
@@ -769,15 +1282,6 @@ impl MailView {
             .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
         let folder =
             bande_xdg::user_dir(&home, user_dirs.as_deref(), bande_xdg::UserDir::Downloads);
-        let name = attachment
-            .name
-            .replace(['/', '\\', '\0'], "_")
-            .trim_start_matches('.')
-            .to_owned();
-        let name = match name.is_empty() {
-            true => "attachment".to_owned(),
-            false => name,
-        };
         let (stem, extension) = match name.rsplit_once('.') {
             Some((stem, extension)) if !stem.is_empty() => {
                 (stem.to_owned(), format!(".{extension}"))
@@ -795,16 +1299,29 @@ impl MailView {
                     .create_new(true)
                     .open(&path)
                 {
-                    Ok(mut file) => return file.write_all(&attachment.data).map(|()| path),
+                    Ok(mut file) => return file.write_all(&data),
                     Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
                     Err(error) => return Err(error),
                 }
             }
             Err(std::io::Error::other("no free file name"))
         });
-        match saved {
-            Ok(path) => self.requests.push(Request::OpenAttachment(path)),
-            Err(error) => tracing::warn!("cannot save {}: {error}", attachment.name),
+        if let Err(error) = saved {
+            tracing::warn!("cannot save {name}: {error}");
+        }
+    }
+
+    fn remove_unedited_attachments(&mut self) {
+        for (path, opened) in self.opened.drain(..) {
+            let unedited = std::fs::metadata(&path)
+                .and_then(|metadata| metadata.modified())
+                .is_ok_and(|modified| modified == opened);
+            if unedited
+                && std::fs::remove_file(&path).is_ok()
+                && let Some(folder) = path.parent()
+            {
+                let _ = std::fs::remove_dir(folder);
+            }
         }
     }
 
@@ -819,10 +1336,17 @@ impl MailView {
                     self.statuses.retain(|(known, _)| *known != account);
                     self.statuses.push((account, status));
                 }
-                MailEvent::Changed(_) => stale = true,
-                MailEvent::Arrived(_, ids) => {
+                MailEvent::Changed(_) => {
                     stale = true;
-                    self.notify(&ids);
+                    if !self.undoing.is_empty() {
+                        let moves = std::mem::take(&mut self.undoing);
+                        self.put_back(moves);
+                    }
+                }
+                MailEvent::Arrived(account, ids) => {
+                    stale = true;
+                    let left = self.apply_rules(account, ids);
+                    self.notify(&left);
                 }
                 MailEvent::Body(id) => {
                     if self.selected == Some(id)
@@ -844,6 +1368,12 @@ impl MailView {
                     tracing::warn!("account {account}: {error}");
                 }
                 MailEvent::Sent(_) => {}
+                MailEvent::MailboxRefused(reason) => {
+                    self.ui.present_sheet(
+                        Alert::new(&L10N.tr("mailbox-refused"), &reason, |_| {})
+                            .primary(&L10N.tr("button-ok"), "ok"),
+                    );
+                }
                 MailEvent::NotSent(_, error, outgoing) => {
                     self.requests.push(Request::NotSent { error, outgoing });
                 }
@@ -867,7 +1397,44 @@ impl MailView {
         changed
     }
 
+    fn apply_rules(&mut self, account: AccountId, mut ids: Vec<MessageId>) -> Vec<MessageId> {
+        for rule in self.store.rules().unwrap_or_default() {
+            if ids.is_empty() {
+                break;
+            }
+            let matched = self.store.matching(&ids, &rule).unwrap_or_default();
+            if matched.is_empty() {
+                continue;
+            }
+            match rule.action {
+                RuleAction::Move(target) => {
+                    let Some(target) = self
+                        .mailbox(target)
+                        .filter(|target| target.account == account)
+                    else {
+                        continue;
+                    };
+                    match self.store.move_messages(&matched, &target) {
+                        Ok(accounts) => self.flush(&accounts),
+                        Err(error) => tracing::warn!("cannot apply a rule: {error}"),
+                    }
+                    ids.retain(|id| !matched.contains(id));
+                }
+                RuleAction::Flag => self.set_flag_on(&matched, Flag::Flagged, true),
+                RuleAction::Read => {
+                    self.set_flag_on(&matched, Flag::Seen, true);
+                    ids.retain(|id| !matched.contains(id));
+                }
+            }
+        }
+        ids
+    }
+
     fn notify(&mut self, ids: &[MessageId]) {
+        if !self.settings.notify {
+            return;
+        }
+        let sound = self.settings.sound;
         let arrived = ids
             .iter()
             .filter_map(|id| self.store.summary(*id).ok().flatten())
@@ -881,6 +1448,7 @@ impl MailView {
                     .map(|summary| summary.sender.shown().to_owned())
                     .collect::<Vec<_>>()
                     .join(", "),
+                sound,
             });
             return;
         }
@@ -891,6 +1459,7 @@ impl MailView {
                     "" => L10N.tr("no-subject"),
                     subject => subject.to_owned(),
                 },
+                sound,
             });
         }
     }
@@ -1001,9 +1570,11 @@ impl MailView {
         } else if *mode == Mode::Manual && servers.is_none() {
             Some("setup-missing-servers")
         } else if self
-            .accounts
+            .store
+            .accounts()
+            .unwrap_or_default()
             .iter()
-            .any(|(account, _)| account.email.eq_ignore_ascii_case(&email))
+            .any(|account| account.email.eq_ignore_ascii_case(&email))
         {
             Some("setup-exists")
         } else {
@@ -1050,7 +1621,11 @@ impl MailView {
             Outcome::WrongPassword(settings, _) => {
                 let mut state = state.borrow_mut();
                 fill_servers(&mut state, &settings);
-                state.status = Some((L10N.tr("setup-wrong-password"), true));
+                let message = match app_password_hint(&settings.imap.host) {
+                    Some(hint) => format!("{} {}", L10N.tr("setup-wrong-password"), L10N.tr(hint)),
+                    None => L10N.tr("setup-wrong-password"),
+                };
+                state.status = Some((message, true));
             }
             Outcome::NeedsServers(settings, reason) => {
                 if let Some(settings) = &settings {
@@ -1086,6 +1661,8 @@ impl MailView {
             user: settings.user,
             imap: settings.imap,
             smtp: settings.smtp,
+            signature: String::new(),
+            enabled: true,
         };
         let id = match self.store.add_account(&account) {
             Ok(id) => id,
@@ -1118,25 +1695,6 @@ impl MailView {
         ));
         self.close_setup();
         self.reload();
-    }
-
-    fn confirm_removal(&mut self, id: AccountId) {
-        let Some(account) = self.account(id) else {
-            return;
-        };
-        let signals = Rc::clone(&self.signals);
-        let alert = Alert::new(
-            &L10N.tr_args("remove-title", [("email", account.email.clone().into())]),
-            &L10N.tr("remove-message"),
-            move |choice| {
-                if choice == "remove" {
-                    signals.borrow_mut().push(Signal::RemoveAccount(id));
-                }
-            },
-        )
-        .destructive(&L10N.tr("button-remove"), "remove")
-        .cancel(&L10N.tr("button-cancel"), "cancel");
-        self.ui.present_sheet(alert);
     }
 
     pub fn remove_account(&mut self, id: AccountId) {
@@ -1172,7 +1730,9 @@ impl MailView {
                 Signal::Forward => self.forward_selected(),
                 Signal::Flag => self.toggle_flag(),
                 Signal::Search(text) => self.search_for(&text),
-                Signal::RemoveAccount(id) => self.remove_account(id),
+                signal @ (Signal::NewMailbox(..)
+                | Signal::RenameMailbox(..)
+                | Signal::DeleteMailbox(_)) => self.change_mailboxes(signal),
             }
         }
         if let Some(request) = self.ui.take_clipboard_request() {
@@ -1198,18 +1758,17 @@ impl MailView {
             Event::Key { key, modifiers } => self.key(*key, *modifiers),
             Event::PointerDown(pointer) => {
                 if self.over_control(pointer.position) {
-                    self.pressed_ui = true;
                     return self.ui.handle(event);
                 }
-                self.pressed_ui = false;
                 self.ui.clear_focus();
                 self.click(pointer)
             }
-            Event::PointerUp(_) => {
-                let handled = self.ui.handle(event);
-                self.pressed_ui = false;
-                handled
+            Event::PointerUp(_) if self.drag.is_some() => {
+                self.drop_messages();
+                true
             }
+            Event::PointerUp(_) => self.ui.handle(event),
+            Event::PointerMove(pointer) if self.drag.is_some() => self.drag_to(pointer.position),
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
                 let ui = self.ui.handle(event);
                 let hover = self.hit(pointer.position);
@@ -1217,12 +1776,90 @@ impl MailView {
                 self.hover = hover;
                 ui | changed
             }
-            Event::PointerLeave => self.ui.handle(event) | self.hover.take().is_some(),
+            Event::PointerLeave => {
+                self.ui.handle(event) | self.hover.take().is_some() | self.drag.take().is_some()
+            }
             Event::Scroll(scroll) => {
                 self.ui.handle(event)
                     || (!self.over_control(scroll.position) && self.scroll(scroll))
             }
             _ => self.ui.handle(event),
+        }
+    }
+
+    fn drop_target(&self, index: usize) -> bool {
+        match self.sidebar.get(index) {
+            Some(Row::Place { place, .. }) if *place == self.place => false,
+            Some(Row::Place {
+                place: Place::Mailbox(id),
+                ..
+            }) => self
+                .accounts
+                .iter()
+                .flat_map(|(_, mailboxes)| mailboxes)
+                .any(|mailbox| mailbox.id == *id && mailbox.selectable),
+            Some(Row::Place {
+                place: Place::All(role),
+                ..
+            }) => *role != Role::Drafts && *role != Role::Sent,
+            _ => false,
+        }
+    }
+
+    fn drag_to(&mut self, at: Point) -> bool {
+        let over = match self.hit(at) {
+            Some(Hit::Place(index)) if self.drop_target(index) => Some(index),
+            _ => None,
+        };
+        let Some(drag) = self.drag.as_mut() else {
+            return false;
+        };
+        let moving =
+            drag.moving || (at.x - drag.from.x).abs() + (at.y - drag.from.y).abs() > DRAG_THRESHOLD;
+        let changed = moving && (drag.at != at || drag.over != over || !drag.moving);
+        *drag = Drag {
+            at,
+            moving,
+            over: over.filter(|_| moving),
+            ..*drag
+        };
+        changed
+    }
+
+    fn drop_messages(&mut self) {
+        let Some(drag) = self.drag.take() else {
+            return;
+        };
+        if let (false, Some(id)) = (drag.moving, drag.collapse) {
+            self.select(id);
+        }
+        let (true, Some(index)) = (drag.moving, drag.over) else {
+            return;
+        };
+        match self.sidebar.get(index).cloned() {
+            Some(Row::Place {
+                place: Place::Mailbox(id),
+                ..
+            }) => {
+                let target = self
+                    .accounts
+                    .iter()
+                    .flat_map(|(_, mailboxes)| mailboxes)
+                    .find(|mailbox| mailbox.id == id)
+                    .cloned();
+                if let Some(target) = target {
+                    self.move_selected_to(&target);
+                }
+            }
+            Some(Row::Place {
+                place: Place::All(Role::Trash),
+                ..
+            }) => self.delete_selected(),
+            Some(Row::Place {
+                place: Place::All(role),
+                ..
+            }) => self.move_selected(role),
+            _ => {}
         }
     }
 
@@ -1250,6 +1887,32 @@ impl MailView {
         }
         let plain = !modifiers.control;
         match key {
+            Key::Character('z' | 'Z') if modifiers.control && !modifiers.shift => {
+                self.undo();
+                true
+            }
+            Key::Character('a' | 'A') if modifiers.control && !modifiers.shift => {
+                self.select_all();
+                true
+            }
+            Key::Up if plain && modifiers.shift => self.extend(-1),
+            Key::Down if plain && modifiers.shift => self.extend(1),
+            Key::Right | Key::Left if plain && !modifiers.shift => {
+                let expanded = self.selected.is_some_and(|id| {
+                    self.conversations.children.contains(&id)
+                        || self
+                            .conversations
+                            .earlier
+                            .get(&id)
+                            .is_some_and(|(key, _)| self.conversations.expanded.contains(key))
+                });
+                match (key == Key::Right, expanded, self.selected) {
+                    (true, false, Some(id)) | (false, true, Some(id)) => {
+                        self.toggle_conversation(id)
+                    }
+                    _ => false,
+                }
+            }
             Key::Up if plain => self.step(-1),
             Key::Down if plain => self.step(1),
             Key::Backspace | Key::Delete => {
@@ -1263,6 +1926,50 @@ impl MailView {
             }
             _ => self.ui.handle(&event),
         }
+    }
+
+    fn select_all(&mut self) {
+        let Some(first) = self
+            .selected
+            .or_else(|| self.messages.first().map(|summary| summary.id))
+        else {
+            return;
+        };
+        if self.selected.is_none() {
+            self.select(first);
+        }
+        self.also = self
+            .messages
+            .iter()
+            .map(|summary| summary.id)
+            .filter(|id| *id != first)
+            .collect();
+        if !self.also.is_empty() {
+            self.reading = None;
+            self.layout = None;
+        }
+    }
+
+    fn extend(&mut self, by: isize) -> bool {
+        let chosen = self
+            .messages
+            .iter()
+            .enumerate()
+            .filter(|(_, summary)| self.is_chosen(summary.id))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let (Some(first), Some(last)) = (chosen.first(), chosen.last()) else {
+            return self.step(by);
+        };
+        let next = match by < 0 {
+            true => first.checked_sub(1),
+            false => Some(last + 1).filter(|next| *next < self.messages.len()),
+        };
+        let Some(id) = next.map(|next| self.messages[next].id) else {
+            return false;
+        };
+        self.select_more(id, false);
+        true
     }
 
     fn step(&mut self, by: isize) -> bool {
@@ -1290,18 +1997,37 @@ impl MailView {
         let Some(hit) = self.hit(pointer.position) else {
             return false;
         };
-        let secondary = pointer.button == PointerButton::Secondary
-            || (pointer.button == PointerButton::Primary && pointer.modifiers.control);
+        let secondary = pointer.button == PointerButton::Secondary;
         match hit {
             Hit::Place(index) => {
                 self.focus = Pane::Sidebar;
                 if let Some(Row::Place { place, .. }) = self.sidebar.get(index).cloned() {
-                    self.choose_place(place);
+                    if secondary && let Some(menu) = self.mailbox_menu(&place) {
+                        self.requests
+                            .push(Request::ShowMenu(menu, pointer.position));
+                    } else {
+                        self.choose_place(place);
+                    }
                 }
             }
+            Hit::Message(id)
+                if !secondary && (pointer.modifiers.control || pointer.modifiers.shift) =>
+            {
+                self.select_more(id, pointer.modifiers.shift);
+            }
             Hit::Message(id) => {
-                if self.selected != Some(id) {
+                let collapse = !secondary && self.is_chosen(id) && !self.also.is_empty();
+                if !self.is_chosen(id) {
                     self.select(id);
+                }
+                if !secondary && pointer.count == 1 {
+                    self.drag = Some(Drag {
+                        from: pointer.position,
+                        at: pointer.position,
+                        moving: false,
+                        over: None,
+                        collapse: collapse.then_some(id),
+                    });
                 }
                 if pointer.count >= 2 && !secondary {
                     self.continue_draft();
@@ -1312,11 +2038,203 @@ impl MailView {
                         .push(Request::ShowMenu(menu, pointer.position));
                 }
             }
+            Hit::Conversation(id) => {
+                self.toggle_conversation(id);
+            }
             Hit::Link(url) => self.requests.push(Request::OpenLink(url)),
+            Hit::Attachment(index) if secondary => {
+                let menu = Menu::new(vec![
+                    MenuItem::new(
+                        &L10N.tr("attachment-open"),
+                        &format!("attachment-open:{index}"),
+                    ),
+                    MenuItem::new(
+                        &L10N.tr("attachment-save-as"),
+                        &format!("attachment-save-as:{index}"),
+                    ),
+                    MenuItem::new(
+                        &L10N.tr("attachment-save"),
+                        &format!("attachment-save:{index}"),
+                    ),
+                ]);
+                self.requests
+                    .push(Request::ShowMenu(menu, pointer.position));
+            }
             Hit::Attachment(index) => self.open_attachment(index),
             Hit::LoadRemote => self.load_remote(),
         }
         true
+    }
+
+    fn mailbox(&self, id: MailboxId) -> Option<Mailbox> {
+        self.accounts
+            .iter()
+            .flat_map(|(_, mailboxes)| mailboxes)
+            .find(|mailbox| mailbox.id == id)
+            .cloned()
+    }
+
+    pub fn current_account(&self) -> Option<AccountId> {
+        match self.place {
+            Place::Mailbox(id) => self.mailbox(id).map(|mailbox| mailbox.account),
+            _ => None,
+        }
+        .or_else(|| self.accounts.first().map(|(account, _)| account.id))
+    }
+
+    fn mailbox_menu(&self, place: &Place) -> Option<Menu> {
+        let Place::Mailbox(id) = place else {
+            return None;
+        };
+        let mailbox = self.mailbox(*id)?;
+        let own = mailbox.role.is_none();
+        Some(Menu::new(vec![
+            MenuItem::new(
+                &L10N.tr("menu-new-mailbox"),
+                &format!("mailbox-new:{}", mailbox.account),
+            ),
+            MenuItem::new(
+                &L10N.tr("menu-rename-mailbox"),
+                &format!("mailbox-rename:{id}"),
+            )
+            .enabled(own),
+            MenuItem::new(
+                &L10N.tr("menu-delete-mailbox"),
+                &format!("mailbox-delete:{id}"),
+            )
+            .enabled(own),
+        ]))
+    }
+
+    fn ask_mailbox_name(
+        &mut self,
+        title: &str,
+        name: &str,
+        done: impl Fn(String) -> Signal + 'static,
+    ) {
+        let typed = Rc::new(RefCell::new(name.to_owned()));
+        let field = {
+            let typed = Rc::clone(&typed);
+            TextField::new(&L10N.tr("mailbox-name-placeholder"), name, move |text| {
+                *typed.borrow_mut() = text.to_owned();
+            })
+        };
+        let signals = Rc::clone(&self.signals);
+        let alert = Alert::new(title, "", move |choice| {
+            let name = typed.borrow().trim().to_owned();
+            if choice == "ok" && !name.is_empty() {
+                signals.borrow_mut().push(done(name));
+            }
+        })
+        .accessory(field)
+        .primary(&L10N.tr("button-ok"), "ok")
+        .cancel(&L10N.tr("button-cancel"), "cancel");
+        self.ui.present_sheet(alert);
+    }
+
+    fn mailbox_action(&mut self, verb: &str, id: i64) {
+        match verb {
+            "mailbox-new" => {
+                self.ask_mailbox_name(&L10N.tr("new-mailbox-title"), "", move |name| {
+                    Signal::NewMailbox(id, name)
+                });
+            }
+            "mailbox-rename" => {
+                let Some(mailbox) = self.mailbox(id) else {
+                    return;
+                };
+                let title = L10N.tr_args(
+                    "rename-mailbox-title",
+                    [("name", mailbox.name.clone().into())],
+                );
+                self.ask_mailbox_name(&title, &mailbox.name, move |name| {
+                    Signal::RenameMailbox(id, name)
+                });
+            }
+            "mailbox-delete" => {
+                let Some(mailbox) = self.mailbox(id) else {
+                    return;
+                };
+                let signals = Rc::clone(&self.signals);
+                let alert = Alert::new(
+                    &L10N.tr_args("delete-mailbox-title", [("name", mailbox.name.into())]),
+                    &L10N.tr("delete-mailbox-message"),
+                    move |choice| {
+                        if choice == "delete" {
+                            signals.borrow_mut().push(Signal::DeleteMailbox(id));
+                        }
+                    },
+                )
+                .destructive(&L10N.tr("action-delete"), "delete")
+                .cancel(&L10N.tr("button-cancel"), "cancel");
+                self.ui.present_sheet(alert);
+            }
+            _ => {}
+        }
+    }
+
+    fn change_mailboxes(&mut self, signal: Signal) {
+        let (account, change) = match signal {
+            Signal::NewMailbox(account, name) => {
+                let prefix = self.namespace_prefix(account);
+                (account, MailboxChange::Create(format!("{prefix}{name}")))
+            }
+            Signal::RenameMailbox(id, name) => {
+                let Some(mailbox) = self.mailbox(id) else {
+                    return;
+                };
+                let parent = mailbox
+                    .delimiter
+                    .and_then(|delimiter| {
+                        mailbox
+                            .path
+                            .rsplit_once(delimiter)
+                            .map(|(parent, _)| format!("{parent}{delimiter}"))
+                    })
+                    .unwrap_or_default();
+                (
+                    mailbox.account,
+                    MailboxChange::Rename(mailbox.path, format!("{parent}{name}")),
+                )
+            }
+            Signal::DeleteMailbox(id) => {
+                let Some(mailbox) = self.mailbox(id) else {
+                    return;
+                };
+                (mailbox.account, MailboxChange::Delete(mailbox.path))
+            }
+            _ => return,
+        };
+        self.send_command(account, Command::Mailbox(change));
+    }
+
+    fn namespace_prefix(&self, account: AccountId) -> String {
+        let Some((_, mailboxes)) = self.accounts.iter().find(|(known, _)| known.id == account)
+        else {
+            return String::new();
+        };
+        let inbox = mailboxes
+            .iter()
+            .find(|mailbox| mailbox.role == Some(Role::Inbox));
+        let Some(prefix) = inbox.and_then(|inbox| {
+            inbox
+                .delimiter
+                .map(|delimiter| format!("{}{delimiter}", inbox.path))
+        }) else {
+            return String::new();
+        };
+        let others = mailboxes
+            .iter()
+            .filter(|mailbox| mailbox.role != Some(Role::Inbox))
+            .collect::<Vec<_>>();
+        match !others.is_empty()
+            && others
+                .iter()
+                .all(|mailbox| mailbox.path.starts_with(&prefix))
+        {
+            true => prefix,
+            false => String::new(),
+        }
     }
 
     pub fn message_menu(&self) -> Menu {
@@ -1350,6 +2268,15 @@ impl MailView {
             MenuItem::new(&L10N.tr("action-archive"), "archive")
                 .enabled(self.can_move_to(Role::Archive)),
             MenuItem::new(&L10N.tr("action-junk"), "junk").enabled(self.can_move_to(Role::Junk)),
+            MenuItem::submenu(
+                &L10N.tr("menu-move-to"),
+                Menu::new(
+                    self.move_targets()
+                        .into_iter()
+                        .map(|(name, id)| MenuItem::new(&name, &format!("move-to:{id}")))
+                        .collect(),
+                ),
+            ),
             MenuItem::new(&L10N.tr("action-delete"), "delete"),
         ])
     }
@@ -1361,24 +2288,80 @@ impl MailView {
             "forward" => self.forward_selected(),
             "toggle-read" => self.toggle_read(),
             "toggle-flag" => self.toggle_flag(),
+            "mark-all-read" => self.mark_all_read(),
+            "sort-ascending" | "sort-descending" => {
+                self.settings.ascending = action == "sort-ascending";
+                self.keep_settings();
+            }
+            action if action.starts_with("sort-") => {
+                if let Some(sort) = SortBy::ALL
+                    .into_iter()
+                    .find(|sort| action.strip_prefix("sort-") == Some(sort.name()))
+                {
+                    self.settings.sort = sort;
+                    self.keep_settings();
+                }
+            }
             "archive" => self.move_selected(Role::Archive),
             "junk" => self.move_selected(Role::Junk),
             "delete" => self.delete_selected(),
             "compose" => self.compose(Draft::default()),
             "get-mail" => self.get_mail(),
             "add-account" => self.present_setup(Mode::Add),
-            "find" => self.ui.set_focus(self.toolbar.search),
-            action => {
-                if let Some(id) = action
-                    .strip_prefix("remove-account:")
-                    .and_then(|id| id.parse().ok())
-                {
-                    self.confirm_removal(id);
-                } else {
-                    let handled = self.ui.menu_action(action);
-                    self.after_ui();
-                    return handled;
+            "new-mailbox" => {
+                if let Some(account) = self.current_account() {
+                    self.mailbox_action("mailbox-new", account);
                 }
+            }
+            "find" => self.ui.set_focus(self.toolbar.search),
+            action if action.starts_with("move-to:") => {
+                let target = action
+                    .strip_prefix("move-to:")
+                    .and_then(|id| id.parse::<MailboxId>().ok())
+                    .and_then(|id| {
+                        self.accounts
+                            .iter()
+                            .flat_map(|(_, mailboxes)| mailboxes)
+                            .find(|mailbox| mailbox.id == id)
+                            .cloned()
+                    });
+                if let Some(target) = target {
+                    self.move_selected_to(&target);
+                }
+            }
+            action if action.starts_with("mailbox-") => {
+                if let Some((verb, id)) = action
+                    .split_once(':')
+                    .and_then(|(verb, id)| Some((verb, id.parse().ok()?)))
+                {
+                    self.mailbox_action(verb, id);
+                }
+            }
+            action if action.starts_with("attachment-") => {
+                let parsed = action
+                    .split_once(':')
+                    .and_then(|(verb, index)| Some((verb, index.parse::<usize>().ok()?)));
+                match parsed {
+                    Some(("attachment-open", index)) => self.open_attachment(index),
+                    Some(("attachment-save", index)) => self.save_attachment(index),
+                    Some(("attachment-save-as", index)) => {
+                        if let (Some(name), Some(data)) = (
+                            self.attachment_name(index),
+                            self.reading
+                                .as_ref()
+                                .and_then(|reading| reading.content.attachments.get(index))
+                                .map(|attachment| attachment.data.clone()),
+                        ) {
+                            self.requests.push(Request::SaveAttachment(name, data));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            action => {
+                let handled = self.ui.menu_action(action);
+                self.after_ui();
+                return handled;
             }
         }
         self.after_ui();
@@ -1391,6 +2374,28 @@ impl MailView {
             .rev()
             .find(|(rect, _)| rect.contains(at))
             .map(|(_, hit)| hit.clone())
+    }
+}
+
+fn app_password_hint(host: &str) -> Option<&'static str> {
+    let host = host.to_ascii_lowercase();
+    let provider = |domains: &[&str]| {
+        domains
+            .iter()
+            .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
+    };
+    if provider(&["gmail.com", "googlemail.com"]) {
+        Some("hint-google")
+    } else if provider(&["outlook.com", "office365.com", "hotmail.com", "live.com"]) {
+        Some("hint-microsoft")
+    } else if provider(&["me.com", "mac.com", "icloud.com"]) {
+        Some("hint-icloud")
+    } else if provider(&["yahoo.com", "aol.com"]) {
+        Some("hint-yahoo")
+    } else if provider(&["fastmail.com", "messagingengine.com"]) {
+        Some("hint-fastmail")
+    } else {
+        None
     }
 }
 

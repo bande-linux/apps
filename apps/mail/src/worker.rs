@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::compose::{Draft, Outgoing, build};
+use crate::compose::{Draft, Outgoing, build, forget_unsent};
 use crate::error::{Error, Result};
 use crate::imap::{Flag, Role, Session};
 use crate::net::{Closer, Network};
@@ -40,7 +40,15 @@ pub enum Command {
     Send(Box<Outgoing>),
     SaveDraft(Box<Outgoing>),
     Password(String),
+    Mailbox(MailboxChange),
     Stop,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MailboxChange {
+    Create(String),
+    Rename(String, String),
+    Delete(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +63,7 @@ pub enum Event {
     NotSent(AccountId, String, Box<Outgoing>),
     Setup(Box<crate::setup::Outcome>),
     Pictures(MessageId, Vec<(String, crate::picture::Picture)>),
+    MailboxRefused(String),
 }
 
 #[derive(Clone)]
@@ -136,7 +145,7 @@ pub struct Worker {
     commands: Sender<Command>,
     stopping: Arc<AtomicBool>,
     idle: Arc<Mutex<Watch>>,
-    thread: Option<thread::JoinHandle<()>>,
+    running: Option<Receiver<()>>,
 }
 
 impl Worker {
@@ -155,12 +164,14 @@ impl Worker {
             commands: commands.clone(),
             stopping: Arc::clone(&stopping),
             idle: Arc::clone(&idle),
-            thread: None,
+            running: None,
         };
         let id = account.id;
+        let (alive, running) = mpsc::channel::<()>();
         let spawned = thread::Builder::new()
             .name(format!("mail-{id}"))
             .spawn(move || {
+                let _alive = alive;
                 let store = match Store::open(&store) {
                     Ok(store) => store,
                     Err(error) => {
@@ -187,7 +198,7 @@ impl Worker {
                 .run();
             });
         match spawned {
-            Ok(thread) => worker.thread = Some(thread),
+            Ok(_) => worker.running = Some(running),
             Err(error) => tracing::error!("cannot start the mail worker: {error}"),
         }
         worker.send(Command::Sync);
@@ -207,17 +218,15 @@ impl Worker {
     pub fn finish(mut self, deadline: Instant) {
         self.close_idle();
         let _ = self.commands.send(Command::Stop);
-        if let Some(thread) = self.thread.take() {
-            while !thread.is_finished() && Instant::now() < deadline {
-                thread::sleep(Duration::from_millis(20));
-            }
+        if let Some(running) = self.running.take() {
+            let _ = running.recv_timeout(deadline.saturating_duration_since(Instant::now()));
         }
     }
 }
 
 impl Drop for Worker {
     fn drop(&mut self) {
-        if self.thread.is_some() {
+        if self.running.is_some() {
             self.stopping.store(true, Ordering::Relaxed);
         }
         self.close_idle();
@@ -424,19 +433,49 @@ impl Runner {
                 Ok(())
             }
             Command::Flush => {
-                if self.flush()? {
-                    self.emit(Event::Changed(self.account.id));
+                let Some(targets) = self.flush()? else {
+                    return Ok(());
+                };
+                self.emit(Event::Changed(self.account.id));
+                let mailboxes = self.store.mailboxes(self.account.id)?;
+                for target in targets {
+                    if let Some(mailbox) = mailboxes.iter().find(|mailbox| mailbox.path == target) {
+                        self.sync_one(mailbox)?;
+                    }
                 }
                 Ok(())
             }
             Command::Body(id) => self.body(*id),
+            Command::Mailbox(change) => self.change_mailbox(change),
             Command::Send(outgoing) => self.send(outgoing),
-            Command::SaveDraft(outgoing) => self.save_draft(&outgoing.draft, outgoing.replaces),
+            Command::SaveDraft(outgoing) => {
+                self.save_draft(&outgoing.draft, outgoing.replaces)?;
+                forget_unsent(outgoing);
+                Ok(())
+            }
             Command::Password(_) | Command::Stop => Ok(()),
         }
     }
 
-    fn flush(&mut self) -> Result<bool> {
+    fn change_mailbox(&mut self, change: &MailboxChange) -> Result<()> {
+        let session = self.session()?;
+        let changed = match change {
+            MailboxChange::Create(path) => session.create(path),
+            MailboxChange::Rename(from, to) => session.rename(from, to),
+            MailboxChange::Delete(path) => session.delete(path),
+        };
+        match changed {
+            Err(Error::Refused(text)) => self.emit(Event::MailboxRefused(text)),
+            other => other?,
+        }
+        let account = self.account.id;
+        let (session, store) = self.connected()?;
+        sync_folders(session, store, account)?;
+        self.emit(Event::Changed(account));
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<Option<Vec<String>>> {
         let account = self.account.id;
         let (session, store) = self.connected()?;
         flush(session, store, account)
@@ -568,6 +607,7 @@ impl Runner {
             draft,
             answering,
             replaces,
+            ..
         } = outgoing;
         let (answering, replaces) = (*answering, *replaces);
         let raw = build(draft, &jiff::Zoned::now());
@@ -583,6 +623,7 @@ impl Runner {
                 message: &raw,
             },
         )?;
+        forget_unsent(outgoing);
         self.emit(Event::Sent(self.account.id));
         let mut kept = self.file_sent(&raw, answering, replaces);
         if matches!(&kept, Err(error) if error.is_connection()) {

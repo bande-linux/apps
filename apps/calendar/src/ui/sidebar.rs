@@ -116,7 +116,7 @@ pub fn paint(
 
 fn paint_mini_month(model: &ViewModel, first: Date, frame: Rect, painter: &mut Painter<Hit>) {
     let palette = model.palette;
-    let month = Month::containing(first, model.formats.first_weekday());
+    let month = Month::containing(first, model.first_weekday);
     let title_rect = Rect::new(frame.x + 6.0, frame.y, frame.width - 64.0, MINI_HEADER);
     painter.label(
         &model.formats.month_title(first),
@@ -143,7 +143,8 @@ fn paint_mini_month(model: &ViewModel, first: Date, frame: Rect, painter: &mut P
         painter.hit(button, Hit::MiniShift(shift));
     }
     let cell_width = frame.width / 7.0;
-    let (focus_first, focus_last) = super::paint::period(model.mode, model.focus, model.formats);
+    let (focus_first, focus_last) =
+        super::paint::period(model.mode, model.focus, model.first_weekday);
     if let Some(week) = month.weeks.first() {
         for (column, day) in week.days.iter().enumerate() {
             let initial: String = model.formats.short_weekday(*day).chars().take(2).collect();

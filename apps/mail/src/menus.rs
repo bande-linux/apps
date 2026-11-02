@@ -1,5 +1,6 @@
 use bande_app_menu::{Entry, edit_submenu};
 use bande_mail::L10N;
+use bande_mail::settings::SortBy;
 use bande_mail::ui::{MailView, SHORTCUTS};
 
 fn item(message: &str, action: &str) -> Entry {
@@ -11,25 +12,56 @@ fn item(message: &str, action: &str) -> Entry {
 }
 
 pub fn app_menus(view: &MailView) -> Vec<Entry> {
-    let accounts = view
-        .accounts()
+    let targets = view
+        .move_targets()
         .into_iter()
-        .map(|account| Entry::item(&account.email, &format!("remove-account:{}", account.id)))
+        .map(|(name, id)| Entry::item(&name, &format!("move-to:{id}")))
         .collect::<Vec<_>>();
     vec![
         Entry::submenu(
             &L10N.tr("menu-file"),
             vec![
                 item("action-compose", "compose"),
-                item("action-get-mail", "get-mail"),
                 Entry::separator(),
                 item("menu-add-account", "add-account"),
-                Entry::submenu(&L10N.tr("menu-remove-account"), accounts),
                 Entry::separator(),
                 item("menu-find", "find"),
             ],
         ),
         edit_submenu(Vec::new()),
+        Entry::submenu(&L10N.tr("menu-view"), {
+            let settings = view.settings();
+            let mut entries = SortBy::ALL
+                .into_iter()
+                .map(|sort| {
+                    Entry::item(
+                        &L10N.tr(&format!("menu-sort-{}", sort.name())),
+                        &format!("sort-{}", sort.name()),
+                    )
+                    .radio(settings.sort == sort)
+                })
+                .collect::<Vec<_>>();
+            entries.push(Entry::separator());
+            entries.push(
+                Entry::item(&L10N.tr("menu-sort-descending"), "sort-descending")
+                    .radio(!settings.ascending),
+            );
+            entries.push(
+                Entry::item(&L10N.tr("menu-sort-ascending"), "sort-ascending")
+                    .radio(settings.ascending),
+            );
+            entries
+        }),
+        Entry::submenu(
+            &L10N.tr("menu-mailbox"),
+            vec![
+                item("action-get-mail", "get-mail"),
+                Entry::separator(),
+                item("menu-mark-all-read", "mark-all-read"),
+                Entry::separator(),
+                item("menu-new-mailbox", "new-mailbox"),
+            ],
+        ),
         Entry::submenu(
             &L10N.tr("menu-message"),
             vec![
@@ -44,6 +76,7 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
                 Entry::separator(),
                 item("action-archive", "archive"),
                 item("action-junk", "junk"),
+                Entry::submenu(&L10N.tr("menu-move-to"), targets),
                 item("action-delete", "delete"),
             ],
         ),

@@ -26,6 +26,9 @@ pub const ACTION_REFRESH: &str = "refresh";
 pub const ACTION_ADD_ACCOUNT: &str = "add-account";
 pub const ACTION_DELETE: &str = "delete";
 pub const ACTION_MODE: &str = "mode-";
+pub const ACTION_IMPORT: &str = "import";
+pub const ACTION_EXPORT: &str = "export";
+const ACTION_EXPORT_CALENDAR: &str = "calendar-export:";
 const ACTION_COLOR: &str = "calendar-color:";
 const ACTION_REMOVE_ACCOUNT: &str = "remove-account:";
 const ACTION_RENAME: &str = "calendar-rename:";
@@ -69,6 +72,10 @@ fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
     items.push(MenuItem::new(
         &L10N.tr("rename-calendar"),
         &format!("{ACTION_RENAME}{index}"),
+    ));
+    items.push(MenuItem::new(
+        &L10N.tr("export"),
+        &format!("{ACTION_EXPORT_CALENDAR}{index}"),
     ));
     if !subscription && (calendar.info.account != crate::store::LOCAL_ACCOUNT || locals > 1) {
         items.push(MenuItem::new(
@@ -123,6 +130,14 @@ pub fn menu_command(view: &mut CalendarView, action: &str) -> bool {
         ACTION_NEW_EVENT => signal(view, Signal::NewEvent),
         ACTION_ADD_ACCOUNT => signal(view, Signal::AddAccount),
         ACTION_REFRESH => view.requests.push(Request::Refresh),
+        ACTION_IMPORT => view.requests.push(Request::Import),
+        ACTION_EXPORT => view.export_calendar(None),
+        other if other.starts_with(ACTION_EXPORT_CALENDAR) => {
+            match other[ACTION_EXPORT_CALENDAR.len()..].parse() {
+                Ok(index) => view.export_calendar(Some(index)),
+                Err(_) => return false,
+            }
+        }
         ACTION_FIND => {
             let search = view.toolbar.search;
             view.ui.set_focus(search);
@@ -693,7 +708,14 @@ fn create(view: &mut CalendarView, start: DateTime, end: DateTime, all_day: bool
         return;
     };
     view.drag = None;
-    let object = new_event(start, end, all_day, "", &view.zone);
+    let mut object = new_event(start, end, all_day, "", &view.zone);
+    let alert = match all_day {
+        true => view.settings.all_day_alert,
+        false => view.settings.timed_alert,
+    };
+    if let Some(event) = object.events.first_mut() {
+        event.alarms = alert.alarms(&[]);
+    }
     let Some(event) = object.events.first() else {
         return;
     };
@@ -767,6 +789,12 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
         }
         Signal::Choice(action) => choose(view, &action),
         Signal::SetupSubmit => submit_setup(view),
+        Signal::SetupKind(_) => {
+            if let Some(setup) = &mut view.setup {
+                let hint = setup.preset.hint();
+                setup.show_note(&mut view.ui, &hint);
+            }
+        }
         Signal::NameSubmit => view.submit_naming(),
         Signal::NameCancel => view.cancel_naming(),
         Signal::SetupCancel => {
@@ -789,10 +817,25 @@ fn submit_setup(view: &mut CalendarView) {
         return;
     }
     let password = setup.password.clone().unwrap_or_default();
+    if let Some(account) = setup.account.clone() {
+        if password.is_empty() {
+            return;
+        }
+        let user = setup.user.clone();
+        if let Some(setup) = view.setup.take() {
+            setup.close(&mut view.ui);
+        }
+        view.requests.push(Request::SetPassword {
+            account,
+            user,
+            password,
+        });
+        return;
+    }
     let request = match setup.kind {
         super::setup::Kind::CalDav if setup.user.is_empty() => None,
         super::setup::Kind::CalDav => Some(Request::AddAccount {
-            server: setup.server.clone(),
+            server: setup.server(),
             user: setup.user.clone(),
             password,
         }),

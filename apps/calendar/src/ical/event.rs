@@ -9,7 +9,7 @@ use super::rule::Rule;
 use super::tz::{Zones, vtimezone};
 use super::value::{Duration, InstanceKey, Moment};
 
-const PRODUCT: &str = "-//Bande//Calendar 0.1//EN";
+pub(super) const PRODUCT: &str = "-//Bande//Calendar 0.1//EN";
 
 const MANAGED: [&str; 15] = [
     "UID",

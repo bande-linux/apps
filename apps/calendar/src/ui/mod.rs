@@ -5,6 +5,7 @@ mod naming;
 mod paint;
 pub mod painter;
 mod panel;
+mod settings_view;
 mod setup;
 mod sidebar;
 mod toolbar;
@@ -20,15 +21,17 @@ use bande_toolkit::ui::{Alert, ClipboardRequest, Context, Cursor, FreeLayout, Me
 use bande_toolkit::{
     Appearance, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextSystem,
 };
-use jiff::civil::{Date, DateTime};
+use jiff::civil::{Date, DateTime, Weekday};
 use jiff::tz::TimeZone;
 use jiff::{ToSpan, Zoned};
 
 use crate::edit::{Details, Scope};
 use crate::ical::{CalendarObject, InstanceKey};
-use crate::store::{AccountKind, CalendarInfo, Found, LOCAL_ACCOUNT, Library, new_uid};
+use crate::settings::CalendarSettings;
+use crate::store::{AccountKind, CalendarInfo, Found, LOCAL_ACCOUNT, Library, Pending, new_uid};
 use bande_design::{Accent, Scheme};
 
+pub use settings_view::{SETTINGS_SIZE, SettingsView};
 pub use toolbar::TOOLBAR_HEIGHT;
 
 const ENGLISH: &str = include_str!("../../locales/en-US/bande-calendar.ftl");
@@ -36,7 +39,6 @@ const ENGLISH: &str = include_str!("../../locales/en-US/bande-calendar.ftl");
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const SIDEBAR_WIDTH: f32 = 220.0;
-const DAY_START_HOUR: f32 = 7.5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -77,6 +79,16 @@ pub enum Request {
     },
     Changed,
     Refresh,
+    Import,
+    SetPassword {
+        account: String,
+        user: String,
+        password: String,
+    },
+    Export {
+        name: String,
+        data: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -96,6 +108,8 @@ pub(crate) enum Signal {
     EndDate(String),
     EndTime(String),
     Repeat(usize),
+    EndRepeatKind(usize),
+    EndRepeatText(String),
     Alert(usize),
     Calendar(usize),
     Notes(String),
@@ -196,6 +210,7 @@ pub struct CalendarView {
     toolbar: toolbar::Toolbar,
     palette: Palette,
     formats: DateFormats,
+    settings: CalendarSettings,
     zone: TimeZone,
     now: Zoned,
     mode: Mode,
@@ -229,6 +244,7 @@ impl CalendarView {
         palette: Palette,
         text: TextSystem,
         formats: DateFormats,
+        settings: CalendarSettings,
         zone: TimeZone,
         now: Zoned,
     ) -> Self {
@@ -252,7 +268,8 @@ impl CalendarView {
             mode: Mode::Week,
             focus: today,
             mini_month: today.first_of_month(),
-            scroll: DAY_START_HOUR * geometry::HOUR_HEIGHT,
+            scroll: f32::from(settings.day_start) * geometry::HOUR_HEIGHT,
+            settings,
             size: (0.0, 0.0),
             full_screen: false,
             shown: Vec::new(),
@@ -304,6 +321,19 @@ impl CalendarView {
     pub fn go_to(&mut self, day: Date) {
         self.focus = day;
         self.mini_month = day.first_of_month();
+    }
+
+    pub fn set_settings(&mut self, settings: CalendarSettings) {
+        if settings.day_start != self.settings.day_start {
+            self.scroll = f32::from(settings.day_start) * geometry::HOUR_HEIGHT;
+        }
+        self.settings = settings;
+    }
+
+    pub(crate) fn first_weekday(&self) -> Weekday {
+        self.settings
+            .first_weekday
+            .unwrap_or(self.formats.first_weekday())
     }
 
     pub fn set_now(&mut self, now: Zoned) {
@@ -525,6 +555,7 @@ impl CalendarView {
                             visible: true,
                             ctag: None,
                             sync_token: None,
+                            refreshed: None,
                         });
                     }
                 }
@@ -573,6 +604,51 @@ impl CalendarView {
         self.selected = None;
         self.shown.clear();
         self.results.clear();
+    }
+
+    pub(crate) fn export_calendar(&mut self, index: Option<usize>) {
+        let index = index
+            .or_else(|| self.selected_found().map(|found| found.calendar))
+            .or_else(|| self.default_calendar());
+        let Some(calendar) = index.and_then(|index| self.library.calendars.get(index)) else {
+            return;
+        };
+        let data = crate::ical::export(
+            &calendar.info.name,
+            calendar
+                .objects
+                .iter()
+                .filter(|stored| stored.pending != Some(Pending::Delete))
+                .map(|stored| stored.data.as_str()),
+        );
+        self.requests.push(Request::Export {
+            name: format!("{}.ics", calendar.info.name),
+            data,
+        });
+    }
+
+    pub fn ask_password(&mut self, account: &str) {
+        if self.setup.is_some() {
+            return;
+        }
+        let Some((name, user)) =
+            self.library
+                .account(account)
+                .and_then(|known| match &known.kind {
+                    AccountKind::CalDav { user, .. } => Some((known.name.clone(), user.clone())),
+                    _ => None,
+                })
+        else {
+            return;
+        };
+        self.close_inspector(true);
+        let (panel, setup) = setup::Setup::sign_in(&self.signals, account, &name, &user);
+        let field = setup.password_field();
+        self.setup = Some(setup);
+        self.ui.present_sheet(panel);
+        if let Some(field) = field {
+            self.ui.set_focus(field);
+        }
     }
 
     pub fn open_account_setup(&mut self) {
@@ -630,6 +706,9 @@ impl CalendarView {
             library: &self.library,
             palette: self.palette,
             formats: &self.formats,
+            first_weekday: self.first_weekday(),
+            work_hours: self.settings.work_hours(),
+            week_numbers: self.settings.week_numbers,
             zone: &self.zone,
             now: &self.now,
             mode: self.mode,
@@ -735,9 +814,14 @@ impl CalendarView {
                 .update_widget::<panel::Panel>(id, |panel, _| panel.set_arrow(arrow));
         }
         self.ui.set_sheet_top(TOOLBAR_HEIGHT);
-        if let Some(grid) =
-            paint::time_grid(self.mode, self.focus, &self.formats, sheet, self.scroll, 1)
-        {
+        if let Some(grid) = paint::time_grid(
+            self.mode,
+            self.focus,
+            self.first_weekday(),
+            sheet,
+            self.scroll,
+            1,
+        ) {
             if !self.scrolled_once {
                 self.scrolled_once = true;
                 let now =
@@ -768,10 +852,15 @@ impl CalendarView {
             let info = &self.library.calendars[*index].info;
             !info.read_only && info.visible
         };
-        self.selected
-            .as_ref()
-            .and_then(|selected| self.library.calendar_index(&selected.calendar))
+        self.library
+            .calendar_index(&self.settings.default_calendar)
             .filter(usable)
+            .or_else(|| {
+                self.selected
+                    .as_ref()
+                    .and_then(|selected| self.library.calendar_index(&selected.calendar))
+                    .filter(usable)
+            })
             .or_else(|| {
                 self.library
                     .writable()
@@ -818,7 +907,7 @@ impl CalendarView {
         self.ui.present_dialog(alert);
     }
 
-    pub(crate) fn ask_remove_account(&mut self, id: &str) {
+    pub fn ask_remove_account(&mut self, id: &str) {
         let Some(account) = self.library.account(id) else {
             return;
         };
@@ -947,8 +1036,15 @@ impl CalendarView {
             .iter()
             .find(|(_, hit)| matches!(hit, Hit::Event(index, Part::Body) if self.shown.get(*index) == Some(&found)))
             .map(|(rect, _)| *rect);
-        let (panel, inspector) =
-            inspector::Inspector::build(&self.signals, found, &event, read_only, calendars, anchor);
+        let (panel, inspector) = inspector::Inspector::build(
+            &self.signals,
+            found,
+            &event,
+            read_only,
+            calendars,
+            anchor,
+            &self.zone,
+        );
         if let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) {
             host.insert(panel, Rect::default());
         }
@@ -1017,6 +1113,9 @@ pub(crate) struct ViewModel<'a> {
     pub library: &'a Library,
     pub palette: Palette,
     pub formats: &'a DateFormats,
+    pub first_weekday: Weekday,
+    pub work_hours: (u8, u8),
+    pub week_numbers: bool,
     pub zone: &'a TimeZone,
     pub now: &'a Zoned,
     pub mode: Mode,

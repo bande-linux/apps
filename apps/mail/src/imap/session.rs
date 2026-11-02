@@ -509,6 +509,25 @@ impl Session {
         self.expunge(uids)
     }
 
+    pub fn create(&mut self, path: &str) -> Result<()> {
+        let path = mailbox_argument(path)?;
+        self.run(&format!("CREATE {path}"))?;
+        if let Err(error) = self.run(&format!("SUBSCRIBE {path}")) {
+            tracing::debug!("cannot subscribe to {path}: {error}");
+        }
+        Ok(())
+    }
+
+    pub fn rename(&mut self, from: &str, to: &str) -> Result<()> {
+        let (from, to) = (mailbox_argument(from)?, mailbox_argument(to)?);
+        self.run(&format!("RENAME {from} {to}")).map(drop)
+    }
+
+    pub fn delete(&mut self, path: &str) -> Result<()> {
+        let path = mailbox_argument(path)?;
+        self.run(&format!("DELETE {path}")).map(drop)
+    }
+
     pub fn append(&mut self, path: &str, flags: &[Flag], message: &[u8]) -> Result<()> {
         let flags = flags
             .iter()

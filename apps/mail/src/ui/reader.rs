@@ -9,6 +9,7 @@ use crate::L10N;
 use crate::html::{BlockKind, Document};
 use crate::message::{Address, Content};
 use crate::picture::{Picture, decode};
+use crate::settings::MailSettings;
 use crate::ui::format::{full_date, initials};
 use crate::ui::symbols::{Symbol, Symbols};
 
@@ -52,8 +53,16 @@ fn image_of(picture: Picture) -> Option<Image> {
 }
 
 impl Reading {
-    pub fn new(content: Content, downloaded: bool) -> Self {
-        let document = content.document(false);
+    pub fn new(content: Content, downloaded: bool, settings: &MailSettings) -> Self {
+        let plain = content.plain.is_some() && (settings.plain_text || content.html.is_none());
+        let mut document = content.document(settings.plain_text);
+        if plain && settings.fixed_width {
+            for block in &mut document.blocks {
+                if block.kind == BlockKind::Paragraph {
+                    block.kind = BlockKind::Preformatted;
+                }
+            }
+        }
         let mut pictures = HashMap::new();
         let mut pixels = 0u64;
         for source in document

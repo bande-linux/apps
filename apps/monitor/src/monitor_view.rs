@@ -1377,6 +1377,11 @@ impl Screen for MonitorView {
                 }
             },
             Event::PointerUp(_) if self.edge_drag.take().is_some() => true,
+            Event::PointerLeave => {
+                let dragged = self.edge_drag.take().is_some();
+                self.edge_hover = false;
+                self.pass(event) | dragged
+            }
             _ => self.pass(event),
         }
     }

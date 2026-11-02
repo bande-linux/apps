@@ -2,7 +2,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::Path;
 use std::time::Duration;
 
-use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
+use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params, params_from_iter};
 
 use crate::error::Result;
 use crate::imap::{Fetched, Flag, Flags, Folder, Role};
@@ -63,6 +63,13 @@ CREATE TABLE IF NOT EXISTS messages (
     UNIQUE (mailbox, uid)
 );
 CREATE INDEX IF NOT EXISTS messages_by_date ON messages (mailbox, date DESC);
+CREATE TABLE IF NOT EXISTS rules (
+    id INTEGER PRIMARY KEY,
+    field TEXT NOT NULL,
+    pattern TEXT NOT NULL,
+    action TEXT NOT NULL,
+    mailbox INTEGER REFERENCES mailboxes(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS pending (
     id INTEGER PRIMARY KEY,
     account INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -84,6 +91,8 @@ pub struct Account {
     pub user: String,
     pub imap: Server,
     pub smtp: Server,
+    pub signature: String,
+    pub enabled: bool,
 }
 
 impl Account {
@@ -127,6 +136,7 @@ pub struct Summary {
     pub flags: Flags,
     pub attachments: bool,
     pub downloaded: bool,
+    pub thread: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,6 +151,48 @@ pub enum Action {
     Flag(Flag, bool),
     Move(String),
     Expunge,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleField {
+    From,
+    To,
+    Subject,
+}
+
+impl RuleField {
+    pub const ALL: [Self; 3] = [Self::From, Self::To, Self::Subject];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::From => "from",
+            Self::To => "to",
+            Self::Subject => "subject",
+        }
+    }
+
+    fn columns(self) -> &'static str {
+        match self {
+            Self::From => "(sender_name LIKE ?1 ESCAPE '\\' OR sender_email LIKE ?1 ESCAPE '\\')",
+            Self::To => "recipients LIKE ?1 ESCAPE '\\'",
+            Self::Subject => "subject LIKE ?1 ESCAPE '\\'",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleAction {
+    Move(MailboxId),
+    Flag,
+    Read,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rule {
+    pub id: i64,
+    pub field: RuleField,
+    pub pattern: String,
+    pub action: RuleAction,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -176,12 +228,14 @@ fn account_from(row: &Row<'_>) -> rusqlite::Result<Account> {
             port: row.get(8)?,
             security: security(row.get(9)?),
         },
+        signature: row.get(10)?,
+        enabled: row.get(11)?,
     })
 }
 
 const SUMMARY_COLUMNS: &str = "m.id, m.mailbox, b.account, m.uid, m.subject, m.sender_name, \
     m.sender_email, m.date, m.preview, m.seen, m.flagged, m.answered, m.deleted, m.draft, \
-    m.attachments, m.body IS NOT NULL";
+    m.attachments, m.body IS NOT NULL, m.thread";
 
 fn summary_from(row: &Row<'_>) -> rusqlite::Result<Summary> {
     Ok(Summary {
@@ -205,7 +259,18 @@ fn summary_from(row: &Row<'_>) -> rusqlite::Result<Summary> {
         },
         attachments: row.get(14)?,
         downloaded: row.get(15)?,
+        thread: row.get(16)?,
     })
+}
+
+const ENABLED: &str = " AND b.account IN (SELECT id FROM accounts WHERE enabled = 1)";
+
+fn thread_of(envelope: &Envelope) -> Option<String> {
+    envelope
+        .references
+        .first()
+        .or(envelope.message_id.as_ref())
+        .cloned()
 }
 
 fn like_pattern(search: &str) -> String {
@@ -245,17 +310,48 @@ impl Store {
             .append(true)
             .mode(0o600)
             .open(path)?;
-        let connection = Connection::open(path)?;
+        let mut connection = Connection::open(path)?;
         connection.busy_timeout(Duration::from_secs(10))?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
         connection.execute_batch(SCHEMA)?;
+        let migration = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let version: i64 = migration.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version < 1 {
+            migration.execute_batch(
+                "ALTER TABLE accounts ADD COLUMN signature TEXT NOT NULL DEFAULT ''; \
+                 PRAGMA user_version = 1;",
+            )?;
+        }
+        if version < 2 {
+            migration.execute_batch("ALTER TABLE messages ADD COLUMN thread TEXT;")?;
+            let headers = migration
+                .prepare("SELECT id, header FROM messages")?
+                .query_map([], |row| {
+                    Ok((row.get::<_, MessageId>(0)?, row.get::<_, Vec<u8>>(1)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            for (id, header) in headers {
+                migration.execute(
+                    "UPDATE messages SET thread = ?2 WHERE id = ?1",
+                    params![id, thread_of(&Envelope::parse(&header))],
+                )?;
+            }
+            migration.execute_batch("PRAGMA user_version = 2;")?;
+        }
+        if version < 3 {
+            migration.execute_batch(
+                "ALTER TABLE accounts ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1; \
+                 PRAGMA user_version = 3;",
+            )?;
+        }
+        migration.commit()?;
         Ok(Self { connection })
     }
 
     pub fn accounts(&self) -> Result<Vec<Account>> {
         let mut statement = self.connection.prepare(
             "SELECT id, name, email, user, imap_host, imap_port, imap_security, \
-             smtp_host, smtp_port, smtp_security FROM accounts ORDER BY id",
+             smtp_host, smtp_port, smtp_security, signature, enabled FROM accounts ORDER BY id",
         )?;
         let accounts = statement
             .query_map([], account_from)?
@@ -273,7 +369,8 @@ impl Store {
     pub fn add_account(&self, account: &Account) -> Result<AccountId> {
         self.connection.execute(
             "INSERT INTO accounts (name, email, user, imap_host, imap_port, imap_security, \
-             smtp_host, smtp_port, smtp_security) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             smtp_host, smtp_port, smtp_security, signature) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 account.name,
                 account.email,
@@ -284,9 +381,32 @@ impl Store {
                 account.smtp.host,
                 account.smtp.port,
                 account.smtp.security.name(),
+                account.signature,
             ],
         )?;
         Ok(self.connection.last_insert_rowid())
+    }
+
+    pub fn update_account(&self, account: &Account) -> Result<()> {
+        self.connection.execute(
+            "UPDATE accounts SET name = ?2, user = ?3, imap_host = ?4, imap_port = ?5, \
+             imap_security = ?6, smtp_host = ?7, smtp_port = ?8, smtp_security = ?9, \
+             signature = ?10, enabled = ?11 WHERE id = ?1",
+            params![
+                account.id,
+                account.name,
+                account.user,
+                account.imap.host,
+                account.imap.port,
+                account.imap.security.name(),
+                account.smtp.host,
+                account.smtp.port,
+                account.smtp.security.name(),
+                account.signature,
+                account.enabled,
+            ],
+        )?;
+        Ok(())
     }
 
     pub fn remove_account(&self, id: AccountId) -> Result<()> {
@@ -437,8 +557,8 @@ impl Store {
             let date = envelope.date.or(message.internal_date).unwrap_or_default();
             transaction.execute(
                 "INSERT INTO messages (mailbox, uid, message_id, subject, sender_name, sender_email, \
-                 recipients, date, size, seen, flagged, answered, deleted, draft, header) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15) \
+                 recipients, date, size, seen, flagged, answered, deleted, draft, header, thread) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) \
                  ON CONFLICT (mailbox, uid) DO NOTHING",
                 params![
                     mailbox,
@@ -459,6 +579,7 @@ impl Store {
                     flags.deleted,
                     flags.draft,
                     header,
+                    thread_of(&envelope),
                 ],
             )?;
         }
@@ -551,7 +672,7 @@ impl Store {
         };
         let query = format!(
             "SELECT {SUMMARY_COLUMNS} FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
-             WHERE {filter} AND m.deleted = 0{search_filter} ORDER BY m.date DESC, m.id DESC"
+             WHERE {filter} AND m.deleted = 0{search_filter}{ENABLED} ORDER BY m.date DESC, m.id DESC"
         );
         let mut statement = self.connection.prepare(&query)?;
         let mut values: Vec<Box<dyn rusqlite::ToSql>> = vec![scope_value];
@@ -590,6 +711,29 @@ impl Store {
             .query_row("SELECT header FROM messages WHERE id = ?1", [id], |row| {
                 row.get(0)
             })
+            .optional()?)
+    }
+
+    pub fn message_id(&self, id: MessageId) -> Result<Option<String>> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT message_id FROM messages WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten())
+    }
+
+    pub fn find_message(&self, mailbox: MailboxId, message_id: &str) -> Result<Option<MessageId>> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT id FROM messages WHERE mailbox = ?1 AND message_id = ?2",
+                params![mailbox, message_id],
+                |row| row.get(0),
+            )
             .optional()?)
     }
 
@@ -723,6 +867,78 @@ impl Store {
         Ok(pending)
     }
 
+    pub fn rules(&self) -> Result<Vec<Rule>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT id, field, pattern, action, mailbox FROM rules ORDER BY id")?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<MailboxId>>(4)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|(id, field, pattern, action, mailbox)| {
+                let field = RuleField::ALL
+                    .into_iter()
+                    .find(|known| known.name() == field)?;
+                let action = match (action.as_str(), mailbox) {
+                    ("move", Some(mailbox)) => RuleAction::Move(mailbox),
+                    ("flag", _) => RuleAction::Flag,
+                    ("read", _) => RuleAction::Read,
+                    _ => return None,
+                };
+                Some(Rule {
+                    id,
+                    field,
+                    pattern,
+                    action,
+                })
+            })
+            .collect())
+    }
+
+    pub fn add_rule(&self, rule: &Rule) -> Result<()> {
+        let (action, mailbox) = match rule.action {
+            RuleAction::Move(mailbox) => ("move", Some(mailbox)),
+            RuleAction::Flag => ("flag", None),
+            RuleAction::Read => ("read", None),
+        };
+        self.connection.execute(
+            "INSERT INTO rules (field, pattern, action, mailbox) VALUES (?1, ?2, ?3, ?4)",
+            params![rule.field.name(), rule.pattern, action, mailbox],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_rule(&self, id: i64) -> Result<()> {
+        self.connection
+            .execute("DELETE FROM rules WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    pub fn matching(&self, ids: &[MessageId], rule: &Rule) -> Result<Vec<MessageId>> {
+        let query = format!(
+            "SELECT id FROM messages WHERE id IN ({}) AND {}",
+            ids.iter()
+                .map(MessageId::to_string)
+                .collect::<Vec<_>>()
+                .join(","),
+            rule.field.columns()
+        );
+        let mut statement = self.connection.prepare(&query)?;
+        let matched = statement
+            .query_map([like_pattern(&rule.pattern)], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(matched)
+    }
+
     pub fn finish_pending(&self, id: i64) -> Result<()> {
         self.connection
             .execute("DELETE FROM pending WHERE id = ?1", [id])?;
@@ -733,7 +949,7 @@ impl Store {
         let (filter, scope_value) = scope_filter(scope);
         let query = format!(
             "SELECT COUNT(*) FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
-             WHERE {filter} AND m.deleted = 0 AND m.seen = 0"
+             WHERE {filter} AND m.deleted = 0 AND m.seen = 0{ENABLED}"
         );
         let count: i64 = self
             .connection

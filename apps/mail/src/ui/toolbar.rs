@@ -30,7 +30,9 @@ pub enum Signal {
     Forward,
     Flag,
     Search(String),
-    RemoveAccount(crate::store::AccountId),
+    NewMailbox(crate::store::AccountId, String),
+    RenameMailbox(crate::store::MailboxId, String),
+    DeleteMailbox(crate::store::MailboxId),
 }
 
 pub type Signals = Rc<RefCell<Vec<Signal>>>;

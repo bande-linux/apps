@@ -23,9 +23,16 @@ fn refused_is_done(result: Result<()>) -> Result<()> {
     }
 }
 
-pub fn flush(session: &mut Session, store: &Store, account: AccountId) -> Result<bool> {
+pub fn flush(
+    session: &mut Session,
+    store: &Store,
+    account: AccountId,
+) -> Result<Option<Vec<String>>> {
     let pending = store.pending(account)?;
-    let flushed = !pending.is_empty();
+    if pending.is_empty() {
+        return Ok(None);
+    }
+    let mut targets = Vec::new();
     for change in pending {
         let selected = match session.select(&change.mailbox) {
             Ok(selected) => Some(selected),
@@ -40,9 +47,14 @@ pub fn flush(session: &mut Session, store: &Store, account: AccountId) -> Result
             };
             refused_is_done(applied)?;
         }
+        if let Action::Move(target) = change.action
+            && !targets.contains(&target)
+        {
+            targets.push(target);
+        }
         store.finish_pending(change.id)?;
     }
-    Ok(flushed)
+    Ok(Some(targets))
 }
 
 pub fn sync_folders(session: &mut Session, store: &mut Store, account: AccountId) -> Result<()> {
