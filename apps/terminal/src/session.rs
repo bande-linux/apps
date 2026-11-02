@@ -161,10 +161,13 @@ impl Session {
                 }
                 Ok(read) => {
                     let chunk = &buffer[..read];
-                    for report in self.reports.scan(chunk) {
+                    let mut fed = 0;
+                    for (end, report) in self.reports.scan(chunk) {
+                        self.terminal.feed(&chunk[fed..end]);
+                        fed = end;
                         self.reported(report);
                     }
-                    self.terminal.feed(chunk);
+                    self.terminal.feed(&chunk[fed..]);
                 }
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
@@ -183,14 +186,24 @@ impl Session {
     fn reported(&mut self, report: Report) {
         match report {
             Report::Directory(directory) => self.reported_directory = Some(directory),
-            Report::CommandStarted => {
-                if self.command.is_none() {
-                    let name = self.running_program().unwrap_or_default().to_owned();
-                    self.command = Some((Instant::now(), name));
-                }
+            Report::PromptStarted => self.terminal.mark_output_end(),
+            Report::CommandStarted => self.start_command(),
+            Report::OutputStarted => {
+                self.terminal.mark_output_start();
+                self.start_command();
             }
-            Report::CommandFinished(code) => self.finish_command(code),
+            Report::CommandFinished(code) => {
+                self.terminal.mark_output_end();
+                self.finish_command(code);
+            }
             Report::Notify { title, body } => self.notices.push(Notice::Notify { title, body }),
+        }
+    }
+
+    fn start_command(&mut self) {
+        if self.command.is_none() {
+            let name = self.running_program().unwrap_or_default().to_owned();
+            self.command = Some((Instant::now(), name));
         }
     }
 

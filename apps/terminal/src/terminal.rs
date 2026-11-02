@@ -112,6 +112,7 @@ fn trimmed_url(text: &str) -> &str {
 }
 
 const PROMPT_MARK: &str = "bande-prompt";
+const OUTPUT_END_MARK: &str = "bande-output-end";
 
 const PATH_DELIMITERS: &[char] = &[
     ' ', '\t', '\0', '"', '\'', '`', '(', ')', '[', ']', '{', '}', '<', '>', '|', ',', ';', '=',
@@ -182,6 +183,8 @@ pub struct Terminal {
     urls: Option<RegexSearch>,
     shift: f32,
     options: (CursorShape, usize),
+    shell_marks_output: bool,
+    output_running: bool,
 }
 
 impl Terminal {
@@ -201,6 +204,8 @@ impl Terminal {
             urls: None,
             shift: 0.0,
             options: (CursorShape::Block, SCROLLBACK),
+            shell_marks_output: false,
+            output_running: false,
         }
     }
 
@@ -308,23 +313,57 @@ impl Terminal {
     }
 
     pub fn mark_prompt(&mut self) {
-        let start = self.term.line_search_left(self.term.grid().cursor.point);
-        let cell = &mut self.term.grid_mut()[start.line][Column(0)];
-        if cell.hyperlink().is_none() {
-            cell.set_hyperlink(Some(Hyperlink::new(Some(PROMPT_MARK), String::new())));
+        let cursor = self.term.grid().cursor.point.line;
+        self.mark(cursor, PROMPT_MARK);
+    }
+
+    pub fn mark_output_start(&mut self) {
+        self.output_running = true;
+        if let Some(command) = self.finished_line() {
+            self.mark(command, PROMPT_MARK);
         }
     }
 
-    fn prompt_marks(&self) -> Vec<Line> {
+    pub fn mark_output_end(&mut self) {
+        self.output_running = false;
+        if let Some(output) = self.finished_line() {
+            self.shell_marks_output = true;
+            self.mark(output, OUTPUT_END_MARK);
+        }
+    }
+
+    fn finished_line(&self) -> Option<Line> {
+        let cursor = self.term.grid().cursor.point;
+        let line = match cursor.column.0 {
+            0 => cursor.line - 1,
+            _ => cursor.line,
+        };
+        let shown = !self.term.mode().contains(TermMode::ALT_SCREEN);
+        (shown && line >= self.term.grid().topmost_line()).then_some(line)
+    }
+
+    fn mark(&mut self, line: Line, id: &str) {
+        let start = self.term.line_search_left(GridPoint::new(line, Column(0)));
+        let cell = &mut self.term.grid_mut()[start.line][Column(0)];
+        if cell.hyperlink().is_none() {
+            cell.set_hyperlink(Some(Hyperlink::new(Some(id), String::new())));
+        }
+    }
+
+    fn marks(&self, id: &str) -> Vec<Line> {
         let grid = self.term.grid();
         (grid.topmost_line().0..=grid.bottommost_line().0)
             .map(Line)
             .filter(|line| {
                 grid[*line][Column(0)]
                     .hyperlink()
-                    .is_some_and(|hyperlink| hyperlink.id() == PROMPT_MARK)
+                    .is_some_and(|hyperlink| hyperlink.id() == id)
             })
             .collect()
+    }
+
+    fn prompt_marks(&self) -> Vec<Line> {
+        self.marks(PROMPT_MARK)
     }
 
     pub fn jump_to_prompt(&mut self, older: bool) -> bool {
@@ -357,16 +396,27 @@ impl Terminal {
         let Some(start) = marks.iter().rev().find(|line| **line < anchor).copied() else {
             return false;
         };
-        let end = marks
-            .iter()
-            .find(|line| **line > start)
-            .copied()
-            .unwrap_or(cursor);
-        if end.0 - start.0 < 2 {
+        let next = marks.iter().find(|line| **line > start).copied();
+        let output = self
+            .term
+            .line_search_right(GridPoint::new(start, Column(0)))
+            .line
+            + 1;
+        let reported_end = self
+            .marks(OUTPUT_END_MARK)
+            .into_iter()
+            .find(|line| *line >= output && next.is_none_or(|next| *line < next));
+        let end = match (reported_end, next) {
+            (Some(end), _) => end,
+            (None, Some(_)) if self.shell_marks_output => return false,
+            (None, None) if self.shell_marks_output && !self.output_running => return false,
+            (None, next) => next.unwrap_or(cursor) - 1,
+        };
+        if end < output {
             return false;
         }
-        let first = GridPoint::new(start + 1, Column(0));
-        let last = GridPoint::new(end - 1, self.term.grid().last_column());
+        let first = GridPoint::new(output, Column(0));
+        let last = GridPoint::new(end, self.term.grid().last_column());
         let mut selection = Selection::new(SelectionType::Lines, first, Side::Left);
         selection.update(last, Side::Right);
         self.term.selection = Some(selection);

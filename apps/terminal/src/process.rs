@@ -46,7 +46,9 @@ enum State {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Report {
     Directory(PathBuf),
+    PromptStarted,
     CommandStarted,
+    OutputStarted,
     CommandFinished(Option<i32>),
     Notify { title: String, body: String },
 }
@@ -71,13 +73,13 @@ impl Reports {
         }
     }
 
-    pub fn scan(&mut self, bytes: &[u8]) -> Vec<Report> {
+    pub fn scan(&mut self, bytes: &[u8]) -> Vec<(usize, Report)> {
         let mut reports = Vec::new();
-        for &byte in bytes {
+        for (at, &byte) in bytes.iter().enumerate() {
             self.state = match (self.state, byte) {
                 (State::Body(number), ESCAPE) => State::BodyEscape(number),
                 (State::Body(number), BELL) | (State::BodyEscape(number), b'\\') => {
-                    reports.extend(self.report(number));
+                    reports.extend(self.report(number).map(|report| (at + 1, report)));
                     State::Ground
                 }
                 (_, ESCAPE) => State::Escape,
@@ -103,7 +105,9 @@ impl Reports {
         match number {
             DIRECTORY => self.directory().map(Report::Directory),
             PROMPT_MARKS => match self.body.split_first() {
-                Some((b'B' | b'C', _)) => Some(Report::CommandStarted),
+                Some((b'A', _)) => Some(Report::PromptStarted),
+                Some((b'B', _)) => Some(Report::CommandStarted),
+                Some((b'C', _)) => Some(Report::OutputStarted),
                 Some((b'D', rest)) => {
                     let code = std::str::from_utf8(rest)
                         .ok()
