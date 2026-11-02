@@ -6,7 +6,7 @@
   <name>Software</name>
   <summary>Find and install apps</summary>
   <description>
-    <p>Browse and search the apps Debian and Flathub offer, read about them before installing, and keep apps that need X11 out of the way.</p>
+    <p>Browse and search the apps Debian offers, read about them before installing, and keep apps that need X11 out of the way.</p>
   </description>
   <developer id="org.bande">
     <name>Bande</name>

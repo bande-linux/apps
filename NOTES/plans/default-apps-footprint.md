@@ -66,7 +66,7 @@ greetd, polkitd (bande-polkit), locales (bande-settings).
 
 **Useful, keep**: network-manager (+ modemmanager, ppp, dnsmasq-base come with it), bluez,
 upower, power-profiles-daemon (brings Python 3, 25 MB), udisks2, accountsservice, packagekit,
-appstream, flatpak (bande-software R), at-spi2-core, xdg-user-dirs, systemd-oomd,
+appstream, at-spi2-core, xdg-user-dirs, systemd-oomd,
 systemd-zram-generator, every font (Noto, Inter, Manrope, JetBrains Mono, emoji),
 adwaita-icon-theme (fallback icons, 13 MB), bande-apt-source, apt-config-icons-hidpi, every
 bande-* app and service, bande-screenshot's GStreamer recommends, firefox-esr for now.
@@ -76,6 +76,7 @@ bande-* app and service, bande-screenshot's GStreamer recommends, firefox-esr fo
 | Item | Saves | How |
 |---|---:|---|
 | gnome-calculator | 288 MB from today's install (601 MB on the lean base) | drop from `[debian]`; a Bande Calculator replaces it |
+| flatpak | 14 packages, 18 MB (ostree, libcurl, p11-kit, xdg-dbus-proxy, desktop-file-utils) | dropped from bande-software's Recommends; Software offers Flathub only once the user installs `flatpak`. GnuPG (udisks2 → libvolume-key1 → gpgme), bubblewrap (xdg-desktop-portal, glycin) and dconf (pipewire-pulse) stay as hard dependencies of Debian packages |
 | papers, loupe, gnome-text-editor, showtime | together with the calculator and Firefox, 943 MB on the lean base | drop from `[debian]` as each Bande app lands; showtime only when there is a media stack |
 
 **Replace with Bande code** (later, M): needrestart (57 MB of Perl) with the restart logic in

@@ -15,17 +15,24 @@ use bande_software::{
 };
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 
-static INFO: Info = Info {
+const FLATPAK: &str = "flatpak";
+
+const INFO: Info = Info {
     id: "org.bande.Software",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
     name: || L10N.tr("title"),
     keys: Keys::Standard,
+    settings: None,
+};
+
+const WITH_FLATPAK: Info = Info {
     settings: Some(Settings {
         title: || L10N.tr("settings-title"),
         size: SETTINGS_SIZE,
         view: settings_window,
     }),
+    ..INFO
 };
 
 fn settings_window(appearance: Appearance) -> Box<dyn View> {
@@ -207,5 +214,9 @@ impl Program for Store {
 }
 
 fn main() -> ExitCode {
-    bande_app::run::<Store>(&INFO)
+    let info = match bande_xdg::find_executable(FLATPAK) {
+        Some(_) => &WITH_FLATPAK,
+        None => &INFO,
+    };
+    bande_app::run::<Store>(info)
 }

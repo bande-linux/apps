@@ -54,7 +54,6 @@ flathub-turning-on = Turning on Flathub…
 flathub-turning-off = Turning off Flathub…
 download-with-runtime = { $size }, and { $runtime_size } for the { $runtime } runtime
 remove-runtimes = Runtimes that no other app uses are removed with it.
-problem-no-flatpak = Installing apps from Flathub needs Flatpak, which isn’t installed.
 permissions = Permissions
 permission-none = Runs in a sandbox with no access beyond its own files.
 permission-network = Uses the network

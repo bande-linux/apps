@@ -289,7 +289,6 @@ fn problem_text(problem: Problem, task: Task, name: &str) -> String {
         (Problem::SystemPackage, _) => "problem-system-package",
         (Problem::Unsigned, _) => "problem-unsigned",
         (Problem::NoPackageKit, _) => "problem-no-packagekit",
-        (Problem::NoFlatpak, _) => "problem-no-flatpak",
         (Problem::NeedsX11, _) => "needs-x11",
         (Problem::Other | Problem::Cancelled, Task::Install) => "install-failed",
         (Problem::Other | Problem::Cancelled, Task::Remove) => "remove-failed",
@@ -342,7 +341,7 @@ pub struct Software {
     flatpaks: HashMap<String, Installed>,
     flathub: bool,
     flathub_wanted: Option<bool>,
-    flathub_busy: Option<Progress>,
+    flathub_busy: bool,
     flathub_failure: Option<Failure>,
     chosen: HashMap<String, Source>,
     icons: HashMap<String, Option<Image>>,
@@ -435,7 +434,7 @@ impl Software {
             flatpaks: HashMap::new(),
             flathub: false,
             flathub_wanted,
-            flathub_busy: None,
+            flathub_busy: false,
             flathub_failure: None,
             chosen: HashMap::new(),
             icons: HashMap::new(),
@@ -552,7 +551,7 @@ impl Software {
             return;
         }
         self.flathub_failure = None;
-        self.flathub_busy = Some(Progress::default());
+        self.flathub_busy = true;
         self.send(Job::Flathub(wanted));
     }
 
@@ -852,9 +851,8 @@ impl Software {
             Message::FlatpakDetails(key, facts) => {
                 self.flatpak_facts.insert(key, facts);
             }
-            Message::FlathubProgress(progress) => self.flathub_busy = Some(progress),
             Message::Flathub(result) => {
-                self.flathub_busy = None;
+                self.flathub_busy = false;
                 match result {
                     Ok(on) => {
                         self.flathub = on;
@@ -1219,10 +1217,9 @@ impl Software {
     }
 
     fn flathub_status(&self) -> Widgets {
-        if let Some(progress) = &self.flathub_busy {
-            let id = match (self.flathub_wanted, progress.status) {
-                (_, Status::Authorizing) => "status-authorizing",
-                (Some(false), _) => "flathub-turning-off",
+        if self.flathub_busy {
+            let id = match self.flathub_wanted {
+                Some(false) => "flathub-turning-off",
                 _ => "flathub-turning-on",
             };
             return vec![row(vec![
