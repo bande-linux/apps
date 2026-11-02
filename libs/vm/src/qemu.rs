@@ -13,6 +13,13 @@ const FIRMWARE_VARS: &str = "/usr/share/AAVMF/AAVMF_VARS.fd";
 const MIB: u64 = 1024 * 1024;
 const OVERHEAD_MIB: u64 = 512;
 const TRANSLATION_CACHE_MIB: u64 = 256;
+const REQUIRED: [(&str, &str); 5] = [
+    ("qemu-system-aarch64", "qemu-system-arm"),
+    ("qemu-img", "qemu-utils"),
+    ("passt", "passt"),
+    (FIRMWARE_CODE, "qemu-efi-aarch64"),
+    (FIRMWARE_VARS, "qemu-efi-aarch64"),
+];
 const SANDBOX: &str = "on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,23 +49,26 @@ impl Accel {
 
 impl Host {
     pub fn detect() -> Result<Self> {
-        let tool = |program: &str, package: &str| {
-            find_executable(program).ok_or_else(|| Error::Missing(package.into()))
-        };
-        let firmware = |path: &str| {
-            let path = PathBuf::from(path);
-            path.is_file()
-                .then_some(path)
-                .ok_or_else(|| Error::Missing("qemu-efi-aarch64".into()))
-        };
+        let [qemu, qemu_img, passt, firmware_code, firmware_vars] =
+            REQUIRED.map(|(path, package)| locate(path).ok_or(Error::Missing(package.into())));
         Ok(Self {
-            qemu: tool("qemu-system-aarch64", "qemu-system-arm")?,
-            qemu_img: tool("qemu-img", "qemu-utils")?,
-            passt: tool("passt", "passt")?,
-            firmware_code: firmware(FIRMWARE_CODE)?,
-            firmware_vars: firmware(FIRMWARE_VARS)?,
+            qemu: qemu?,
+            qemu_img: qemu_img?,
+            passt: passt?,
+            firmware_code: firmware_code?,
+            firmware_vars: firmware_vars?,
             accel: Accel::detect(),
         })
+    }
+
+    pub fn missing_packages() -> Vec<&'static str> {
+        let mut missing: Vec<&'static str> = REQUIRED
+            .iter()
+            .filter(|(path, _)| locate(path).is_none())
+            .map(|(_, package)| *package)
+            .collect();
+        missing.dedup();
+        missing
     }
 
     pub fn memory_max(&self, machine: &Machine) -> u64 {
@@ -222,6 +232,13 @@ impl Host {
             status: output.status,
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         })
+    }
+}
+
+fn locate(path: &str) -> Option<PathBuf> {
+    match path.starts_with('/') {
+        true => Some(PathBuf::from(path)).filter(|path| path.is_file()),
+        false => find_executable(path),
     }
 }
 
