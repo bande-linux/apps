@@ -9,7 +9,7 @@ views. Packaged as `bande-calendar`.
 - **Accounts.** CalDAV (RFC 4791) with discovery: a full URL, a host name or just an e-mail
   address. It tries `_caldavs._tcp` DNS SRV records, `/.well-known/caldav`, then
   `current-user-principal` → `calendar-home-set` → the calendars in the home set. Passwords go to
-  the Secret Service (gnome-keyring), never to disk, and are sent only over HTTPS (or to this
+  the Secret Service (the Bande keychain), never to disk, and are sent only over HTTPS (or to this
   computer, for a local server). Several accounts, plus a local calendar. The account sheet
   has iCloud, Fastmail, Google and Nextcloud presets that fill in the server and say which
   password to use (Google needs OAuth, so it offers a subscription to the calendar's secret

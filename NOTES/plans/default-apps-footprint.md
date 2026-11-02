@@ -35,7 +35,6 @@ An item's dependencies that other items share are counted for each of them.
 | papers | bande-desktop R | 59, 153 MB | GTK4, libadwaita, libnautilus-extension, poppler, djvu, spelling |
 | gnome-clocks | bande-desktop S | 51, 132 MB | GTK4, libadwaita, libgweather, geoclue, GStreamer (not installed by default) |
 | gnome-text-editor | bande-desktop R | 48, 115 MB | GTK4, libadwaita, GtkSourceView, ICU, enchant/hunspell/aspell |
-| gnome-keyring + libpam-gnome-keyring | bande-desktop R | 50, 111 MB | `gcr` → both GTK3 and GTK4 (through `gcr4`, `pinentry-gnome3`) |
 | loupe | bande-desktop R | 37, 93 MB | GTK4, libadwaita, libgweather (22 MB of locations, for the photo location) |
 | showtime | bande-desktop R | 46, 65 MB | GTK4 via PyGObject, Python, gst-gtk4 (GStreamer core is already in the base, below) |
 | needrestart | bande-desktop R | 14, 57 MB | Perl |
@@ -79,9 +78,9 @@ bande-* app and service, bande-screenshot's GStreamer recommends, firefox-esr fo
 | gnome-calculator | 288 MB from today's install (601 MB on the lean base) | drop from `[debian]`; a Bande Calculator replaces it |
 | papers, loupe, gnome-text-editor, showtime | together with the calculator and Firefox, 943 MB on the lean base | drop from `[debian]` as each Bande app lands; showtime only when there is a media stack |
 
-**Replace with Bande code** (later, M each): gnome-keyring (111 MB, GTK3+GTK4 through gcr) with
-a Bande Secret Service (with PAM unlock from the greeter); needrestart (57 MB of Perl) with the
-restart logic in Software Update (PackageKit plus `/proc/*/maps` deleted-file scan).
+**Replace with Bande code** (later, M): needrestart (57 MB of Perl) with the restart logic in
+Software Update (PackageKit plus `/proc/*/maps` deleted-file scan). gnome-keyring is replaced by
+the Bande keychain (`bande-secrets`).
 
 The lean base (every cut, no Firefox, no cups): 477 packages, 1.31 GB, no GTK, Qt, libadwaita, GNOME apps, X11 tools or
 WebKit. Left from those stacks: GLib, gdk-pixbuf/glycin (through librsvg for the icon theme),

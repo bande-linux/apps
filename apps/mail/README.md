@@ -34,7 +34,7 @@ apt install bande-mail
 - **Security.** IMAP and SMTP use TLS or STARTTLS, verified against the system's certificate
   store. Plain text is refused for anything but this computer (`localhost`, `127.0.0.1`, `::1`),
   so a local bridge or test server still works. Passwords live in the Secret Service
-  (gnome-keyring), under `application=org.bande.Mail`, never in a file.
+  (the Bande keychain), under `application=org.bande.Mail`, never in a file.
 - **Window.** The sidebar lists Inbox, Flagged, Drafts, Sent, Archive, Junk and Trash across all
   accounts, then each account's folders with unread counts. The list shows sender, subject, a
   preview (two lines unless Settings says otherwise), the date, an unread dot, a flag and a

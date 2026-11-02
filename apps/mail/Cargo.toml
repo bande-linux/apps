@@ -45,7 +45,7 @@ copyright = "2026 Mikael Hug"
 section = "mail"
 priority = "optional"
 depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
-recommends = "gnome-keyring"
+recommends = "bande-secrets | org.freedesktop.secrets"
 extended-description = """\
 Mail for the Bande desktop, in three panes as in macOS Mail: mailboxes \
 and a unified Inbox, the message list, and the reader. It speaks IMAP and \
