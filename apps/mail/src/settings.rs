@@ -13,6 +13,7 @@ pub struct MailSettings {
     pub sound: bool,
     pub load_remote: bool,
     pub preview_lines: u8,
+    pub conversations: bool,
     pub quote: bool,
     pub send_from: String,
 }
@@ -24,6 +25,7 @@ impl Default for MailSettings {
             sound: true,
             load_remote: false,
             preview_lines: 2,
+            conversations: true,
             quote: true,
             send_from: String::new(),
         }
@@ -47,6 +49,9 @@ impl Stored for MailSettings {
                         .filter(|lines| *lines <= MAX_PREVIEW_LINES)
                         .unwrap_or(settings.preview_lines);
                 }
+                "conversations" => {
+                    settings.conversations = flag(value).unwrap_or(settings.conversations);
+                }
                 "quote" => settings.quote = flag(value).unwrap_or(settings.quote),
                 "send-from" => settings.send_from = value.to_owned(),
                 _ => {}
@@ -57,11 +62,12 @@ impl Stored for MailSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nquote = {}\nsend-from = {}\n",
+            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nquote = {}\nsend-from = {}\n",
             self.notify,
             self.sound,
             self.load_remote,
             self.preview_lines,
+            self.conversations,
             self.quote,
             self.send_from.trim(),
         )

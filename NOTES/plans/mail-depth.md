@@ -20,7 +20,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Viewing | Remote content off by default | Have: blocked until Load Remote Content, or always loaded when turned on in Viewing |
 | Viewing | Privacy protection (hide IP) | Partly: remote pictures only over HTTPS, capped; no proxy, so loading reveals the IP |
 | Viewing | List preview lines | Have: None to 5 lines |
-| Viewing | Threading (conversations) | Missing |
+| Viewing | Threading (conversations) | Have: one row per conversation with a count, expanded in place; on by default |
 | Composing | Message format (rich text) | Plain text only |
 | Composing | Quote original, default send account | Have: quote toggle, "Send new messages from" |
 | Composing | Check spelling | Missing (no desktop spell service) |
@@ -35,7 +35,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Mailboxes and folders | Have: read all folders, Move To any mailbox of the account, drag onto a mailbox, New/Rename/Delete Mailbox |
 | Flags | One flag; no colours |
 | Search | Local, over sender, recipients, subject and text; no server search or tokens |
-| Threads | Missing |
+| Threads | Grouped by the first References entry; the reader shows one message at a time, and Sent replies from other mailboxes are not pulled in |
 | Attachments | Show, open (private copy), Save Attachment…, Save to Downloads Folder, add from the portal; no Save All, no Quick Look |
 | Reply / forward | Have, with threading headers |
 | Drafts | Kept in Drafts when a message window closes or Mail quits; a local copy is saved while typing and reopens after a crash or an offline quit |
@@ -46,7 +46,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 ## Remaining, ranked by how much users rely on it
 
 1. Redo and more than one level of Undo; dragging messages out to other apps.
-2. Conversations (threads) in the list and the reader.
+2. Conversations: show the whole conversation in the reader and include replies from Sent; group by subject when References are missing.
 3. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses passwords.
 4. Sort order, flag colours (Mark All as Read is in the Mailbox menu).
 5. Rules (move/flag/mark by sender, subject, account).

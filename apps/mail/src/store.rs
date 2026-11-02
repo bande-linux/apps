@@ -128,6 +128,7 @@ pub struct Summary {
     pub flags: Flags,
     pub attachments: bool,
     pub downloaded: bool,
+    pub thread: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -183,7 +184,7 @@ fn account_from(row: &Row<'_>) -> rusqlite::Result<Account> {
 
 const SUMMARY_COLUMNS: &str = "m.id, m.mailbox, b.account, m.uid, m.subject, m.sender_name, \
     m.sender_email, m.date, m.preview, m.seen, m.flagged, m.answered, m.deleted, m.draft, \
-    m.attachments, m.body IS NOT NULL";
+    m.attachments, m.body IS NOT NULL, m.thread";
 
 fn summary_from(row: &Row<'_>) -> rusqlite::Result<Summary> {
     Ok(Summary {
@@ -207,7 +208,16 @@ fn summary_from(row: &Row<'_>) -> rusqlite::Result<Summary> {
         },
         attachments: row.get(14)?,
         downloaded: row.get(15)?,
+        thread: row.get(16)?,
     })
+}
+
+fn thread_of(envelope: &Envelope) -> Option<String> {
+    envelope
+        .references
+        .first()
+        .or(envelope.message_id.as_ref())
+        .cloned()
 }
 
 fn like_pattern(search: &str) -> String {
@@ -258,6 +268,22 @@ impl Store {
                 "ALTER TABLE accounts ADD COLUMN signature TEXT NOT NULL DEFAULT ''; \
                  PRAGMA user_version = 1;",
             )?;
+        }
+        if version < 2 {
+            migration.execute_batch("ALTER TABLE messages ADD COLUMN thread TEXT;")?;
+            let headers = migration
+                .prepare("SELECT id, header FROM messages")?
+                .query_map([], |row| {
+                    Ok((row.get::<_, MessageId>(0)?, row.get::<_, Vec<u8>>(1)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            for (id, header) in headers {
+                migration.execute(
+                    "UPDATE messages SET thread = ?2 WHERE id = ?1",
+                    params![id, thread_of(&Envelope::parse(&header))],
+                )?;
+            }
+            migration.execute_batch("PRAGMA user_version = 2;")?;
         }
         migration.commit()?;
         Ok(Self { connection })
@@ -471,8 +497,8 @@ impl Store {
             let date = envelope.date.or(message.internal_date).unwrap_or_default();
             transaction.execute(
                 "INSERT INTO messages (mailbox, uid, message_id, subject, sender_name, sender_email, \
-                 recipients, date, size, seen, flagged, answered, deleted, draft, header) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15) \
+                 recipients, date, size, seen, flagged, answered, deleted, draft, header, thread) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) \
                  ON CONFLICT (mailbox, uid) DO NOTHING",
                 params![
                     mailbox,
@@ -493,6 +519,7 @@ impl Store {
                     flags.deleted,
                     flags.draft,
                     header,
+                    thread_of(&envelope),
                 ],
             )?;
         }

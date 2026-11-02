@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::os::fd::BorrowedFd;
 use std::os::unix::fs::DirBuilderExt;
@@ -82,6 +83,7 @@ pub enum Request {
 pub enum Hit {
     Place(usize),
     Message(MessageId),
+    Conversation(MessageId),
     Link(String),
     Attachment(usize),
     LoadRemote,
@@ -91,6 +93,66 @@ pub enum Hit {
 pub(crate) enum Pane {
     Sidebar,
     List,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct Conversations {
+    pub(crate) earlier: HashMap<MessageId, (String, Vec<Summary>)>,
+    pub(crate) children: HashSet<MessageId>,
+    expanded: HashSet<String>,
+}
+
+impl Conversations {
+    fn group(&mut self, all: Vec<Summary>) -> Vec<Summary> {
+        self.earlier.clear();
+        self.children.clear();
+        let mut order: Vec<Vec<Summary>> = Vec::new();
+        let mut index: HashMap<String, usize> = HashMap::new();
+        for summary in all {
+            match summary
+                .thread
+                .clone()
+                .and_then(|key| index.get(&key).copied())
+            {
+                Some(group) => order[group].push(summary),
+                None => {
+                    if let Some(key) = summary.thread.clone() {
+                        index.insert(key, order.len());
+                    }
+                    order.push(vec![summary]);
+                }
+            }
+        }
+        let mut shown = Vec::new();
+        for mut group in order {
+            let head = group.remove(0);
+            let key = head.thread.clone().unwrap_or_default();
+            if !group.is_empty() {
+                if self.expanded.contains(&key) {
+                    self.children.extend(group.iter().map(|summary| summary.id));
+                    shown.push(head.clone());
+                    shown.extend(group.iter().cloned());
+                } else {
+                    shown.push(head.clone());
+                }
+                self.earlier.insert(head.id, (key, group));
+            } else {
+                shown.push(head);
+            }
+        }
+        shown
+    }
+
+    pub(crate) fn collapsed(&self, id: MessageId) -> Option<&[Summary]> {
+        self.earlier
+            .get(&id)
+            .filter(|(key, _)| !self.expanded.contains(key))
+            .map(|(_, earlier)| earlier.as_slice())
+    }
+
+    pub(crate) fn count(&self, id: MessageId) -> Option<usize> {
+        self.earlier.get(&id).map(|(_, earlier)| earlier.len() + 1)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -153,6 +215,7 @@ pub struct MailView {
     undo: Vec<Moved>,
     undoing: Vec<Moved>,
     pub(crate) drag: Option<Drag>,
+    pub(crate) conversations: Conversations,
 }
 
 fn keyring_password(email: String, host: String) -> crate::worker::PasswordSource {
@@ -207,6 +270,7 @@ impl MailView {
             undo: Vec::new(),
             undoing: Vec::new(),
             drag: None,
+            conversations: Conversations::default(),
         };
         view.insert_toolbar();
         view.ui.set_sheet_top(TOOLBAR_HEIGHT);
@@ -235,8 +299,33 @@ impl MailView {
     }
 
     pub fn set_settings(&mut self, settings: MailSettings) {
+        let regroup = settings.conversations != self.settings.conversations;
         self.settings = settings;
         self.layout = None;
+        if regroup {
+            self.reload();
+        }
+    }
+
+    pub fn toggle_conversation(&mut self, id: MessageId) -> bool {
+        let head = self
+            .conversations
+            .earlier
+            .iter()
+            .find(|(head, (_, earlier))| {
+                **head == id || earlier.iter().any(|summary| summary.id == id)
+            })
+            .map(|(head, (key, _))| (*head, key.clone()));
+        let Some((head, key)) = head else {
+            return false;
+        };
+        if !self.conversations.expanded.remove(&key) {
+            self.conversations.expanded.insert(key);
+        } else if self.selected != Some(head) && self.is_chosen(id) {
+            self.select(head);
+        }
+        self.reload();
+        true
     }
 
     pub fn accounts_changed(&mut self) {
@@ -344,7 +433,9 @@ impl MailView {
 
     pub fn cursor(&self) -> Cursor {
         match self.hover {
-            Some(Hit::Link(_) | Hit::Attachment(_) | Hit::LoadRemote) => Cursor::Pointer,
+            Some(Hit::Link(_) | Hit::Attachment(_) | Hit::LoadRemote | Hit::Conversation(_)) => {
+                Cursor::Pointer
+            }
             _ => self.ui.cursor(),
         }
     }
@@ -426,10 +517,20 @@ impl MailView {
         if !exists {
             self.place = Place::All(Role::Inbox);
         }
-        self.messages = self
+        let all = self
             .store
             .summaries(&self.place.scope(), &self.search)
             .unwrap_or_default();
+        self.messages = match self.settings.conversations {
+            true => self.conversations.group(all),
+            false => {
+                self.conversations = Conversations {
+                    expanded: std::mem::take(&mut self.conversations.expanded),
+                    ..Conversations::default()
+                };
+                all
+            }
+        };
         let messages = &self.messages;
         self.also
             .retain(|id| messages.iter().any(|summary| summary.id == *id));
@@ -477,8 +578,13 @@ impl MailView {
         self.focus = Pane::List;
         self.scrolls[2] = ScrollState::default();
         self.load_reading(&summary);
-        if !summary.flags.seen {
-            self.set_flag_on(&[id], Flag::Seen, true);
+        let unread = std::iter::once(&summary)
+            .chain(self.conversations.collapsed(id).unwrap_or_default())
+            .filter(|summary| !summary.flags.seen)
+            .map(|summary| summary.id)
+            .collect::<Vec<_>>();
+        if !unread.is_empty() {
+            self.set_flag_on(&unread, Flag::Seen, true);
         }
         self.reveal_selected();
     }
@@ -525,7 +631,15 @@ impl MailView {
         self.messages
             .iter()
             .filter(|summary| self.is_chosen(summary.id))
-            .cloned()
+            .flat_map(|summary| {
+                std::iter::once(summary.clone()).chain(
+                    self.conversations
+                        .collapsed(summary.id)
+                        .unwrap_or_default()
+                        .iter()
+                        .cloned(),
+                )
+            })
             .collect()
     }
 
@@ -571,9 +685,15 @@ impl MailView {
             Ok(accounts) => self.flush(&accounts),
             Err(error) => tracing::warn!("cannot change a flag: {error}"),
         }
+        let earlier = self
+            .conversations
+            .earlier
+            .values_mut()
+            .flat_map(|(_, earlier)| earlier.iter_mut());
         for summary in self
             .messages
             .iter_mut()
+            .chain(earlier)
             .filter(|summary| ids.contains(&summary.id))
         {
             match flag {
@@ -1695,6 +1815,22 @@ impl MailView {
             }
             Key::Up if plain && modifiers.shift => self.extend(-1),
             Key::Down if plain && modifiers.shift => self.extend(1),
+            Key::Right | Key::Left if plain && !modifiers.shift => {
+                let expanded = self.selected.is_some_and(|id| {
+                    self.conversations.children.contains(&id)
+                        || self
+                            .conversations
+                            .earlier
+                            .get(&id)
+                            .is_some_and(|(key, _)| self.conversations.expanded.contains(key))
+                });
+                match (key == Key::Right, expanded, self.selected) {
+                    (true, false, Some(id)) | (false, true, Some(id)) => {
+                        self.toggle_conversation(id)
+                    }
+                    _ => false,
+                }
+            }
             Key::Up if plain => self.step(-1),
             Key::Down if plain => self.step(1),
             Key::Backspace | Key::Delete => {
@@ -1819,6 +1955,9 @@ impl MailView {
                     self.requests
                         .push(Request::ShowMenu(menu, pointer.position));
                 }
+            }
+            Hit::Conversation(id) => {
+                self.toggle_conversation(id);
             }
             Hit::Link(url) => self.requests.push(Request::OpenLink(url)),
             Hit::Attachment(index) if secondary => {
