@@ -17,9 +17,11 @@ bande-app-menu.workspace = true
 bande-l10n.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
-web-content.workspace = true
-web-net.workspace = true
+web-host.workspace = true
+web-netd.workspace = true
 web-paint.workspace = true
+web-renderer.workspace = true
+zbus.workspace = true
 
 [lints]
 workspace = true
@@ -34,6 +36,8 @@ A web browser built on Bande's own web engine, written from scratch in \
 Rust: private by default, no telemetry, no ads."""
 assets = [
     ["target/release/bande-browser", "usr/bin/", "755"],
+    ["target/release/bande-browser-renderer", "usr/libexec/bande-browser/", "755"],
+    ["target/release/bande-browser-network", "usr/libexec/bande-browser/", "755"],
     ["data/org.bande.Browser.desktop", "usr/share/applications/", "644"],
     ["data/org.bande.Browser.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Browser.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],

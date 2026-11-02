@@ -6,8 +6,8 @@ use bande_toolkit::ui::{
     Context, Cursor, Event, Key, PointerButton, ScrollState, Size, Widget, WidgetId,
 };
 use bande_toolkit::{Color, Item, Point, Rect, Shape, TextAlign, TextStyle};
-use web_content::Viewport;
-use web_net::Url;
+use web_host::Url;
+use web_host::Viewport;
 use web_paint::DisplayList;
 
 use crate::L10N;
@@ -23,6 +23,9 @@ const MESSAGE_WIDTH: f32 = 560.0;
 const CANVAS: Color = Color::WHITE;
 const TEXT: Color = Color::hex(0x202122);
 const SECONDARY: Color = Color::hex(0x54595d);
+const BUTTON: Color = Color::hex(0xeaecf0);
+const BUTTON_PADDING: f32 = 14.0;
+const BUTTON_RADIUS: f32 = 8.0;
 
 pub(crate) enum Content {
     Blank,
@@ -35,6 +38,7 @@ pub(crate) enum Content {
         url: Url,
         kind: String,
     },
+    Crashed(Url),
     Document {
         list: Arc<DisplayList>,
         links: Arc<Links>,
@@ -55,6 +59,8 @@ pub(crate) struct PageView {
     jump: Option<f32>,
     pressed: Option<Point>,
     followed: Option<Url>,
+    reload: Option<Rect>,
+    reload_pressed: bool,
     hovered: Option<(f32, f32)>,
     shown_offset: Cell<f32>,
 }
@@ -75,6 +81,8 @@ impl PageView {
             jump: None,
             pressed: None,
             followed: None,
+            reload: None,
+            reload_pressed: false,
             hovered: None,
             shown_offset: Cell::new(0.0),
         }
@@ -135,6 +143,21 @@ impl PageView {
         self.followed.take()
     }
 
+    pub(crate) fn take_reload(&mut self) -> bool {
+        std::mem::take(&mut self.reload_pressed)
+    }
+
+    fn reload_at(&self, point: Point) -> bool {
+        let x = point.x - self.frame.x;
+        let y = point.y - self.frame.y + self.shown_offset.get();
+        self.reload.is_some_and(|button| {
+            x >= button.x
+                && y >= button.y
+                && x < button.x + button.width
+                && y < button.y + button.height
+        })
+    }
+
     pub(crate) fn set_radius(&mut self, radius: f32) {
         self.radius = radius;
     }
@@ -152,6 +175,7 @@ impl PageView {
     fn lay_out(&mut self, cx: &mut Context, width: f32) {
         self.laid_out_width = Some(width);
         self.message.clear();
+        self.reload = None;
         self.tiles = None;
         if let Content::Document { list, .. } = &self.content {
             let tiles = Tiles::new(Arc::clone(list), &mut self.images);
@@ -174,6 +198,30 @@ impl PageView {
             });
             y += height + size * 0.6;
         }
+        if matches!(self.content, Content::Crashed(_)) {
+            let label = cx.text.paragraph(
+                &L10N.tr("reload"),
+                TextStyle::new(BODY_SIZE, TEXT).weight(TextStyle::SEMIBOLD),
+                None,
+                TextAlign::Start,
+            );
+            let button = Rect::new(
+                (width - label.painted_width()) / 2.0 - BUTTON_PADDING,
+                y,
+                label.painted_width() + 2.0 * BUTTON_PADDING,
+                label.height() + BUTTON_PADDING,
+            );
+            self.message.push(Item::Fill {
+                shape: Shape::rounded(button, BUTTON_RADIUS),
+                paint: BUTTON.into(),
+            });
+            self.message.push(Item::Text {
+                origin: Point::new(button.x + BUTTON_PADDING, y + BUTTON_PADDING / 2.0),
+                paragraph: label,
+            });
+            self.reload = Some(button);
+            y += button.height + BODY_SIZE;
+        }
         self.height = y + MARGIN;
     }
 
@@ -193,6 +241,11 @@ impl PageView {
             Content::Unsupported { url, kind } => vec![
                 title(L10N.tr("cannot-show")),
                 body(kind.clone(), TEXT),
+                body(url.to_string(), SECONDARY),
+            ],
+            Content::Crashed(url) => vec![
+                title(L10N.tr("page-crashed")),
+                body(L10N.tr("page-crashed-body"), TEXT),
                 body(url.to_string(), SECONDARY),
             ],
         }
@@ -230,6 +283,10 @@ impl PageView {
                     (pressed.x - pointer.position.x).abs() + (pressed.y - pointer.position.y).abs();
                 if moved > 4.0 {
                     return false;
+                }
+                if self.reload_at(pointer.position) {
+                    self.reload_pressed = true;
+                    return true;
                 }
                 self.followed = self.link_at(pointer.position).cloned();
                 self.followed.is_some()
@@ -329,9 +386,11 @@ impl Widget for PageView {
     }
 
     fn cursor(&self, point: Point) -> Option<Cursor> {
-        Some(match self.link_at(point) {
-            Some(_) => Cursor::Pointer,
-            None => Cursor::Default,
-        })
+        Some(
+            match self.link_at(point).is_some() || self.reload_at(point) {
+                true => Cursor::Pointer,
+                false => Cursor::Default,
+            },
+        )
     }
 }

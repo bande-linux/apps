@@ -1,4 +1,4 @@
-use web_net::Url;
+use web_host::Url;
 
 const SEARCH: &str = "https://html.duckduckgo.com/html/";
 

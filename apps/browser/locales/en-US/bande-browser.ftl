@@ -23,3 +23,5 @@ show-tab = Show Tab
 show-last-tab = Show Last Tab
 private-placeholder = Search or enter website name (Private)
 private-browsing = Private Browsing
+page-crashed = This page crashed
+page-crashed-body = Something on the page stopped Browser from showing it. Reload to try again.

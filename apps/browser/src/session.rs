@@ -1,4 +1,4 @@
-use web_net::Url;
+use web_host::Url;
 
 use crate::view::SavedWindow;
 

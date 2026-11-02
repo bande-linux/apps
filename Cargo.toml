@@ -60,9 +60,10 @@ bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "44f8be2
 bande-watch = { git = "https://github.com/bande-linux/desktop", rev = "44f8be26a3746faa979f90ae2280c6006126fd56" }
 bande-volumes = { git = "https://github.com/bande-linux/desktop", rev = "44f8be26a3746faa979f90ae2280c6006126fd56" }
 bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "44f8be26a3746faa979f90ae2280c6006126fd56" }
-web-content = { git = "https://github.com/bande-linux/web", rev = "be24d08ae88fa523dd40d915c509f2fff356a44d" }
-web-net = { git = "https://github.com/bande-linux/web", rev = "be24d08ae88fa523dd40d915c509f2fff356a44d" }
-web-paint = { git = "https://github.com/bande-linux/web", rev = "be24d08ae88fa523dd40d915c509f2fff356a44d" }
+web-host = { git = "https://github.com/bande-linux/web", rev = "685781f1d242c3d8cfe560988502db1f3fe86d62" }
+web-netd = { git = "https://github.com/bande-linux/web", rev = "685781f1d242c3d8cfe560988502db1f3fe86d62" }
+web-paint = { git = "https://github.com/bande-linux/web", rev = "685781f1d242c3d8cfe560988502db1f3fe86d62" }
+web-renderer = { git = "https://github.com/bande-linux/web", rev = "685781f1d242c3d8cfe560988502db1f3fe86d62" }
 
 
 [workspace.lints.clippy]

@@ -12,11 +12,11 @@ use bande_toolkit::{
     Appearance, FrameRegions, Header, Image, Item, Point, Radius, Rect, SHEET_INSET, Scene, Shape,
     TextSystem, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent, window_controls_end,
 };
-use web_content::Viewport;
-use web_net::Url;
+use web_host::Url;
+use web_host::Viewport;
 
 use crate::page::{Content, PageView};
-use crate::renderer::{Command, Link, LoadId, Outcome, Session, Update, ViewId};
+use crate::renderer::{Command, Link, LoadId, Outcome, Session, Update, Verdict, ViewId};
 use crate::{L10N, address};
 
 const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
@@ -529,6 +529,17 @@ impl BrowserView {
             Outcome::Scroll(y) if Some(update.load) == shown => {
                 self.with_page(index, |page| page.jump_to(y));
             }
+            Outcome::Crashed { url } if Some(update.load) == shown => {
+                if let Some(tab) = self.tabs.get_mut(index) {
+                    tab.shown = None;
+                }
+                self.with_page(index, |page| page.show(Content::Crashed(url)));
+                self.refresh_navigation();
+            }
+            Outcome::Paused(paused) => self.renderer.send(Command::Resume {
+                request: paused.request,
+                verdict: Verdict::Continue,
+            }),
             outcome if Some(update.load) == pending => self.commit(index, update.load, outcome),
             _ => {}
         }
@@ -558,7 +569,11 @@ impl BrowserView {
                 tab.shown = None;
                 (url.clone(), None, Content::Unsupported { url, kind }, None)
             }
-            Outcome::Relaid(..) | Outcome::Scroll(_) => return,
+            Outcome::Crashed { url } => {
+                tab.shown = None;
+                (url.clone(), None, Content::Crashed(url), None)
+            }
+            Outcome::Relaid(..) | Outcome::Scroll(_) | Outcome::Paused(_) => return,
         };
         let restored = match pending.target {
             Target::New => {
@@ -768,6 +783,12 @@ impl BrowserView {
         let index = self.active;
         if let Some(url) = self.with_page(index, PageView::take_followed).flatten() {
             self.follow(url);
+        }
+        if self
+            .with_page(index, PageView::take_reload)
+            .unwrap_or(false)
+        {
+            self.reload();
         }
         let hovered = self.with_page(index, PageView::take_hovered).flatten();
         if let (Some((x, y)), Some(tab)) = (hovered, self.tabs.get(index))

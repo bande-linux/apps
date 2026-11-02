@@ -15,7 +15,7 @@ use std::sync::LazyLock;
 use bande_app::{Cx, Detached, Info, Keys, Kind, Menus, Program, TabCarry, TabDrop, WindowId};
 use bande_app_menu::Entry;
 use bande_l10n::Localizer;
-use web_net::Url;
+use web_host::Url;
 
 use crate::renderer::{Renderer, Session};
 use crate::view::{Ask, BrowserView, CarriedTab, SavedWindow};
@@ -206,7 +206,7 @@ impl Program for Browser {
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let mut browser = Self {
-            renderer: Renderer::new()?,
+            renderer: renderer::start()?,
             ids: Rc::default(),
             next_private: 0,
             carry: TabCarry::default(),
