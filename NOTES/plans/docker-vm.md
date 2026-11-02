@@ -72,11 +72,12 @@ Calendar's and Mail's `worker.rs`.
 | `engine/socket.rs` | socket order: `DOCKER_HOST`, the context in `~/.docker/config.json`, `$XDG_RUNTIME_DIR/docker.sock`, `$XDG_RUNTIME_DIR/podman/podman.sock`, `/run/docker.sock`, `/run/podman/podman.sock` |
 | `engine/client.rs` | typed Engine API (serde): containers, images, volumes, networks, `system/df`, `info`, `version`, pull progress, stats, logs |
 | `engine/informer.rs` | one `/events` stream; full re-list on every (re)connect; a store keyed by id that the views read |
+| `vm/*` below | **built as the crate `bande-vm` in `libs/vm`** (V0, 2026-11-02): `Library`/`Machine`/`Manifest`, `Host` (argv), `Units`, `Qmp`, `ImageStore` + `catalog()`, `CloudInit`; the app's `vm/` keeps only the jobs and views |
 | `vm/manifest.rs` | versioned JSON per VM, durable (temp + fsync + rename); corrupt JSON fails loudly |
-| `vm/qemu.rs` | argv builder: `virt,gic-version=3`, `-cpu host`, AAVMF code + vars as **qcow2**, virtio-blk `cache=none,aio=io_uring,discard=unmap`, virtio-rng, passt NIC, guest-agent channel, `-sandbox on`, `-display dbus,p2p=yes` |
-| `vm/unit.rs` | a transient systemd **user** unit per VM (`StartTransientUnit` over zbus) with `MemoryMax`, `CPUQuota`, `NoNewPrivileges`; lifecycle from `PropertiesChanged`; VMs outlive the app |
+| `vm/qemu.rs` | argv builder: `virt,gic-version=3`, `-cpu host`, AAVMF code + vars as **qcow2**, virtio-blk `cache=none,aio=io_uring,discard=unmap`, virtio-rng, passt NIC, guest-agent channel, `-sandbox on`, `-display dbus,p2p=yes` (V3; `-display none` until then) |
+| `vm/unit.rs` | a transient systemd **user** unit per VM (`StartTransientUnit` over zbus) with `MemoryMax`, `CPUQuota`, `NoNewPrivileges`; lifecycle from `PropertiesChanged`; VMs outlive the app. passt runs in a second aux unit (`velox-vm-<id>-network.service`, `Type=forking`, `StopWhenUnneeded`) that the VM unit `Requires`/`After` |
 | `vm/qmp.rs` | one QMP client: events (`STOP`, `RESUME`, `SHUTDOWN`, `JOB_STATUS_CHANGE`) and commands; a second `-qmp` socket for scripts |
-| `vm/cloud.rs` | catalog data file (URL + SHA256/512), download job, `qemu-img` overlay, NoCloud `CIDATA` vfat seed (`fatfs`) |
+| `vm/cloud.rs` | catalog data file (URL + SHA256/512), download job, `qemu-img` overlay, NoCloud `CIDATA` vfat seed (`fatfs`). Base images live in `$XDG_DATA_HOME/velox/images` (not the cache: overlays depend on them), named by checksum prefix |
 | `readiness.rs` | one state machine, two providers; re-evaluated on inotify (`bande-watch`) of the socket folders, `/dev` and `/var/lib/dpkg/status`; first blocking state wins; the setup steps live in one table here |
 | `jobs.rs` | one job/progress/cancel model: pull, download, create, snapshot, clone |
 | `ui/` | `sidebar`, `overview`, `containers`, `images`, `volumes`, `networks`, `machines`, `new_machine`, `machine_window` (console, info, snapshots, settings), `logs_window`, `inspector`, `not_ready`, `settings` |
@@ -369,7 +370,7 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 
 - **No root at runtime, and nothing installed for the user** (decision 4). The `docker` group
   is root-equivalent; the not-ready view says so and offers Podman rootless.
-- **QEMU sandboxing:** each QEMU runs in the user's own unit with `-sandbox on`,
+- **QEMU sandboxing:** each QEMU runs in the user's own unit with the full `-sandbox on` set (passt outside it, V0),
   `NoNewPrivileges` and `MemoryMax`. No setuid bridge helper in v1.
 - **Downloads** are checked against vendor checksums over HTTPS (decision 6).
 - **Spawned processes** (`docker compose`, Terminal, `ssh`, `qemu-*`) get argv only, never a
@@ -403,6 +404,52 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
     accessibility tree shows both not-ready lines and their Copy buttons.
   - One parser test for chunked decoding plus stream framing.
 
+## V0 findings (2026-11-02, mini, QEMU 11.1.2, passt 2026-10-02, Debian 13 genericcloud)
+
+- **KVM was not testable:** `/dev/kvm` is `root:kvm 0660` plus a uaccess ACL for the
+  seated session, and the seat had only the greeter, so an SSH session gets `EACCES`. The
+  spike ran on **TCG** (`-accel tcg,thread=multi,tb-size=256 -cpu max,pauth-impdef=on`).
+  KVM needs the owner's seated session, or `kvm` group membership for SSH-only use (owner's
+  call). `Accel::detect()` picks KVM when `/dev/kvm` opens read-write.
+- **TCG times (4 vCPU, 2 GiB):** QEMU initialised (unit active + QMP greeting) in 0.08–0.2 s;
+  the first boot with cloud-init took 69 s to "Cloud-init finished" and SSH; a warm boot took
+  36–72 s to multi-user (load-dependent). The ≤ 8 s target needs a KVM measurement.
+- **Snapshots (internal, qcow2 disk + qcow2 vars):** `snapshot-save` with 0.9 GB of dirty RAM
+  took 0.35–0.9 s, `snapshot-load` 0.4–2.2 s (TCG), and `snapshot-delete` ~15 ms. RAM state
+  really reverts: a file written after the save was gone after the load, and SSH reconnects
+  through passt. The save brackets itself with `STOP`/`RESUME`. vmstate goes to `disk`;
+  devices are `disk` + `vars`. **Delete frees clusters inside the qcow2 but does not shrink
+  the host file** (`du` stays at the high-water mark; the next save reuses the space).
+  Reclaiming needs an offline `qemu-img convert`: V4 shows the size and offers Compact….
+- **`-sandbox on` breaks QEMU's `-netdev passt`:** the seccomp filter is inherited by the
+  passt that QEMU spawns, which dies with SIGSYS. passt therefore runs as its own daemon
+  (`--socket … --one-off --pid …`, which forks when ready) and QEMU joins it with
+  `-netdev stream,addr.type=unix`. That allows the full
+  `-sandbox on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny`.
+  Port forwards bind `127.0.0.1` only (`--tcp-ports 127.0.0.1/H:G`).
+- **`-daemonize` is incompatible** with `spawn=deny` and `elevateprivileges=deny` (QEMU exits
+  1 without a message), so the unit is `Type=exec`. Readiness is event-driven: inotify on the
+  runtime folder for the QMP socket, plus a pidfd on `MainPID`, then the QMP greeting, which
+  QEMU sends only once init is done; EOF means QEMU failed. A socket file alone is not
+  enough, because chardevs are created before the block devices are opened.
+- **`-mon` is deprecated in QEMU 11:** use `-object monitor-qmp,chardev=…`.
+- **systemd** emits every `ActiveState` change twice, plus an `inactive` when a transient
+  unit loads; `UnitEvents` drops repeats. `system_powerdown` ends the unit cleanly (passt
+  exits with `--one-off`), and so does `systemctl --user stop` (QEMU exits on SIGTERM).
+- **PMU (from the kernel source, `arch/arm64/kvm/pmu-emul.c`; not measured):** the M2 PMU is
+  IMPDEF, and KVM spoofs a minimal PMUv3 through `ARM64_WORKAROUND_PMUV3_IMPDEF_TRAPS`, so
+  `-cpu host` keeps `pmu=on`. QEMU sets no PMU type, so KVM takes the PMU of the core where the
+  vCPU was initialised and lets vCPUs run on both clusters. Guest counters just stop on the
+  other cluster, which is harmless.
+- **Core pinning:** none by default. Pinning to the P-cores (CPUs 4–7) would only keep guest
+  perf counters steady and would starve the desktop. Revisit if a KVM run shows guest timer
+  trouble.
+- **highmem:** left at QEMU's default. The guest under TCG saw 4 vCPUs (`CPU part 0x051`, `max`)
+  and booted UEFI from qcow2 vars. Under KVM, QEMU clamps the high regions to the host IPA
+  size by itself, which is unconfirmed until a KVM run.
+- **Still open for the first KVM run:** time to SSH, guest `dmesg` for the PMU, arch timer and
+  vGIC, and whether `-cpu host` with E/P migration shows any fault.
+
 ## Milestones (each mergeable on its own; desktop items merge there first and arrive with a bump)
 
 | # | Repo | What | Done when |
@@ -413,7 +460,7 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 | A4 | apps | Compose project actions (Up/Down/Restart via `docker compose`) | a sample project goes up and down from the menu, and grouping follows |
 | D4 | desktop | Source-list widget in `bande-widgets` (sections, counts, selection, accessibility) from Files' sidebar; Files adopts it | Files unchanged in use; Velox swaps its in-app sidebar for it |
 | D2 | desktop | Activity Monitor's graph (`Graph`, `paint_graph`) moved into `bande-widgets`; Monitor uses it | Monitor unchanged; Velox inspector Stats and Overview cards use it |
-| V0 | apps | Spike on the mini: hand-written QEMU argv, Debian cloud image + seed, QMP `snapshot-save/load`; settle `pmu`, `highmem`, P-core pinning | boots to SSH with times recorded; the defaults go into `vm/qemu.rs` |
+| V0 ✓ | apps | Spike on the mini: hand-written QEMU argv, Debian cloud image + seed, QMP `snapshot-save/load`; settle `pmu`, `highmem`, P-core pinning | boots to SSH with times recorded; the defaults go into `vm/qemu.rs` |
 | V1 | apps | Machines pane (table, states, inspector, empty state, Machine menu), virtualization not-ready view, New Virtual Machine sheet (cloud images), transient units, QMP, passt with SSH forward, guest-agent IP, Open in Terminal; Machine window with Info and Settings tabs | create→SSH ≤ 8 s; the VM survives Quit; state follows `systemctl --user stop`; the SIGKILL + `fsck` test is clean |
 | D1 | desktop | External surface widget (`wl_subsurface` fed by memfd shm + damage, then dmabuf); client keyboard-shortcuts-inhibit and pointer lock | a test app shows a moving buffer at 0 CPU while still; Super reaches an inhibited surface |
 | V3 | apps | Console tab over D-Bus display: resize via `SetUIInfo`, capture/release, clipboard via `qemu-vdagent` | a Debian desktop guest is usable; a still guest costs 0 % CPU |
