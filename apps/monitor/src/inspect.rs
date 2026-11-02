@@ -4,7 +4,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 
 use crate::L10N;
-use crate::proc::{parse_kilobytes, parse_stat};
+use crate::proc::{Stat, parse_kilobytes, parse_number, parse_stat};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Thread {
@@ -12,6 +12,7 @@ pub struct Thread {
     pub name: String,
     pub state: char,
     pub cpu_seconds: f64,
+    pub waiting_in: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +37,17 @@ pub struct Details {
     pub maps: Option<Vec<Mapping>>,
     pub virtual_size: Option<u64>,
     pub running_seconds: Option<f64>,
+    pub statistics: Statistics,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Statistics {
+    pub minor_faults: u64,
+    pub major_faults: u64,
+    pub switches: Option<u64>,
+    pub involuntary_switches: Option<u64>,
+    pub read_calls: Option<u64>,
+    pub write_calls: Option<u64>,
 }
 
 pub fn state_name(state: char) -> String {
@@ -80,11 +92,16 @@ fn read_threads(folder: &Path, ticks_per_second: f64) -> Vec<Thread> {
         .filter_map(|entry| {
             let tid = entry.file_name().to_str()?.parse::<u32>().ok()?;
             let stat = parse_stat(&fs::read_to_string(entry.path().join("stat")).ok()?)?;
+            let waiting_in = fs::read_to_string(entry.path().join("wchan"))
+                .ok()
+                .map(|symbol| symbol.trim().to_owned())
+                .filter(|symbol| !symbol.is_empty() && symbol != "0");
             Some(Thread {
                 tid,
                 name: stat.comm,
                 state: stat.state,
                 cpu_seconds: stat.cpu_ticks as f64 / ticks_per_second,
+                waiting_in,
             })
         })
         .collect::<Vec<_>>();
@@ -185,6 +202,31 @@ fn read_files(folder: &Path) -> Option<Vec<OpenFile>> {
     Some(files)
 }
 
+fn read_statistics(folder: &Path, stat: &Stat) -> Statistics {
+    let statuses = fs::read_dir(folder.join("task"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|task| fs::read_to_string(task.path().join("status")).ok())
+        .collect::<Vec<_>>();
+    let summed = |key: &str| {
+        statuses
+            .iter()
+            .map(|status| parse_number(status, key))
+            .sum::<Option<u64>>()
+    };
+    let io = fs::read_to_string(folder.join("io")).ok();
+    let calls = |key: &str| io.as_deref().and_then(|io| parse_number(io, key));
+    Statistics {
+        minor_faults: stat.minor_faults,
+        major_faults: stat.major_faults,
+        switches: summed("voluntary_ctxt_switches"),
+        involuntary_switches: summed("nonvoluntary_ctxt_switches"),
+        read_calls: calls("syscr"),
+        write_calls: calls("syscw"),
+    }
+}
+
 pub fn read_details(root: &Path, pid: u32, ticks_per_second: f64) -> Option<Details> {
     let folder = root.join("proc").join(pid.to_string());
     let stat = parse_stat(&fs::read_to_string(folder.join("stat")).ok()?)?;
@@ -203,5 +245,6 @@ pub fn read_details(root: &Path, pid: u32, ticks_per_second: f64) -> Option<Deta
             .and_then(|status| parse_kilobytes(&status, "VmSize")),
         running_seconds: uptime
             .map(|uptime| (uptime - stat.start_ticks as f64 / ticks_per_second).max(0.0)),
+        statistics: read_statistics(&folder, &stat),
     })
 }
