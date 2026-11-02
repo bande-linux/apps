@@ -22,6 +22,11 @@ const RETRY: Duration = Duration::from_secs(1);
 pub enum Action {
     Start,
     Stop,
+    Restart,
+    Pause,
+    Resume,
+    Kill,
+    Remove,
 }
 
 #[derive(Debug)]
@@ -31,6 +36,11 @@ pub enum Update {
     Listed(Vec<Container>),
     Changed(Container),
     Removed(String),
+    Done {
+        id: String,
+        action: Action,
+    },
+    Containers(crate::containers::Event),
     Failed {
         id: String,
         action: Action,
@@ -39,13 +49,13 @@ pub enum Update {
 }
 
 #[derive(Clone)]
-struct Updates {
+pub(crate) struct Updates {
     sender: Sender<Update>,
     wake: Arc<UnixStream>,
 }
 
 impl Updates {
-    fn send(&self, update: Update) -> bool {
+    pub(crate) fn send(&self, update: Update) -> bool {
         self.sender.send(update).is_ok() && (&*self.wake).write_all(&[1]).is_ok()
     }
 }
@@ -186,27 +196,30 @@ impl Informer {
         self.updates.try_iter().collect()
     }
 
+    pub(crate) fn updates(&self) -> Updates {
+        self.sender.clone()
+    }
+
     pub fn act(&self, engine: Engine, action: Action, ids: Vec<String>) {
-        let out = self.sender.clone();
-        let spawned = std::thread::Builder::new()
-            .name("velox-action".to_owned())
-            .spawn(move || {
-                for id in ids {
-                    let done = match action {
-                        Action::Start => engine.start(&id),
-                        Action::Stop => engine.stop(&id),
-                    };
-                    if let Err(error) = done {
-                        out.send(Update::Failed {
+        for id in ids {
+            let out = self.sender.clone();
+            let engine = engine.clone();
+            let spawned = std::thread::Builder::new()
+                .name("velox-action".to_owned())
+                .spawn(move || {
+                    let update = match engine.act(&id, action) {
+                        Ok(()) => Update::Done { id, action },
+                        Err(error) => Update::Failed {
                             id,
                             action,
                             message: error.to_string(),
-                        });
-                    }
-                }
-            });
-        if let Err(error) = spawned {
-            tracing::warn!("cannot reach the engine: {error}");
+                        },
+                    };
+                    out.send(update);
+                });
+            if let Err(error) = spawned {
+                tracing::warn!("cannot reach the engine: {error}");
+            }
         }
     }
 

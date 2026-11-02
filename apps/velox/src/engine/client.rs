@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
 use super::http::{self, Body};
+use super::informer::Action;
 
 const COMPOSE_PROJECT: &str = "com.docker.compose.project";
 const MIN_API: (u32, u32) = (1, 41);
@@ -49,8 +50,27 @@ impl From<serde_json::Error> for Error {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Port {
+    #[serde(default, rename = "IP")]
+    pub ip: Option<String>,
+    #[serde(default)]
+    pub private_port: u16,
     #[serde(default)]
     pub public_port: Option<u16>,
+    #[serde(default, rename = "Type")]
+    pub protocol: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Attachment {
+    #[serde(rename = "IPAddress", default)]
+    pub ip_address: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Networks {
+    #[serde(default)]
+    pub networks: Option<HashMap<String, Attachment>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -69,6 +89,8 @@ pub struct Container {
     pub ports: Option<Vec<Port>>,
     #[serde(default)]
     pub labels: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub network_settings: Option<Networks>,
 }
 
 impl Container {
@@ -90,6 +112,24 @@ impl Container {
 
     pub fn running(&self) -> bool {
         matches!(self.state.as_str(), "running" | "restarting")
+    }
+
+    pub fn paused(&self) -> bool {
+        self.state == "paused"
+    }
+
+    pub fn label(&self, name: &str) -> Option<&str> {
+        self.labels.as_ref()?.get(name).map(String::as_str)
+    }
+
+    pub fn ip(&self) -> Option<&str> {
+        self.network_settings
+            .as_ref()?
+            .networks
+            .as_ref()?
+            .values()
+            .map(|network| network.ip_address.as_str())
+            .find(|ip| !ip.is_empty())
     }
 
     pub fn published_ports(&self) -> Vec<u16> {
@@ -170,7 +210,7 @@ fn api_supported(version: &str) -> bool {
     }
 }
 
-fn is_container_id(id: &str) -> bool {
+pub(crate) fn is_container_id(id: &str) -> bool {
     !id.is_empty() && id.chars().all(|char| char.is_ascii_alphanumeric())
 }
 
@@ -186,7 +226,11 @@ impl Engine {
         }
     }
 
-    fn call(&self, method: &str, path: &str) -> Result<Body<UnixStream>, Error> {
+    pub fn socket(&self) -> &Path {
+        &self.socket
+    }
+
+    pub(crate) fn call(&self, method: &str, path: &str) -> Result<Body<UnixStream>, Error> {
         let response = http::exchange(UnixStream::connect(&self.socket)?, method, path)?;
         let mut body = response.body;
         if (200..300).contains(&response.status) || response.status == 304 {
@@ -200,7 +244,7 @@ impl Engine {
         Err(Error::Status(response.status, message))
     }
 
-    fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, Error> {
+    pub(crate) fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, Error> {
         let mut bytes = Vec::new();
         self.call("GET", path)?.read_to_end(&mut bytes)?;
         Ok(serde_json::from_slice(&bytes)?)
@@ -244,34 +288,42 @@ impl Engine {
         Ok(found.into_iter().find(|container| container.id == id))
     }
 
-    fn act(&self, id: &str, action: &str) -> Result<(), Error> {
-        if !is_container_id(id) {
-            return Ok(());
-        }
+    fn post(&self, method: &str, path: &str) -> Result<(), Error> {
         let mut drained = Vec::new();
-        self.call("POST", &format!("/containers/{id}/{action}"))?
-            .read_to_end(&mut drained)?;
+        self.call(method, path)?.read_to_end(&mut drained)?;
         Ok(())
     }
 
-    pub fn start(&self, id: &str) -> Result<(), Error> {
-        self.act(id, "start")
+    pub fn act(&self, id: &str, action: Action) -> Result<(), Error> {
+        if !is_container_id(id) {
+            return Ok(());
+        }
+        let verb = match action {
+            Action::Start => "start",
+            Action::Stop => "stop",
+            Action::Restart => "restart",
+            Action::Pause => "pause",
+            Action::Resume => "unpause",
+            Action::Kill => "kill",
+            Action::Remove => {
+                self.post("POST", &format!("/containers/{id}/stop"))?;
+                return self.post("DELETE", &format!("/containers/{id}?force=1"));
+            }
+        };
+        self.post("POST", &format!("/containers/{id}/{verb}"))
     }
 
-    pub fn stop(&self, id: &str) -> Result<(), Error> {
-        self.act(id, "stop")
+    pub fn stream(&self, path: &str) -> Result<(UnixStream, Body<UnixStream>), Error> {
+        let stream = UnixStream::connect(&self.socket)?;
+        let handle = stream.try_clone()?;
+        let response = http::exchange(stream, "GET", path)?;
+        match response.status {
+            200 => Ok((handle, response.body)),
+            status => Err(Error::Status(status, format!("the engine refused {path}"))),
+        }
     }
 
     pub fn events(&self) -> Result<(UnixStream, Body<UnixStream>), Error> {
-        let stream = UnixStream::connect(&self.socket)?;
-        let handle = stream.try_clone()?;
-        let response = http::exchange(stream, "GET", CONTAINER_EVENTS)?;
-        match response.status {
-            200 => Ok((handle, response.body)),
-            status => Err(Error::Status(
-                status,
-                "the engine refused /events".to_owned(),
-            )),
-        }
+        self.stream(CONTAINER_EVENTS)
     }
 }

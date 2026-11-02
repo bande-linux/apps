@@ -1,45 +1,36 @@
-mod containers;
 mod not_ready;
 mod widgets;
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
-use bande_toolkit::ui::{
-    Alert, Axis, Button, Cell, Column, Context, Label, Row, SearchField, Stack, Table, Ui, Widget,
-    WidgetId,
-};
+use bande_app_menu::Entry;
+use bande_toolkit::ui::{Cell, Column, Context, Label, Row, Table, Ui, Widget, WidgetId};
 use bande_toolkit::{Appearance, Header, Palette, SHEET_INSET, TextSystem};
 
-use self::containers::PROJECT_PREFIX;
 pub use self::widgets::SIDEBAR_WIDTH;
-use self::widgets::{Centered, Light, Pill, Root, symbol};
+pub(crate) use self::widgets::{Centered, dot, symbol};
+use self::widgets::{Light, Pill, Root};
 use crate::L10N;
-use crate::engine::{Action, Container, Engine, EngineInfo, Flavor, Update};
+use crate::containers::{self, Containers};
+use crate::engine::{Action, Engine, EngineInfo, Flavor, Update};
 use crate::readiness::Readiness;
 
-const START_SYMBOL: &str = include_str!("../../data/symbols/start.svg");
-const STOP_SYMBOL: &str = include_str!("../../data/symbols/stop.svg");
 const CONTAINERS_SYMBOL: &str = include_str!("../../data/symbols/containers.svg");
 const CONTAINERS_KEY: &str = "containers";
-const COUNT_WIDTH: f32 = 48.0;
+const COUNT_WIDTH: f32 = 56.0;
 const TITLE_INSET: f32 = 16.0;
-const EMPTY_WIDTH: f32 = 360.0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Request {
     Act(Engine, Action, Vec<String>),
     Relist(Engine),
-    OpenLink(&'static str),
+    OpenLink(String),
+    Containers(containers::Request),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Intent {
-    Select(Vec<String>),
-    Expand(Vec<String>, bool),
-    Filter(String),
-    Act(Action),
     Copy(&'static str),
     Open(&'static str),
     Alternative(bool),
@@ -62,32 +53,18 @@ enum Connection {
 enum Shown {
     Nothing,
     Page,
-    Empty,
-    Table,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Tools {
-    start: WidgetId,
-    stop: WidgetId,
-    search: WidgetId,
+    Containers,
 }
 
 pub struct VeloxView {
     ui: Ui,
     root: WidgetId,
     sidebar: WidgetId,
-    table: Option<WidgetId>,
-    tools: Option<Tools>,
     shown: Shown,
     page_for: Option<Readiness>,
     palette: Palette,
     connection: Connection,
-    containers: BTreeMap<String, Container>,
-    pending: HashMap<String, Action>,
-    selected: Vec<String>,
-    collapsed: HashSet<String>,
-    filter: String,
+    containers: Containers,
     alternative: bool,
     intents: Intents,
     requests: Vec<Request>,
@@ -141,17 +118,11 @@ impl VeloxView {
             ui,
             root: root_id,
             sidebar: sidebar_id,
-            table: None,
-            tools: None,
             shown: Shown::Nothing,
             page_for: None,
             palette,
             connection: Connection::Connecting,
-            containers: BTreeMap::new(),
-            pending: HashMap::new(),
-            selected: Vec::new(),
-            collapsed: HashSet::new(),
-            filter: String::new(),
+            containers: Containers::new(),
             alternative: false,
             intents,
             requests: Vec::new(),
@@ -172,7 +143,10 @@ impl VeloxView {
         self.palette = appearance.palette();
         self.ui.set_appearance(appearance);
         self.shown = Shown::Nothing;
-        self.tools = None;
+        self.containers.reset();
+        if let Some(root) = self.ui.widget_as::<Root>(self.root) {
+            root.set_tools(Vec::new());
+        }
         self.refresh();
     }
 
@@ -203,7 +177,9 @@ impl VeloxView {
     }
 
     pub fn take_requests(&mut self) -> Vec<Request> {
-        std::mem::take(&mut self.requests)
+        let mut requests = std::mem::take(&mut self.requests);
+        requests.extend(self.containers.take_requests());
+        requests
     }
 
     pub fn engine(&self) -> Option<Engine> {
@@ -213,58 +189,32 @@ impl VeloxView {
         }
     }
 
-    fn selected_containers(&self) -> Vec<&Container> {
-        let mut chosen: Vec<&Container> = Vec::new();
-        for key in &self.selected {
-            match key.strip_prefix(PROJECT_PREFIX) {
-                Some(project) => chosen.extend(
-                    self.containers
-                        .values()
-                        .filter(|container| container.project() == Some(project)),
-                ),
-                None => chosen.extend(self.containers.get(key)),
-            }
+    pub fn command(&mut self, command: &str) -> bool {
+        let known = self.containers.command(&mut self.ui, command);
+        if known {
+            self.refresh();
         }
-        chosen.sort_by(|left, right| left.id.cmp(&right.id));
-        chosen.dedup_by(|left, right| left.id == right.id);
-        chosen
+        known
     }
 
-    fn targets(&self, action: Action) -> Vec<String> {
-        self.selected_containers()
-            .into_iter()
-            .filter(|container| !self.pending.contains_key(&container.id))
-            .filter(|container| match action {
-                Action::Start => !container.running(),
-                Action::Stop => container.running(),
-            })
-            .map(|container| container.id.clone())
-            .collect()
+    pub fn container_menu(&self) -> Vec<Entry> {
+        self.containers.menu()
     }
 
-    pub fn can(&self, action: Action) -> bool {
-        self.engine().is_some() && !self.targets(action).is_empty()
-    }
-
-    pub fn act(&mut self, action: Action) {
-        let ids = self.targets(action);
-        let Some(engine) = self.engine() else {
-            return;
-        };
-        if ids.is_empty() {
-            return;
-        }
-        for id in &ids {
-            self.pending.insert(id.clone(), action);
-        }
-        self.requests.push(Request::Act(engine, action, ids));
-        self.refresh();
+    pub fn view_entries(&self) -> Vec<Entry> {
+        vec![self.containers.inspector_entry()]
     }
 
     pub fn focus_filter(&mut self) {
-        if let Some(tools) = self.tools {
-            self.ui.set_focus(tools.search);
-        }
+        self.containers.focus_filter(&mut self.ui);
+    }
+
+    pub fn set_hidden(&mut self, hidden: bool) {
+        self.containers.set_hidden(hidden);
+    }
+
+    pub fn sync_streams(&mut self) {
+        self.containers.sync(&self.ui);
     }
 
     pub fn relist(&mut self) {
@@ -277,98 +227,38 @@ impl VeloxView {
         match update {
             Update::Blocked(readiness) => {
                 self.connection = Connection::Blocked(readiness);
-                self.containers.clear();
-                self.pending.clear();
+                self.containers.set_engine(None);
             }
-            Update::Ready(info) => self.connection = Connection::Ready(info),
-            Update::Listed(listed) => {
-                self.containers = listed
-                    .into_iter()
-                    .map(|container| (container.id.clone(), container))
-                    .collect();
-                let containers = &self.containers;
-                self.pending.retain(|id, action| {
-                    containers
-                        .get(id)
-                        .is_some_and(|container| !settled(container, *action))
-                });
+            Update::Ready(info) => {
+                self.containers.set_engine(Some(info.clone()));
+                self.connection = Connection::Ready(info);
             }
-            Update::Changed(container) => {
-                if self
-                    .pending
-                    .get(&container.id)
-                    .is_some_and(|action| settled(&container, *action))
-                {
-                    self.pending.remove(&container.id);
-                }
-                self.containers.insert(container.id.clone(), container);
-            }
-            Update::Removed(id) => {
-                self.pending.remove(&id);
-                self.containers.remove(&id);
-            }
-            Update::Failed {
-                id,
-                action,
-                message,
-            } => {
-                self.pending.remove(&id);
-                let name = self
-                    .containers
-                    .get(&id)
-                    .map_or_else(|| id.clone(), |container| container.name().to_owned());
-                let title = match action {
-                    Action::Start => "cannot-start",
-                    Action::Stop => "cannot-stop",
-                };
-                self.ui.present_sheet(
-                    Alert::new(
-                        &L10N.tr_args(title, [("name", name.into())]),
-                        &message,
-                        |_| {},
-                    )
-                    .primary(&L10N.tr("button-ok"), "ok"),
-                );
-            }
+            update => self.containers.apply(&mut self.ui, update),
         }
         self.refresh();
     }
 
     pub fn pump(&mut self) -> bool {
         let intents: Vec<Intent> = self.intents.borrow_mut().drain(..).collect();
-        if intents.is_empty() {
-            return false;
-        }
-        for intent in intents {
+        let pumped = self.containers.pump(&mut self.ui);
+        for intent in &intents {
             match intent {
-                Intent::Select(keys) => self.selected = keys,
-                Intent::Expand(keys, expanded) => {
-                    for key in keys {
-                        match expanded {
-                            true => self.collapsed.remove(&key),
-                            false => self.collapsed.insert(key),
-                        };
-                    }
-                }
-                Intent::Filter(text) => self.filter = text,
-                Intent::Act(action) => self.act(action),
                 Intent::Copy(text) => self.ui.context().copy(text),
-                Intent::Open(link) => self.requests.push(Request::OpenLink(link)),
-                Intent::Alternative(open) => self.alternative = open,
+                Intent::Open(link) => self.requests.push(Request::OpenLink((*link).to_owned())),
+                Intent::Alternative(open) => self.alternative = *open,
             }
+        }
+        if intents.is_empty() && !pumped {
+            return false;
         }
         self.refresh();
         true
     }
 
     fn sidebar_rows(&self) -> Vec<Row> {
-        let running = self
-            .containers
-            .values()
-            .filter(|container| container.running())
-            .count();
+        let (running, total) = self.containers.running();
         let count = match &self.connection {
-            Connection::Ready(_) => format!("{running}/{}", self.containers.len()),
+            Connection::Ready(_) => format!("{running}/{total}"),
             _ => String::new(),
         };
         vec![
@@ -395,55 +285,6 @@ impl VeloxView {
         }
     }
 
-    fn make_tools(&self) -> (Tools, Vec<Box<dyn Widget>>) {
-        let button = |svg: &str, label: &str, action: Action| {
-            let intents = Rc::clone(&self.intents);
-            let click = move || push(&intents, Intent::Act(action));
-            let label = L10N.tr(label);
-            match symbol(svg, self.palette.ink) {
-                Some(image) => Button::symbol(image, &label, click).tooltip(&label),
-                None => Button::new(&label, click),
-            }
-        };
-        let start = button(START_SYMBOL, "action-start", Action::Start);
-        let stop = button(STOP_SYMBOL, "action-stop", Action::Stop);
-        let intents = Rc::clone(&self.intents);
-        let search = SearchField::new(&L10N.tr("filter-containers"), &self.filter, move |text| {
-            push(&intents, Intent::Filter(text.to_owned()));
-        });
-        let tools = Tools {
-            start: start.id(),
-            stop: stop.id(),
-            search: search.id(),
-        };
-        (tools, vec![boxed(start), boxed(stop), boxed(search)])
-    }
-
-    fn make_table(&self) -> Table {
-        let select = Rc::clone(&self.intents);
-        let expand = Rc::clone(&self.intents);
-        Table::new(containers::columns())
-            .on_selection(move |keys| push(&select, Intent::Select(keys.to_vec())))
-            .on_expand(move |keys, expanded, _| {
-                push(&expand, Intent::Expand(keys.to_vec(), expanded));
-            })
-    }
-
-    fn empty_page() -> Box<dyn Widget> {
-        boxed(Centered::new(
-            boxed(Stack::new(
-                Axis::Vertical,
-                6.0,
-                0.0,
-                vec![
-                    boxed(Label::new(&L10N.tr("empty-title"))),
-                    boxed(Label::new(&L10N.tr("empty-hint")).secondary()),
-                ],
-            )),
-            EMPTY_WIDTH,
-        ))
-    }
-
     fn refresh(&mut self) {
         let rows = self.sidebar_rows();
         if let Some(sidebar) = self.ui.widget_as::<Table>(self.sidebar) {
@@ -454,8 +295,7 @@ impl VeloxView {
         let wanted = match &self.connection {
             Connection::Connecting => Shown::Nothing,
             Connection::Blocked(_) => Shown::Page,
-            Connection::Ready(_) if self.containers.is_empty() => Shown::Empty,
-            Connection::Ready(_) => Shown::Table,
+            Connection::Ready(_) => Shown::Containers,
         };
         let page = match &self.connection {
             Connection::Blocked(readiness)
@@ -470,83 +310,38 @@ impl VeloxView {
                 None
             }
         };
-        let ready = matches!(self.connection, Connection::Ready(_));
-        let tools = match (ready, self.tools) {
-            (true, None) => Some(self.make_tools()),
+        let ready = wanted == Shown::Containers;
+        let tools = match (ready, self.containers.has_tools()) {
+            (true, false) => Some(self.containers.tools(&self.palette)),
             _ => None,
         };
-        let table = match (wanted, self.shown) {
-            (Shown::Table, Shown::Table) => None,
-            (Shown::Table, _) => Some(self.make_table()),
+        let content = match (wanted, self.shown) {
+            (Shown::Containers, Shown::Containers) => None,
+            (Shown::Containers, _) => Some(self.containers.content()),
             _ => None,
         };
         let Some(root) = self.ui.widget_as::<Root>(self.root) else {
             return;
         };
         root.set_pill(boxed(pill));
-        if let Some((ids, widgets)) = tools {
+        if let Some(widgets) = tools {
             root.set_tools(widgets);
-            self.tools = Some(ids);
         }
-        if !ready && self.tools.is_some() {
+        if !ready && self.containers.has_tools() {
             root.set_tools(Vec::new());
-            self.tools = None;
+            self.containers.drop_tools();
         }
         if let Some(page) = page {
             root.set_content(page);
-        } else if let Some(table) = table {
-            self.table = Some(table.id());
-            root.set_content(boxed(table));
+        } else if let Some(content) = content {
+            root.set_content(content);
         } else if wanted != self.shown {
-            root.set_content(match wanted {
-                Shown::Empty => Self::empty_page(),
-                _ => boxed(Label::new("")),
-            });
+            root.set_content(boxed(Label::new("")));
         }
-        if wanted != Shown::Table {
-            self.table = None;
-            self.selected.clear();
+        if wanted != Shown::Containers {
+            self.containers.leave();
         }
         self.shown = wanted;
-        self.fill_table();
-        self.update_tools();
-    }
-
-    fn fill_table(&mut self) {
-        let Some(table) = self.table else {
-            return;
-        };
-        let rows = containers::rows(&self.palette, &self.containers, &self.pending, &self.filter);
-        let expanded: Vec<String> = rows
-            .iter()
-            .filter(|row| !row.children.is_empty() && !self.collapsed.contains(&row.key))
-            .map(|row| row.key.clone())
-            .collect();
-        if let Some(table) = self.ui.widget_as::<Table>(table) {
-            table.set_rows(rows);
-            table.set_expanded_rows(expanded);
-        }
-    }
-
-    fn update_tools(&mut self) {
-        let Some(tools) = self.tools else {
-            return;
-        };
-        let states = [
-            (tools.start, self.can(Action::Start)),
-            (tools.stop, self.can(Action::Stop)),
-        ];
-        for (id, enabled) in states {
-            if let Some(button) = self.ui.widget_as::<Button>(id) {
-                button.set_enabled(enabled);
-            }
-        }
-    }
-}
-
-fn settled(container: &Container, action: Action) -> bool {
-    match action {
-        Action::Start => container.state == "running",
-        Action::Stop => !container.running(),
+        self.containers.refresh(&mut self.ui, &self.palette);
     }
 }

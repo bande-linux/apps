@@ -1,3 +1,4 @@
+mod containers;
 mod engine;
 mod readiness;
 mod ui;
@@ -6,6 +7,7 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
+pub use containers::{LogsTarget, LogsView, Work};
 pub use engine::{Action, Informer, Update};
 pub use readiness::Readiness;
 pub use ui::{Request, SIDEBAR_WIDTH, VeloxView};
