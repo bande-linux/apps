@@ -77,7 +77,7 @@ views. Packaged as `bande-calendar`.
   the window opens when there is something to confirm, as on macOS.
 
 Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Left/Right previous/next, Ctrl+N new event,
-Alt+Ctrl+N new calendar, Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the
+Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the
 selected event, Ctrl+W close and Ctrl+Q quit.
 
 ## Layout

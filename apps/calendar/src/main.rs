@@ -207,7 +207,7 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
             vec![
                 entry("new-event", NEW_EVENT).shortcut("Ctrl+N"),
                 Entry::separator(),
-                entry("new-calendar", "new-calendar").shortcut("Alt+Ctrl+N"),
+                entry("new-calendar", "new-calendar"),
                 entry("add-account", "add-account"),
                 entry("refresh", REFRESH).shortcut("Ctrl+R"),
                 Entry::separator(),
