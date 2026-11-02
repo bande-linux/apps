@@ -8,8 +8,8 @@ use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
-    ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers, Pointer,
-    PointerButton, ScrollState, Ui, Widget, WidgetId, shortcut_pressed,
+    Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
+    Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
@@ -35,7 +35,7 @@ use crate::ui::setup_sheet::{AccountSheet, Action, Field, Mode, Shared, SheetSta
 use crate::ui::sidebar::{Place, Row, rows};
 use crate::ui::symbols::Symbols;
 use crate::ui::toolbar::{Signal, Signals, Toolbar};
-use crate::worker::{Command, Event as MailEvent, Mailroom, Status, Worker};
+use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status, Worker};
 
 pub const SHORTCUTS: [(&str, &str); 12] = [
     ("compose", "Ctrl+N"),
@@ -1202,6 +1202,12 @@ impl MailView {
                     tracing::warn!("account {account}: {error}");
                 }
                 MailEvent::Sent(_) => {}
+                MailEvent::MailboxRefused(reason) => {
+                    self.ui.present_sheet(
+                        Alert::new(&L10N.tr("mailbox-refused"), &reason, |_| {})
+                            .primary(&L10N.tr("button-ok"), "ok"),
+                    );
+                }
                 MailEvent::NotSent(_, error, outgoing) => {
                     self.requests.push(Request::NotSent { error, outgoing });
                 }
@@ -1522,6 +1528,9 @@ impl MailView {
                 Signal::Forward => self.forward_selected(),
                 Signal::Flag => self.toggle_flag(),
                 Signal::Search(text) => self.search_for(&text),
+                signal @ (Signal::NewMailbox(..)
+                | Signal::RenameMailbox(..)
+                | Signal::DeleteMailbox(_)) => self.change_mailboxes(signal),
             }
         }
         if let Some(request) = self.ui.take_clipboard_request() {
@@ -1775,7 +1784,12 @@ impl MailView {
             Hit::Place(index) => {
                 self.focus = Pane::Sidebar;
                 if let Some(Row::Place { place, .. }) = self.sidebar.get(index).cloned() {
-                    self.choose_place(place);
+                    if secondary && let Some(menu) = self.mailbox_menu(&place) {
+                        self.requests
+                            .push(Request::ShowMenu(menu, pointer.position));
+                    } else {
+                        self.choose_place(place);
+                    }
                 }
             }
             Hit::Message(id)
@@ -1829,6 +1843,177 @@ impl MailView {
             Hit::LoadRemote => self.load_remote(),
         }
         true
+    }
+
+    fn mailbox(&self, id: MailboxId) -> Option<Mailbox> {
+        self.accounts
+            .iter()
+            .flat_map(|(_, mailboxes)| mailboxes)
+            .find(|mailbox| mailbox.id == id)
+            .cloned()
+    }
+
+    pub fn current_account(&self) -> Option<AccountId> {
+        match self.place {
+            Place::Mailbox(id) => self.mailbox(id).map(|mailbox| mailbox.account),
+            _ => None,
+        }
+        .or_else(|| self.accounts.first().map(|(account, _)| account.id))
+    }
+
+    fn mailbox_menu(&self, place: &Place) -> Option<Menu> {
+        let Place::Mailbox(id) = place else {
+            return None;
+        };
+        let mailbox = self.mailbox(*id)?;
+        let own = mailbox.role.is_none();
+        Some(Menu::new(vec![
+            MenuItem::new(
+                &L10N.tr("menu-new-mailbox"),
+                &format!("mailbox-new:{}", mailbox.account),
+            ),
+            MenuItem::new(
+                &L10N.tr("menu-rename-mailbox"),
+                &format!("mailbox-rename:{id}"),
+            )
+            .enabled(own),
+            MenuItem::new(
+                &L10N.tr("menu-delete-mailbox"),
+                &format!("mailbox-delete:{id}"),
+            )
+            .enabled(own),
+        ]))
+    }
+
+    fn ask_mailbox_name(
+        &mut self,
+        title: &str,
+        name: &str,
+        done: impl Fn(String) -> Signal + 'static,
+    ) {
+        let typed = Rc::new(RefCell::new(name.to_owned()));
+        let field = {
+            let typed = Rc::clone(&typed);
+            TextField::new(&L10N.tr("mailbox-name-placeholder"), name, move |text| {
+                *typed.borrow_mut() = text.to_owned();
+            })
+        };
+        let signals = Rc::clone(&self.signals);
+        let alert = Alert::new(title, "", move |choice| {
+            let name = typed.borrow().trim().to_owned();
+            if choice == "ok" && !name.is_empty() {
+                signals.borrow_mut().push(done(name));
+            }
+        })
+        .accessory(field)
+        .primary(&L10N.tr("button-ok"), "ok")
+        .cancel(&L10N.tr("button-cancel"), "cancel");
+        self.ui.present_sheet(alert);
+    }
+
+    fn mailbox_action(&mut self, verb: &str, id: i64) {
+        match verb {
+            "mailbox-new" => {
+                self.ask_mailbox_name(&L10N.tr("new-mailbox-title"), "", move |name| {
+                    Signal::NewMailbox(id, name)
+                });
+            }
+            "mailbox-rename" => {
+                let Some(mailbox) = self.mailbox(id) else {
+                    return;
+                };
+                let title = L10N.tr_args(
+                    "rename-mailbox-title",
+                    [("name", mailbox.name.clone().into())],
+                );
+                self.ask_mailbox_name(&title, &mailbox.name, move |name| {
+                    Signal::RenameMailbox(id, name)
+                });
+            }
+            "mailbox-delete" => {
+                let Some(mailbox) = self.mailbox(id) else {
+                    return;
+                };
+                let signals = Rc::clone(&self.signals);
+                let alert = Alert::new(
+                    &L10N.tr_args("delete-mailbox-title", [("name", mailbox.name.into())]),
+                    &L10N.tr("delete-mailbox-message"),
+                    move |choice| {
+                        if choice == "delete" {
+                            signals.borrow_mut().push(Signal::DeleteMailbox(id));
+                        }
+                    },
+                )
+                .destructive(&L10N.tr("action-delete"), "delete")
+                .cancel(&L10N.tr("button-cancel"), "cancel");
+                self.ui.present_sheet(alert);
+            }
+            _ => {}
+        }
+    }
+
+    fn change_mailboxes(&mut self, signal: Signal) {
+        let (account, change) = match signal {
+            Signal::NewMailbox(account, name) => {
+                let prefix = self.namespace_prefix(account);
+                (account, MailboxChange::Create(format!("{prefix}{name}")))
+            }
+            Signal::RenameMailbox(id, name) => {
+                let Some(mailbox) = self.mailbox(id) else {
+                    return;
+                };
+                let parent = mailbox
+                    .delimiter
+                    .and_then(|delimiter| {
+                        mailbox
+                            .path
+                            .rsplit_once(delimiter)
+                            .map(|(parent, _)| format!("{parent}{delimiter}"))
+                    })
+                    .unwrap_or_default();
+                (
+                    mailbox.account,
+                    MailboxChange::Rename(mailbox.path, format!("{parent}{name}")),
+                )
+            }
+            Signal::DeleteMailbox(id) => {
+                let Some(mailbox) = self.mailbox(id) else {
+                    return;
+                };
+                (mailbox.account, MailboxChange::Delete(mailbox.path))
+            }
+            _ => return,
+        };
+        self.send_command(account, Command::Mailbox(change));
+    }
+
+    fn namespace_prefix(&self, account: AccountId) -> String {
+        let Some((_, mailboxes)) = self.accounts.iter().find(|(known, _)| known.id == account)
+        else {
+            return String::new();
+        };
+        let inbox = mailboxes
+            .iter()
+            .find(|mailbox| mailbox.role == Some(Role::Inbox));
+        let Some(prefix) = inbox.and_then(|inbox| {
+            inbox
+                .delimiter
+                .map(|delimiter| format!("{}{delimiter}", inbox.path))
+        }) else {
+            return String::new();
+        };
+        let others = mailboxes
+            .iter()
+            .filter(|mailbox| mailbox.role != Some(Role::Inbox))
+            .collect::<Vec<_>>();
+        match !others.is_empty()
+            && others
+                .iter()
+                .all(|mailbox| mailbox.path.starts_with(&prefix))
+        {
+            true => prefix,
+            false => String::new(),
+        }
     }
 
     pub fn message_menu(&self) -> Menu {
@@ -1889,6 +2074,11 @@ impl MailView {
             "compose" => self.compose(Draft::default()),
             "get-mail" => self.get_mail(),
             "add-account" => self.present_setup(Mode::Add),
+            "new-mailbox" => {
+                if let Some(account) = self.current_account() {
+                    self.mailbox_action("mailbox-new", account);
+                }
+            }
             "find" => self.ui.set_focus(self.toolbar.search),
             action if action.starts_with("move-to:") => {
                 let target = action
@@ -1903,6 +2093,14 @@ impl MailView {
                     });
                 if let Some(target) = target {
                     self.move_selected_to(&target);
+                }
+            }
+            action if action.starts_with("mailbox-") => {
+                if let Some((verb, id)) = action
+                    .split_once(':')
+                    .and_then(|(verb, id)| Some((verb, id.parse().ok()?)))
+                {
+                    self.mailbox_action(verb, id);
                 }
             }
             action if action.starts_with("attachment-") => {

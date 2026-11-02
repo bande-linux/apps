@@ -40,7 +40,15 @@ pub enum Command {
     Send(Box<Outgoing>),
     SaveDraft(Box<Outgoing>),
     Password(String),
+    Mailbox(MailboxChange),
     Stop,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MailboxChange {
+    Create(String),
+    Rename(String, String),
+    Delete(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +63,7 @@ pub enum Event {
     NotSent(AccountId, String, Box<Outgoing>),
     Setup(Box<crate::setup::Outcome>),
     Pictures(MessageId, Vec<(String, crate::picture::Picture)>),
+    MailboxRefused(String),
 }
 
 #[derive(Clone)]
@@ -437,6 +446,7 @@ impl Runner {
                 Ok(())
             }
             Command::Body(id) => self.body(*id),
+            Command::Mailbox(change) => self.change_mailbox(change),
             Command::Send(outgoing) => self.send(outgoing),
             Command::SaveDraft(outgoing) => {
                 self.save_draft(&outgoing.draft, outgoing.replaces)?;
@@ -445,6 +455,24 @@ impl Runner {
             }
             Command::Password(_) | Command::Stop => Ok(()),
         }
+    }
+
+    fn change_mailbox(&mut self, change: &MailboxChange) -> Result<()> {
+        let session = self.session()?;
+        let changed = match change {
+            MailboxChange::Create(path) => session.create(path),
+            MailboxChange::Rename(from, to) => session.rename(from, to),
+            MailboxChange::Delete(path) => session.delete(path),
+        };
+        match changed {
+            Err(Error::Refused(text)) => self.emit(Event::MailboxRefused(text)),
+            other => other?,
+        }
+        let account = self.account.id;
+        let (session, store) = self.connected()?;
+        sync_folders(session, store, account)?;
+        self.emit(Event::Changed(account));
+        Ok(())
     }
 
     fn flush(&mut self) -> Result<Option<Vec<String>>> {
