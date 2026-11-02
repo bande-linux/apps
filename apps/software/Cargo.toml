@@ -19,6 +19,7 @@ flate2.workspace = true
 image.workspace = true
 jiff.workspace = true
 jxl-oxide.workspace = true
+rustls.workspace = true
 ureq.workspace = true
 roxmltree.workspace = true
 serde.workspace = true

@@ -130,7 +130,7 @@ Each one is in Debian, except where noted:
 
 | Crate | Why |
 |---|---|
-| `native-tls` | TLS for IMAP, SMTP and HTTPS through the system OpenSSL and CA store; one TLS stack, security updates from Debian |
+| `rustls`, `rustls-platform-verifier` | TLS 1.2 and 1.3 for IMAP, SMTP and HTTPS on aws-lc-rs (not in Debian; the provider the Browser needs for post-quantum key exchange), checked against the system's CA store; the same TLS stack and crypto provider as Calendar, Software, Velox and Browser |
 | `mailparse` | MIME parsing, charsets and encoded words of incoming mail |
 | `rusqlite` | the offline store, on the system `libsqlite3` |
 | `html5ever` | a correct HTML tokenizer for turning mail HTML into safe text |
