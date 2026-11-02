@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::io::{self, Read};
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use bande_toolkit::Image;
@@ -130,35 +131,123 @@ pub struct Identity {
     pub icon: Option<Image>,
 }
 
-const APPLICATIONS: &str = "usr/share/applications";
-const HICOLOR: &str = "usr/share/icons/hicolor";
-const PIXMAPS: &str = "usr/share/pixmaps";
-const WANTED: [&str; 3] = [
-    "./usr/share/applications/*.desktop",
-    "./usr/share/icons/hicolor/*/apps/*",
-    "./usr/share/pixmaps/*",
-];
+const APPLICATIONS: &str = "usr/share/applications/";
+const HICOLOR: &str = "usr/share/icons/hicolor/";
+const PIXMAPS: &str = "usr/share/pixmaps/";
+const BLOCK: u64 = 512;
+const FILE_LIMIT: u64 = 4 << 20;
+const TOTAL_LIMIT: u64 = 16 << 20;
 const ICON_PIXELS: u32 = 128;
 
-struct Scratch(PathBuf);
+fn wanted(name: &str) -> bool {
+    let direct = |prefix: &str| {
+        name.strip_prefix(prefix)
+            .is_some_and(|rest| !rest.is_empty() && !rest.contains('/'))
+    };
+    let icon = name
+        .strip_prefix(HICOLOR)
+        .and_then(|rest| rest.split_once("/apps/"))
+        .is_some_and(|(size, file)| !size.contains('/') && !file.is_empty() && !file.contains('/'));
+    (direct(APPLICATIONS) && name.ends_with(".desktop")) || direct(PIXMAPS) || icon
+}
 
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        if let Err(error) = std::fs::remove_dir_all(&self.0) {
-            tracing::debug!("cannot remove {}: {error}", self.0.display());
-        }
+fn field(header: &[u8], range: std::ops::Range<usize>) -> &str {
+    let bytes = header.get(range).unwrap_or_default();
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    std::str::from_utf8(bytes.get(..end).unwrap_or_default()).unwrap_or_default()
+}
+
+fn octal(header: &[u8]) -> Option<u64> {
+    let size = header.get(124..136)?;
+    if size.first().is_some_and(|byte| byte & 0x80 != 0) {
+        return size.iter().skip(1).try_fold(0u64, |total, byte| {
+            total.checked_mul(256)?.checked_add(u64::from(*byte))
+        });
+    }
+    u64::from_str_radix(field(header, 124..136).trim(), 8).ok()
+}
+
+fn discard(reader: &mut impl Read, length: u64) -> io::Result<()> {
+    let copied = io::copy(&mut reader.take(length), &mut io::sink())?;
+    match copied == length {
+        true => Ok(()),
+        false => Err(io::ErrorKind::UnexpectedEof.into()),
     }
 }
 
-fn extract(path: &Path) -> Option<Scratch> {
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_nanos())
-        .unwrap_or_default();
-    let dir = Scratch(
-        std::env::temp_dir().join(format!("bande-installer-{}-{stamp}", std::process::id())),
-    );
-    std::fs::create_dir(&dir.0).ok()?;
+fn skip(reader: &mut impl Read, size: u64) -> io::Result<()> {
+    discard(reader, size.div_ceil(BLOCK) * BLOCK)
+}
+
+fn read_member(reader: &mut impl Read, size: u64) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader.take(size).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 != size {
+        return Err(io::ErrorKind::UnexpectedEof.into());
+    }
+    discard(reader, size.div_ceil(BLOCK) * BLOCK - size)?;
+    Ok(bytes)
+}
+
+fn pax_path(data: &[u8]) -> Option<String> {
+    String::from_utf8_lossy(data).lines().find_map(|line| {
+        let (_, record) = line.split_once(' ')?;
+        record.strip_prefix("path=").map(str::to_owned)
+    })
+}
+
+fn members(reader: &mut impl Read) -> HashMap<String, Vec<u8>> {
+    let mut found = HashMap::new();
+    let mut kept = 0u64;
+    let mut long_name: Option<String> = None;
+    let mut header = [0u8; BLOCK as usize];
+    while reader.read_exact(&mut header).is_ok() && header.iter().any(|byte| *byte != 0) {
+        let Some(size) = octal(&header) else {
+            break;
+        };
+        let kind = header[156];
+        let read = match kind {
+            b'L' | b'x' => read_member(reader, size.min(FILE_LIMIT)).map(|data| {
+                long_name = match kind {
+                    b'L' => Some(field(&data, 0..data.len()).to_owned()),
+                    _ => pax_path(&data),
+                };
+            }),
+            b'0' | 0 => {
+                let prefix = field(&header, 345..500);
+                let name = long_name.take().unwrap_or_else(|| match prefix.is_empty() {
+                    true => field(&header, 0..100).to_owned(),
+                    false => format!("{prefix}/{}", field(&header, 0..100)),
+                });
+                let name = name.trim_start_matches("./").to_owned();
+                if wanted(&name) && size <= FILE_LIMIT && kept + size <= TOTAL_LIMIT {
+                    kept += size;
+                    read_member(reader, size).map(|data| {
+                        found.insert(name, data);
+                    })
+                } else {
+                    skip(reader, size)
+                }
+            }
+            _ => {
+                long_name = None;
+                skip(reader, size)
+            }
+        };
+        if read.is_err() {
+            break;
+        }
+    }
+    if let Err(error) = io::copy(reader, &mut io::sink()) {
+        tracing::debug!("cannot read the rest of the package: {error}");
+    }
+    found
+}
+
+fn archive_members(path: &Path) -> Option<HashMap<String, Vec<u8>>> {
     let mut archive = Command::new("dpkg-deb")
         .arg("--fsys-tarfile")
         .arg(path)
@@ -166,93 +255,69 @@ fn extract(path: &Path) -> Option<Scratch> {
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
-    let extracted = Command::new("tar")
-        .args([
-            "--extract",
-            "--no-same-owner",
-            "--no-same-permissions",
-            "--wildcards",
-            "--no-wildcards-match-slash",
-            "--file",
-            "-",
-            "--directory",
-        ])
-        .arg(&dir.0)
-        .args(WANTED)
-        .stdin(archive.stdout.take()?)
-        .stderr(Stdio::null())
-        .status();
-    if let Err(error) = archive.wait() {
-        tracing::debug!("dpkg-deb did not finish: {error}");
+    let found = archive.stdout.take().map(|mut stdout| members(&mut stdout));
+    let finished = archive.wait().ok()?;
+    found.filter(|_| finished.success())
+}
+
+fn decode_icon(name: &str, bytes: &[u8]) -> Option<Image> {
+    if name.ends_with(".svg") {
+        return Image::from_svg(bytes, ICON_PIXELS, ICON_PIXELS);
     }
-    extracted.ok().map(|_| dir)
+    let decoded = image::load_from_memory(bytes).ok()?.to_rgba8();
+    let (width, height) = decoded.dimensions();
+    Image::from_rgba(width, height, decoded.into_raw())
 }
 
-fn regular(path: PathBuf) -> Option<PathBuf> {
-    std::fs::symlink_metadata(&path)
-        .ok()
-        .filter(|metadata| metadata.is_file())
-        .map(|_| path)
-}
-
-fn files(dir: &Path) -> Vec<PathBuf> {
-    let mut found: Vec<PathBuf> = std::fs::read_dir(dir)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|entry| regular(entry.path()))
-        .collect();
-    found.sort();
-    found
-}
-
-fn icon_file(root: &Path, icon: &str) -> Option<PathBuf> {
-    let named = |dir: &Path| {
-        ["svg", "png"]
-            .into_iter()
-            .find_map(|extension| regular(dir.join(format!("{icon}.{extension}"))))
+fn icon_member<'a>(files: &'a HashMap<String, Vec<u8>>, icon: &str) -> Option<(&'a str, &'a [u8])> {
+    let stem_is = |file: &str| {
+        [".svg", ".png"]
+            .iter()
+            .any(|extension| file.strip_suffix(extension) == Some(icon))
     };
-    let mut sizes: Vec<(u32, PathBuf)> = std::fs::read_dir(root.join(HICOLOR))
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|entry| {
-            let size = entry.file_name().into_string().ok()?;
-            let rank = match size.as_str() {
-                "scalable" => u32::MAX,
-                _ => size.split('x').next()?.parse().ok()?,
-            };
-            Some((rank, named(&entry.path().join("apps"))?))
+    let rank = |name: &str| -> Option<u32> {
+        if let Some((size, file)) = name.strip_prefix(HICOLOR)?.split_once("/apps/") {
+            return stem_is(file).then(|| match size {
+                "scalable" => Some(u32::MAX),
+                _ => size.split('x').next()?.parse().ok(),
+            })?;
+        }
+        None
+    };
+    files
+        .iter()
+        .filter_map(|(name, bytes)| Some((rank(name)?, name, bytes)))
+        .max_by_key(|(rank, ..)| *rank)
+        .map(|(_, name, bytes)| (name.as_str(), bytes.as_slice()))
+        .or_else(|| {
+            files
+                .iter()
+                .find(|(name, _)| name.strip_prefix(PIXMAPS).is_some_and(stem_is))
+                .map(|(name, bytes)| (name.as_str(), bytes.as_slice()))
         })
-        .collect();
-    sizes.sort();
-    sizes
-        .pop()
-        .map(|(_, path)| path)
-        .or_else(|| named(&root.join(PIXMAPS)))
 }
 
 pub fn identity(path: &Path) -> Option<Identity> {
-    let scratch = extract(path)?;
+    let files = archive_members(path)?;
     let locale = bande_xdg::Locale::from_env();
     let desktops = bande_xdg::current_desktops();
-    let entry = files(&scratch.0.join(APPLICATIONS))
-        .into_iter()
-        .filter(|file| {
-            file.extension()
-                .is_some_and(|extension| extension == "desktop")
-        })
-        .find_map(|file| {
-            let text = std::fs::read_to_string(&file).ok()?;
-            let id = file.file_name()?.to_str()?.to_owned();
-            DesktopEntry::parse(&id, &file, &text, locale.as_ref(), &desktops)
-        })?;
+    let mut entries: Vec<(&String, &Vec<u8>)> = files
+        .iter()
+        .filter(|(name, _)| name.starts_with(APPLICATIONS))
+        .collect();
+    entries.sort();
+    let entry = entries.into_iter().find_map(|(name, bytes)| {
+        let text = std::str::from_utf8(bytes).ok()?;
+        let id = name.strip_prefix(APPLICATIONS)?;
+        let file = Path::new("/").join(name);
+        DesktopEntry::parse(id, &file, text, locale.as_ref(), &desktops)
+    })?;
     let icon = entry
         .icon
         .as_deref()
         .filter(|icon| !icon.contains('/'))
-        .and_then(|icon| icon_file(&scratch.0, icon))
-        .and_then(|file| Image::load(&file, ICON_PIXELS));
+        .and_then(|icon| icon_member(&files, icon))
+        .and_then(|(name, bytes)| decode_icon(name, bytes));
     Some(Identity {
         name: entry.name,
         icon,

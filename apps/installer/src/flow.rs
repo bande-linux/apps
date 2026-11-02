@@ -161,8 +161,11 @@ pub fn preview(client: &Client, path: &Path, deb: &Deb) -> State {
     };
     match client.install_files(path, Mode::Simulate, &|_| {}) {
         Ok(applied) => State::Ready(Preview {
+            signed: match action {
+                Action::Downgrade(_) => None,
+                Action::Install | Action::Upgrade(_) => signed(client, deb),
+            },
             action,
-            signed: signed(client, deb),
             also: others(&applied, &deb.name, &INSTALLING),
             download: download_size(client, &applied, &deb.name),
             removes: others(&applied, &deb.name, &[Info::Removing, Info::Obsoleting]),

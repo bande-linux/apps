@@ -529,6 +529,7 @@ dependencies = [
  "bande-packages",
  "bande-toolkit",
  "bande-xdg",
+ "image",
  "tempfile",
  "tracing",
  "zbus",
