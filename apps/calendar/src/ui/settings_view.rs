@@ -177,6 +177,22 @@ fn general(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormLi
     ]
 }
 
+fn advanced(settings: &Shared<CalendarSettings>) -> Vec<FormLine> {
+    let shared = settings.clone();
+    let time_zones = Toggle::new(
+        &L10N.tr("settings-time-zones"),
+        settings.borrow().time_zones,
+        move |on| shared.borrow_mut().time_zones = on,
+    );
+    vec![
+        FormLine::Heading(L10N.tr("settings-advanced")),
+        FormLine::Row(L10N.tr("settings-time-zones"), Box::new(time_zones)),
+        FormLine::Wide(Box::new(
+            Label::new(&L10N.tr("settings-time-zones-note")).secondary(),
+        )),
+    ]
+}
+
 fn alerts(settings: &Shared<CalendarSettings>) -> Vec<FormLine> {
     let current = settings.borrow().clone();
     let choices = |all: &[Alert]| -> Vec<(Alert, String)> {
@@ -286,6 +302,7 @@ fn settings_form(appearance: Appearance, settings: &Shared<CalendarSettings>) ->
     let mut lines = general(settings, &summary);
     lines.extend(alerts(settings));
     lines.extend(accounts(settings, &summary));
+    lines.extend(advanced(settings));
     let form = Form::new(&L10N.tr("settings-title"), lines);
     let mut ui = Ui::new(
         Box::new(ScrollView::new(form)),
