@@ -63,5 +63,6 @@ fixed four rows).
    permitted) and a Statistics section (faults, context switches, I/O syscalls).
 3. Selected Processes and Active Processes filters.
 4. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
-5. Ports column (socket count per process), packets in/out, and UDP traffic per process (needs eBPF or nftables accounting).
+5. Ports column (socket count per process), packets in/out, and UDP traffic per process (needs
+   eBPF or nftables accounting).
 6. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).
