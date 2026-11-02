@@ -7,6 +7,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime};
 
 use bande_inbox::Outbox;
+use bande_packages::flatpak::{self, FLATHUB, Installed};
 use bande_toolkit::Image;
 use bande_xdg::DesktopEntry;
 use jxl_oxide::JxlImage;
@@ -39,6 +40,8 @@ pub enum Loaded {
     Catalogue {
         apps: Vec<Component>,
         installed: HashSet<String>,
+        flatpaks: HashMap<String, Installed>,
+        flathub: bool,
     },
     Icons(Vec<(String, Option<Image>)>),
     Shot {
@@ -281,8 +284,26 @@ fn entry_app(entry: &DesktopEntry, package: Option<&String>) -> Component {
     }
 }
 
+fn exported(path: &Path) -> bool {
+    path.components()
+        .collect::<Vec<_>>()
+        .windows(2)
+        .any(|pair| pair[0].as_os_str() == "flatpak" && pair[1].as_os_str() == "exports")
+}
+
 fn catalogue() -> Loaded {
-    let mut apps = catalog::system_catalog();
+    let remotes = flatpak::remotes().unwrap_or_else(|error| {
+        if error != flatpak::Error::Missing {
+            tracing::warn!("cannot list the Flatpak remotes: {error}");
+        }
+        Vec::new()
+    });
+    let flatpaks: HashMap<String, Installed> = flatpak::installed()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|installed| (installed.id.clone(), installed))
+        .collect();
+    let mut apps = catalog::system_catalog(&remotes);
     let entries = bande_xdg::applications(
         &bande_xdg::data_dirs(),
         None,
@@ -302,7 +323,9 @@ fn catalogue() -> Loaded {
             continue;
         };
         listed.insert(entry.path.clone());
-        installed.insert(app.key().to_owned());
+        if !exported(&entry.path) {
+            installed.insert(app.key().to_owned());
+        }
         if app.icons.is_empty() {
             app.icons.extend(entry.icon.as_deref().map(entry_icon));
         }
@@ -321,7 +344,23 @@ fn catalogue() -> Loaded {
         installed.insert(app.key().to_owned());
         apps.push(app);
     }
-    Loaded::Catalogue { apps, installed }
+    let known: HashSet<String> = apps.iter().map(|app| app.key().to_owned()).collect();
+    for found in flatpaks.values().filter(|found| !known.contains(&found.id)) {
+        if let Some(entry) = by_id.get(format!("{}.desktop", found.id).as_str()) {
+            let mut app = entry_app(entry, None);
+            app.bundles.push(Bundle::Flatpak {
+                remote: found.origin.clone(),
+                reference: found.reference.clone(),
+            });
+            apps.push(app);
+        }
+    }
+    Loaded::Catalogue {
+        apps,
+        installed,
+        flatpaks,
+        flathub: remotes.iter().any(|remote| remote == FLATHUB),
+    }
 }
 
 fn icons(requested: Vec<(String, Vec<Icon>)>, data_dirs: &[PathBuf]) -> Loaded {
@@ -336,16 +375,35 @@ fn icons(requested: Vec<(String, Vec<Icon>)>, data_dirs: &[PathBuf]) -> Loaded {
     )
 }
 
+fn flatpak_paths() -> Vec<PathBuf> {
+    let Some(dir) = catalog::flatpak_user_dir() else {
+        return Vec::new();
+    };
+    let appstream = dir.join("appstream");
+    let mut paths: Vec<PathBuf> = fs::read_dir(&appstream)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|remote| remote.path().join(catalog::flatpak_arch()))
+        .collect();
+    paths.extend([
+        appstream,
+        dir.join(".changed"),
+        dir.join("repo").join("config"),
+    ]);
+    paths
+}
+
 fn fingerprint() -> Option<SystemTime> {
     catalog::SYSTEM_ROOTS
         .iter()
         .flat_map(|root| [Path::new(root).join("xml"), Path::new(root).join("yaml")])
         .chain([
             PathBuf::from(DPKG_STATUS),
-            PathBuf::from(catalog::FLATPAK_ROOT),
             PathBuf::from(catalog::METAINFO),
             PathBuf::from(SYSTEM_APPLICATIONS),
         ])
+        .chain(flatpak_paths())
         .filter_map(|path| {
             fs::metadata(path)
                 .and_then(|metadata| metadata.modified())

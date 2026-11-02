@@ -2,11 +2,13 @@ use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
+use bande_app_settings::{SettingsWindow, settings_folder};
 use bande_notify::Urgency;
 use bande_notify::client::{Request as Notification, notify};
 use bande_packages::{Client, debian_arch};
+use bande_software::settings::{SETTINGS_SIZE, SoftwareSettings, settings_form};
 use bande_software::{
     COMMAND_BACK, COMMAND_DISCOVER, COMMAND_FIND, COMMAND_INSTALLED, COMMAND_UPDATES, Finished,
     L10N, Software, WINDOW_SIZE,
@@ -19,8 +21,20 @@ static INFO: Info = Info {
     version: env!("CARGO_PKG_VERSION"),
     name: || L10N.tr("title"),
     keys: Keys::Standard,
-    settings: None,
+    settings: Some(Settings {
+        title: || L10N.tr("settings-title"),
+        size: SETTINGS_SIZE,
+        view: settings_window,
+    }),
 };
+
+fn settings_window(appearance: Appearance) -> Box<dyn View> {
+    Box::new(SettingsWindow::<SoftwareSettings>::new(
+        appearance,
+        settings_folder(),
+        settings_form,
+    ))
+}
 
 struct Pane(Software);
 
@@ -43,7 +57,7 @@ impl View for Pane {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.0.fd()]
+        self.0.fds()
     }
 
     fn source_ready(&mut self, _window: &mut Window, _index: usize) -> bool {
@@ -124,7 +138,7 @@ impl Program for Store {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        self.parked.iter().map(|pane| pane.0.fd()).collect()
+        self.parked.iter().flat_map(|pane| pane.0.fds()).collect()
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {

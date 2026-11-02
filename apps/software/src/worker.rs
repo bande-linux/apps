@@ -2,20 +2,50 @@ use std::io;
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use bande_inbox::{Inbox, Outbox};
-use bande_packages::{Client, Error, ErrorCode, Info, Mode, Package, Progress, native};
+use bande_packages::flatpak::{self, Canceller as FlatpakCanceller};
+use bande_packages::{Client, Error, ErrorCode, Info, Mode, Package, Progress, Status, native};
 
+use crate::catalog::flatpak_needs_x11;
 use crate::media::Loaded;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Job {
-    Install { key: String, package: String },
-    Remove { key: String, id: String },
+    Install {
+        key: String,
+        package: String,
+    },
+    Remove {
+        key: String,
+        id: String,
+    },
+    FlatpakInstall {
+        key: String,
+        remote: String,
+        reference: String,
+    },
+    FlatpakRemove {
+        key: String,
+        reference: String,
+    },
+    Flathub(bool),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Query {
-    PlanRemoval { key: String, package: String },
-    Details { key: String, package: String },
+    PlanRemoval {
+        key: String,
+        package: String,
+    },
+    Details {
+        key: String,
+        package: String,
+    },
+    FlatpakDetails {
+        key: String,
+        remote: String,
+        reference: String,
+        installed: bool,
+    },
     Updates,
 }
 
@@ -29,6 +59,9 @@ pub enum Problem {
     SystemPackage,
     Unsigned,
     NoPackageKit,
+    NoFlatpak,
+    NeedsX11,
+    Cancelled,
     Other,
 }
 
@@ -63,8 +96,79 @@ pub enum Message {
         also: Vec<String>,
     },
     Details(String, Facts),
-    Updates(Vec<Package>),
+    FlatpakDetails(String, flatpak::Facts),
+    Updates(Vec<Package>, Vec<flatpak::Update>),
     Failed(String, Failure),
+    FlathubProgress(Progress),
+    Flathub(Result<bool, Failure>),
+}
+
+pub const FLATPAK_PACKAGE: &str = "flatpak";
+
+fn flatpak_failure(error: flatpak::Error) -> Option<Failure> {
+    tracing::warn!("flatpak: {error}");
+    let details = match error {
+        flatpak::Error::Cancelled => return None,
+        flatpak::Error::Missing => {
+            return Some(Failure {
+                problem: Problem::NoFlatpak,
+                details: String::new(),
+            });
+        }
+        flatpak::Error::Failed(details) => details,
+    };
+    let lower = details.to_lowercase();
+    let problem = if ["resolve", "connect", "network", "timeout"]
+        .iter()
+        .any(|word| lower.contains(word))
+    {
+        Problem::NoNetwork
+    } else if lower.contains("space") {
+        Problem::NoSpace
+    } else {
+        Problem::Other
+    };
+    Some(Failure { problem, details })
+}
+
+fn flatpak_settled(key: String, result: Result<Message, flatpak::Error>) -> Message {
+    result.unwrap_or_else(|error| match flatpak_failure(error) {
+        Some(failure) => Message::Failed(key, failure),
+        None => Message::Stopped(key),
+    })
+}
+
+fn flatpak_progress(status: Status, percent: Option<u32>) -> Progress {
+    Progress {
+        percent,
+        status,
+        allow_cancel: true,
+    }
+}
+
+fn turn_on_flathub(client: &Client, arch: &str, out: &Outbox<Message>) -> Result<(), Failure> {
+    match flatpak::enable_flathub() {
+        Err(flatpak::Error::Missing) => {
+            install(client, arch, FLATPAK_PACKAGE, &|progress| {
+                out.send(Message::FlathubProgress(progress));
+            })
+            .map_err(|error| {
+                failure(&error).unwrap_or(Failure {
+                    problem: Problem::Cancelled,
+                    details: String::new(),
+                })
+            })?;
+            out.send(Message::FlathubProgress(Progress::default()));
+            flatpak::enable_flathub()
+        }
+        enabled => enabled,
+    }
+    .map_err(|error| {
+        flatpak_failure(error).unwrap_or(Failure {
+            problem: Problem::Cancelled,
+            details: String::new(),
+        })
+    })
 }
 
 fn failure(error: &Error) -> Option<Failure> {
@@ -196,7 +300,13 @@ fn details(client: &Client, arch: &str, package: &str) -> Result<Facts, Error> {
     })
 }
 
-fn transact(client: &Client, arch: &str, jobs: &Receiver<Job>, out: &Outbox<Message>) {
+fn transact(
+    client: &Client,
+    arch: &str,
+    flatpaks: &FlatpakCanceller,
+    jobs: &Receiver<Job>,
+    out: &Outbox<Message>,
+) {
     for job in jobs {
         let message = match job {
             Job::Install { key, package } => {
@@ -215,6 +325,59 @@ fn transact(client: &Client, arch: &str, jobs: &Receiver<Job>, out: &Outbox<Mess
                     .remove(std::slice::from_ref(&id), Mode::Apply, &progress)
                     .map(|_| Message::Removed(key.clone()));
                 settled(key, removed)
+            }
+            Job::FlatpakInstall {
+                key,
+                remote,
+                reference,
+            } => {
+                let progress = |percent| {
+                    out.send(Message::Progress(
+                        key.clone(),
+                        flatpak_progress(Status::Installing, percent),
+                    ));
+                };
+                let needs_x11 = flatpak::facts(&remote, &reference, false)
+                    .is_ok_and(|facts| flatpak_needs_x11(&facts.metadata));
+                if needs_x11 {
+                    Message::Failed(
+                        key,
+                        Failure {
+                            problem: Problem::NeedsX11,
+                            details: String::new(),
+                        },
+                    )
+                } else {
+                    let installed = flatpak::install(&remote, &reference, &progress, flatpaks)
+                        .map(|()| Message::Installed(key.clone()));
+                    flatpak_settled(key, installed)
+                }
+            }
+            Job::FlatpakRemove { key, reference } => {
+                let progress = |percent| {
+                    out.send(Message::Progress(
+                        key.clone(),
+                        flatpak_progress(Status::Removing, percent),
+                    ));
+                };
+                let removed = flatpak::uninstall(&reference, &progress, flatpaks).map(|()| {
+                    if let Err(error) = flatpak::uninstall_unused() {
+                        tracing::warn!("cannot remove the unused runtimes: {error}");
+                    }
+                    Message::Removed(key.clone())
+                });
+                flatpak_settled(key, removed)
+            }
+            Job::Flathub(true) => {
+                Message::Flathub(turn_on_flathub(client, arch, out).map(|()| true))
+            }
+            Job::Flathub(false) => {
+                Message::Flathub(flatpak::disable_flathub().map(|()| false).map_err(|error| {
+                    flatpak_failure(error).unwrap_or(Failure {
+                        problem: Problem::Cancelled,
+                        details: String::new(),
+                    })
+                }))
             }
         };
         if !out.send(message) {
@@ -242,13 +405,33 @@ fn ask(client: &Client, arch: &str, queries: &Receiver<Query>, out: &Outbox<Mess
                     continue;
                 }
             },
-            Query::Updates => match client.updates() {
-                Ok(updates) => Message::Updates(updates),
+            Query::FlatpakDetails {
+                key,
+                remote,
+                reference,
+                installed,
+            } => match flatpak::facts(&remote, &reference, installed) {
+                Ok(facts) => Message::FlatpakDetails(key, facts),
                 Err(error) => {
-                    tracing::warn!("cannot look for updates: {error}");
+                    tracing::warn!("cannot read the details of {reference}: {error}");
                     continue;
                 }
             },
+            Query::Updates => {
+                let flatpaks = flatpak::updates().unwrap_or_else(|error| {
+                    if error != flatpak::Error::Missing {
+                        tracing::warn!("cannot look for Flatpak updates: {error}");
+                    }
+                    Vec::new()
+                });
+                match client.updates() {
+                    Ok(updates) => Message::Updates(updates, flatpaks),
+                    Err(error) => {
+                        tracing::warn!("cannot look for updates: {error}");
+                        Message::Updates(Vec::new(), flatpaks)
+                    }
+                }
+            }
         };
         if !out.send(message) {
             return;
@@ -262,7 +445,12 @@ pub struct Workers {
     pub inbox: Inbox<Message>,
 }
 
-pub fn start(transactions: Client, queries: Client, arch: &str) -> io::Result<Workers> {
+pub fn start(
+    transactions: Client,
+    queries: Client,
+    flatpaks: FlatpakCanceller,
+    arch: &str,
+) -> io::Result<Workers> {
     let inbox = Inbox::new()?;
     let (jobs, job_receiver) = mpsc::channel();
     let (asked, query_receiver) = mpsc::channel();
@@ -270,7 +458,7 @@ pub fn start(transactions: Client, queries: Client, arch: &str) -> io::Result<Wo
     let job_arch = arch.to_owned();
     std::thread::Builder::new()
         .name("software-transactions".to_owned())
-        .spawn(move || transact(&transactions, &job_arch, &job_receiver, &out))?;
+        .spawn(move || transact(&transactions, &job_arch, &flatpaks, &job_receiver, &out))?;
     let out = inbox.outbox();
     let query_arch = arch.to_owned();
     std::thread::Builder::new()

@@ -16,19 +16,19 @@ done.
 | App page | What's New | Have: latest release, its date and notes |
 | App page | Version, size, licence, source, developer, website | Have: available and installed version, download with the packages it pulls in (simulated install) or size on disk, category, licence, Debian suite and component, developer, website link |
 | App page | Ratings and reviews | Missing; no review service (ODRS is the candidate) |
-| App page | Age rating, permissions | Missing (OARS content rating is in AppStream) |
+| App page | Age rating, permissions | Have: a Flatpak's sandbox permissions as sentences; missing: the age rating (OARS content rating is in AppStream) |
 | Install | One click, password, progress, cancel, Open | Have: "You'll be asked for an administrator's password", "Waiting for your password…" while polkit asks, a cancelled prompt goes back quietly, progress with status and percent, Cancel when PackageKit allows it, Open when done |
 | Install | Done while the window is closed | Have: a notification when it finishes or fails |
 | Remove | Confirm, list what else goes | Have |
 | Installed | Every installed app | Have: catalogue apps, apps that ship metainfo (the Bande apps) and apps with only a desktop entry, each with its package for removal |
-| Updates | List, Update All, restarts | Hands off to Settings › Software Update (live, boot and offline classes, restarts). Software lists the updates, the apps among them and opens the pane |
+| Updates | List, Update All, restarts | Hands off to Settings › Software Update (live, boot, offline and Flatpak classes, restarts, automatic updates at idle). Software lists the Debian and Flatpak updates, the apps among them and opens the pane |
 | Errors | A sentence a person can act on | Have: no network, locked, no disk space, not in the package lists, unmet dependencies, system package, unsigned, no PackageKit; the PackageKit text under Details |
 | Offline | Browse works; installs explain | Have: NetworkManager state shown as a line; screenshots reload when the network returns |
 | Freshness | Catalogue follows apt | Have: reloaded on reopen when dpkg or the catalogue changed |
 | Keyboard | Find, Back, places | Have: Ctrl+F, Ctrl+[, Ctrl+1/2/3 |
-| Sources | Where an app comes from, trust | Have: Debian suite and component; no per-source trust or "add a source" UI |
-| Flatpak/Flathub | Apps Debian lacks | Missing: plan below |
-| Settings | Automatic updates, notifications | Belong to Settings › Software Update; automatic updates are missing there |
+| Sources | Where an app comes from, trust | Have: Debian suite and component, Flathub on rows and pages, a Debian/Flathub picker when both offer an app; no per-source trust or "add a source" UI |
+| Flatpak/Flathub | Apps Debian lacks | Have: Software Settings › Get apps from Flathub (off by default) adds the remote with `--user` (installing `flatpak` through PackageKit if missing) and reads its AppStream; per-user install with progress and Cancel, an X11-only app refused, remove with unused runtimes, the runtime download on the page; installs need no password |
+| Settings | Automatic updates, notifications | Belong to Settings › Software Update, which has "Automatically keep this computer up to date" |
 
 ## Package Installer
 
@@ -42,43 +42,15 @@ done.
 | Done | Success with Open, failure with a reason | Have: Open per app the package installs, restart notice; failures for locked, system package, no PackageKit, no network, disk space, dependencies, with the details |
 | Architecture | Refuse a foreign package clearly | Have |
 
-## Flatpak and Flathub (plan)
-
-What a user needs: apps Debian lacks or newer versions, installed per user without a password,
-kept up to date, and removable, with their sandbox permissions shown.
-
-1. Backend: drive the `flatpak` command line on a worker thread (no libflatpak binding in Rust;
-   the CLI is stable and prints progress). Per-user installation (`--user`) needs no polkit and is
-   what Flathub expects; a system installation is an option in Settings later.
-2. Turning it on: Settings › Software Update (or a Software setting) "Get apps from Flathub",
-   off by default. Turning it on installs the `flatpak` package through PackageKit (password)
-   and runs `flatpak remote-add --user --if-not-exists flathub <flatpakrepo URL>`. The
-   catalogue then also reads `~/.local/share/flatpak/appstream/<remote>/<arch>/active/`
-   (system: `/var/lib/flatpak/appstream`, already read).
-3. Catalogue: `Bundle::Flatpak` exists; the X11 filter uses `flatpak_needs_x11` on the app's
-   metadata (`flatpak remote-info --show-metadata`). When an app has both a Debian and a Flathub
-   bundle, the page offers a source picker (Debian first) like GNOME Software.
-4. Install: `flatpak install --user --noninteractive -y flathub <ref>`; parse the percentage
-   lines for progress; Cancel kills the process group. Show the runtime download when it is not
-   installed yet (`flatpak remote-info` sizes).
-5. Remove: `flatpak uninstall --user`, then offer `--unused` to drop runtimes.
-6. Updates: list with `flatpak remote-ls --updates`; Settings › Software Update installs them with
-   the Debian ones (a second class beside live/boot/offline).
-7. Installed: `flatpak list --app --user --columns=application,version,origin`.
-8. Permissions: show the finish-args (network, home, devices) as plain sentences on the page.
-9. Refresh: `flatpak update --appstream` when Software Update refreshes, never on a timer here.
-
 ## Remaining, ranked
 
 Software:
-1. Flatpak and Flathub, as planned above.
-2. Automatic updates in Settings › Software Update (download in the background, install live
-   updates at idle).
-3. Curated Discover (editor's picks per category, like GNOME Software's featured list) instead of
+1. A system-wide Flatpak installation as an option, and Flatpak apps a system remote offers.
+2. Curated Discover (editor's picks per category, like GNOME Software's featured list) instead of
    only New & Updated.
-4. OARS age rating and the licence as free/proprietary with a link.
-5. Reviews from ODRS (opt-in, read-only first).
-6. Move `Picture`/the installer's `Icon` into a toolkit image widget, and share the NetworkManager
+3. OARS age rating and the licence as free/proprietary with a link.
+4. Reviews from ODRS (opt-in, read-only first).
+5. Move `Picture`/the installer's `Icon` into a toolkit image widget, and share the NetworkManager
    online follower with Calendar through a desktop library.
 
 Package Installer:

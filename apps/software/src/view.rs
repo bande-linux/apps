@@ -2,12 +2,17 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::os::fd::BorrowedFd;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
+use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_datetime::DateFormats;
 use bande_fs::format_size;
 use bande_inbox::Inbox;
+use bande_packages::flatpak::{
+    self, Canceller as FlatpakCanceller, FLATHUB, Installed, Permission, permissions,
+};
 use bande_packages::{Canceller, Client, Package, Progress, Status};
 use bande_toolkit::ui::{
     Axis, Button, Context, Disclosure, Label, ProgressBar, ScrollState, ScrollView, SearchField,
@@ -16,9 +21,10 @@ use bande_toolkit::ui::{
 use bande_toolkit::{Image, Palette, Rect, TextSystem};
 
 use crate::L10N;
-use crate::catalog::{Block, Bundle, Category, Component, Icon, search};
+use crate::catalog::{self, Block, Bundle, Category, Component, Icon, flatpak_needs_x11, search};
 use crate::media::{self, Loaded, Media, Request, ShotError};
 use crate::online;
+use crate::settings::SoftwareSettings;
 use crate::widgets::{AppRow, Grid, Picture};
 use crate::worker::{self, Facts, Failure, Job, Message, Problem, Query};
 
@@ -75,6 +81,7 @@ enum Intent {
     Shot(isize),
     Website(String),
     SoftwareUpdate,
+    Source(String, Source),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,11 +90,29 @@ enum Task {
     Remove,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Source {
+    Debian,
+    Flatpak,
+}
+
+impl Source {
+    const ALL: [Self; 2] = [Self::Debian, Self::Flatpak];
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Removal {
     key: String,
     id: String,
     also: Vec<String>,
+    source: Source,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Busy {
+    task: Task,
+    progress: Progress,
+    source: Source,
 }
 
 type Widgets = Vec<Box<dyn Widget>>;
@@ -122,13 +147,30 @@ fn place_name(place: Place) -> String {
     })
 }
 
-fn source(bundle: &Bundle) -> String {
-    match bundle {
-        Bundle::Deb(_) => L10N.tr("source-debian"),
-        Bundle::Flatpak { remote, .. } => {
-            L10N.tr_args("source-flatpak", [("remote", remote.clone().into())])
-        }
+fn remote_name(remote: &str) -> String {
+    match remote {
+        FLATHUB => L10N.tr("flathub"),
+        other => other.to_owned(),
     }
+}
+
+fn permission_text(permission: Permission) -> String {
+    L10N.tr(match permission {
+        Permission::Network => "permission-network",
+        Permission::AllFiles => "permission-all-files",
+        Permission::Home => "permission-home",
+        Permission::ReadOnlyFiles => "permission-read-files",
+        Permission::Folders => "permission-folders",
+        Permission::Devices => "permission-devices",
+        Permission::Audio => "permission-audio",
+        Permission::Bluetooth => "permission-bluetooth",
+        Permission::Printing => "permission-printing",
+        Permission::Ssh => "permission-ssh",
+        Permission::X11 => "permission-x11",
+        Permission::SessionBus => "permission-session-bus",
+        Permission::SystemBus => "permission-system-bus",
+        Permission::Settings => "permission-settings",
+    })
 }
 
 fn origin_name(origin: &str) -> String {
@@ -206,6 +248,20 @@ fn deb(app: &Component) -> Option<&str> {
     })
 }
 
+fn flatpak_bundle(app: &Component) -> Option<(&str, &str)> {
+    app.bundles.iter().find_map(|bundle| match bundle {
+        Bundle::Flatpak { remote, reference } => Some((remote.as_str(), reference.as_str())),
+        Bundle::Deb(_) => None,
+    })
+}
+
+fn offers(app: &Component, source: Source) -> bool {
+    match source {
+        Source::Debian => deb(app).is_some(),
+        Source::Flatpak => flatpak_bundle(app).is_some(),
+    }
+}
+
 fn status_text(task: Task, progress: &Progress) -> String {
     let id = match (progress.status, task) {
         (Status::Authorizing, _) => "status-authorizing",
@@ -233,8 +289,10 @@ fn problem_text(problem: Problem, task: Task, name: &str) -> String {
         (Problem::SystemPackage, _) => "problem-system-package",
         (Problem::Unsigned, _) => "problem-unsigned",
         (Problem::NoPackageKit, _) => "problem-no-packagekit",
-        (Problem::Other, Task::Install) => "install-failed",
-        (Problem::Other, Task::Remove) => "remove-failed",
+        (Problem::NoFlatpak, _) => "problem-no-flatpak",
+        (Problem::NeedsX11, _) => "needs-x11",
+        (Problem::Other | Problem::Cancelled, Task::Install) => "install-failed",
+        (Problem::Other | Problem::Cancelled, Task::Remove) => "remove-failed",
     };
     L10N.tr_args(id, [("name", name.to_owned().into())])
 }
@@ -281,21 +339,32 @@ pub struct Software {
     online: bool,
     dates: DateFormats,
     installed: HashSet<String>,
+    flatpaks: HashMap<String, Installed>,
+    flathub: bool,
+    flathub_wanted: Option<bool>,
+    flathub_busy: Option<Progress>,
+    flathub_failure: Option<Failure>,
+    chosen: HashMap<String, Source>,
     icons: HashMap<String, Option<Image>>,
     requested: HashSet<String>,
     shots: HashMap<String, Result<Image, ShotError>>,
     shot: usize,
     facts: HashMap<String, Facts>,
-    busy: HashMap<String, (Task, Progress)>,
+    flatpak_facts: HashMap<String, flatpak::Facts>,
+    busy: HashMap<String, Busy>,
     failed: HashMap<String, (Task, Failure)>,
     removal: Option<Removal>,
     updates: Vec<Package>,
+    flatpak_updates: Vec<flatpak::Update>,
     shown: usize,
     jobs: Sender<Job>,
     queries: Sender<Query>,
     canceller: Canceller,
+    flatpak_canceller: FlatpakCanceller,
     media: Media,
     inbox: Inbox<Message>,
+    settings_folder: Option<PathBuf>,
+    settings_watch: Option<SettingsWatch>,
     place: Place,
     pages: Vec<(Page, ScrollState)>,
     query: String,
@@ -325,7 +394,16 @@ impl Software {
         text: TextSystem,
     ) -> io::Result<Self> {
         let canceller = transactions.canceller();
-        let workers = worker::start(transactions, queries, arch)?;
+        let flatpak_canceller = FlatpakCanceller::default();
+        let workers = worker::start(transactions, queries, flatpak_canceller.clone(), arch)?;
+        let folder = settings_folder();
+        let settings_watch = folder
+            .as_deref()
+            .and_then(|folder| SettingsWatch::start(folder, SoftwareSettings::FILE));
+        let flathub_wanted = folder
+            .as_deref()
+            .filter(|folder| folder.join(SoftwareSettings::FILE).exists())
+            .map(|folder| SoftwareSettings::load(folder).flathub);
         let media = media::start(&workers.inbox.outbox())?;
         online::watch(workers.inbox.outbox());
         let intents: Rc<RefCell<Vec<Intent>>> = Rc::default();
@@ -354,21 +432,32 @@ impl Software {
             online: true,
             dates: DateFormats::from_env(),
             installed: HashSet::new(),
+            flatpaks: HashMap::new(),
+            flathub: false,
+            flathub_wanted,
+            flathub_busy: None,
+            flathub_failure: None,
+            chosen: HashMap::new(),
             icons: HashMap::new(),
             requested: HashSet::new(),
             shots: HashMap::new(),
             shot: 0,
             facts: HashMap::new(),
+            flatpak_facts: HashMap::new(),
             busy: HashMap::new(),
             failed: HashMap::new(),
             removal: None,
             updates: Vec::new(),
+            flatpak_updates: Vec::new(),
             shown: PAGE_ROWS,
             jobs: workers.jobs,
             queries: workers.queries,
             canceller,
+            flatpak_canceller,
             media,
             inbox: workers.inbox,
+            settings_folder: folder,
+            settings_watch,
             place: Place::Discover,
             pages: vec![(Page::Home, ScrollState::default())],
             query: String::new(),
@@ -387,8 +476,10 @@ impl Software {
         Ok(software)
     }
 
-    pub fn fd(&self) -> BorrowedFd<'_> {
-        self.inbox.fd()
+    pub fn fds(&self) -> Vec<BorrowedFd<'_>> {
+        let mut fds = vec![self.inbox.fd()];
+        fds.extend(self.settings_watch.iter().map(SettingsWatch::fd));
+        fds
     }
 
     pub fn ui(&mut self) -> &mut Ui {
@@ -421,7 +512,14 @@ impl Software {
     pub fn pump(&mut self) -> bool {
         let messages = self.inbox.drain();
         let intents: Vec<Intent> = self.intents.borrow_mut().drain(..).collect();
-        if messages.is_empty() && intents.is_empty() {
+        let settings = self
+            .settings_watch
+            .as_mut()
+            .is_some_and(SettingsWatch::drain);
+        if settings {
+            self.follow_settings();
+        }
+        if messages.is_empty() && intents.is_empty() && !settings {
             return false;
         }
         for intent in intents {
@@ -439,6 +537,44 @@ impl Software {
             tracing::warn!("the catalogue loader stopped");
         }
         self.ask(Query::Updates);
+    }
+
+    fn follow_settings(&mut self) {
+        let Some(folder) = &self.settings_folder else {
+            return;
+        };
+        let wanted = SoftwareSettings::load(folder).flathub;
+        if self.flathub_wanted == Some(wanted) {
+            return;
+        }
+        self.flathub_wanted = Some(wanted);
+        if wanted == self.flathub && self.flathub_failure.is_none() {
+            return;
+        }
+        self.flathub_failure = None;
+        self.flathub_busy = Some(Progress::default());
+        self.send(Job::Flathub(wanted));
+    }
+
+    fn remember_flathub(&mut self) {
+        if self.flathub_wanted.is_some() {
+            return;
+        }
+        self.flathub_wanted = Some(self.flathub);
+        let settings = SoftwareSettings {
+            flathub: self.flathub,
+        };
+        if let Some(folder) = &self.settings_folder
+            && let Err(error) = settings.save(folder)
+        {
+            tracing::warn!("cannot save the Software settings: {error}");
+        }
+    }
+
+    fn send(&self, job: Job) {
+        if self.jobs.send(job).is_err() {
+            tracing::warn!("the software worker stopped");
+        }
     }
 
     pub fn take_finished(&mut self) -> Vec<Finished> {
@@ -507,13 +643,15 @@ impl Software {
             Intent::Back => self.back(),
             Intent::More => self.shown += PAGE_ROWS,
             Intent::Install(index) => self.install(index),
-            Intent::Cancel(key) => {
-                if self.busy.contains_key(&key)
-                    && let Err(error) = self.canceller.cancel()
-                {
-                    tracing::warn!("cannot cancel: {error}");
+            Intent::Cancel(key) => match self.busy.get(&key).map(|busy| busy.source) {
+                Some(Source::Flatpak) => self.flatpak_canceller.cancel(),
+                Some(Source::Debian) => {
+                    if let Err(error) = self.canceller.cancel() {
+                        tracing::warn!("cannot cancel: {error}");
+                    }
                 }
-            }
+                None => {}
+            },
             Intent::Open(index) => self.open(index),
             Intent::Remove(index) => self.plan_removal(index),
             Intent::ConfirmRemoval => self.remove(),
@@ -524,6 +662,10 @@ impl Software {
             }
             Intent::Website(url) => in_background(move || open_website(&url)),
             Intent::SoftwareUpdate => open_software_update(),
+            Intent::Source(key, source) => {
+                self.chosen.insert(key, source);
+                self.refresh_details();
+            }
         }
     }
 
@@ -547,15 +689,54 @@ impl Software {
     }
 
     fn ask_details(&self, index: usize) {
-        if let Some(app) = self.apps.get(index)
-            && let Some(package) = deb(app)
-            && !self.facts.contains_key(app.key())
-        {
-            self.ask(Query::Details {
-                key: app.key().to_owned(),
-                package: package.to_owned(),
-            });
+        let Some(app) = self.apps.get(index) else {
+            return;
+        };
+        let key = app.key().to_owned();
+        match self.source_of(app) {
+            Some(Source::Debian) if !self.facts.contains_key(&key) => {
+                if let Some(package) = deb(app) {
+                    self.ask(Query::Details {
+                        key,
+                        package: package.to_owned(),
+                    });
+                }
+            }
+            Some(Source::Flatpak) if !self.flatpak_facts.contains_key(&key) => {
+                let installed = self.flatpaks.get(&key);
+                if let Some((remote, reference)) = installed
+                    .map(|found| (found.origin.as_str(), found.reference.as_str()))
+                    .or_else(|| flatpak_bundle(app))
+                {
+                    self.ask(Query::FlatpakDetails {
+                        key: key.clone(),
+                        remote: remote.to_owned(),
+                        reference: reference.to_owned(),
+                        installed: installed.is_some(),
+                    });
+                }
+            }
+            _ => {}
         }
+    }
+
+    fn source_of(&self, app: &Component) -> Option<Source> {
+        let key = app.key();
+        if self.flatpaks.contains_key(key) {
+            return Some(Source::Flatpak);
+        }
+        if self.installed.contains(key) {
+            return deb(app).map(|_| Source::Debian);
+        }
+        self.chosen
+            .get(key)
+            .copied()
+            .filter(|source| offers(app, *source))
+            .or_else(|| Source::ALL.into_iter().find(|source| offers(app, *source)))
+    }
+
+    fn is_installed(&self, key: &str) -> bool {
+        self.installed.contains(key) || self.flatpaks.contains_key(key)
     }
 
     fn refresh_details(&self) {
@@ -580,7 +761,12 @@ impl Software {
 
     fn receive(&mut self, message: Message) {
         match message {
-            Message::Loaded(Loaded::Catalogue { apps, installed }) => {
+            Message::Loaded(Loaded::Catalogue {
+                apps,
+                installed,
+                flatpaks,
+                flathub,
+            }) => {
                 let apps: Vec<Component> = apps.into_iter().filter(|app| !app.needs_x11).collect();
                 let shown: Vec<Option<usize>> = self
                     .pages
@@ -610,8 +796,12 @@ impl Software {
                 }
                 self.apps = apps;
                 self.installed = installed;
+                self.flatpaks = flatpaks;
+                self.flathub = flathub;
                 self.facts.clear();
+                self.flatpak_facts.clear();
                 self.loading = false;
+                self.remember_flathub();
                 self.refresh_details();
             }
             Message::Online(online) => {
@@ -632,38 +822,69 @@ impl Software {
                 self.shots.insert(url, image);
             }
             Message::Progress(key, progress) => {
-                if let Some((_, shown)) = self.busy.get_mut(&key) {
-                    *shown = progress;
+                if let Some(busy) = self.busy.get_mut(&key) {
+                    busy.progress = progress;
                 }
             }
             Message::Installed(key) => {
                 self.finished.push(Finished::Installed(self.name_of(&key)));
-                self.busy.remove(&key);
+                let source = self.busy.remove(&key).map(|busy| busy.source);
                 self.facts.remove(&key);
-                self.installed.insert(key);
+                match source {
+                    Some(Source::Flatpak) => self.installed_flatpak(key),
+                    _ => {
+                        self.installed.insert(key);
+                    }
+                }
                 self.ask(Query::Updates);
                 self.refresh_details();
             }
             Message::Removed(key) => {
                 self.busy.remove(&key);
                 self.facts.remove(&key);
-                self.installed.remove(&key);
+                self.flatpak_facts.remove(&key);
+                if self.flatpaks.remove(&key).is_none() {
+                    self.installed.remove(&key);
+                }
                 self.ask(Query::Updates);
                 self.refresh_details();
+            }
+            Message::FlatpakDetails(key, facts) => {
+                self.flatpak_facts.insert(key, facts);
+            }
+            Message::FlathubProgress(progress) => self.flathub_busy = Some(progress),
+            Message::Flathub(result) => {
+                self.flathub_busy = None;
+                match result {
+                    Ok(on) => {
+                        self.flathub = on;
+                        self.reload();
+                    }
+                    Err(failure) if failure.problem == Problem::Cancelled => {}
+                    Err(failure) => self.flathub_failure = Some(failure),
+                }
             }
             Message::Stopped(key) => {
                 self.busy.remove(&key);
             }
             Message::RemovalPlanned { key, id, also } => {
                 self.busy.remove(&key);
-                self.removal = Some(Removal { key, id, also });
+                self.removal = Some(Removal {
+                    key,
+                    id,
+                    also,
+                    source: Source::Debian,
+                });
             }
             Message::Details(key, facts) => {
                 self.facts.insert(key, facts);
             }
-            Message::Updates(updates) => self.updates = updates,
+            Message::Updates(updates, flatpaks) => {
+                self.updates = updates;
+                self.flatpak_updates = flatpaks;
+            }
             Message::Failed(key, failure) => {
-                if let Some((task, _)) = self.busy.remove(&key) {
+                if let Some(Busy { task, .. }) = self.busy.remove(&key) {
                     if task == Task::Install {
                         self.finished.push(Finished::Failed(self.name_of(&key)));
                     }
@@ -709,43 +930,117 @@ impl Software {
         }
     }
 
-    fn start(&mut self, key: String, task: Task) {
+    fn installed_flatpak(&mut self, key: String) {
+        let Some((remote, reference)) = self
+            .apps
+            .iter()
+            .find(|app| app.key() == key)
+            .and_then(flatpak_bundle)
+            .map(|(remote, reference)| (remote.to_owned(), reference.to_owned()))
+        else {
+            return;
+        };
+        let version = self
+            .flatpak_facts
+            .remove(&key)
+            .map(|facts| facts.version)
+            .unwrap_or_default();
+        self.flatpaks.insert(
+            key.clone(),
+            Installed {
+                id: key,
+                version,
+                origin: remote,
+                reference,
+            },
+        );
+    }
+
+    fn start(&mut self, key: String, task: Task, source: Source) {
         self.failed.remove(&key);
-        self.busy.insert(key, (task, Progress::default()));
+        let progress = match (source, task) {
+            (Source::Debian, _) => Progress::default(),
+            (Source::Flatpak, Task::Install) => Progress {
+                status: Status::Downloading,
+                allow_cancel: true,
+                ..Progress::default()
+            },
+            (Source::Flatpak, Task::Remove) => Progress {
+                status: Status::Removing,
+                ..Progress::default()
+            },
+        };
+        self.busy.insert(
+            key,
+            Busy {
+                task,
+                progress,
+                source,
+            },
+        );
     }
 
     fn install(&mut self, index: usize) {
         let Some(app) = self.apps.get(index) else {
             return;
         };
-        let Some(package) = deb(app).map(str::to_owned) else {
+        let key = app.key().to_owned();
+        let job = match self.source_of(app) {
+            Some(Source::Debian) => deb(app).map(|package| Job::Install {
+                key: key.clone(),
+                package: package.to_owned(),
+            }),
+            Some(Source::Flatpak) => {
+                flatpak_bundle(app).map(|(remote, reference)| Job::FlatpakInstall {
+                    key: key.clone(),
+                    remote: remote.to_owned(),
+                    reference: reference.to_owned(),
+                })
+            }
+            None => None,
+        };
+        let Some(job) = job else {
             return;
         };
-        let key = app.key().to_owned();
-        self.start(key.clone(), Task::Install);
-        if self.jobs.send(Job::Install { key, package }).is_err() {
-            tracing::warn!("the software worker stopped");
-        }
+        let source = match job {
+            Job::FlatpakInstall { .. } => Source::Flatpak,
+            _ => Source::Debian,
+        };
+        self.start(key, Task::Install, source);
+        self.send(job);
     }
 
     fn plan_removal(&mut self, index: usize) {
         let Some(app) = self.apps.get(index) else {
             return;
         };
+        let key = app.key().to_owned();
+        if let Some(found) = self.flatpaks.get(&key) {
+            self.removal = Some(Removal {
+                id: found.reference.clone(),
+                key,
+                also: Vec::new(),
+                source: Source::Flatpak,
+            });
+            return;
+        }
         let Some(package) = deb(app).map(str::to_owned) else {
             return;
         };
-        let key = app.key().to_owned();
-        self.start(key.clone(), Task::Remove);
+        self.start(key.clone(), Task::Remove, Source::Debian);
         self.ask(Query::PlanRemoval { key, package });
     }
 
     fn remove(&mut self) {
-        if let Some(Removal { key, id, .. }) = self.removal.take() {
-            self.start(key.clone(), Task::Remove);
-            if self.jobs.send(Job::Remove { key, id }).is_err() {
-                tracing::warn!("the software worker stopped");
-            }
+        if let Some(Removal {
+            key, id, source, ..
+        }) = self.removal.take()
+        {
+            self.start(key.clone(), Task::Remove, source);
+            self.send(match source {
+                Source::Debian => Job::Remove { key, id },
+                Source::Flatpak => Job::FlatpakRemove { key, reference: id },
+            });
         }
     }
 
@@ -754,11 +1049,14 @@ impl Software {
             return;
         };
         in_background(move || {
-            let entries = bande_xdg::applications(
-                &bande_xdg::data_dirs(),
-                None,
-                &bande_xdg::current_desktops(),
-            );
+            let mut dirs = bande_xdg::data_dirs();
+            if let Some(exports) = catalog::flatpak_user_dir()
+                .map(|dir| dir.join("exports").join("share"))
+                .filter(|exports| !dirs.contains(exports))
+            {
+                dirs.push(exports);
+            }
+            let entries = bande_xdg::applications(&dirs, None, &bande_xdg::current_desktops());
             let entry = entries.iter().find(|entry| {
                 entry.path.file_name().and_then(|name| name.to_str()) == Some(launchable.as_str())
             });
@@ -780,29 +1078,46 @@ impl Software {
     }
 
     fn has_update(&self, app: &Component) -> bool {
-        deb(app).is_some_and(|package| self.updates.iter().any(|update| update.name == package))
+        match self.source_of(app) {
+            Some(Source::Flatpak) => self
+                .flatpak_updates
+                .iter()
+                .any(|update| update.id == app.key()),
+            _ => deb(app)
+                .is_some_and(|package| self.updates.iter().any(|update| update.name == package)),
+        }
+    }
+
+    fn update_count(&self) -> usize {
+        self.updates.len() + self.flatpak_updates.len()
     }
 
     fn row_action(&self, index: usize, app: &Component) -> Option<Box<dyn Widget>> {
         let key = app.key();
-        if let Some((task, progress)) = self.busy.get(key) {
-            return Some(boxed(Label::new(&status_text(*task, progress)).secondary()));
+        if let Some(busy) = self.busy.get(key) {
+            return Some(boxed(
+                Label::new(&status_text(busy.task, &busy.progress)).secondary(),
+            ));
         }
-        if self.installed.contains(key) {
+        if self.is_installed(key) {
             return Some(match app.launchable.is_some() {
                 true => boxed(self.button(&L10N.tr("open"), Intent::Open(index))),
                 false => boxed(Label::new(&L10N.tr("is-installed")).secondary()),
             });
         }
-        match deb(app) {
-            Some(_) => Some(boxed(
-                self.button(&L10N.tr("install"), Intent::Install(index)),
-            )),
-            None => app
-                .bundles
-                .first()
-                .map(|bundle| boxed(Label::new(&source(bundle)).secondary())),
+        self.source_of(app)
+            .map(|_| boxed(self.button(&L10N.tr("install"), Intent::Install(index))))
+    }
+
+    fn source_caption(&self, app: &Component) -> Option<String> {
+        if self.source_of(app) != Some(Source::Flatpak) {
+            return None;
         }
+        self.flatpaks
+            .get(app.key())
+            .map(|found| found.origin.as_str())
+            .or_else(|| flatpak_bundle(app).map(|(remote, _)| remote))
+            .map(remote_name)
     }
 
     fn app_row(&self, index: usize) -> Option<Box<dyn Widget>> {
@@ -813,6 +1128,7 @@ impl Software {
             ROW_ICON,
             &app.name,
             &app.summary,
+            self.source_caption(app),
             self.row_action(index, app),
             move || intents.borrow_mut().push(Intent::Show(Page::App(index))),
         )))
@@ -890,13 +1206,45 @@ impl Software {
                 .get(*index)
                 .is_some_and(|app| names.insert(app.name.to_lowercase()))
         });
-        let mut widgets = vec![
+        let mut widgets = self.flathub_status();
+        widgets.extend([
             boxed(Label::heading(&L10N.tr("categories"))),
             boxed(Grid::new(3, SPACING / 2.0, tiles)),
-        ];
+        ]);
         if !fresh.is_empty() {
             widgets.push(boxed(Label::heading(&L10N.tr("new-and-updated"))));
             widgets.extend(self.rows(&fresh, NEW_ROWS));
+        }
+        widgets
+    }
+
+    fn flathub_status(&self) -> Widgets {
+        if let Some(progress) = &self.flathub_busy {
+            let id = match (self.flathub_wanted, progress.status) {
+                (_, Status::Authorizing) => "status-authorizing",
+                (Some(false), _) => "flathub-turning-off",
+                _ => "flathub-turning-on",
+            };
+            return vec![row(vec![
+                boxed(Spinner::new(&L10N.tr(id))),
+                boxed(Label::new(&L10N.tr(id)).secondary()),
+            ])];
+        }
+        let Some(failure) = &self.flathub_failure else {
+            return Vec::new();
+        };
+        let mut widgets = vec![boxed(Label::new(&problem_text(
+            failure.problem,
+            Task::Install,
+            &L10N.tr("flathub"),
+        )))];
+        if !failure.details.is_empty() {
+            widgets.push(boxed(Disclosure::new(
+                &L10N.tr("details"),
+                false,
+                Label::new(&failure.details),
+                |_| {},
+            )));
         }
         widgets
     }
@@ -914,7 +1262,7 @@ impl Software {
     }
 
     fn installed_list(&mut self) -> Widgets {
-        let found = self.sorted(self.matching(|app| self.installed.contains(app.key())));
+        let found = self.sorted(self.matching(|app| self.is_installed(app.key())));
         let mut widgets = vec![boxed(Label::heading(&L10N.tr("installed")))];
         if found.is_empty() {
             widgets.push(boxed(Label::new(&L10N.tr("no-installed"))));
@@ -927,7 +1275,8 @@ impl Software {
 
     fn updates_list(&mut self) -> Widgets {
         let mut widgets = vec![boxed(Label::heading(&L10N.tr("updates")))];
-        if self.updates.is_empty() {
+        let count = self.update_count();
+        if count == 0 {
             widgets.push(boxed(Label::new(&L10N.tr("up-to-date"))));
             widgets.push(boxed(Label::new(&L10N.tr("updates-hint")).secondary()));
             widgets.push(row(vec![boxed(
@@ -936,10 +1285,9 @@ impl Software {
             return widgets;
         }
         let apps = self.sorted(self.matching(|app| self.has_update(app)));
-        widgets.push(boxed(Label::new(&L10N.tr_args(
-            "updates-available",
-            [("count", self.updates.len().into())],
-        ))));
+        widgets.push(boxed(Label::new(
+            &L10N.tr_args("updates-available", [("count", count.into())]),
+        )));
         widgets.push(boxed(Label::new(&L10N.tr("updates-hint")).secondary()));
         widgets.push(row(vec![boxed(
             self.button(&L10N.tr("update-all"), Intent::SoftwareUpdate)
@@ -950,19 +1298,23 @@ impl Software {
             widgets.extend(self.rows(&apps, apps.len()));
         }
         let mut packages: Vec<String> = self
-            .updates
+            .flatpak_updates
             .iter()
+            .map(|update| (&update.name, &update.version))
+            .chain(
+                self.updates
+                    .iter()
+                    .map(|package| (&package.name, &package.version)),
+            )
             .take(LISTED_UPDATES)
-            .map(|package| format!("{} {}", package.name, package.version))
+            .map(|(name, version)| format!("{name} {version}"))
             .collect();
-        if self.updates.len() > LISTED_UPDATES {
-            packages.push(L10N.tr_args(
-                "more-updates",
-                [("count", (self.updates.len() - LISTED_UPDATES).into())],
-            ));
+        if count > LISTED_UPDATES {
+            packages
+                .push(L10N.tr_args("more-updates", [("count", (count - LISTED_UPDATES).into())]));
         }
         widgets.push(boxed(Disclosure::new(
-            &L10N.tr_args("all-updates", [("count", self.updates.len().into())]),
+            &L10N.tr_args("all-updates", [("count", count.into())]),
             false,
             Label::new(&packages.join("\n")),
             |_| {},
@@ -997,21 +1349,67 @@ impl Software {
         widgets
     }
 
+    fn source_picker(&self, app: &Component) -> Option<Box<dyn Widget>> {
+        if self.is_installed(app.key()) || !Source::ALL.iter().all(|source| offers(app, *source)) {
+            return None;
+        }
+        let names: Vec<String> = Source::ALL
+            .into_iter()
+            .map(|source| match source {
+                Source::Debian => L10N.tr("debian"),
+                Source::Flatpak => flatpak_bundle(app)
+                    .map(|(remote, _)| remote_name(remote))
+                    .unwrap_or_default(),
+            })
+            .collect();
+        let selected = self
+            .source_of(app)
+            .and_then(|chosen| Source::ALL.iter().position(|source| *source == chosen));
+        let intents = Rc::clone(&self.intents);
+        let key = app.key().to_owned();
+        Some(boxed(SegmentedControl::new(
+            &L10N.tr("info-source"),
+            &names,
+            selected,
+            move |index| {
+                if let Some(source) = Source::ALL.get(index) {
+                    intents
+                        .borrow_mut()
+                        .push(Intent::Source(key.clone(), *source));
+                }
+            },
+        )))
+    }
+
+    fn needs_x11(&self, app: &Component) -> bool {
+        self.source_of(app) == Some(Source::Flatpak)
+            && self
+                .flatpak_facts
+                .get(app.key())
+                .is_some_and(|facts| flatpak_needs_x11(&facts.metadata))
+    }
+
     fn actions(&self, index: usize, app: &Component) -> Widgets {
         let key = app.key();
         let mut widgets: Widgets = Vec::new();
-        if let Some((task, progress)) = self.busy.get(key) {
-            widgets.extend(self.progress(key, app, *task, progress));
+        if let Some(picker) = self.source_picker(app) {
+            widgets.push(row(vec![
+                boxed(Label::new(&L10N.tr("info-source")).secondary()),
+                picker,
+            ]));
+        }
+        if let Some(busy) = self.busy.get(key) {
+            widgets.extend(self.progress(key, app, busy.task, &busy.progress));
         } else if let Some(removal) = self.removal.as_ref().filter(|removal| removal.key == key) {
             widgets.extend(self.confirmation(app, removal));
-        } else if self.installed.contains(key) {
+        } else if self.is_installed(key) {
             let mut buttons: Widgets = Vec::new();
             if app.launchable.is_some() {
                 buttons.push(boxed(
                     self.button(&L10N.tr("open"), Intent::Open(index)).primary(),
                 ));
             }
-            if deb(app).is_some() {
+            if self.source_of(app).is_some() {
                 buttons.push(boxed(
                     self.button(&L10N.tr("remove"), Intent::Remove(index)),
                 ));
@@ -1025,17 +1423,18 @@ impl Software {
                     boxed(self.button(&L10N.tr("update-all"), Intent::SoftwareUpdate)),
                 ]));
             }
-        } else if deb(app).is_some() {
+        } else if self.needs_x11(app) {
+            widgets.push(boxed(Label::new(&L10N.tr("needs-x11"))));
+        } else if let Some(source) = self.source_of(app) {
             widgets.push(row(vec![boxed(
                 self.button(&L10N.tr("install"), Intent::Install(index))
                     .primary(),
             )]));
-            widgets.push(boxed(Label::new(&L10N.tr("password-hint")).secondary()));
-        } else if let Some(Bundle::Flatpak { remote, .. }) = app.bundles.first() {
-            widgets.push(boxed(Label::new(&L10N.tr_args(
-                "flatpak-unsupported",
-                [("remote", remote.clone().into())],
-            ))));
+            let hint = match source {
+                Source::Debian => "password-hint",
+                Source::Flatpak => "flatpak-hint",
+            };
+            widgets.push(boxed(Label::new(&L10N.tr(hint)).secondary()));
         }
         if let Some((task, failure)) = self.failed.get(key) {
             widgets.push(boxed(Label::new(&problem_text(
@@ -1064,6 +1463,9 @@ impl Software {
                 "remove-also",
                 [("packages", removal.also.join(", ").into())],
             ))));
+        }
+        if removal.source == Source::Flatpak {
+            widgets.push(boxed(Label::new(&L10N.tr("remove-runtimes")).secondary()));
         }
         widgets.push(row(vec![
             boxed(self.button(&L10N.tr("cancel"), Intent::CancelRemoval)),
@@ -1163,8 +1565,66 @@ impl Software {
         widgets
     }
 
+    fn flatpak_facts(&self, app: &Component) -> Option<(Facts, Option<(String, u64)>)> {
+        if self.source_of(app) != Some(Source::Flatpak) {
+            return None;
+        }
+        let facts = self.flatpak_facts.get(app.key())?;
+        let installed = self.flatpaks.get(app.key());
+        let remote = installed
+            .map(|found| found.origin.as_str())
+            .or_else(|| flatpak_bundle(app).map(|(remote, _)| remote))
+            .unwrap_or_default();
+        let version = (!facts.version.is_empty()).then(|| facts.version.clone());
+        let runtime = facts
+            .runtime
+            .clone()
+            .filter(|_| installed.is_none() && facts.runtime_download > 0)
+            .map(|runtime| (runtime, facts.runtime_download));
+        Some((
+            Facts {
+                available: version.clone().filter(|_| installed.is_none()),
+                installed: installed
+                    .map(|found| found.version.clone())
+                    .filter(|version| !version.is_empty())
+                    .or(version.filter(|_| installed.is_some())),
+                size: installed.map(|_| facts.size).unwrap_or(0),
+                download: installed.map(|_| 0).unwrap_or(facts.download),
+                extra: 0,
+                origin: remote_name(remote),
+                homepage: String::new(),
+            },
+            runtime,
+        ))
+    }
+
+    fn permissions(&self, app: &Component) -> Widgets {
+        if self.source_of(app) != Some(Source::Flatpak) {
+            return Vec::new();
+        }
+        let Some(facts) = self.flatpak_facts.get(app.key()) else {
+            return Vec::new();
+        };
+        let mut widgets = vec![boxed(Label::heading(&L10N.tr("permissions")))];
+        let found = permissions(&facts.metadata);
+        if found.is_empty() {
+            widgets.push(boxed(Label::new(&L10N.tr("permission-none"))));
+        }
+        widgets.extend(
+            found
+                .into_iter()
+                .map(|permission| boxed(Label::new(&format!("• {}", permission_text(permission))))),
+        );
+        widgets
+    }
+
     fn information(&self, app: &Component) -> Widgets {
-        let facts = self.facts.get(app.key());
+        let flatpak = self.flatpak_facts(app);
+        let runtime = flatpak.as_ref().and_then(|(_, runtime)| runtime.clone());
+        let facts = flatpak
+            .as_ref()
+            .map(|(facts, _)| facts)
+            .or_else(|| self.facts.get(app.key()));
         let fact = |title: &str, value: Box<dyn Widget>| {
             boxed(Stack::new(
                 Axis::Vertical,
@@ -1193,9 +1653,17 @@ impl Software {
         }
         if let Some(facts) = facts.filter(|facts| facts.download > 0) {
             let size = format_size(facts.download);
-            let value = match facts.extra {
-                0 => size,
-                extra => L10N.tr_args(
+            let value = match (facts.extra, runtime) {
+                (_, Some((runtime, runtime_size))) => L10N.tr_args(
+                    "download-with-runtime",
+                    [
+                        ("size", size.into()),
+                        ("runtime", runtime.into()),
+                        ("runtime_size", format_size(runtime_size).into()),
+                    ],
+                ),
+                (0, None) => size,
+                (extra, None) => L10N.tr_args(
                     "download-with",
                     [("size", size.into()), ("count", extra.into())],
                 ),
@@ -1215,7 +1683,10 @@ impl Software {
             .map(|facts| facts.origin.as_str())
             .filter(|origin| !origin.is_empty())
             .map(origin_name)
-            .or_else(|| app.bundles.first().map(source));
+            .or_else(|| match self.source_of(app)? {
+                Source::Debian => Some(L10N.tr("debian")),
+                Source::Flatpak => flatpak_bundle(app).map(|(remote, _)| remote_name(remote)),
+            });
         if let Some(origin) = origin {
             cells.push(fact(&L10N.tr("info-source"), text(&origin)));
         }
@@ -1274,15 +1745,16 @@ impl Software {
                 .map(|block| boxed(Label::new(&block_text(block)))),
         );
         widgets.extend(self.whats_new(app));
+        widgets.extend(self.permissions(app));
         widgets.extend(self.information(app));
         widgets
     }
 
     fn recount(&mut self) {
-        if self.counted == self.updates.len() {
+        if self.counted == self.update_count() {
             return;
         }
-        self.counted = self.updates.len();
+        self.counted = self.update_count();
         let places = place_control(&self.intents, self.place, self.counted);
         let id = places.id();
         if let Some(holder) = self.ui.widget(self.header)

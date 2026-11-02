@@ -23,7 +23,6 @@ pub use x11::{flatpak_needs_x11, x11_only_packages};
 pub use xml::{Source, parse as parse_xml};
 
 pub const SYSTEM_ROOTS: [&str; 2] = ["/usr/share/swcatalog", "/var/lib/swcatalog"];
-pub const FLATPAK_ROOT: &str = "/var/lib/flatpak/appstream";
 pub const APT_LISTS: &str = "/var/lib/apt/lists";
 pub const METAINFO: &str = "/usr/share/metainfo";
 
@@ -83,19 +82,19 @@ pub fn system_files(root: &Path) -> Vec<CatalogFile> {
         .collect()
 }
 
-pub fn flatpak_files(root: &Path, arch: &str) -> Vec<CatalogFile> {
-    let mut remotes: Vec<_> = fs::read_dir(root)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|entry| entry.file_name().into_string().ok())
-        .collect();
-    remotes.sort();
+pub fn flatpak_user_dir() -> Option<PathBuf> {
+    std::env::var_os("FLATPAK_USER_DIR")
+        .filter(|dir| !dir.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| bande_xdg::data_home().map(|home| home.join("flatpak")))
+}
+
+pub fn flatpak_files(root: &Path, remotes: &[String], arch: &str) -> Vec<CatalogFile> {
     remotes
-        .into_iter()
+        .iter()
         .filter_map(|remote| {
-            let active = root.join(&remote).join(arch).join("active");
-            ["appstream.xml.gz", "appstream.xml"]
+            let active = root.join(remote).join(arch).join("active");
+            ["appstream.xml", "appstream.xml.gz"]
                 .into_iter()
                 .map(|name| active.join(name))
                 .find(|path| path.is_file())
@@ -103,7 +102,7 @@ pub fn flatpak_files(root: &Path, arch: &str) -> Vec<CatalogFile> {
                     path,
                     format: Format::Xml,
                     source: Source {
-                        remote: Some(remote),
+                        remote: Some(remote.clone()),
                         icon_root: active.join("icons"),
                     },
                 })
@@ -235,13 +234,19 @@ pub fn local_apps(dir: &Path, locale: Option<&Locale>) -> Vec<Component> {
         .collect()
 }
 
-pub fn system_catalog() -> Vec<Component> {
+pub fn system_catalog(remotes: &[String]) -> Vec<Component> {
     let locale = Locale::from_env();
     let mut files: Vec<_> = SYSTEM_ROOTS
         .iter()
         .flat_map(|root| system_files(Path::new(root)))
         .collect();
-    files.extend(flatpak_files(Path::new(FLATPAK_ROOT), flatpak_arch()));
+    if let Some(dir) = flatpak_user_dir() {
+        files.extend(flatpak_files(
+            &dir.join("appstream"),
+            remotes,
+            flatpak_arch(),
+        ));
+    }
     let mut apps = merge(
         load(&files, locale.as_ref())
             .into_iter()

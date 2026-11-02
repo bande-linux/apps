@@ -6,6 +6,7 @@ const ROW_PADDING: f32 = 8.0;
 const ROW_GAP: f32 = 12.0;
 const NAME_SIZE: f32 = 13.0;
 const SUMMARY_SIZE: f32 = 12.0;
+const SOURCE_SIZE: f32 = 11.0;
 
 pub struct Grid {
     id: WidgetId,
@@ -198,10 +199,11 @@ pub struct AppRow {
     icon_size: f32,
     name: String,
     summary: String,
+    source: Option<String>,
     on_open: Box<dyn FnMut()>,
     action: Vec<Box<dyn Widget>>,
     action_size: Size,
-    texts: Option<(TextKey, Paragraph, Paragraph)>,
+    texts: Option<(TextKey, Paragraph, Paragraph, Option<Paragraph>)>,
     hovered: bool,
     pressed: bool,
     frame: Rect,
@@ -213,6 +215,7 @@ impl AppRow {
         icon_size: f32,
         name: &str,
         summary: &str,
+        source: Option<String>,
         action: Option<Box<dyn Widget>>,
         on_open: impl FnMut() + 'static,
     ) -> Self {
@@ -222,6 +225,7 @@ impl AppRow {
             icon_size,
             name: name.to_owned(),
             summary: summary.to_owned(),
+            source,
             on_open: Box::new(on_open),
             action: action.into_iter().collect(),
             action_size: Size::new(0.0, 0.0),
@@ -263,8 +267,8 @@ impl Widget for AppRow {
             };
         let room = (available.width - used).max(0.0);
         let key = (room, cx.palette.ink, cx.text.scale());
-        let (name, summary) = match self.texts.take().filter(|(kept, ..)| *kept == key) {
-            Some((_, name, summary)) => (name, summary),
+        let (name, summary, source) = match self.texts.take().filter(|(kept, ..)| *kept == key) {
+            Some((_, name, summary, source)) => (name, summary, source),
             None => (
                 cx.text.fitted(
                     &self.name,
@@ -276,13 +280,17 @@ impl Widget for AppRow {
                     TextStyle::new(SUMMARY_SIZE, cx.palette.ink2),
                     room,
                 ),
+                self.source.as_deref().map(|source| {
+                    cx.text
+                        .fitted(source, TextStyle::new(SOURCE_SIZE, cx.palette.ink3), room)
+                }),
             ),
         };
-        let height = (name.height() + summary.height())
-            .max(self.icon_size)
-            .max(self.action_size.height)
-            + 2.0 * ROW_PADDING;
-        self.texts = Some((key, name, summary));
+        let lines = name.height()
+            + summary.height()
+            + source.as_ref().map_or(0.0, |source| source.height());
+        let height = lines.max(self.icon_size).max(self.action_size.height) + 2.0 * ROW_PADDING;
+        self.texts = Some((key, name, summary, source));
         Size::new(available.width, height.ceil())
     }
 
@@ -318,10 +326,12 @@ impl Widget for AppRow {
             focus_ring(cx, shape, items);
         }
         paint_image(cx, self.icon.as_ref(), self.icon_rect(), items);
-        if let Some((_, name, summary)) = &self.texts {
+        if let Some((_, name, summary, source)) = &self.texts {
             let x = self.frame.x + ROW_PADDING + self.icon_size + ROW_GAP;
+            let source_height = source.as_ref().map_or(0.0, |source| source.height());
             let top = self.frame.y
-                + ((self.frame.height - name.height() - summary.height()) / 2.0).round();
+                + ((self.frame.height - name.height() - summary.height() - source_height) / 2.0)
+                    .round();
             items.push(Item::Text {
                 origin: Point::new(x, top),
                 paragraph: name.clone(),
@@ -330,6 +340,12 @@ impl Widget for AppRow {
                 origin: Point::new(x, top + name.height()),
                 paragraph: summary.clone(),
             });
+            if let Some(source) = source {
+                items.push(Item::Text {
+                    origin: Point::new(x, top + name.height() + summary.height()),
+                    paragraph: source.clone(),
+                });
+            }
         }
         for action in &self.action {
             action.paint(cx, items);
@@ -339,7 +355,10 @@ impl Widget for AppRow {
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::ListItem);
         node.set_label(self.name.clone());
-        node.set_description(self.summary.clone());
+        node.set_description(match &self.source {
+            Some(source) => format!("{}, {source}", self.summary),
+            None => self.summary.clone(),
+        });
         node.add_action(Action::Click);
         node
     }

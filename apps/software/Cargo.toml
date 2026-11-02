@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 accesskit.workspace = true
 bande-app.workspace = true
+bande-app-settings.workspace = true
 bande-app-menu.workspace = true
 bande-datetime.workspace = true
 bande-fs.workspace = true
@@ -41,7 +42,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "admin"
 depends = "$auto, appstream, packagekit, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
-recommends = "bande-polkit"
+recommends = "bande-polkit, flatpak"
 extended-description = """\
 The app store of the Bande desktop: browse and search the apps Debian and \
 Flathub describe with AppStream, read about them before installing, and \
