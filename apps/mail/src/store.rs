@@ -2,7 +2,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::Path;
 use std::time::Duration;
 
-use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params, params_from_iter};
+use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 
 use crate::error::Result;
 use crate::imap::{Fetched, Flag, Flags, Folder, Role};
@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS accounts (
     imap_security TEXT NOT NULL,
     smtp_host TEXT NOT NULL,
     smtp_port INTEGER NOT NULL,
-    smtp_security TEXT NOT NULL
+    smtp_security TEXT NOT NULL,
+    signature TEXT NOT NULL DEFAULT '',
+    enabled INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS mailboxes (
     id INTEGER PRIMARY KEY,
@@ -60,15 +62,23 @@ CREATE TABLE IF NOT EXISTS messages (
     attachments INTEGER NOT NULL DEFAULT 0,
     header BLOB NOT NULL,
     body BLOB,
+    thread TEXT,
+    color INTEGER NOT NULL DEFAULT 0,
     UNIQUE (mailbox, uid)
 );
 CREATE INDEX IF NOT EXISTS messages_by_date ON messages (mailbox, date DESC);
+CREATE INDEX IF NOT EXISTS messages_by_thread ON messages (thread);
 CREATE TABLE IF NOT EXISTS rules (
     id INTEGER PRIMARY KEY,
-    field TEXT NOT NULL,
-    pattern TEXT NOT NULL,
+    every INTEGER NOT NULL DEFAULT 1,
     action TEXT NOT NULL,
     mailbox INTEGER REFERENCES mailboxes(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS rule_conditions (
+    id INTEGER PRIMARY KEY,
+    rule INTEGER NOT NULL REFERENCES rules(id) ON DELETE CASCADE,
+    field TEXT NOT NULL,
+    pattern TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS remote_senders (
     email TEXT PRIMARY KEY
@@ -401,69 +411,10 @@ impl Store {
             .append(true)
             .mode(0o600)
             .open(path)?;
-        let mut connection = Connection::open(path)?;
+        let connection = Connection::open(path)?;
         connection.busy_timeout(Duration::from_secs(10))?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
         connection.execute_batch(SCHEMA)?;
-        let migration = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let version: i64 = migration.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version < 1 {
-            migration.execute_batch(
-                "ALTER TABLE accounts ADD COLUMN signature TEXT NOT NULL DEFAULT ''; \
-                 PRAGMA user_version = 1;",
-            )?;
-        }
-        if version < 2 {
-            migration.execute_batch("ALTER TABLE messages ADD COLUMN thread TEXT;")?;
-            let headers = migration
-                .prepare("SELECT id, header FROM messages")?
-                .query_map([], |row| {
-                    Ok((row.get::<_, MessageId>(0)?, row.get::<_, Vec<u8>>(1)?))
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            for (id, header) in headers {
-                migration.execute(
-                    "UPDATE messages SET thread = ?2 WHERE id = ?1",
-                    params![id, thread_of(&Envelope::parse(&header))],
-                )?;
-            }
-            migration.execute_batch("PRAGMA user_version = 2;")?;
-        }
-        if version < 3 {
-            migration.execute_batch(
-                "ALTER TABLE accounts ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1; \
-                 PRAGMA user_version = 3;",
-            )?;
-        }
-        if version < 4 {
-            migration.execute_batch(
-                "CREATE INDEX IF NOT EXISTS messages_by_thread ON messages (thread); \
-                 PRAGMA user_version = 4;",
-            )?;
-        }
-        if version < 5 {
-            migration.execute_batch(
-                "ALTER TABLE rules ADD COLUMN every INTEGER NOT NULL DEFAULT 1; \
-                 CREATE TABLE rule_conditions ( \
-                     id INTEGER PRIMARY KEY, \
-                     rule INTEGER NOT NULL REFERENCES rules(id) ON DELETE CASCADE, \
-                     field TEXT NOT NULL, \
-                     pattern TEXT NOT NULL \
-                 ); \
-                 INSERT INTO rule_conditions (rule, field, pattern) \
-                     SELECT id, field, pattern FROM rules; \
-                 ALTER TABLE rules DROP COLUMN field; \
-                 ALTER TABLE rules DROP COLUMN pattern; \
-                 PRAGMA user_version = 5;",
-            )?;
-        }
-        if version < 6 {
-            migration.execute_batch(
-                "ALTER TABLE messages ADD COLUMN color INTEGER NOT NULL DEFAULT 0; \
-                 PRAGMA user_version = 6;",
-            )?;
-        }
-        migration.commit()?;
         Ok(Self { connection })
     }
 

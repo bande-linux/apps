@@ -4,9 +4,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, Result};
-
-pub const MANIFEST_VERSION: u32 = 1;
+use crate::Result;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Forward {
@@ -16,7 +14,6 @@ pub struct Forward {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Manifest {
-    pub version: u32,
     pub id: String,
     pub name: String,
     pub os: String,
@@ -29,19 +26,9 @@ pub struct Manifest {
     pub forwards: Vec<Forward>,
 }
 
-#[derive(Deserialize)]
-struct Versioned {
-    version: u32,
-}
-
 impl Manifest {
     pub fn load(path: &Path) -> Result<Self> {
-        let bytes = fs::read(path)?;
-        let Versioned { version } = serde_json::from_slice(&bytes)?;
-        if version != MANIFEST_VERSION {
-            return Err(Error::Version(version));
-        }
-        Ok(serde_json::from_slice(&bytes)?)
+        Ok(serde_json::from_slice(&fs::read(path)?)?)
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {

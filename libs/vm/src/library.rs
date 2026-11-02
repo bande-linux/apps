@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rustix::process::getuid;
 use rustix::rand::{GetRandomFlags, getrandom};
 
-use crate::manifest::{Forward, MANIFEST_VERSION, Manifest};
+use crate::manifest::{Forward, Manifest};
 use crate::qemu::{Host, utf8};
 use crate::seed::CloudInit;
 use crate::{Error, Result};
@@ -79,7 +79,6 @@ impl Library {
             .duration_since(UNIX_EPOCH)
             .map_or(0, |since| since.as_secs());
         let machine = self.machine(Manifest {
-            version: MANIFEST_VERSION,
             id,
             name: new.name,
             os: new.os,

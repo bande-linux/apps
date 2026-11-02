@@ -32,7 +32,6 @@ pub enum Error {
     },
     Missing(String),
     NotUtf8(PathBuf),
-    Version(u32),
     Cancelled,
 }
 
@@ -57,7 +56,6 @@ impl fmt::Display for Error {
             Self::Unit { unit, result } => write!(f, "{unit} did not start: {result}"),
             Self::Missing(what) => write!(f, "{what} is not available"),
             Self::NotUtf8(path) => write!(f, "{} is not a UTF-8 path", path.display()),
-            Self::Version(version) => write!(f, "unknown manifest version {version}"),
             Self::Cancelled => f.write_str("cancelled"),
         }
     }

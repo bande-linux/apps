@@ -58,11 +58,8 @@ pub fn window_file(folder: &Path, pid: u32, window: u32) -> PathBuf {
 }
 
 fn owner(file: &Path) -> Option<u32> {
-    let stem = file.file_stem()?.to_str()?;
-    stem.split_once('-')
-        .map_or(stem, |(pid, _)| pid)
-        .parse()
-        .ok()
+    let (pid, _) = file.file_stem()?.to_str()?.split_once('-')?;
+    pid.parse().ok()
 }
 
 pub fn left_behind(folder: &Path, running: impl Fn(u32) -> bool) -> Vec<PathBuf> {
