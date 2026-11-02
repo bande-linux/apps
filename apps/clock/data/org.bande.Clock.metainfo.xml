@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Clock</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Clock</name>
+  <summary>Alarms, timers, a stopwatch and a world clock</summary>
+  <description>
+    <p>Alarms that repeat on the days you choose, with a label, a sound and snooze; several timers at once, started from presets or your own length; a stopwatch with laps; and the time in cities around the world.</p>
+    <p>Alarms and timers ring with a notification and sound even when Clock's window is closed, and the Clock menu in the menu bar shows the running timers and the next alarm.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Clock.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+</component>
