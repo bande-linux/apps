@@ -48,7 +48,8 @@ apt install bande-mail
   Forward (Shift+Ctrl+F), Flag (Shift+Ctrl+L), Mark as Read or Unread (Shift+Ctrl+U), Send
   (Shift+Ctrl+D), Close Window (Ctrl+W), Quit (Ctrl+Q) and Search (Ctrl+F), which searches
   sender, recipients, subject and text. Mailbox → Mark All as Read marks the shown mailbox read, and Message → Move To files the
-  message in any mailbox of its account.
+  message in any mailbox of its account. Ctrl+click and Shift+click select several messages;
+  Delete, Archive, Junk, Move To, Flag and Mark as Read then act on all of them.
 - **Compose** opens its own window, with From when there are several accounts. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's
   signature goes above the quoted text and changes with From. Files are

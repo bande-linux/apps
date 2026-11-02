@@ -357,7 +357,7 @@ impl MailView {
 
     fn paint_row(&mut self, items: &mut Vec<Item>, summary: &Summary, rect: Rect, now: Timestamp) {
         let palette = self.palette;
-        let selected = self.selected == Some(summary.id);
+        let selected = self.is_chosen(summary.id);
         let active = selected
             && self.focus == Pane::List
             && !self.ui.has_sheet()
@@ -505,9 +505,11 @@ impl MailView {
             return;
         }
         let Some(reading) = &self.reading else {
-            let message = match self.messages.len() {
-                0 => String::new(),
-                _ => L10N.tr("no-message-selected"),
+            let chosen = self.also.len() + usize::from(self.selected.is_some());
+            let message = match (self.messages.len(), chosen) {
+                (0, _) => String::new(),
+                (_, 0 | 1) => L10N.tr("no-message-selected"),
+                (_, count) => L10N.tr_args("messages-selected", [("count", count.into())]),
             };
             let paragraph = self.ui.context().text.paragraph(
                 &message,

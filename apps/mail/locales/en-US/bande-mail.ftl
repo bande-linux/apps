@@ -15,6 +15,7 @@ account-offline = Offline
 no-messages = No Messages
 no-results = No Results
 no-message-selected = No Message Selected
+messages-selected = { $count } Messages Selected
 no-sender = No Sender
 no-subject = No Subject
 header-to = To: { $names }
