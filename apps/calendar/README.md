@@ -17,7 +17,9 @@ views. Packaged as `bande-calendar`.
   (also from Password… in Settings) and keeps every offline change meanwhile.
 - **Subscriptions.** `webcal:` / `webcals:` links and plain `https:` `.ics` URLs, read-only,
   refreshed on a wall-clock deadline kept across restarts (every 5 minutes to every week, or
-  never); the name and colour come from `X-WR-CALNAME` and `X-APPLE-CALENDAR-COLOR`.
+  never; for all of them or one by one in Settings); their alerts are dropped unless turned on
+  for that subscription, as on macOS; the name and colour come from `X-WR-CALNAME` and
+  `X-APPLE-CALENDAR-COLOR`.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
   without a network and pushes changes as soon as NetworkManager says the network is back. Sync is incremental with `sync-token`
   (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
@@ -51,7 +53,7 @@ views. Packaged as `bande-calendar`.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed. Alerts,
   the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
-  suspend or a clock change.
+  suspend or a clock change, and the view follows a change of the system time zone at once.
 - **Settings** (Calendar ▸ Settings…): default calendar, start of the week, the hours the day
   starts and ends (the rest is shaded, and the week opens at the start), week numbers, default
   alerts for new events and all-day events, how often accounts and subscriptions refresh, and

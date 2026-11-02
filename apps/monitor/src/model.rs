@@ -632,6 +632,7 @@ pub struct Monitor {
     cores_shown: bool,
     uid: u32,
     filter: Filter,
+    pinned: Vec<(u32, u64)>,
     frequency: Frequency,
     impacts: HashMap<(u32, u64), VecDeque<f64>>,
     energy: VecDeque<(f64, f64)>,
@@ -694,18 +695,32 @@ pub enum Filter {
     All,
     Hierarchy,
     Mine,
+    System,
+    Active,
     Apps,
+    Selected,
 }
 
 impl Filter {
-    pub const ALL: [Filter; 4] = [Filter::All, Filter::Hierarchy, Filter::Mine, Filter::Apps];
+    pub const ALL: [Filter; 7] = [
+        Filter::All,
+        Filter::Hierarchy,
+        Filter::Mine,
+        Filter::System,
+        Filter::Active,
+        Filter::Apps,
+        Filter::Selected,
+    ];
 
     pub fn id(self) -> &'static str {
         match self {
             Filter::All => "all",
             Filter::Hierarchy => "hierarchy",
             Filter::Mine => "mine",
+            Filter::System => "system",
+            Filter::Active => "active",
             Filter::Apps => "apps",
+            Filter::Selected => "selected",
         }
     }
 
@@ -714,7 +729,10 @@ impl Filter {
             Filter::All => L10N.tr("filter-all"),
             Filter::Hierarchy => L10N.tr("filter-hierarchy"),
             Filter::Mine => L10N.tr("filter-mine"),
+            Filter::System => L10N.tr("filter-system"),
+            Filter::Active => L10N.tr("filter-active"),
             Filter::Apps => L10N.tr("filter-apps"),
+            Filter::Selected => L10N.tr("filter-selected"),
         }
     }
 }
@@ -749,6 +767,7 @@ impl Monitor {
             cores_shown: false,
             uid,
             filter: Filter::All,
+            pinned: Vec::new(),
             frequency: Frequency::default(),
             impacts: HashMap::new(),
             energy: VecDeque::new(),
@@ -892,7 +911,7 @@ impl Monitor {
             state.push_str(CORES_STATE);
             state.push('\n');
         }
-        if self.filter != Filter::All {
+        if !matches!(self.filter, Filter::All | Filter::Selected) {
             state.push_str(&format!("{FILTER_STATE} {}\n", self.filter.id()));
         }
         if self.frequency != Frequency::default() {
@@ -1312,15 +1331,42 @@ impl Monitor {
     }
 
     pub fn set_filter(&mut self, filter: Filter) {
+        if filter == Filter::Selected {
+            self.pinned = self
+                .selection
+                .iter()
+                .flat_map(|key| self.members(key))
+                .collect();
+        }
         self.filter = filter;
         self.rebuild();
+    }
+
+    fn members(&self, key: &RowKey) -> Vec<(u32, u64)> {
+        match key {
+            RowKey::Group(key) => self
+                .group(key)
+                .map(|group| {
+                    group
+                        .members
+                        .iter()
+                        .map(|member| &self.snapshot.processes[*member])
+                        .map(|process| (process.pid, process.start_ticks))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            RowKey::Process { pid, start_ticks } => vec![(*pid, *start_ticks)],
+        }
     }
 
     fn passes_filter(&self, group: &Group, process: &Process) -> bool {
         match self.filter {
             Filter::All | Filter::Hierarchy => true,
             Filter::Mine => process.identity.uid == self.uid,
+            Filter::System => process.identity.uid == 0,
+            Filter::Active => process.cpu_percent > 0.0,
             Filter::Apps => group.app.is_some(),
+            Filter::Selected => self.pinned.contains(&(process.pid, process.start_ticks)),
         }
     }
 

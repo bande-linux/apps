@@ -6,8 +6,8 @@ use bande_app::View;
 use bande_app_settings::{SettingsWatch, SettingsWindow, Shared, settings_folder};
 use bande_datetime::DateFormats;
 use bande_toolkit::ui::{
-    Axis, Button, Context, Form, FormLine, Label, PopUpButton, ScrollView, Stack, Toggle, Ui,
-    Widget,
+    Axis, Button, CheckState, Checkbox, Context, Form, FormLine, Label, PopUpButton, ScrollView,
+    Stack, Toggle, Ui, Widget,
 };
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 use jiff::civil::{Date, Time};
@@ -256,34 +256,32 @@ fn accounts(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormL
         ),
     ];
     for account in &summary.accounts {
-        let password = match &account.kind {
-            AccountKind::CalDav { .. } => {
-                let id = account.id.clone();
-                Some(Button::new(&L10N.tr("change-password"), move || {
-                    announce(Change::Password(id.clone()))
-                }))
-            }
-            _ => None,
-        };
-        let kind = match &account.kind {
+        let id = account.id.clone();
+        let (kind, mut buttons): (String, Vec<Box<dyn Widget>>) = match &account.kind {
             AccountKind::Local => continue,
-            AccountKind::CalDav { server, .. } => {
-                L10N.tr_args("settings-caldav-at", [("server", server.clone().into())])
-            }
-            AccountKind::Subscription { url } => {
-                L10N.tr_args("settings-subscribed-to", [("url", url.clone().into())])
-            }
+            AccountKind::CalDav { server, .. } => (
+                L10N.tr_args("settings-caldav-at", [("server", server.clone().into())]),
+                vec![Box::new(Button::new(
+                    &L10N.tr("change-password"),
+                    move || announce(Change::Password(id.clone())),
+                ))],
+            ),
+            AccountKind::Subscription {
+                url,
+                refresh_minutes,
+                alerts,
+            } => (
+                L10N.tr_args("settings-subscribed-to", [("url", url.clone().into())]),
+                subscription_controls(&account.id, *refresh_minutes, *alerts),
+            ),
         };
         let id = account.id.clone();
-        let remove = Button::new(&L10N.tr("settings-remove"), move || {
-            announce(Change::RemoveAccount(id.clone()))
-        })
-        .tooltip(&kind);
-        let buttons: Vec<Box<dyn Widget>> = password
-            .into_iter()
-            .map(|button| Box::new(button) as Box<dyn Widget>)
-            .chain([Box::new(remove) as Box<dyn Widget>])
-            .collect();
+        buttons.push(Box::new(
+            Button::new(&L10N.tr("settings-remove"), move || {
+                announce(Change::RemoveAccount(id.clone()))
+            })
+            .tooltip(&kind),
+        ));
         lines.push(FormLine::Row(
             account.name.clone(),
             Box::new(Stack::new(Axis::Horizontal, 8.0, 0.0, buttons).trailing()),
@@ -295,6 +293,43 @@ fn accounts(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormL
         Label::new(&L10N.tr("settings-accounts-note")).secondary(),
     )));
     lines
+}
+
+fn subscription_controls(id: &str, refresh: Option<u32>, alerts: bool) -> Vec<Box<dyn Widget>> {
+    let choices: Vec<Option<u32>> = std::iter::once(None)
+        .chain(SUBSCRIPTION_MINUTES.iter().copied().map(Some))
+        .collect();
+    let labels: Vec<String> = choices
+        .iter()
+        .map(|choice| match choice {
+            None => L10N.tr("refresh-default"),
+            Some(minutes) => every_label(*minutes),
+        })
+        .collect();
+    let chosen = choices
+        .iter()
+        .position(|choice| *choice == refresh)
+        .unwrap_or_default();
+    let shared = id.to_owned();
+    let refresh = PopUpButton::new(
+        &L10N.tr("settings-subscription-refresh"),
+        &labels,
+        chosen,
+        move |index| {
+            if let Some(choice) = choices.get(index) {
+                announce(Change::SubscriptionRefresh(shared.clone(), *choice));
+            }
+        },
+    );
+    let shared = id.to_owned();
+    let state = match alerts {
+        true => CheckState::On,
+        false => CheckState::Off,
+    };
+    let alerts = Checkbox::new(&L10N.tr("settings-subscription-alerts"), state, move |on| {
+        announce(Change::SubscriptionAlerts(shared.clone(), on))
+    });
+    vec![Box::new(refresh), Box::new(alerts)]
 }
 
 fn settings_form(appearance: Appearance, settings: &Shared<CalendarSettings>) -> Ui {

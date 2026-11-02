@@ -496,6 +496,9 @@ impl TerminalWindow {
             self.badge += 1;
             self.bus.set_badge(self.serial, self.badge);
         }
+        if self.settings.audible_bell {
+            self.bus.ring();
+        }
         if self.settings.flash_on_bell && tab == self.active {
             self.flash = Some(Instant::now());
             window.request_redraw();

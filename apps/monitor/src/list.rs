@@ -31,6 +31,14 @@ pub(crate) enum Signal {
 
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
 
+fn wired(table: Table, signals: &Signals) -> Table {
+    let (selection, activate, sort) = (sender(signals), sender(signals), sender(signals));
+    table
+        .on_selection(move |keys| selection(Signal::Selection(keys.to_vec())))
+        .on_activate(move |keys| activate(Signal::Activate(keys.to_vec())))
+        .on_sort(move |order| sort(Signal::Sort(order)))
+}
+
 pub(crate) fn sender(signals: &Signals) -> impl Fn(Signal) + 'static {
     let signals = signals.clone();
     move |signal| signals.borrow_mut().push(signal)
@@ -46,11 +54,7 @@ pub(crate) struct List {
 impl List {
     pub(crate) fn new(table: Table, palette: Palette, text: TextSystem) -> Self {
         let signals: Signals = Rc::new(RefCell::new(Vec::new()));
-        let (selection, activate, sort) = (sender(&signals), sender(&signals), sender(&signals));
-        let table = table
-            .on_selection(move |keys| selection(Signal::Selection(keys.to_vec())))
-            .on_activate(move |keys| activate(Signal::Activate(keys.to_vec())))
-            .on_sort(move |order| sort(Signal::Sort(order)));
+        let table = wired(table, &signals);
         let table_id = Widget::id(&table);
         let mut host = FreeLayout::new();
         host.insert(table, Rect::default());
@@ -63,6 +67,11 @@ impl List {
         };
         list.focus();
         list
+    }
+
+    pub(crate) fn replace_table(&mut self, table: Table) {
+        let table = wired(table, &self.signals);
+        self.table = self.replace(self.table, table);
     }
 
     pub(crate) fn signals(&self) -> &Signals {

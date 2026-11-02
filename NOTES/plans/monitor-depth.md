@@ -29,7 +29,7 @@ ranked list at the end is what is left. Delete this plan when the list is done.
 
 | macOS | Bande |
 |---|---|
-| All / My / System / Selected / Applications in last 12 h / Active / Inactive / Windowed processes | All, All Hierarchically, My Processes, Apps. Missing Selected, Active, System |
+| All / My / System / Selected / Applications in last 12 h / Active / Inactive / Windowed processes | Have All, All Hierarchically, My, System, Active, Apps (windowed) and Selected Processes. No Inactive or last-12-hours apps |
 | All Processes, Hierarchically | Have (process tree by parent, kernel threads folded) |
 | Update Frequency: 1 s / 2 s / 5 s | Have, remembered; the graph span follows (1, 2 or 5 min) |
 | Columns, Dock Icon (CPU usage/history, memory, network, disk) | Columns have; dock icon is missing |
@@ -41,7 +41,7 @@ ranked list at the end is what is left. Delete this plan when the list is done.
 | macOS | Bande |
 |---|---|
 | Quit / Force Quit with confirmation | Have; apps are asked over the session bus first, PID reuse is guarded by start time |
-| Inspect: parent, user, CPU, threads, memory, open files and ports, statistics | Have Info (parent/children, command, unit, resources), Threads, Open Files (with sockets and listening ports), Memory Map |
+| Inspect: parent, user, CPU, threads, memory, open files and ports, statistics | Have Info (parent/children, command, unit, resources, statistics: page faults, context switches, read/write calls), Threads (with the kernel function each waits in), Open Files (with sockets and listening ports), Memory Map |
 | Sample Process / spindump | Missing |
 | Search by name or PID, sort any column | Have |
 | Sampling only while visible | Have: no process sampling while every window is hidden; the inspector samples its own process |
@@ -59,10 +59,9 @@ fixed four rows).
 
 1. Dock icon modes (CPU usage, CPU history, memory pressure): needs a desktop API for live dock
    icon content.
-2. Sample Process in the inspector (per-thread `wchan` and `syscall` snapshot, or perf when
-   permitted) and a Statistics section (faults, context switches, I/O syscalls).
-3. Selected Processes and Active Processes filters.
-4. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
-5. Ports column (socket count per process), packets in/out, and UDP traffic per process (needs
+2. Sample Process in the inspector: user-space stacks need ptrace or perf (not permitted for other
+   users' processes); a sampled call tree for the user's own processes would match macOS.
+3. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
+4. Ports column (socket count per process), packets in/out, and UDP traffic per process (needs
    eBPF or nftables accounting).
-6. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).
+5. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).

@@ -11,9 +11,8 @@ use bande_app::{
 };
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_terminal::{
-    CLOSE_WINDOW, COLUMNS, CloseAsk, Command, GridSize, L10N, MenuCommand, Painter, ROWS,
-    SETTINGS_SIZE, Session, Settings, Terminal, app_menus, claim, left_behind, settings_view,
-    window_file, windows_folder,
+    CLOSE_WINDOW, CloseAsk, Command, GridSize, L10N, MenuCommand, Painter, SETTINGS_SIZE, Session,
+    Settings, Terminal, app_menus, claim, left_behind, settings_view, window_file, windows_folder,
 };
 use bande_toolkit::Appearance;
 
@@ -71,8 +70,8 @@ impl Terminals {
             .filter(|_| command.is_none())
             .map(|folder| window_file(&folder, std::process::id(), serial));
         let grid = GridSize {
-            columns: COLUMNS,
-            lines: ROWS,
+            columns: self.settings.columns,
+            lines: self.settings.rows,
         };
         let mut painter = Painter::new(
             Appearance::default(),
