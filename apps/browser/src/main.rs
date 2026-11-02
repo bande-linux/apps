@@ -2,14 +2,17 @@ mod address;
 mod page;
 mod view;
 
+use std::cell::RefCell;
 use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::process::ExitCode;
+use std::rc::Rc;
 use std::sync::LazyLock;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
 use bande_app_menu::Entry;
 use bande_l10n::Localizer;
+use web_content::Fonts;
 use web_net::{Fetcher, Url};
 
 use crate::view::BrowserView;
@@ -36,6 +39,7 @@ const FORWARD: &str = "forward";
 
 struct Browser {
     fetcher: Fetcher,
+    fonts: Rc<RefCell<Fonts>>,
 }
 
 fn addresses(arguments: &[String]) -> Vec<Url> {
@@ -51,7 +55,7 @@ impl Browser {
             Kind::Main,
             &L10N.tr("app-name"),
             WINDOW_SIZE,
-            BrowserView::new,
+            |appearance| BrowserView::new(appearance, Rc::clone(&self.fonts)),
         );
         let window = match opened {
             Ok(window) => window,
@@ -82,6 +86,7 @@ impl Program for Browser {
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let mut browser = Self {
             fetcher: Fetcher::new()?,
+            fonts: Rc::default(),
         };
         browser.open_all(cx, addresses(&arguments));
         Ok(browser)
