@@ -31,7 +31,7 @@ use crate::settings::{MailSettings, SortBy};
 use crate::setup::{Outcome, Request as SetupRequest, check};
 use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary};
 use crate::ui::format::full_date;
-use crate::ui::reader::{Layout, Reading, Remote};
+use crate::ui::reader::{Entry, Layout, Reading, Remote, Respond, Target, Thread};
 use crate::ui::setup_sheet::{AccountSheet, Action, Field, Mode, Shared, SheetState};
 use crate::ui::sidebar::{Place, Row, rows};
 use crate::ui::symbols::Symbols;
@@ -87,9 +87,7 @@ pub enum Hit {
     Place(usize),
     Message(MessageId),
     Conversation(MessageId),
-    Link(String),
-    Attachment(usize),
-    LoadRemote,
+    Reader(Target),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -213,7 +211,7 @@ pub struct MailView {
     pub(crate) messages: Vec<Summary>,
     pub(crate) selected: Option<MessageId>,
     pub(crate) also: Vec<MessageId>,
-    pub(crate) reading: Option<Reading>,
+    pub(crate) thread: Option<Thread>,
     pub(crate) layout: Option<(f32, Layout)>,
     pub(crate) search: String,
     pub(crate) ui: Ui,
@@ -269,7 +267,7 @@ impl MailView {
             messages: Vec::new(),
             selected: None,
             also: Vec::new(),
-            reading: None,
+            thread: None,
             layout: None,
             search: String::new(),
             ui: Ui::new(Box::new(host), Context::new(text, palette)),
@@ -335,11 +333,17 @@ impl MailView {
         if regroup {
             self.reload();
         }
-        if reread
-            && self.also.is_empty()
-            && let Some(summary) = self.selected_summary()
-        {
-            self.load_reading(&summary);
+        if reread {
+            let expanded = self
+                .thread
+                .iter()
+                .flat_map(|thread| &thread.entries)
+                .filter(|entry| entry.reading.is_some())
+                .map(|entry| entry.summary.id)
+                .collect::<Vec<_>>();
+            for id in expanded {
+                self.read_entry(id);
+            }
         }
     }
 
@@ -483,10 +487,9 @@ impl MailView {
     }
 
     pub fn cursor(&self) -> Cursor {
-        match self.hover {
-            Some(Hit::Link(_) | Hit::Attachment(_) | Hit::LoadRemote | Hit::Conversation(_)) => {
-                Cursor::Pointer
-            }
+        match &self.hover {
+            Some(Hit::Conversation(_)) => Cursor::Pointer,
+            Some(Hit::Reader(target)) if !matches!(target, Target::Card(_)) => Cursor::Pointer,
             _ => self.ui.cursor(),
         }
     }
@@ -600,9 +603,70 @@ impl MailView {
         {
             self.selected = None;
             self.also.clear();
-            self.reading = None;
+            self.thread = None;
             self.layout = None;
         }
+        self.refresh_thread();
+    }
+
+    fn conversation_of(&self, summary: &Summary) -> Vec<Summary> {
+        match self.settings.conversations {
+            true => self
+                .store
+                .conversation(summary)
+                .unwrap_or_else(|_| vec![summary.clone()]),
+            false => vec![summary.clone()],
+        }
+    }
+
+    fn refresh_thread(&mut self) {
+        let Some(thread) = &self.thread else {
+            return;
+        };
+        let Some(focused) = thread
+            .entry(thread.focus)
+            .map(|entry| entry.summary.clone())
+        else {
+            return;
+        };
+        let messages = self.conversation_of(&focused);
+        let Some(thread) = self.thread.as_mut() else {
+            return;
+        };
+        let same = messages.len() == thread.entries.len()
+            && messages
+                .iter()
+                .zip(&thread.entries)
+                .all(|(summary, entry)| summary.id == entry.summary.id);
+        if same {
+            for (summary, entry) in messages.into_iter().zip(&mut thread.entries) {
+                entry.summary = summary;
+            }
+            return;
+        }
+        let mut old = std::mem::take(&mut thread.entries);
+        thread.entries = messages
+            .into_iter()
+            .map(
+                |summary| match old.iter().position(|entry| entry.summary.id == summary.id) {
+                    Some(index) => Entry {
+                        summary,
+                        ..old.swap_remove(index)
+                    },
+                    None => Entry {
+                        summary,
+                        reading: None,
+                        quotes: false,
+                    },
+                },
+            )
+            .collect();
+        if thread.entry(thread.focus).is_none()
+            && let Some(last) = thread.entries.last()
+        {
+            thread.focus = last.summary.id;
+        }
+        self.layout = None;
     }
 
     pub fn choose_place(&mut self, place: Place) {
@@ -612,7 +676,7 @@ impl MailView {
         self.place = place;
         self.selected = None;
         self.also.clear();
-        self.reading = None;
+        self.thread = None;
         self.layout = None;
         self.scrolls[1] = ScrollState::default();
         self.reload();
@@ -637,9 +701,9 @@ impl MailView {
         self.also.clear();
         self.focus = Pane::List;
         self.scrolls[2] = ScrollState::default();
-        self.load_reading(&summary);
-        if !summary.flags.seen {
-            self.set_flag_on(&[id], Flag::Seen, true);
+        let unseen = self.open_thread(&summary);
+        if !unseen.is_empty() {
+            self.set_flag_on(&unseen, Flag::Seen, true);
         }
         self.reveal_selected();
     }
@@ -670,9 +734,12 @@ impl MailView {
         }
         self.focus = Pane::List;
         match (self.also.is_empty(), self.selected_summary()) {
-            (true, Some(summary)) => self.load_reading(&summary),
+            (true, Some(summary)) => {
+                self.scrolls[2] = ScrollState::default();
+                self.open_thread(&summary);
+            }
             _ => {
-                self.reading = None;
+                self.thread = None;
                 self.layout = None;
             }
         }
@@ -698,9 +765,9 @@ impl MailView {
             .collect()
     }
 
-    fn load_reading(&mut self, summary: &Summary) {
+    fn reading_of(&self, summary: &Summary) -> Reading {
         let body = self.store.body(summary.id).ok().flatten();
-        let reading = match body {
+        match body {
             Some(raw) => Reading::new(Content::parse(&raw), true, &self.settings),
             None => {
                 let header = self
@@ -719,13 +786,97 @@ impl MailView {
                     &self.settings,
                 )
             }
+        }
+    }
+
+    fn open_thread(&mut self, summary: &Summary) -> Vec<MessageId> {
+        let messages = self.conversation_of(summary);
+        let shown = messages
+            .iter()
+            .filter(|message| message.id == summary.id || !message.flags.seen)
+            .map(|message| (message.id, message.flags.seen))
+            .collect::<Vec<_>>();
+        self.thread = Some(Thread {
+            entries: messages
+                .into_iter()
+                .map(|summary| Entry {
+                    summary,
+                    reading: None,
+                    quotes: false,
+                })
+                .collect(),
+            focus: summary.id,
+            reveal: true,
+        });
+        for (id, _) in &shown {
+            self.read_entry(*id);
+        }
+        shown
+            .into_iter()
+            .filter(|(_, seen)| !seen)
+            .map(|(id, _)| id)
+            .collect()
+    }
+
+    fn read_entry(&mut self, id: MessageId) {
+        let Some(summary) = self
+            .thread
+            .as_ref()
+            .and_then(|thread| thread.entry(id))
+            .map(|entry| entry.summary.clone())
+        else {
+            return;
         };
+        let reading = self.reading_of(&summary);
         let remote = reading.downloaded && reading.document.remote_images > 0;
-        self.reading = Some(reading);
+        if let Some(entry) = self.thread.as_mut().and_then(|thread| thread.entry_mut(id)) {
+            entry.reading = Some(reading);
+        }
         self.layout = None;
         if remote && self.settings.load_remote {
-            self.load_remote();
+            self.load_remote(id);
         }
+    }
+
+    fn focus_entry(&mut self, id: MessageId) {
+        if let Some(thread) = self.thread.as_mut()
+            && thread.focus != id
+        {
+            thread.focus = id;
+            self.layout = None;
+        }
+    }
+
+    fn toggle_entry(&mut self, id: MessageId) {
+        let Some(thread) = self.thread.as_mut() else {
+            return;
+        };
+        let Some(entry) = thread.entry_mut(id) else {
+            return;
+        };
+        if entry.reading.take().is_none() {
+            let unseen = !entry.summary.flags.seen;
+            self.focus_entry(id);
+            self.read_entry(id);
+            if unseen {
+                self.set_flag_on(&[id], Flag::Seen, true);
+            }
+            return;
+        }
+        if thread.focus == id
+            && let Some(open) = thread
+                .entries
+                .iter()
+                .rev()
+                .find(|entry| entry.reading.is_some())
+        {
+            thread.focus = open.summary.id;
+        }
+        self.layout = None;
+    }
+
+    fn focused(&self) -> Option<(&Summary, &Reading)> {
+        self.thread.as_ref().and_then(Thread::focused)
     }
 
     fn selected_summary(&self) -> Option<Summary> {
@@ -832,7 +983,7 @@ impl MailView {
         self.messages.retain(|summary| !ids.contains(&summary.id));
         self.selected = None;
         self.also.clear();
-        self.reading = None;
+        self.thread = None;
         self.layout = None;
         let next = position
             .and_then(|position| {
@@ -1080,8 +1231,7 @@ impl MailView {
     }
 
     pub fn respond(&mut self, all: bool) {
-        let (Some(summary), Some(reading)) = (self.selected_summary(), self.reading.as_ref())
-        else {
+        let Some((summary, reading)) = self.focused() else {
             return;
         };
         let Some(account) = self.account(summary.account) else {
@@ -1114,13 +1264,12 @@ impl MailView {
     }
 
     pub fn continue_draft(&mut self) {
-        let (Some(summary), Some(reading)) = (self.selected_summary(), self.reading.as_ref())
-        else {
+        let Some((summary, reading)) = self.focused() else {
             return;
         };
         let is_draft = summary.flags.draft
             || self
-                .mailbox_of(&summary)
+                .mailbox_of(summary)
                 .is_some_and(|mailbox| mailbox.role == Some(Role::Drafts));
         if !is_draft || !reading.downloaded {
             return;
@@ -1133,7 +1282,7 @@ impl MailView {
             from: account.address(),
             to: envelope.to.clone(),
             cc: envelope.cc.clone(),
-            bcc: Vec::new(),
+            bcc: envelope.bcc.clone(),
             subject: envelope.subject.clone(),
             body: reading.content.text().replace("\r\n", "\n"),
             in_reply_to: envelope.references.last().cloned(),
@@ -1149,8 +1298,7 @@ impl MailView {
     }
 
     pub fn forward_selected(&mut self) {
-        let (Some(summary), Some(reading)) = (self.selected_summary(), self.reading.as_ref())
-        else {
+        let Some((summary, reading)) = self.focused() else {
             return;
         };
         let Some(account) = self.account(summary.account) else {
@@ -1228,8 +1376,13 @@ impl MailView {
         self.remove_unedited_attachments();
     }
 
-    pub fn load_remote(&mut self) {
-        let (Some(id), Some(reading)) = (self.selected, self.reading.as_mut()) else {
+    pub fn load_remote(&mut self, id: MessageId) {
+        let Some(reading) = self
+            .thread
+            .as_mut()
+            .and_then(|thread| thread.entry_mut(id))
+            .and_then(|entry| entry.reading.as_mut())
+        else {
             return;
         };
         if reading.remote != Remote::Blocked {
@@ -1260,7 +1413,7 @@ impl MailView {
     }
 
     fn attachment_name(&self, index: usize) -> Option<String> {
-        let attachment = self.reading.as_ref()?.content.attachments.get(index)?;
+        let attachment = self.focused()?.1.content.attachments.get(index)?;
         let name = attachment
             .name
             .replace(['/', '\\', '\0'], "_")
@@ -1273,15 +1426,14 @@ impl MailView {
     }
 
     fn attachment_data(&self, index: usize) -> Option<Vec<u8>> {
-        self.reading
-            .as_ref()
-            .and_then(|reading| reading.content.attachments.get(index))
+        self.focused()
+            .and_then(|(_, reading)| reading.content.attachments.get(index))
             .map(|attachment| attachment.data.clone())
     }
 
     pub fn open_attachment(&mut self, index: usize) {
         let (Some(summary), Some(name), Some(data)) = (
-            self.selected_summary(),
+            self.focused().map(|(summary, _)| summary.clone()),
             self.attachment_name(index),
             self.attachment_data(index),
         ) else {
@@ -1402,10 +1554,13 @@ impl MailView {
                     self.notify(&left);
                 }
                 MailEvent::Body(id) => {
-                    if self.selected == Some(id)
-                        && let Some(summary) = self.selected_summary()
+                    if self
+                        .thread
+                        .as_ref()
+                        .and_then(|thread| thread.entry(id))
+                        .is_some_and(|entry| entry.reading.is_some())
                     {
-                        self.load_reading(&summary);
+                        self.read_entry(id);
                     }
                     stale = true;
                 }
@@ -1432,8 +1587,11 @@ impl MailView {
                 }
                 MailEvent::Setup(outcome) => self.setup_checked(*outcome),
                 MailEvent::Pictures(id, pictures) => {
-                    if self.selected == Some(id)
-                        && let Some(reading) = self.reading.as_mut()
+                    if let Some(reading) = self
+                        .thread
+                        .as_mut()
+                        .and_then(|thread| thread.entry_mut(id))
+                        .and_then(|entry| entry.reading.as_mut())
                     {
                         for (source, picture) in pictures {
                             reading.add_picture(source, picture);
@@ -2004,7 +2162,7 @@ impl MailView {
             .filter(|id| *id != first)
             .collect();
         if !self.also.is_empty() {
-            self.reading = None;
+            self.thread = None;
             self.layout = None;
         }
     }
@@ -2100,8 +2258,34 @@ impl MailView {
             Hit::Conversation(id) => {
                 self.toggle_conversation(id);
             }
-            Hit::Link(url) => self.requests.push(Request::OpenLink(url)),
-            Hit::Attachment(index) if secondary => {
+            Hit::Reader(target) => self.click_reader(target, pointer),
+        }
+        true
+    }
+
+    fn click_reader(&mut self, target: Target, pointer: &Pointer) {
+        let secondary = pointer.button == PointerButton::Secondary;
+        match target {
+            Target::Card(id) => self.focus_entry(id),
+            Target::Expand(id) => self.toggle_entry(id),
+            Target::Quotes(id) => {
+                self.focus_entry(id);
+                if let Some(entry) = self.thread.as_mut().and_then(|thread| thread.entry_mut(id)) {
+                    entry.quotes = !entry.quotes;
+                    self.layout = None;
+                }
+            }
+            Target::Respond(id, respond) => {
+                self.focus_entry(id);
+                match respond {
+                    Respond::Reply => self.respond(false),
+                    Respond::ReplyAll => self.respond(true),
+                    Respond::Forward => self.forward_selected(),
+                }
+            }
+            Target::Link(url) => self.requests.push(Request::OpenLink(url)),
+            Target::Attachment(id, index) if secondary => {
+                self.focus_entry(id);
                 let menu = Menu::new(vec![
                     MenuItem::new(
                         &L10N.tr("attachment-open"),
@@ -2119,10 +2303,12 @@ impl MailView {
                 self.requests
                     .push(Request::ShowMenu(menu, pointer.position));
             }
-            Hit::Attachment(index) => self.open_attachment(index),
-            Hit::LoadRemote => self.load_remote(),
+            Target::Attachment(id, index) => {
+                self.focus_entry(id);
+                self.open_attachment(index);
+            }
+            Target::LoadRemote(id) => self.load_remote(id),
         }
-        true
     }
 
     fn mailbox(&self, id: MailboxId) -> Option<Mailbox> {

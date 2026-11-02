@@ -39,8 +39,12 @@ apt install bande-mail
   paperclip. Messages of one conversation (the first `References` entry, else the
   `Message-ID`) share one row with a count; clicking the count, or Right and Left, shows and
   hides the earlier ones, and acting on a closed conversation acts on all of it (Settings →
-  Viewing turns this off). The reader shows the headers, the plain text or sanitised HTML, and the
-  attachments. Clicking an attachment opens a private copy in `~/.cache/bande-mail/attachments/`,
+  Viewing turns this off). The reader shows the whole conversation, oldest first, with your
+  replies from Sent and the account's other mailboxes (not Trash or Junk): the chosen message and
+  unread ones open, the others as a line that opens on a click. Each open message shows its
+  headers, the plain text or sanitised HTML, quoted text folded behind Show Quoted Text, and the
+  attachments; Reply, Reply All and Forward (in the message or the toolbar) act on the message
+  last clicked. Clicking an attachment opens a private copy in `~/.cache/bande-mail/attachments/`,
   removed when Mail quits unless it was edited; its menu also saves it where you choose (the
   desktop's file chooser) or to the Downloads folder.
 - **HTML** is never rendered as a web page: it is turned into paragraphs, headings, lists,

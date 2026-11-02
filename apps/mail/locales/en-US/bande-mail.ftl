@@ -23,6 +23,8 @@ header-to = To: { $names }
 header-cc = Cc: { $names }
 downloading-message = Downloading the message…
 remote-content-blocked = Remote content in this message was not loaded, to protect your privacy.
+show-quoted-text = Show Quoted Text
+hide-quoted-text = Hide Quoted Text
 new-messages = { $count } new messages
 
 search-placeholder = Search

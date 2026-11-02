@@ -344,6 +344,12 @@ impl Store {
                  PRAGMA user_version = 3;",
             )?;
         }
+        if version < 4 {
+            migration.execute_batch(
+                "CREATE INDEX IF NOT EXISTS messages_by_thread ON messages (thread); \
+                 PRAGMA user_version = 4;",
+            )?;
+        }
         migration.commit()?;
         Ok(Self { connection })
     }
@@ -707,6 +713,37 @@ impl Store {
             .query_map(params_from_iter(values.iter()), summary_from)?
             .collect::<rusqlite::Result<_>>()?;
         Ok(summaries)
+    }
+
+    pub fn conversation(&self, of: &Summary) -> Result<Vec<Summary>> {
+        let Some(key) = &of.thread else {
+            return Ok(vec![of.clone()]);
+        };
+        let query = format!(
+            "SELECT {SUMMARY_COLUMNS}, m.message_id FROM messages m \
+             JOIN mailboxes b ON b.id = m.mailbox \
+             WHERE b.account = ?1 AND m.thread = ?2 AND m.deleted = 0 \
+             AND (m.mailbox = ?3 OR b.role IS NULL OR b.role NOT IN ('trash', 'junk')) \
+             ORDER BY m.id = ?4 DESC, m.mailbox = ?3 DESC, b.role = 'all', m.id"
+        );
+        let mut statement = self.connection.prepare(&query)?;
+        let found = statement
+            .query_map(params![of.account, key, of.mailbox, of.id], |row| {
+                Ok((summary_from(row)?, row.get::<_, Option<String>>(17)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut seen = std::collections::HashSet::new();
+        let mut messages = found
+            .into_iter()
+            .filter(|(_, message_id)| {
+                message_id
+                    .as_ref()
+                    .is_none_or(|message_id| seen.insert(message_id.clone()))
+            })
+            .map(|(summary, _)| summary)
+            .collect::<Vec<_>>();
+        messages.sort_by_key(|summary| (summary.date, summary.id));
+        Ok(messages)
     }
 
     pub fn summary(&self, id: MessageId) -> Result<Option<Summary>> {

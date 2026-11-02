@@ -35,7 +35,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Mailboxes and folders | Have: read all folders, Move To any mailbox of the account, drag onto a mailbox, New/Rename/Delete Mailbox |
 | Flags | One flag; no colours |
 | Search | Local, over sender, recipients, subject and text; no server search or tokens |
-| Threads | Grouped by the first References entry; the reader shows one message at a time, and Sent replies from other mailboxes are not pulled in |
+| Threads | Grouped by the first References entry; the reader stacks the whole conversation with Sent replies, earlier messages folded to a line, quoted text folded |
 | Attachments | Show, open (private copy), Save Attachment…, Save to Downloads Folder, add from the portal; no Save All, no Quick Look |
 | Reply / forward | Have, with threading headers |
 | Drafts | Kept in Drafts when a message window closes or Mail quits; a local copy is saved while typing and reopens after a crash or an offline quit |
@@ -45,8 +45,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 
 ## Remaining, ranked by how much users rely on it
 
-1. Conversations: show the whole conversation in the reader and include replies from Sent; group
-   by subject when References are missing.
+1. Conversations: group by subject when References are missing.
 2. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses
    passwords.
 3. The known gaps below (unsent metadata, silent drops).
