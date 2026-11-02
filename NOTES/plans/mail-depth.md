@@ -14,7 +14,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Accounts | Add, edit, remove IMAP/SMTP accounts | Have: list, Add Account… (setup sheet in the viewer), Remove… with confirmation, full name, server settings (user, hosts, ports, TLS/STARTTLS) checked against the servers before they are saved |
 | Accounts | Provider presets (Gmail, Outlook, iCloud, Fastmail) | Autodiscovery (provider autoconfig, ISPDB, SRV, MX) finds them; a refused password names the provider's app-password page |
 | Accounts | OAuth sign-in | Missing: Gmail and Outlook need app passwords |
-| Accounts | Enable/disable an account, change its password | Missing in Settings (the password sheet appears when the server refuses it) |
+| Accounts | Enable/disable an account, change its password | Have "Use this account"; the password is changed in the sheet that appears when the server refuses it |
 | Junk | Junk filtering | Server-side only; Move to Junk files a message |
 | Fonts & Colors | Message font and size, fixed-width plain text | Missing (follows the desktop text size) |
 | Viewing | Remote content off by default | Have: blocked until Load Remote Content, or always loaded when turned on in Viewing |
@@ -51,7 +51,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 4. Sort order, flag colours (Mark All as Read is in the Mailbox menu).
 5. Rules (move/flag/mark by sender, subject, account).
 6. Rich text compose and spelling (both need desktop services first).
-7. Enable/disable an account and change its password in Settings.
+7. A Password field in Settings → Accounts.
 8. Per-sender "always load remote content"; a privacy proxy for remote pictures.
 9. Message font and size, fixed-width plain text.
 10. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).

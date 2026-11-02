@@ -156,6 +156,7 @@ settings-account = Account
 settings-no-accounts = No accounts are set up.
 settings-remove-account = Remove…
 settings-account-information = Account Information
+settings-enabled = Use this account
 settings-email = Email address
 settings-name = Full name
 settings-user = User name
