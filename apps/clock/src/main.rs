@@ -408,21 +408,25 @@ impl Program for ClockApp {
         let view_menu = pages
             .chain([
                 Entry::separator(),
-                entry(toggle, "stopwatch-toggle").shortcut("Ctrl+T"),
-                entry(lap, "stopwatch-lap")
-                    .shortcut("Ctrl+L")
-                    .enabled(running || !stopwatch.banked.is_zero()),
+                entry(toggle, "stopwatch-toggle"),
+                entry(lap, "stopwatch-lap").enabled(running || !stopwatch.banked.is_zero()),
             ])
             .collect();
         Menus {
             menus: vec![
                 Entry::submenu(
                     &L10N.tr("menu-file"),
-                    vec![
-                        entry("new-alarm-menu", "new-alarm").shortcut("Ctrl+N"),
-                        entry("new-timer-menu", "new-timer").shortcut("Shift+Ctrl+N"),
-                        entry("add-city-menu", "add-city"),
-                    ],
+                    [
+                        ("new-alarm-menu", "new-alarm", Page::Alarms),
+                        ("new-timer-menu", "new-timer", Page::Timers),
+                        ("add-city-menu", "add-city", Page::World),
+                    ]
+                    .into_iter()
+                    .map(|(message, command, creates)| match creates == page {
+                        true => entry(message, command).shortcut("Ctrl+N"),
+                        false => entry(message, command),
+                    })
+                    .collect(),
                 ),
                 Entry::submenu(&L10N.tr("menu-view"), view_menu),
             ],

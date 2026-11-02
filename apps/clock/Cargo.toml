@@ -1,7 +1,7 @@
 [package]
 name = "bande-clock"
 description = "Bande Clock: alarms, timers, a stopwatch and a world clock"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true

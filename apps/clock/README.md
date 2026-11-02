@@ -28,9 +28,8 @@ Packaged as `bande-clock`; it replaces gnome-clocks.
   `NextAlarm` (`(sx)`: name and time, or `0` for none), with `PropertiesChanged`. The shell's
   Clock menu lists them and offers Open Clock.
 
-Shortcuts: Ctrl+1…4 for World Clock, Alarms, Stopwatch and Timers, Ctrl+N new alarm,
-Shift+Ctrl+N new timer, Ctrl+T start or stop the stopwatch, Ctrl+L lap or reset, Ctrl+W close and
-Ctrl+Q quit.
+Shortcuts: Ctrl+1…4 for World Clock, Alarms, Stopwatch and Timers, Ctrl+N a new city, alarm or
+timer on the page shown, Ctrl+W close and Ctrl+Q quit.
 
 ## Deadlines and sleep
 
