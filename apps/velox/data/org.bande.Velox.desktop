@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Velox
+GenericName=Container Manager
+Comment=See, start and stop your containers
+Icon=org.bande.Velox
+Exec=bande-velox
+StartupNotify=true
+Categories=System;
+Keywords=docker;podman;container;compose;engine;

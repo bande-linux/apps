@@ -798,6 +798,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-velox"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-app-menu",
+ "bande-l10n",
+ "bande-toolkit",
+ "bande-watch",
+ "bande-xdg",
+ "httparse",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "bande-watch"
 version = "0.1.0"
 source = "git+https://github.com/bande-linux/desktop?rev=b198daa8f78bfa4c326c5580bf80e952f3be9276#b198daa8f78bfa4c326c5580bf80e952f3be9276"

@@ -18,6 +18,7 @@ apt install bande-<name>
 | Activity Monitor | `bande-monitor` |
 | Mail | `bande-mail` |
 | Calendar | `bande-calendar` |
+| Velox | `bande-velox` (containers of Docker Engine or Podman; virtual machines to come) |
 
 Every app is a `bande-app` app: like on macOS, it keeps running after its last window closes and
 reopens a window when activated, until Quit (Ctrl+Q). Without a window its menus stay full:

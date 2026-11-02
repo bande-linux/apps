@@ -15,6 +15,7 @@ base64 = "=0.22.1"
 data-encoding = "2.11"
 flate2 = "=1.1.10"
 html5ever = "0.40"
+httparse = "=1.10.1"
 image = { version = "=0.25.10", default-features = false, features = ["gif", "jpeg", "png"] }
 jiff = "=0.2.38"
 jxl-oxide = { version = "=0.12.6", default-features = false }
@@ -48,6 +49,7 @@ bande-search = { git = "https://github.com/bande-linux/desktop", rev = "b198daa8
 bande-spring = { git = "https://github.com/bande-linux/desktop", rev = "b198daa8f78bfa4c326c5580bf80e952f3be9276" }
 bande-status = { git = "https://github.com/bande-linux/desktop", rev = "b198daa8f78bfa4c326c5580bf80e952f3be9276" }
 bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "b198daa8f78bfa4c326c5580bf80e952f3be9276" }
+bande-watch = { git = "https://github.com/bande-linux/desktop", rev = "b198daa8f78bfa4c326c5580bf80e952f3be9276" }
 bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "b198daa8f78bfa4c326c5580bf80e952f3be9276" }
 
 

@@ -422,6 +422,9 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 | V5 | apps | ISO path in the sheet with presets, virtiofs shares and USB in Settings, swtpm + Secure Boot, signed SUMS | a Windows 11 ARM ISO installs with no manual flags |
 | A7 | apps | Velox extras: Ctrl+K palette, crash notifications (`bande-notify`), optional status item via the tray with the background mode (as Calendar's) | each off by default and measured at 0 wake-ups while idle |
 
+Done: **A1** (2026-11-02), with A2's pending badges and the filter field. Docker's Status text
+("Up 3 hours") refreshes on every event and when the window becomes active, never on a timer.
+
 D3 (desktop): the theme icon, with A1. **Kernel: none.** If V0 hits a guest timer, PMU or vGIC
 fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
 
