@@ -263,7 +263,9 @@ impl TerminalWindow {
     }
 
     fn send(&mut self, bytes: &[u8]) {
-        self.session().send(bytes);
+        if !self.session().send(bytes) {
+            self.bus.ring();
+        }
     }
 
     fn has_strip(&self) -> bool {

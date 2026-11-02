@@ -13,6 +13,7 @@ use crate::terminal::{GridSize, Terminal};
 
 const READ_BUFFER: usize = 65536;
 const READS_PER_WAKE: usize = 16;
+const UNREAD_INPUT_CAP: usize = 1 << 20;
 const TITLE_SEPARATOR: &str = " — ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,9 +107,13 @@ impl Session {
         !self.output.is_empty()
     }
 
-    pub fn send(&mut self, bytes: &[u8]) {
+    pub fn send(&mut self, bytes: &[u8]) -> bool {
+        if self.output.len() >= UNREAD_INPUT_CAP {
+            return false;
+        }
         self.output.extend_from_slice(bytes);
         self.flush();
+        true
     }
 
     pub fn flush(&mut self) {
@@ -203,7 +208,9 @@ impl Session {
         let mut notices = std::mem::take(&mut self.notices);
         for event in self.terminal.take_events() {
             match event {
-                TermEvent::PtyWrite(text) => self.send(text.as_bytes()),
+                TermEvent::PtyWrite(text) => {
+                    self.send(text.as_bytes());
+                }
                 TermEvent::TextAreaSizeRequest(reply) => {
                     let text = reply(self.terminal.window_size());
                     self.send(text.as_bytes());
