@@ -151,7 +151,7 @@ fn download(client: &Client, id: &str) -> Result<(u64, usize), Error> {
     let size = client
         .details(&ids)?
         .iter()
-        .map(|details| details.size)
+        .map(|details| details.download)
         .sum();
     Ok((size, ids.len().saturating_sub(1)))
 }
@@ -178,7 +178,7 @@ fn details(client: &Client, arch: &str, package: &str) -> Result<Facts, Error> {
         None => {
             let (download, extra) = download(client, &chosen.id).unwrap_or_else(|error| {
                 tracing::debug!("cannot work out the download of {package}: {error}");
-                (own, 0)
+                (details.map(|details| details.download).unwrap_or(0), 0)
             });
             (0, download, extra)
         }

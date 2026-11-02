@@ -157,32 +157,35 @@ fn download(agent: &ureq::Agent, url: &str) -> Result<Vec<u8>, ShotError> {
     response
         .into_body()
         .into_reader()
-        .take(SHOT_LIMIT)
+        .take(SHOT_LIMIT + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| ShotError::Offline)?;
-    Ok(bytes)
+    match bytes.len() as u64 > SHOT_LIMIT {
+        true => Err(ShotError::Unreadable),
+        false => Ok(bytes),
+    }
 }
 
 fn screenshot(agent: &ureq::Agent, url: &str) -> Result<Image, ShotError> {
     let cached = cache_file(url);
-    let bytes = match cached
-        .as_deref()
-        .and_then(|path| read_limited(path, SHOT_LIMIT))
+    if let Some(path) = &cached
+        && let Some(bytes) = read_limited(path, SHOT_LIMIT)
     {
-        Some(bytes) => bytes,
-        None => {
-            let bytes = download(agent, url)?;
-            if let Some(path) = &cached
-                && let Some(parent) = path.parent()
-                && let Err(error) =
-                    fs::create_dir_all(parent).and_then(|()| fs::write(path, &bytes))
-            {
-                tracing::debug!("cannot cache the screenshot: {error}");
-            }
-            bytes
+        if let Some(image) = decode(&bytes) {
+            return Ok(image);
         }
-    };
-    decode(&bytes).ok_or(ShotError::Unreadable)
+        if let Err(error) = fs::remove_file(path) {
+            tracing::debug!("cannot remove a broken screenshot: {error}");
+        }
+    }
+    let bytes = download(agent, url)?;
+    let image = decode(&bytes).ok_or(ShotError::Unreadable)?;
+    if let Some(path) = &cached
+        && let Err(error) = bande_xdg::replace_file(path, &bytes)
+    {
+        tracing::debug!("cannot cache the screenshot: {error}");
+    }
+    Ok(image)
 }
 
 fn desktop_id(app: &Component) -> String {

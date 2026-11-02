@@ -67,15 +67,15 @@ fn run(client: &Client, path: &Path, machine: &Machine, jobs: Receiver<Job>, out
             if !out.send(Message::Read(deb.clone())) {
                 break;
             }
-            if deb.is_some() && !out.send(Message::Identity(deb::identity(path))) {
-                break;
-            }
             if !out.send(Message::State(flow::inspect(
                 client,
                 path,
                 machine,
                 deb.as_ref(),
             ))) {
+                break;
+            }
+            if deb.is_some() && !out.send(Message::Identity(deb::identity(path))) {
                 break;
             }
             continue;
