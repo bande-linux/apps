@@ -66,10 +66,23 @@ scorer exists (W1).
   and editing; print.
 - **Workers and storage:** workers and service workers; IndexedDB on SQLite.
 - **Networking:** WebSocket, HTTP/3.
-- **Media** (`media.md`): **K1** (kernel repo) puts the AVD driver in the build with `avd-fw`.
-  **D4/D5** (desktop) add NV12 multi-planar dmabufs in the compositor and a video subsurface in
-  the toolkit. Then the media element, our demuxers, the AVD path, rav1d, Opus, symphonia, MSE.
-- **DRM:** **W-EME**, with Clear Key and the CDM host; Widevine is turned on once licensed.
+- **Media** (`media.md`):
+  - **K1** (kernel): the AVD driver in the build with `avd-fw`, fuzzed through V4L2.
+  - **D5** (desktop): NV12 and P010 multi-planar dmabufs in the compositor, a video subsurface in
+    the toolkit, protected dmabufs passed through.
+  - **W-Media**: the media element, our demuxers and bitstream parsers, MSE, Opus, symphonia, and
+    the decode backends behind one interface: V4L2 stateless first, then VA-API (verified on an
+    Intel or AMD machine), then software.
+- **DRM** (`media.md`):
+  - **W-EME**: the `KeySystem` interface, Clear Key, the capability detector, the 6-tier
+    fallback, honest robustness reporting, `bande://media` diagnostics.
+  - **W-CDM**: the sandboxed Widevine host and the component updater, turned on once licensed.
+  - **D6** (desktop): a content-protection protocol; protected surfaces only on outputs that
+    meet them, black in screenshots and screencasts.
+  - **K2** (kernel): the DCP `hdcp` endpoint traced, and "Content Protection" and "HDCP Content
+    Type" on the DCP connector if the firmware allows.
+  - **Done:** Netflix plays at the highest tier the M2 reaches (tier 3 or 4, at Netflix's L3 cap),
+    and `bande://media` names why tiers 1–2 are unavailable.
 - **GPU:** WebGL and WebGPU through the GPU process.
 - **The rest:** WASM through wasmtime; the baseline JIT.
 - **Done at phase end:** 85–90% of the list.
@@ -95,3 +108,6 @@ scorer exists (W1).
 6. Sites that block unknown engines (decision 5).
 7. Widevine depends on Google's licence; without it, DRM sites stay in the system browser.
 8. The AVD driver is held, not yet upstream; until K1, video decodes in software.
+9. Widevine L1, and so Netflix 4K, is unreachable on the M2 under Linux: there's no certified
+   TEE. The aspiration depends on Google, Apple or other hardware, not on our code.
+10. HDCP on the M2 depends on reverse-engineering the DCP firmware's `hdcp` endpoint (K2).

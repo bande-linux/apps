@@ -1,92 +1,178 @@
 # Media and DRM
 
-## Recommendation: our own media stack, hardware first
+This file plans against the owner's binding requirements in the index ("DRM, Premium Streaming
+and Video Playback"). It has three layers that know nothing of each other's internals:
+- **DRM authorization** (`web-cdm`): key systems and CDMs.
+- **Decode** (`web-media`): demuxers, bitstream parsers, decode backends.
+- **Output** (the compositor): protected surfaces, HDCP.
 
-| Part | Choice | Why |
+The **capability detector** combines the three.
+
+## Decode
+
+**Demuxers, our own (10–15k):** MP4 and fragmented MP4 with CENC (`pssh`, `tenc`, `senc`,
+`saiz`/`saio`, `sbgp`/`sgpd`), WebM/Matroska, Ogg, WAV, MP3 frames.
+- MSE needs byte-stream control: append, remove, buffered ranges, eviction, splicing,
+  `ManagedMediaSource`.
+- It is also the most hostile input.
+
+**Bitstream parsers, our own:** H.264, HEVC, VP9 and AV1 headers (SPS, PPS, slice, frame and
+sequence headers), validated before anything reaches a driver. Both hardware APIs below take
+parsed parameters, so one set of parsers serves both.
+
+**Decode backends** sit behind one interface (`VideoDecoder`: probe, configure, decode to dmabuf,
+flush). Every backend outputs NV12 dmabufs, or P010 for 10-bit and HDR.
+
+| Backend | Where | Codecs |
 |---|---|---|
-| Demuxers: MP4 and fragmented MP4 (with CENC), WebM/Matroska, Ogg, WAV, MP3 frames | **our own**, 10–15k | bounded specs; MSE needs byte-stream parsing and buffered-range control that a library hides; EME needs CENC boxes (`pssh`, `tenc`, `senc`, `saiz`/`saio`, `sbgp`/`sgpd`); memory-safe parsing of the most hostile input |
-| H.264, HEVC, VP9 video | **our own bitstream parsers driving the M2's Apple Video Decoder** through V4L2 stateless decoding, 10–15k | the kernel repo's held AVD driver (`patches/7.3/held/avd`) decodes H.264, HEVC and VP9 bit-exactly through `V4L2_CID_STATELESS_*` controls, so the parsing (SPS, PPS, slice and frame headers) is ours in Rust and the hardware does the pixel work. That is the best performance per watt, and it puts the codec patent licence with Apple's hardware |
-| AV1 video (the M2 has no AV1 hardware) | **rav1d**, a dependency | the Rust port of dav1d; 1080p in software costs about two cores. MediaCapabilities reports AV1 as not power-efficient, so YouTube serves VP9, which the AVD decodes |
-| H.264, HEVC, VP9 without the AVD (the dev VM, other machines) | **Debian's libavcodec**, loaded at run time in the sandboxed media process | writing software H.264 or VP9 decoders at competitive speed is years of SIMD work, and it carries patent exposure that Debian already takes on |
-| Opus | **our own decoder**, 6–9 eng-mo | the web's main audio codec (YouTube, WebRTC); RFC 6716 and RFC 8251 define the bitstream exactly and ship test vectors; there's no mature Rust decoder |
-| AAC-LC, MP3, Vorbis, FLAC | **symphonia**, a dependency | pure Rust and fuzzed; AAC-LC's patents have largely expired; HE-AAC is added to it upstream if sites need it |
-| Audio output | PipeWire through the desktop's `bande-audio` | one audio path for the desktop |
-| Video output | decoded frames as NV12 dmabufs, shown on a video subsurface, scanned out directly when possible | zero copies from the decoder to the screen. **Desktop D5:** multi-planar NV12 dmabufs with modifiers in the compositor (today it takes single-plane ARGB/XRGB LINEAR only), YCbCr sampling, and a video subsurface in the toolkit |
+| V4L2 stateless (request API) | the M2's Apple Video Decoder (held driver in the kernel repo, bit-exact); also Rockchip, MediaTek and Hantro boards | H.264, HEVC, VP9 (the M2 has no AV1 hardware) |
+| VA-API (libva, loaded at run time) | Intel (iHD) and AMD (radeonsi) machines running Bande on amd64 | H.264, HEVC, VP9, AV1 where the GPU has them |
+| Software | everywhere | AV1 through rav1d; H.264, HEVC and VP9 through Debian's libavcodec (open decision 2) |
 
-**Security.**
-- Every demuxer and parser runs in the sandboxed media process. It has no network and no files,
-  and it can reach only the V4L2 device and its own memfds.
-- Our parsers validate every header before it reaches the kernel driver, because malformed slice
-  parameters reach the kernel, not just userspace. The AVD driver gets fuzzed through the V4L2
-  path before it ships in the build.
+At run time the browser probes each backend for its codecs, profiles, maximum size and frame
+rate, and whether it is power-efficient. It picks the best backend per stream, and reports the
+result through MediaCapabilities, so YouTube serves VP9 to the M2's hardware rather than AV1 in
+software.
 
-**MSE.** `MediaSource`, `SourceBuffer` (append, remove, buffered ranges, timestamp offset,
-coded-frame eviction and splicing), `ManagedMediaSource`, and fMP4 and WebM byte streams. This
-is what YouTube, Netflix and most video sites use.
+**Audio.** Our own Opus decoder (RFC 6716 and RFC 8251, with their test vectors, 6–9 eng-mo).
+Symphonia for AAC-LC, MP3, Vorbis and FLAC. Output through PipeWire with the desktop's
+`bande-audio`.
 
-**Size.** About 2–3 engineer-years for the media element, MSE, demuxers, the AVD path, Opus, A/V
-sync and the D5 desktop work, spread over phase 4.
+**Security.** Everything above runs in the sandboxed media process. It has no network and no
+files, and it reaches only the V4L2 or DRM render node and its own memfds. The AVD driver is
+fuzzed through V4L2 before it ships.
 
-**Kernel prerequisite (K1).** Move `held/avd` into the build, package `avd-fw`, and fuzz the
-driver.
+**Patents.** H.264 and HEVC decoding in hardware carries the hardware vendor's licence. Software
+decoding of those codecs is left to Debian's libavcodec.
 
-## DRM: EME with the Widevine CDM
+## DRM authorization
 
-**What's needed.**
-- Netflix, Disney+, Prime Video and Spotify need **Widevine**. No other DRM is offered to
-  non-Apple browsers on Linux.
-- On desktop Linux, Widevine runs as **L3** (software only, no hardware-protected path) and
-  without VMP (Verified Media Path, which Google enforces on Windows and macOS only). Netflix
-  therefore caps Linux browsers at about **720p**; other services cap L3 similarly.
-- Services also check the User-Agent, so the compatibility token matters.
+**Key systems.** A `KeySystem` interface covers capabilities, sessions, decrypt-only, and
+decrypt-and-decode. Its implementations:
+- **Clear Key**, our own: required by the spec, and it runs WPT `encrypted-media`.
+- **Widevine** through a host for Chromium's CDM interface (`InitializeCdmModule_4`,
+  `ContentDecryptionModule_10/11`, `Host_10/11`, in Rust with one audited `unsafe` vtable
+  module).
+- Later others, such as PlayReady, behind the same interface.
 
-**How other browsers get it.**
-- **Firefox** downloads Google's CDM as a GMP plugin and runs it in a sandboxed plugin process.
-- **Chromium** runs it in a sandboxed utility process.
-- Both hold Widevine agreements with Google, and so do Brave, Vivaldi, Opera and Edge.
-- Google ships no aarch64 Linux CDM. On Asahi, `widevine-installer` downloads a ChromeOS
-  recovery image from Google, extracts the aarch64 `libwidevinecdm.so`, and patches its ELF
-  alignment so it loads on 16K-page kernels (ours is 16K). Firefox and Chromium are then pointed
-  at it. It's a user-run download, not a redistribution.
+The engine sees only EME. A CDM runs in its own sandboxed process per site (`bande-browser-cdm`).
+It has only its library, per-origin storage through the host API, no network, and its own
+seccomp policy.
 
-**Licence.**
-- Integrating the CDM into a browser needs an agreement with Google: Widevine's CDM licence,
-  plus Google signing or allow-listing the host where VMP applies.
-- Google has been slow or unwilling with small and independent browsers, so approval is
-  uncertain.
-- **Technically**, an unlicensed browser could load a user-installed CDM on Linux: there's no VMP
-  check there, and license servers see the CDM's own client identity.
-- **Legally**, that uses Google's binary outside the terms it was distributed under, and Google
-  can revoke CDM versions. Bande must not ship, download or advertise that path without a
-  licence.
+**Upgradable components.**
+- CDMs are installed apart from the browser, in `/var/lib/bande-browser/cdm/<system>/<version>/`.
+- They are updated by a component updater that checks the vendor's signature and version, from
+  the source the licence names (Google's component update service, for Widevine).
+- The host negotiates CDM interface versions 10 and 11, so a new CDM needs no browser release.
+- A CDM is never fetched without a licence.
 
-**Design** (crate `web-cdm`, process `bande-browser-cdm`).
-- **The process:** one sandboxed process per site, like Firefox's GMP process. It has only the
-  CDM library, a per-origin storage folder through the host API, no network, and seccomp tuned to
-  the CDM.
-- **The host side:** we implement Chromium's CDM interface (`InitializeCdmModule_4`,
-  `CreateCdmInstance`, `ContentDecryptionModule_10/11` and `Host_10/11`) in Rust. The C++ vtables
-  are matched as `#[repr(C)]` function-pointer tables in one audited `unsafe` module, with no C++
-  compiler.
-- **Decode path:**
-  - Audio, and video where the licence allows, is decrypt-only: the CDM returns clear samples
-    to our decoders, so the AVD keeps working.
-  - Otherwise the CDM decrypts and decodes in software and returns YUV frames, which are copied
-    into a dmabuf for the video subsurface.
-  - We report no output protection (HDCP), which also caps resolution.
-- **EME API:**
-  - `navigator.requestMediaKeySystemAccess`;
-  - `MediaKeySystemAccess`, `MediaKeys` (`createSession`, `setServerCertificate`);
-  - `MediaKeySession` (`generateRequest`, `update`, `load`, `close`, `remove`, `keyStatuses`,
-    the `message` event, expiration);
-  - `HTMLMediaElement.setMediaKeys` and the `encrypted` event;
-  - init data `cenc`, `webm` and `keyids`; encryption schemes `cenc` and `cbcs`.
-  - **Clear Key** is ours, built in. It's required by the spec, and it lets WPT
-    `encrypted-media` run without Widevine.
+**EME API.**
+- `requestMediaKeySystemAccess`, `MediaKeySystemAccess`, `MediaKeys`, `MediaKeySession`;
+- `setMediaKeys` and the `encrypted` event;
+- init data `cenc`, `webm` and `keyids`; encryption schemes `cenc` and `cbcs`.
 
-**Phase.** Late phase 4, after MSE: **W-EME** (Clear Key and the CDM host, 6–9 eng-mo). The
-Widevine host is turned on only once a licence exists.
+**Honest robustness.** We answer `requestMediaKeySystemAccess` and MediaCapabilities only from
+the detector. Widevine's levels are:
+- `SW_SECURE_CRYPTO` and `SW_SECURE_DECODE`: L3.
+- `HW_SECURE_CRYPTO`, `HW_SECURE_DECODE` and `HW_SECURE_ALL`: L1.
 
-**Fallback without a licence.** Run Asahi's `widevine-installer` with Debian's chromium or
-firefox-esr, which are licensed browsers. Browser offers "Open in System Browser" automatically
-when a page asks for `com.widevine.alpha`.
+An `HW_*` level is claimed only when the CDM itself reports hardware security.
+`QueryOutputProtectionStatus` reports exactly what the compositor says about the output.
+
+## Capability detector and the fallback algorithm
+
+The detector's inputs:
+- **The CDM:** installed, licensed, version, security level.
+- **Decode backends:** codec, profile, size, power-efficiency.
+- **Output protection:** HDCP version and state of the window's output.
+- **The display:** size, refresh, HDR.
+- **Policy:** private window, site permission.
+
+For each requested key system configuration, in the site's order, the detector picks the
+highest tier that is true on every input:
+
+1. L1 (`HW_SECURE_ALL`) with secure decode and 4K: a hardware TEE and secure buffers, HDCP 2.2
+   or later on every output showing the video, a 4K display.
+2. L1 at a lower resolution: as 1, but HDCP below 2.2, or a smaller display.
+3. L3 with hardware decode: the CDM decrypt-only (where the licence permits it, as Chromium does
+   on desktop Linux), then the V4L2 or VA-API backend.
+4. L3 with software decode: the CDM decrypts and decodes, or our software backends decode.
+5. Lower resolutions or other codecs: the site's own ladder, helped by honest MediaCapabilities
+   answers.
+6. Unprotected playback when no key system is required.
+
+If no tier is true, the configuration is rejected rather than over-claimed. Playback moves down a
+tier when the window moves to an output with weaker protection. Higher tiers come back when it
+returns.
+
+**Diagnostics.**
+- `bande://media` lists each CDM, backend, output and tier, and for each unavailable tier the
+  first condition that failed. For example:
+  - "Widevine L1 not available: no hardware-backed TEE on this platform."
+  - "HDCP 2.2 not reported by the display driver."
+  - "AV1: no hardware decoder; using software."
+  - "Widevine not installed: no licence."
+- The page's info popover links to it as "Why not higher quality?".
+
+## Protected path and HDCP
+
+**What Linux offers.**
+- KMS connectors expose **"Content Protection"** (Undesired / Desired / Enabled) and **"HDCP
+  Content Type"** (Type 0 or Type 1 for HDCP 2.2+), which i915 and amdgpu implement.
+- Secure decode buffers need a TEE-backed protected dma-buf heap. Our kernel has only the `system`
+  and `cma` heaps. Protected-memory work upstream targets OP-TEE Arm boards.
+- Wayland has Weston's `weston_content_protection` protocol: a surface asks for a protection
+  type, and the compositor shows it only on outputs that meet it.
+
+**On the M2 today.**
+- Apple's DCP driver lists an `hdcp` firmware endpoint (`HDCP_ENDPOINT = 0x2b`) but implements
+  nothing for it and attaches no content-protection property. HARDWARE-GAPS has no HDCP entry.
+- So no HDCP is reported, and protected surfaces can't be enforced on the output.
+
+**Milestones.**
+- **K2 (kernel):** trace macOS's use of the DCP `hdcp` endpoint, then implement "Content
+  Protection" and "HDCP Content Type" on the DCP connector if the firmware supports it.
+- **D6 (desktop):** a content-protection protocol in Weston's shape:
+  - the compositor reads the connector properties;
+  - protected surfaces show only on outputs that meet their type;
+  - protected surfaces are black in screenshots, screencasts and the screenshot and screencast
+    portals, as on macOS.
+
+  D6 is worth doing even without HDCP, so DRM video is never recorded against the provider's
+  terms.
+- **D5 (desktop):** NV12 and P010 multi-planar dmabufs with modifiers in the compositor (today it
+  takes single-plane ARGB/XRGB LINEAR only), a video subsurface in the toolkit, and protected
+  dmabufs passed through untouched where a platform has them. HDR output needs compositor colour
+  management later.
+
+## L1 honesty: what the M2 can reach
+
+- **L1 (tiers 1–2) is not reachable on the M2 under Linux**, nor on any desktop Linux today.
+  - Widevine L1 runs Google's OEMCrypto inside a hardware TEE that Google certifies and
+    provisions per device family.
+  - Apple Silicon has no TrustZone OS for Linux: there is no EL3, and the Secure Enclave runs only
+    Apple's firmware.
+  - Google ships no L1 for desktop Linux on any hardware.
+- **The realistic top tier is 3**: Widevine L3, with the AVD decoding H.264, HEVC and VP9 where
+  the licence allows decrypt-only. Otherwise it's tier 4.
+- **Providers' L3 caps apply** (Netflix: about 720p), and only once Google licenses Browser.
+- **Without a licence**, Browser reaches tier 6 itself, and DRM sites open in the system
+  browser. That's Debian's chromium or firefox-esr with Asahi's `widevine-installer`: tier 4, at
+  the same caps.
+- **What would change this:**
+  - Google certifying an L1 TEE for a Linux device family, which on Apple Silicon needs Apple;
+  - or Bande running on hardware whose vendor ships a Widevine L1 OEMCrypto under Linux (some Arm
+    TV and Chromebook SoCs with OP-TEE);
+  - plus HDCP 2.2 on the output and Netflix authorizing Browser.
+
+  **Netflix 4K on Linux stays the aspirational target.** The architecture above reaches it
+  without redesign once those exist.
+
+## Phase and size
+
+Phase 4, after MSE:
+- the decode backends (V4L2 first, then VA-API, then software);
+- **W-EME** (Clear Key, the `KeySystem` interface, the detector and diagnostics);
+- the Widevine host and the component updater, turned on once licensed.
+
+About 3–4 engineer-years for media and DRM together, with D5, D6, K1 and K2.

@@ -130,3 +130,5 @@ Open:
    it is the longest lead time in the plan.*
 2. **Software fallback for H.264, HEVC and VP9 without the AVD** (the dev VM, other machines):
    Debian's libavcodec in the sandboxed media process, or no fallback. *Recommend libavcodec.*
+3. **An Intel or AMD amd64 test machine** for the VA-API backend; there's none in the lab today.
+   *Recommend one, before VA-API work starts in phase 4.*
