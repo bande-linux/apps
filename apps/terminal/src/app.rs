@@ -29,6 +29,7 @@ use bande_toolkit::{
 use crate::APP_ID;
 use crate::bus::Bus;
 
+const BADGE_GAP: Duration = Duration::from_millis(250);
 const FILES: &str = "bande-files";
 const FILES_APP_ID: &str = "org.bande.Files";
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
@@ -67,7 +68,7 @@ enum Pending {
     CloseOtherTabs(u32),
     CloseWindow,
     Quit,
-    Paste(String),
+    Paste(u32, String),
     Rename(u32),
 }
 
@@ -150,6 +151,7 @@ pub struct TerminalWindow {
     momentum: Option<Momentum>,
     flash: Option<Instant>,
     badge: u32,
+    badged: Option<Instant>,
     cursor: Cursor,
     bus: Rc<Bus>,
     serial: u32,
@@ -205,6 +207,7 @@ impl TerminalWindow {
             momentum: None,
             flash: None,
             badge: 0,
+            badged: None,
             cursor: Cursor::Default,
             bus,
             serial,
@@ -500,7 +503,12 @@ impl TerminalWindow {
             tab.bell = true;
             window.request_redraw();
         }
-        if !self.focused && self.settings.badge_on_bell {
+        let now = Instant::now();
+        let due = self
+            .badged
+            .is_none_or(|badged| now.duration_since(badged) >= BADGE_GAP);
+        if !self.focused && self.settings.badge_on_bell && due {
+            self.badged = Some(now);
             self.badge += 1;
             self.bus.set_badge(self.serial, self.badge);
         }
@@ -663,7 +671,7 @@ impl TerminalWindow {
         let appearance = window.appearance();
         let button = match pending {
             Pending::Quit => L10N.tr("quit"),
-            Pending::Paste(_) => L10N.tr("paste"),
+            Pending::Paste(..) => L10N.tr("paste"),
             Pending::Rename(_) => L10N.tr("rename"),
             Pending::CloseTab(_)
             | Pending::ClosePane(_)
@@ -701,7 +709,11 @@ impl TerminalWindow {
                 }
             }
             Some(Pending::Quit) => self.asks.push(Ask::Quit),
-            Some(Pending::Paste(text)) => self.paste_now(&text),
+            Some(Pending::Paste(id, text)) => {
+                if self.tab().focused().id() == id {
+                    self.paste_now(&text);
+                }
+            }
             Some(Pending::Rename(id)) => {
                 if let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == id) {
                     tab.title = query
@@ -797,7 +809,7 @@ impl TerminalWindow {
         }
         let stale = match &self.pending {
             Some(Pending::CloseTab(id) | Pending::CloseOtherTabs(id)) => *id == closed.id,
-            Some(Pending::Paste(_)) => was_active,
+            Some(Pending::Paste(..)) => was_active,
             Some(Pending::Rename(id)) => *id == closed.id,
             Some(Pending::ClosePane(id)) => closed.session(*id).is_some(),
             Some(Pending::CloseWindow | Pending::Quit) | None => false,
@@ -1113,11 +1125,16 @@ impl TerminalWindow {
     }
 
     fn paste(&mut self, window: &mut Window, text: &str) {
-        let lines = text.trim_end_matches(['\r', '\n']).lines().count();
+        let lines = text
+            .replace("\r\n", "\n")
+            .trim_end_matches(['\r', '\n'])
+            .split(['\r', '\n'])
+            .count();
         let guarded = self.mode().contains(TermMode::BRACKETED_PASTE);
         if self.settings.paste_warning && lines > 1 && !guarded {
             let message = L10N.tr_args("confirm-paste", [("count", lines.into())]);
-            return self.ask(window, &message, Pending::Paste(text.to_owned()));
+            let id = self.tab().focused().id();
+            return self.ask(window, &message, Pending::Paste(id, text.to_owned()));
         }
         self.paste_now(text);
     }
