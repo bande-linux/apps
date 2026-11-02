@@ -1,7 +1,16 @@
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
 use accesskit::{Node, Role};
-use bande_toolkit::ui::{Context, Cursor, Event, Key, ScrollState, Size, Widget, WidgetId};
-use bande_toolkit::{Color, Item, Point, Rect, Shape, TextAlign, TextStyle};
+use bande_toolkit::ui::{
+    Context, Cursor, Event, Key, PointerButton, ScrollState, Size, Widget, WidgetId,
+};
+use bande_toolkit::{
+    Color, GlyphRun, Item, Point, PositionedGlyph, Rect, Shape, TextAlign, TextStyle,
+};
+use web_content::{Fonts, Page};
 use web_net::{FetchError, Response, Url};
+use web_paint::DisplayList;
 
 use crate::L10N;
 
@@ -11,6 +20,7 @@ const PAGE_OVERLAP: f32 = 40.0;
 const TITLE_SIZE: f32 = 22.0;
 const BODY_SIZE: f32 = 15.0;
 const MESSAGE_WIDTH: f32 = 560.0;
+const FIRST_WIDTH: f32 = 1024.0;
 const CANVAS: Color = Color::WHITE;
 const TEXT: Color = Color::hex(0x202122);
 const SECONDARY: Color = Color::hex(0x54595d);
@@ -19,7 +29,8 @@ pub(crate) enum Content {
     Blank,
     Loading(Url),
     Failed { url: Url, message: String },
-    Loaded(Response),
+    Unsupported(Response),
+    Document { url: Url, page: Box<Page> },
 }
 
 impl Content {
@@ -41,24 +52,32 @@ pub(crate) struct PageView {
     id: WidgetId,
     frame: Rect,
     radius: f32,
+    fonts: Rc<RefCell<Fonts>>,
     content: Content,
     laid_out_width: Option<f32>,
     placed: Vec<Placed>,
     height: f32,
     scroll: ScrollState,
+    pressed: Option<Point>,
+    followed: Option<Url>,
+    shown_offset: Cell<f32>,
 }
 
 impl PageView {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(fonts: Rc<RefCell<Fonts>>) -> Self {
         Self {
             id: WidgetId::next(),
             frame: Rect::default(),
             radius: 0.0,
+            fonts,
             content: Content::Blank,
             laid_out_width: None,
             placed: Vec::new(),
             height: 0.0,
             scroll: ScrollState::default(),
+            pressed: None,
+            followed: None,
+            shown_offset: Cell::new(0.0),
         }
     }
 
@@ -68,59 +87,67 @@ impl PageView {
         self.scroll = ScrollState::default();
     }
 
+    pub(crate) fn show_response(&mut self, response: Response) {
+        let html = response
+            .content_type
+            .as_ref()
+            .is_none_or(|content_type| content_type.is_html());
+        if !html {
+            return self.show(Content::Unsupported(response));
+        }
+        let width = match self.frame.width {
+            width if width > 0.0 => width,
+            _ => FIRST_WIDTH,
+        };
+        let document = web_content::parse(&response.body);
+        let page = Page::new(document, width, &mut self.fonts.borrow_mut());
+        self.show(Content::Document {
+            url: response.url,
+            page: Box::new(page),
+        });
+    }
+
+    pub(crate) fn title(&self) -> Option<String> {
+        match &self.content {
+            Content::Document { page, .. } => page.title().filter(|title| !title.is_empty()),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn take_followed(&mut self) -> Option<Url> {
+        self.followed.take()
+    }
+
     pub(crate) fn set_radius(&mut self, radius: f32) {
         self.radius = radius;
     }
 
+    fn link_at(&self, point: Point) -> Option<Url> {
+        let Content::Document { url, page } = &self.content else {
+            return None;
+        };
+        let href = page.link_at(
+            point.x - self.frame.x,
+            point.y - self.frame.y + self.shown_offset.get(),
+        )?;
+        url.join(href.trim())
+            .ok()
+            .filter(|target| matches!(target.scheme(), "http" | "https"))
+    }
+
     fn lay_out(&mut self, cx: &mut Context, width: f32) {
         self.placed.clear();
-        let column = (width - 2.0 * MARGIN).max(0.0);
-        let lines: Vec<(String, f32, f32, Color)> = match &self.content {
-            Content::Blank => Vec::new(),
-            Content::Loading(url) => vec![
-                (L10N.tr("loading"), TITLE_SIZE, TextStyle::SEMIBOLD, TEXT),
-                (url.to_string(), BODY_SIZE, TextStyle::REGULAR, SECONDARY),
-            ],
-            Content::Failed { url, message } => vec![
-                (
-                    L10N.tr("cannot-open"),
-                    TITLE_SIZE,
-                    TextStyle::SEMIBOLD,
-                    TEXT,
-                ),
-                (message.clone(), BODY_SIZE, TextStyle::REGULAR, TEXT),
-                (url.to_string(), BODY_SIZE, TextStyle::REGULAR, SECONDARY),
-            ],
-            Content::Loaded(response) => vec![
-                (
-                    response.url.host_str().unwrap_or_default().to_owned(),
-                    TITLE_SIZE,
-                    TextStyle::SEMIBOLD,
-                    TEXT,
-                ),
-                (
-                    format!(
-                        "{} · {} · {} bytes",
-                        response.status,
-                        response
-                            .content_type
-                            .as_ref()
-                            .map_or("", |content_type| content_type.essence.as_str()),
-                        response.body.len()
-                    ),
-                    BODY_SIZE,
-                    TextStyle::REGULAR,
-                    SECONDARY,
-                ),
-                (
-                    L10N.tr("engine-pending"),
-                    BODY_SIZE,
-                    TextStyle::REGULAR,
-                    TEXT,
-                ),
-            ],
-        };
-        let column = column.min(MESSAGE_WIDTH);
+        if let Content::Document { page, .. } = &mut self.content {
+            if page.display_list.width != width {
+                page.resize(width, &mut self.fonts.borrow_mut());
+            }
+            self.placed = placed(&page.display_list);
+            self.height = page.display_list.height;
+            self.laid_out_width = Some(width);
+            return;
+        }
+        let lines = self.message();
+        let column = (width - 2.0 * MARGIN).clamp(0.0, MESSAGE_WIDTH);
         let left = ((width - column) / 2.0).max(MARGIN);
         let mut y = MARGIN + LINE_STEP;
         for (text, size, weight, color) in lines {
@@ -143,16 +170,114 @@ impl PageView {
         self.laid_out_width = Some(width);
     }
 
+    fn message(&self) -> Vec<(String, f32, f32, Color)> {
+        let title = |text: String| (text, TITLE_SIZE, TextStyle::SEMIBOLD, TEXT);
+        let body = |text: String, color: Color| (text, BODY_SIZE, TextStyle::REGULAR, color);
+        match &self.content {
+            Content::Blank | Content::Document { .. } => Vec::new(),
+            Content::Loading(url) => {
+                vec![title(L10N.tr("loading")), body(url.to_string(), SECONDARY)]
+            }
+            Content::Failed { url, message } => vec![
+                title(L10N.tr("cannot-open")),
+                body(message.clone(), TEXT),
+                body(url.to_string(), SECONDARY),
+            ],
+            Content::Unsupported(response) => vec![
+                title(L10N.tr("cannot-show")),
+                body(
+                    response
+                        .content_type
+                        .as_ref()
+                        .map(|content_type| content_type.essence.clone())
+                        .unwrap_or_default(),
+                    TEXT,
+                ),
+                body(response.url.to_string(), SECONDARY),
+            ],
+        }
+    }
+
     fn scroll_by_page(&mut self, cx: &Context, pages: f32) -> bool {
-        let offset = self.scroll.offset(cx);
         let page = (self.frame.height - PAGE_OVERLAP).max(LINE_STEP);
-        self.scroll.scroll_to(cx, offset + pages * page)
+        self.scroll_by(cx, pages * page)
     }
 
     fn scroll_by(&mut self, cx: &Context, delta: f32) -> bool {
         let offset = self.scroll.offset(cx);
         self.scroll.scroll_to(cx, offset + delta)
     }
+
+    fn click(&mut self, event: &Event) -> bool {
+        match event {
+            Event::PointerDown(pointer) if pointer.button == PointerButton::Primary => {
+                self.pressed = Some(pointer.position);
+                false
+            }
+            Event::PointerUp(pointer) if pointer.button == PointerButton::Primary => {
+                let Some(pressed) = self.pressed.take() else {
+                    return false;
+                };
+                let moved =
+                    (pressed.x - pointer.position.x).abs() + (pressed.y - pointer.position.y).abs();
+                if moved > 4.0 {
+                    return false;
+                }
+                self.followed = self.link_at(pointer.position);
+                self.followed.is_some()
+            }
+            _ => false,
+        }
+    }
+}
+
+fn color(color: web_paint::Color) -> Color {
+    Color {
+        r: color.r,
+        g: color.g,
+        b: color.b,
+        a: color.a,
+    }
+}
+
+fn placed(list: &DisplayList) -> Vec<Placed> {
+    list.items
+        .iter()
+        .filter_map(|item| match item {
+            web_paint::Item::Rect { rect, color: fill } => Some(Placed {
+                top: rect.y,
+                bottom: rect.y + rect.height,
+                item: Item::Fill {
+                    shape: Shape::rect(Rect::new(rect.x, rect.y, rect.width, rect.height)),
+                    paint: color(*fill).into(),
+                },
+            }),
+            web_paint::Item::Glyphs {
+                rect,
+                font,
+                size,
+                color: ink,
+                glyphs,
+                ..
+            } => {
+                let font = list.fonts.get(*font as usize)?.clone();
+                let glyphs = list
+                    .glyphs(glyphs)
+                    .iter()
+                    .map(|glyph| PositionedGlyph {
+                        id: glyph.id,
+                        x: glyph.x,
+                        y: glyph.y,
+                    })
+                    .collect();
+                Some(Placed {
+                    top: rect.y,
+                    bottom: rect.y + rect.height,
+                    item: Item::Glyphs(GlyphRun::new(font, *size, color(*ink), glyphs)),
+                })
+            }
+        })
+        .collect()
 }
 
 impl Widget for PageView {
@@ -178,21 +303,24 @@ impl Widget for PageView {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let offset = self.scroll.offset(cx);
+        self.shown_offset.set(offset);
         let shown = offset..offset + self.frame.height;
-        let mut content = vec![Item::Fill {
-            shape: Shape::rect(self.frame),
-            paint: CANVAS.into(),
-        }];
         let visible = self
             .placed
             .iter()
             .filter(|placed| placed.bottom >= shown.start && placed.top <= shown.end)
             .map(|placed| placed.item.clone())
             .collect();
-        content.push(Item::Translate {
-            offset: Point::new(self.frame.x, self.frame.y - offset),
-            items: visible,
-        });
+        let content = vec![
+            Item::Fill {
+                shape: Shape::rect(self.frame),
+                paint: CANVAS.into(),
+            },
+            Item::Translate {
+                offset: Point::new(self.frame.x, self.frame.y - offset),
+                items: visible,
+            },
+        ];
         items.push(Item::Clip {
             shape: Shape::rounded(self.frame, self.radius),
             items: content,
@@ -222,7 +350,7 @@ impl Widget for PageView {
                 Key::End => self.scroll.scroll_to(cx, self.height),
                 _ => false,
             },
-            _ => false,
+            _ => self.click(event),
         }
     }
 
@@ -230,7 +358,10 @@ impl Widget for PageView {
         true
     }
 
-    fn cursor(&self, _point: Point) -> Option<Cursor> {
-        Some(Cursor::Default)
+    fn cursor(&self, point: Point) -> Option<Cursor> {
+        Some(match self.link_at(point) {
+            Some(_) => Cursor::Pointer,
+            None => Cursor::Default,
+        })
     }
 }

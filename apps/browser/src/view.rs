@@ -11,6 +11,7 @@ use bande_toolkit::{
     Appearance, FrameRegions, Header, Image, Item, Radius, Rect, SHEET_INSET, Scene, Shape,
     TextSystem, WINDOW_HEADER_HEIGHT, Window, WindowEvent, window_controls_end,
 };
+use web_content::Fonts;
 use web_net::{FetchError, FetchId, Response, Url};
 
 use crate::page::{Content, PageView};
@@ -80,7 +81,7 @@ pub(crate) struct BrowserView {
 }
 
 impl BrowserView {
-    pub(crate) fn new(appearance: Appearance) -> Self {
+    pub(crate) fn new(appearance: Appearance, fonts: Rc<RefCell<Fonts>>) -> Self {
         let signals: Signals = Rc::default();
         let mut host = FreeLayout::new();
         let back = host.insert_in_header(
@@ -99,7 +100,7 @@ impl BrowserView {
             symbol(RELOAD, &L10N.tr("reload"), &signals, || Signal::Reload),
             Rect::default(),
         );
-        let page = host.insert(PageView::new(), Rect::default());
+        let page = host.insert(PageView::new(fonts), Rect::default());
         let host_id = bande_toolkit::ui::Widget::id(&host);
         let mut ui = Ui::new(
             Box::new(host),
@@ -131,6 +132,19 @@ impl BrowserView {
 
     pub(crate) fn navigate(&mut self, url: Url) {
         self.load(url, Target::New);
+    }
+
+    fn follow(&mut self, url: Url) {
+        let mut without_fragment = url.clone();
+        without_fragment.set_fragment(None);
+        let same_document = self.current_url().is_some_and(|current| {
+            let mut current = current.clone();
+            current.set_fragment(None);
+            current == without_fragment
+        });
+        if !same_document {
+            self.navigate(url);
+        }
     }
 
     fn load(&mut self, url: Url, target: Target) {
@@ -165,11 +179,10 @@ impl BrowserView {
         let Some((requested, target)) = self.pending.take() else {
             return;
         };
-        let (url, content) = match result {
-            Ok(response) => (response.url.clone(), Content::Loaded(response)),
-            Err(error) => (requested.clone(), Content::failed(requested, &error)),
+        let url = match &result {
+            Ok(response) => response.url.clone(),
+            Err(_) => requested.clone(),
         };
-        self.title = url.host_str().map(str::to_owned);
         match target {
             Target::New => {
                 let next = self.current.map_or(0, |current| current + 1);
@@ -187,7 +200,16 @@ impl BrowserView {
         if !self.address_focused() {
             self.set_address(url.as_str());
         }
-        self.with_page(|page| page.show(content));
+        let title = self.with_page(|page| {
+            match result {
+                Ok(response) => page.show_response(response),
+                Err(error) => page.show(Content::failed(requested, &error)),
+            }
+            page.title()
+        });
+        self.title = title
+            .flatten()
+            .or_else(|| url.host_str().map(str::to_owned));
         self.refresh_navigation();
     }
 
@@ -270,10 +292,8 @@ impl BrowserView {
             });
     }
 
-    fn with_page(&mut self, update: impl FnOnce(&mut PageView)) {
-        if let Some(page) = self.ui.widget_as::<PageView>(self.page) {
-            update(page);
-        }
+    fn with_page<T>(&mut self, update: impl FnOnce(&mut PageView) -> T) -> Option<T> {
+        self.ui.widget_as::<PageView>(self.page).map(update)
     }
 
     fn refresh_navigation(&mut self) {
@@ -299,6 +319,13 @@ impl BrowserView {
                 true
             }
             None => false,
+        }
+    }
+
+    fn settle(&mut self) {
+        self.drain();
+        if let Some(url) = self.with_page(PageView::take_followed).flatten() {
+            self.follow(url);
         }
     }
 
@@ -479,7 +506,7 @@ impl View for BrowserView {
                 false
             }
         };
-        self.drain();
+        self.settle();
         history || handled || self.request.is_some()
     }
 

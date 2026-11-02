@@ -15,7 +15,9 @@ bande-app.workspace = true
 bande-app-menu.workspace = true
 bande-l10n.workspace = true
 bande-toolkit.workspace = true
+web-content.workspace = true
 web-net.workspace = true
+web-paint.workspace = true
 
 [lints]
 workspace = true
