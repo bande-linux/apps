@@ -5,6 +5,7 @@ discover = Discover
 installed = Installed
 updates = Updates
 loading = Loading apps…
+offline = You’re offline. You can browse apps, but installing them and their screenshots need the internet.
 categories = Categories
 new-and-updated = New & Updated
 category-internet = Internet

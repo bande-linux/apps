@@ -17,6 +17,7 @@ use bande_toolkit::{Image, Palette, Rect, TextSystem};
 use crate::L10N;
 use crate::catalog::{Block, Bundle, Category, Component, Icon, search};
 use crate::media::{self, Loaded, Media, ShotError};
+use crate::online;
 use crate::widgets::{AppRow, Grid, Picture};
 use crate::worker::{self, Facts, Failure, Job, Message, Problem, Query};
 
@@ -219,6 +220,7 @@ fn has_local_icon(app: &Component) -> bool {
 pub struct Software {
     apps: Vec<Component>,
     loading: bool,
+    online: bool,
     installed: HashSet<String>,
     icons: HashMap<String, Option<Image>>,
     requested: HashSet<String>,
@@ -255,6 +257,7 @@ impl Software {
         let canceller = transactions.canceller();
         let workers = worker::start(transactions, queries, arch)?;
         let media = media::start(&workers.inbox.outbox())?;
+        online::watch(workers.inbox.outbox());
         let intents: Rc<RefCell<Vec<Intent>>> = Rc::default();
         let typed = Rc::clone(&intents);
         let search = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
@@ -280,6 +283,7 @@ impl Software {
         let mut software = Self {
             apps: Vec::new(),
             loading: true,
+            online: true,
             installed: HashSet::new(),
             icons: HashMap::new(),
             requested: HashSet::new(),
@@ -449,6 +453,14 @@ impl Software {
                 self.apps = apps.into_iter().filter(|app| !app.needs_x11).collect();
                 self.installed = installed;
                 self.loading = false;
+            }
+            Message::Online(online) => {
+                self.online = online;
+                if online {
+                    self.shots
+                        .retain(|_, shot| !matches!(shot, Err(ShotError::Offline)));
+                    self.request_shot();
+                }
             }
             Message::Loaded(Loaded::Icons(icons)) => {
                 for (key, image) in icons {
@@ -1050,7 +1062,7 @@ impl Software {
     }
 
     fn rebuild(&mut self) {
-        let widgets = if self.loading {
+        let mut widgets = if self.loading {
             vec![boxed(Spinner::new(&L10N.tr("loading")))]
         } else if self.apps.is_empty() {
             vec![boxed(Label::new(&L10N.tr("no-catalogue")))]
@@ -1066,6 +1078,9 @@ impl Software {
                 },
             }
         };
+        if !self.online {
+            widgets.insert(0, boxed(Label::new(&L10N.tr("offline")).secondary()));
+        }
         let page = boxed(Stack::new(Axis::Vertical, SPACING, 0.0, widgets));
         if let Some(holder) = self.ui.widget(self.content)
             && let Some(slot) = holder.children_mut().first_mut()
