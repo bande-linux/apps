@@ -1,0 +1,72 @@
+# Activity Monitor depth: what a user needs to rely on it
+
+Benchmarked against macOS Activity Monitor. "Have" is what Activity Monitor does today; the
+ranked list at the end is what is left. Delete this plan when the list is done.
+
+## Tabs and columns
+
+| macOS | User need | Bande |
+|---|---|---|
+| CPU: % CPU, CPU Time, Threads, Idle Wake Ups, PID, User | Find what burns the CPU and wakes the machine | Have, all default; % GPU and GPU Time choosable |
+| Memory: Memory, Compressed, Threads, Ports, PID, User | Find what holds memory | Have Memory (footprint from `bande_status::memory::footprint`: PSS anon + swap PSS), Compressed (swap PSS), Resident, Threads, PID, User. No Ports column |
+| Energy: Energy Impact, 12 hr Power, App Nap, Preventing Sleep | Find battery drains | Have Energy Impact (CPU + GPU + wake-ups, 30 s average), wake-ups, Preventing Sleep (logind inhibitors). No 12 hr average |
+| Disk: Bytes Written/Read, Kind, PID | Find what hits the disk | Have rates and totals per process |
+| Network: Sent/Rcvd Bytes and Packets per process | Find what uses the network | Per interface only; per-process traffic is missing |
+| Column chooser (right-click a header) | Pick columns | Have, remembered per tab |
+| GPU (window) | GPU use | Have a GPU tab when a DRM device reports per-client use |
+
+## Footer panels
+
+| macOS | Bande |
+|---|---|
+| CPU: System (red), User (blue), Idle, CPU Load graph, Threads, Processes | Have: same layout, coloured values, stacked graph (system red under user blue), per-core strips (drag the footer edge, click the graph, View → Show CPU Cores) |
+| Memory: Memory Pressure graph, Physical, Used, Cached Files, Swap Used; App, Wired, Compressed | Have: same columns; the pressure graph is coloured green/yellow/red by PSI level, its height is memory used |
+| Disk: reads/writes in and out per second, data read/written | Have; data read/s blue, written/s red in values and graph |
+| Network: packets/data in/out | Data in/out only (no packet counts) |
+| Energy: impact graph, battery charge 12 hr | Have both (battery graph when there is a battery) |
+
+## View menu
+
+| macOS | Bande |
+|---|---|
+| All / My / System / Selected / Applications in last 12 h / Active / Inactive / Windowed processes | All, All Hierarchically, My Processes, Apps. Missing Selected, Active, System |
+| All Processes, Hierarchically | Have (process tree by parent, kernel threads folded) |
+| Update Frequency: 1 s / 2 s / 5 s | Have, remembered; the graph span follows (1, 2 or 5 min) |
+| Columns, Dock Icon (CPU usage/history, memory, network, disk) | Columns have; dock icon is missing |
+| Send Signal to Process | Missing |
+| Show/hide CPU, GPU history windows | Per-core strips in the footer instead |
+
+## Process actions
+
+| macOS | Bande |
+|---|---|
+| Quit / Force Quit with confirmation | Have; apps are asked over the session bus first, PID reuse is guarded by start time |
+| Inspect: parent, user, CPU, threads, memory, open files and ports, statistics | Have Info (parent/children, command, unit, resources), Threads, Open Files (with sockets and listening ports), Memory Map |
+| Sample Process / spindump | Missing |
+| Search by name or PID, sort any column | Have |
+| Sampling only while visible | Have: no process sampling while every window is hidden; the inspector samples its own process |
+
+## Visual review (headless PNGs, light and dark)
+
+Fixed: the window title was cut to "Activit…"/"Ac…" (toolbar now measures the title and fits tabs
+and search, default size 960×640); PID and other columns cut their values or titles (widths now
+fit the measured header); the memory footer mixed a usage bar into the readouts (now macOS's two
+columns around the graph); graphs were a single accent line on a muddy well (now coloured series
+with soft fills, framed well, caption above with span); footer height jumped between tabs (now
+fixed four rows).
+
+## Ranked remaining
+
+1. Per-process network bytes (sock_diag `INET_DIAG_INFO` bytes_acked/received per socket, mapped
+   to processes through `/proc/<pid>/fd` socket inodes; only while the Network tab shows).
+2. Send Signal to Process (View menu and context menu: HUP, INT, TERM, KILL, STOP, CONT, USR1/2).
+3. Dock icon modes (CPU usage, CPU history, memory pressure): needs a desktop API for live dock
+   icon content.
+4. Sample Process in the inspector (per-thread `wchan` and `syscall` snapshot, or perf when
+   permitted) and a Statistics section (faults, context switches, I/O syscalls).
+5. Selected Processes and Active Processes filters.
+6. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
+7. Ports column (socket count per process) and packets in/out.
+8. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).
+9. Inspector windows could not be opened in the headless capture tool (the compositor stalled after
+   Ctrl+I); check Inspect on the machine.
