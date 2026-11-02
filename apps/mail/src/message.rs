@@ -78,6 +78,7 @@ pub struct Envelope {
     pub from: Vec<Address>,
     pub to: Vec<Address>,
     pub cc: Vec<Address>,
+    pub bcc: Vec<Address>,
     pub reply_to: Vec<Address>,
     pub date: Option<i64>,
     pub message_id: Option<String>,
@@ -105,6 +106,7 @@ impl Envelope {
             from: header_addresses(headers, "From"),
             to: header_addresses(headers, "To"),
             cc: header_addresses(headers, "Cc"),
+            bcc: header_addresses(headers, "Bcc"),
             reply_to: header_addresses(headers, "Reply-To"),
             date: headers
                 .get_first_value("Date")

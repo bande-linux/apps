@@ -228,9 +228,10 @@ impl MailView {
         let selected = self.selected.is_some();
         let has_account = self.has_accounts();
         let reading = self
-            .reading
+            .thread
             .as_ref()
-            .is_some_and(|reading| reading.downloaded);
+            .and_then(crate::ui::reader::Thread::focused)
+            .is_some_and(|(_, reading)| reading.downloaded);
         let states = [
             (self.toolbar.get_mail, has_account),
             (self.toolbar.compose, has_account),

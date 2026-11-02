@@ -7,7 +7,7 @@ use jiff::Timestamp;
 use crate::L10N;
 use crate::store::Summary;
 use crate::ui::format::list_date;
-use crate::ui::reader::lay_out;
+use crate::ui::reader::{Clock, lay_out};
 use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
@@ -583,7 +583,7 @@ impl MailView {
         if frame.width <= 0.0 {
             return;
         }
-        let Some(reading) = &self.reading else {
+        let Some(thread) = &self.thread else {
             let chosen = self.also.len() + usize::from(self.selected.is_some());
             let message = match (self.messages.len(), chosen) {
                 (0, _) => String::new(),
@@ -611,13 +611,14 @@ impl MailView {
             .is_none_or(|(width, _)| *width != frame.width)
         {
             let zone = self.zone.clone();
+            let now = self.now.unwrap_or_else(Timestamp::now);
             let layout = lay_out(
-                reading,
+                thread,
                 frame.width,
                 &mut self.ui.context().text,
                 &palette,
                 &mut self.symbols,
-                &zone,
+                Clock { zone: &zone, now },
             );
             self.layout = Some((frame.width, layout));
         }
@@ -625,9 +626,24 @@ impl MailView {
             return;
         };
         let height = layout.height;
+        let reveal = self
+            .thread
+            .as_mut()
+            .filter(|thread| thread.reveal)
+            .and_then(|thread| {
+                thread.reveal = false;
+                layout
+                    .tops
+                    .iter()
+                    .find(|(id, _)| *id == thread.focus)
+                    .map(|(_, top)| *top)
+            });
         let offset = {
             let scroll = &mut self.scrolls[2];
             scroll.set_extent(height, frame.height);
+            if let Some(top) = reveal {
+                scroll.follow(self.ui.context(), top, top + frame.height);
+            }
             scroll.offset(self.ui.context())
         };
         let origin = Point::new(frame.x, frame.y - offset);
@@ -642,22 +658,10 @@ impl MailView {
                 rect.height,
             )
         };
-        let links = layout
-            .links
+        let targets = layout
+            .targets
             .iter()
-            .map(|(rect, url)| (moved(rect), Hit::Link(url.clone())))
-            .chain(
-                layout
-                    .attachments
-                    .iter()
-                    .map(|(rect, index)| (moved(rect), Hit::Attachment(*index))),
-            )
-            .chain(
-                layout
-                    .load_remote
-                    .iter()
-                    .map(|rect| (moved(rect), Hit::LoadRemote)),
-            )
+            .map(|(rect, target)| (moved(rect), Hit::Reader(target.clone())))
             .filter(|(rect, _)| rect.y + rect.height > frame.y && rect.y < frame.y + frame.height)
             .collect::<Vec<_>>();
         items.push(Item::Clip {
@@ -667,7 +671,7 @@ impl MailView {
                 items: layout.items.clone(),
             }],
         });
-        self.hits.extend(links);
+        self.hits.extend(targets);
         let scroll = &self.scrolls[2];
         let cx = self.ui.context();
         scroll.paint_scrollbar(cx, frame, items);

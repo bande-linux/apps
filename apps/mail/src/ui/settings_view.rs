@@ -70,6 +70,10 @@ enum Signal {
     Remove(AccountId),
     AddRule,
     RemoveRule(i64),
+    AddCondition,
+    RemoveCondition,
+    Matching(bool),
+    ForgetSenders,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -120,12 +124,29 @@ impl Editing {
     }
 }
 
+#[derive(Debug, Clone)]
+struct NewRule {
+    every: bool,
+    conditions: Vec<(usize, String)>,
+    action: usize,
+}
+
+impl Default for NewRule {
+    fn default() -> Self {
+        Self {
+            every: false,
+            conditions: vec![(0, String::new())],
+            action: 0,
+        }
+    }
+}
+
 #[derive(Default)]
 struct State {
     settings: MailSettings,
     editing: Editing,
     signals: Vec<Signal>,
-    rule: (usize, String, usize),
+    rule: NewRule,
 }
 
 type Shared = Rc<RefCell<State>>;
@@ -429,8 +450,26 @@ impl SettingsView {
                     ),
                 ),
                 note("settings-load-remote-note"),
-            ],
+            ]
+            .into_iter()
+            .chain(self.remote_senders())
+            .collect(),
         )
+    }
+
+    fn remote_senders(&self) -> Option<FormLine> {
+        let count = self
+            .store
+            .as_ref()
+            .and_then(|store| store.remote_senders().ok())
+            .filter(|count| *count > 0)?;
+        Some(FormLine::Row(
+            L10N.tr_args("settings-remote-senders", [("count", count.into())]),
+            Box::new(Button::new(
+                &L10N.tr("button-forget"),
+                sender(&self.state, Signal::ForgetSenders),
+            )),
+        ))
     }
 
     fn rule_actions(&self) -> Vec<(String, RuleAction)> {
@@ -481,13 +520,30 @@ impl SettingsView {
                 .find(|(_, action)| *action == rule.action)
                 .map(|(title, _)| title.clone())
                 .unwrap_or_default();
+            let joiner = format!(
+                " {} ",
+                L10N.tr(match rule.every {
+                    true => "rule-and",
+                    false => "rule-or",
+                })
+            );
+            let conditions = rule
+                .conditions
+                .iter()
+                .map(|(field, pattern)| {
+                    L10N.tr_args(
+                        "rule-condition",
+                        [
+                            ("field", L10N.tr(rule_field(*field)).into()),
+                            ("pattern", pattern.clone().into()),
+                        ],
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(&joiner);
             let description = L10N.tr_args(
                 "rule-description",
-                [
-                    ("field", L10N.tr(rule_field(rule.field)).into()),
-                    ("pattern", rule.pattern.clone().into()),
-                    ("action", action.into()),
-                ],
+                [("conditions", conditions.into()), ("action", action.into())],
             );
             lines.push(FormLine::Row(
                 description,
@@ -497,27 +553,64 @@ impl SettingsView {
                 )),
             ));
         }
-        let (field, pattern, action) = self.state.borrow().rule.clone();
-        let state = Rc::clone(&self.state);
-        let field = PopUpButton::new(&L10N.tr("rule-if"), &fields, field, move |index| {
-            state.borrow_mut().rule.0 = index;
-        });
-        let state = Rc::clone(&self.state);
-        let pattern = TextField::new("", &pattern, move |text| {
-            state.borrow_mut().rule.1 = text.to_owned();
-        });
+        let rule = self.state.borrow().rule.clone();
+        lines.push(heading("settings-new-rule"));
+        if rule.conditions.len() > 1 {
+            let state = Rc::clone(&self.state);
+            let every = PopUpButton::new(
+                &L10N.tr("rule-match"),
+                &[L10N.tr("rule-any"), L10N.tr("rule-all")],
+                usize::from(rule.every),
+                move |index| {
+                    state
+                        .borrow_mut()
+                        .signals
+                        .push(Signal::Matching(index == 1))
+                },
+            );
+            lines.push(row("rule-match", every));
+        }
+        for (index, (field, pattern)) in rule.conditions.iter().enumerate() {
+            let state = Rc::clone(&self.state);
+            let field = PopUpButton::new(&L10N.tr("rule-if"), &fields, *field, move |chosen| {
+                if let Some(condition) = state.borrow_mut().rule.conditions.get_mut(index) {
+                    condition.0 = chosen;
+                }
+            });
+            let state = Rc::clone(&self.state);
+            let pattern = TextField::new("", pattern, move |text| {
+                if let Some(condition) = state.borrow_mut().rule.conditions.get_mut(index) {
+                    condition.1 = text.to_owned();
+                }
+            });
+            let label = match (index, rule.every) {
+                (0, _) => "rule-if",
+                (_, true) => "rule-and-if",
+                (_, false) => "rule-or-if",
+            };
+            lines.push(row(label, field));
+            lines.push(row("rule-contains", pattern));
+        }
+        let mut condition_buttons = vec![Button::new(
+            &L10N.tr("rule-add-condition"),
+            sender(&self.state, Signal::AddCondition),
+        )];
+        if rule.conditions.len() > 1 {
+            condition_buttons.push(Button::new(
+                &L10N.tr("rule-remove-condition"),
+                sender(&self.state, Signal::RemoveCondition),
+            ));
+        }
+        lines.push(buttons(condition_buttons));
         let titles = actions
             .iter()
             .map(|(title, _)| title.clone())
             .collect::<Vec<_>>();
         let state = Rc::clone(&self.state);
-        let action = PopUpButton::new(&L10N.tr("rule-then"), &titles, action, move |index| {
-            state.borrow_mut().rule.2 = index;
+        let action = PopUpButton::new(&L10N.tr("rule-then"), &titles, rule.action, move |index| {
+            state.borrow_mut().rule.action = index;
         });
         lines.extend([
-            heading("settings-new-rule"),
-            row("rule-if", field),
-            row("rule-contains", pattern),
             row("rule-then", action),
             buttons(vec![Button::new(
                 &L10N.tr("rule-add"),
@@ -529,24 +622,30 @@ impl SettingsView {
     }
 
     fn add_rule(&mut self) {
-        let (field, pattern, action) = self.state.borrow().rule.clone();
+        let rule = self.state.borrow().rule.clone();
         let actions = self.rule_actions();
-        let (Some(store), Some(field), Some((_, action))) =
-            (&self.store, RuleField::ALL.get(field), actions.get(action))
-        else {
+        let (Some(store), Some((_, action))) = (&mut self.store, actions.get(rule.action)) else {
             return;
         };
-        if pattern.trim().is_empty() {
+        let conditions = rule
+            .conditions
+            .iter()
+            .filter(|(_, pattern)| !pattern.trim().is_empty())
+            .filter_map(|(field, pattern)| {
+                Some((*RuleField::ALL.get(*field)?, pattern.trim().to_owned()))
+            })
+            .collect::<Vec<_>>();
+        if conditions.is_empty() {
             return;
         }
         let rule = Rule {
             id: 0,
-            field: *field,
-            pattern: pattern.trim().to_owned(),
+            every: rule.every,
+            conditions,
             action: *action,
         };
         match store.add_rule(&rule) {
-            Ok(()) => self.state.borrow_mut().rule.1.clear(),
+            Ok(()) => self.state.borrow_mut().rule = NewRule::default(),
             Err(error) => tracing::warn!("cannot add the rule: {error}"),
         }
     }
@@ -892,11 +991,38 @@ impl SettingsView {
                     self.add_rule();
                     rebuild = true;
                 }
+                Signal::AddCondition => {
+                    self.state
+                        .borrow_mut()
+                        .rule
+                        .conditions
+                        .push((0, String::new()));
+                    rebuild = true;
+                }
+                Signal::Matching(every) => {
+                    self.state.borrow_mut().rule.every = every;
+                    rebuild = true;
+                }
+                Signal::RemoveCondition => {
+                    let mut state = self.state.borrow_mut();
+                    if state.rule.conditions.len() > 1 {
+                        state.rule.conditions.pop();
+                    }
+                    rebuild = true;
+                }
                 Signal::RemoveRule(id) => {
                     if let Some(store) = &self.store
                         && let Err(error) = store.remove_rule(id)
                     {
                         tracing::warn!("cannot remove the rule: {error}");
+                    }
+                    rebuild = true;
+                }
+                Signal::ForgetSenders => {
+                    if let Some(store) = &self.store
+                        && let Err(error) = store.forget_remote_senders()
+                    {
+                        tracing::warn!("cannot forget the senders: {error}");
                     }
                     rebuild = true;
                 }

@@ -16,9 +16,9 @@ use bande_toolkit::{
 };
 
 use crate::L10N;
-use crate::compose::{Draft, Outgoing, keep_unsent, unsent_folder};
+use crate::compose::{Draft, Original, Outgoing, keep_unsent, unsent_folder};
 use crate::message::{Address, Attachment, parse_addresses};
-use crate::store::{Account, MessageId};
+use crate::store::Account;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{SHORTCUTS, TOOLBAR_HEIGHT};
 
@@ -60,8 +60,8 @@ pub struct ComposeView {
     senders: Vec<Account>,
     sender: usize,
     draft: Draft,
-    answering: Option<MessageId>,
-    replaces: Option<MessageId>,
+    answering: Option<Original>,
+    replaces: Option<Original>,
     initial: Draft,
     palette: Palette,
     size: (f32, f32),
@@ -502,15 +502,15 @@ impl ComposeView {
             return;
         }
         self.autosave_at = None;
-        let Some(path) = self.unsent.clone() else {
+        if self.unsent.is_none() {
             return;
-        };
+        }
         let draft = self.compose_draft();
         let unchanged = !self.recovered && self.autosaved.is_none() && draft == self.initial;
         if unchanged || self.autosaved.as_ref() == Some(&draft) {
             return;
         }
-        match keep_unsent(&path, &draft) {
+        match keep_unsent(&self.outgoing(draft.clone())) {
             Ok(()) => self.autosaved = Some(draft),
             Err(error) => tracing::warn!("cannot keep the unsent message: {error}"),
         }
@@ -577,8 +577,8 @@ impl ComposeView {
     fn outgoing(&self, draft: Draft) -> Outgoing {
         Outgoing {
             draft,
-            answering: self.answering,
-            replaces: self.replaces,
+            answering: self.answering.clone(),
+            replaces: self.replaces.clone(),
             unsent: self.unsent.clone(),
         }
     }

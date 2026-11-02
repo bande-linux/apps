@@ -23,6 +23,8 @@ header-to = To: { $names }
 header-cc = Cc: { $names }
 downloading-message = Downloading the message…
 remote-content-blocked = Remote content in this message was not loaded, to protect your privacy.
+show-quoted-text = Show Quoted Text
+hide-quoted-text = Hide Quoted Text
 new-messages = { $count } new messages
 
 search-placeholder = Search
@@ -155,7 +157,12 @@ settings-plain-text = Show plain text when a message has it
 settings-fixed-width = Use a fixed-width font for plain text
 settings-privacy = Privacy
 settings-load-remote = Load remote content in messages
-settings-load-remote-note = Remote pictures can tell the sender when and where you read a message. When this is off, a message shows Load Remote Content instead.
+settings-load-remote-note = Remote pictures can tell the sender when and where you read a message. When this is off, a message shows Load Remote Content instead, and Mail remembers the senders you load it for.
+settings-remote-senders = { $count ->
+    [one] Remote content loads for one sender
+   *[other] Remote content loads for { $count } senders
+}
+button-forget = Forget
 settings-addressing = Addressing
 settings-send-from = Send new messages from
 settings-send-from-mailbox = Account of the selected mailbox
@@ -194,7 +201,23 @@ rule-subject = Subject
 rule-flag = Flag the message
 rule-read = Mark as read
 rule-move = Move to { $mailbox } ({ $account })
-rule-description = { $field } contains “{ $pattern }”: { $action }
+rule-condition = { $field } contains “{ $pattern }”
+rule-description = { $conditions }: { $action }
+rule-and = and
+rule-or = or
+rule-match = Match
+rule-any = Any condition
+rule-all = All conditions
+rule-and-if = And if
+rule-or-if = Or if
+rule-add-condition = Add Condition
+rule-remove-condition = Remove Condition
 security-tls = TLS
 security-starttls = STARTTLS
 security-none = None (this computer only)
+held-title = { $count ->
+    [one] A Message Is Waiting to Be Sent
+   *[other] { $count } Messages Are Waiting to Be Sent
+}
+held-message = { $email } is turned off. Mail sends what is waiting when you turn the account on again in Settings → Accounts. If you quit Mail first, it opens again as an unsent message.
+account-gone = No account sends from this address any more.

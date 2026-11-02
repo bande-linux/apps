@@ -19,10 +19,12 @@ apt install bande-mail
   Accounts: whether each account is used, its full name, signature and server settings (user
   name, hosts, ports, TLS or STARTTLS), Add Account… and Remove…; changed servers are checked
   with the saved password before they are kept. Viewing: list preview lines, conversations,
-  plain text over HTML, a fixed-width font for plain text, and whether remote content loads by
-  itself (off by default). Composing: the account new messages are sent from and whether replies
-  quote the original. Rules: if From, To or Cc, or Subject contains a text, move new unread
-  Inbox mail to a mailbox, flag it or mark it read, while Mail is open. They are kept in
+  plain text over HTML, a fixed-width font for plain text, whether remote content loads by
+  itself (off by default), and Forget for the senders Mail loads it for because you chose Load
+  Remote Content in one of their messages. Composing: the account new messages are sent from and whether replies
+  quote the original. Rules: if any or all of several conditions hold (From, To or Cc, or
+  Subject contains a text), move new unread Inbox mail to a mailbox, flag it or mark it read,
+  while Mail is open. They are kept in
   `~/.config/bande/mail.conf`; signatures, servers and rules in the offline store.
 - **Finding servers**, in this order: the provider's own autoconfig
   (`autoconfig.<domain>`, then `<domain>/.well-known/autoconfig`), Mozilla's ISPDB
@@ -39,15 +41,20 @@ apt install bande-mail
   paperclip. Messages of one conversation (the first `References` entry, else the
   `Message-ID`) share one row with a count; clicking the count, or Right and Left, shows and
   hides the earlier ones, and acting on a closed conversation acts on all of it (Settings →
-  Viewing turns this off). The reader shows the headers, the plain text or sanitised HTML, and the
-  attachments. Clicking an attachment opens a private copy in `~/.cache/bande-mail/attachments/`,
+  Viewing turns this off). The reader shows the whole conversation, oldest first, with your
+  replies from Sent and the account's other mailboxes (not Trash or Junk): the chosen message and
+  unread ones open, the others as a line that opens on a click. Each open message shows its
+  headers, the plain text or sanitised HTML, quoted text folded behind Show Quoted Text, and the
+  attachments; Reply, Reply All and Forward (in the message or the toolbar) act on the message
+  last clicked. Clicking an attachment opens a private copy in `~/.cache/bande-mail/attachments/`,
   removed when Mail quits unless it was edited; its menu also saves it where you choose (the
   desktop's file chooser) or to the Downloads folder.
 - **HTML** is never rendered as a web page: it is turned into paragraphs, headings, lists,
   quotes, links and pictures. Scripts, styles, forms and frames are dropped, and only `http`,
   `https` and `mailto` links survive. Pictures sent inside the message (`cid:`) show at once;
   remote pictures are not fetched until **Load Remote Content** is clicked in the reader's
-  banner (or by themselves when Settings → Viewing allows it), and then only over HTTPS, at
+  banner, which Mail then remembers for that sender (or by themselves when Settings → Viewing
+  allows it), and then only over HTTPS, at
   most 20 per message, 10 MB each, decoded with limits on their size.
 - **Toolbar and keys.** Get Mail (Shift+Ctrl+N), New Message (Ctrl+N), Archive (Shift+Ctrl+A),
   Delete (Delete or Backspace), Junk (Shift+Ctrl+J), Reply (Ctrl+R), Reply All (Shift+Ctrl+R),
@@ -67,11 +74,14 @@ apt install bande-mail
   changes. Files are
   attached through the desktop's file chooser (the portal), up to 25 MB each, and a click on an
   attachment removes it. A sent message is kept in Sent and the original is marked answered. If
-  sending fails, the message comes back in a window with the error.
+  sending fails, the message comes back in a window with the error. A message sent or saved from
+  an account that is turned off, or whose servers change before it goes out, stays queued: Mail
+  says so and sends it when the account is on again.
 - **Drafts.** Closing a message that was changed and not sent keeps it in the account's Drafts
   mailbox (also on quit). While a message is written, a copy is kept every few seconds in
   `~/.local/share/bande-mail/unsent/` until the server has it, so a message survives a crash or
-  quitting offline: it opens again the next time Mail starts. Double-click a draft, or press Return, to carry on; saving it again or
+  quitting offline: it opens again the next time Mail starts, still replacing the draft it came
+  from and answering the message it replies to. Both copies keep the Bcc recipients. Double-click a draft, or press Return, to carry on; saving it again or
   sending it removes the older copy.
 - **Offline store.** One SQLite database in `~/.local/share/bande-mail/` holds the accounts,
   folders, headers, flags and message bodies (bodies up to 2 MB are fetched ahead, larger ones
