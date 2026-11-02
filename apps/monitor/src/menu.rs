@@ -112,9 +112,7 @@ pub fn process_menu(selected: Selected) -> Menu {
         item("menu-inspect", MenuCommand::Inspect)
             .shortcut("Ctrl+I")
             .enabled(selected.inspectable),
-        item("menu-show-in-files", MenuCommand::ShowInFiles)
-            .shortcut("Shift+Ctrl+R")
-            .enabled(selected.located),
+        item("menu-show-in-files", MenuCommand::ShowInFiles).enabled(selected.located),
         MenuItem::separator(),
         MenuItem::submenu(
             &L10N.tr("menu-send-signal"),
@@ -188,7 +186,7 @@ pub fn app_menus(tabs: &[Tab], shown: Filter, frequency: Frequency, windowed: bo
         .enabled(windowed),
         process("menu-inspect", MenuCommand::Inspect).shortcut("Ctrl+I"),
         Entry::separator(),
-        process("menu-show-in-files", MenuCommand::ShowInFiles).shortcut("Shift+Ctrl+R"),
+        process("menu-show-in-files", MenuCommand::ShowInFiles),
     ]);
     vec![
         edit_submenu(vec![
