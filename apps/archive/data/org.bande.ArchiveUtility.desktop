@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Archive Utility
+Comment=Expand and create compressed archives
+Icon=org.bande.ArchiveUtility
+Exec=bande-archive %F
+StartupNotify=true
+MimeType=application/zip;application/x-tar;application/x-compressed-tar;application/x-bzip2-compressed-tar;application/x-xz-compressed-tar;application/x-zstd-compressed-tar;application/gzip;application/x-bzip2;application/x-xz;application/zstd;application/x-7z-compressed;
+Categories=Utility;Archiving;Compression;
+Keywords=zip;unzip;tar;7z;compress;extract;
