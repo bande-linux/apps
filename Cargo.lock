@@ -528,6 +528,25 @@ version = "0.1.2"
 source = "git+https://github.com/bande-linux/desktop?rev=4c52920e8a98d06ac74cc69d890b14fda7da938e#4c52920e8a98d06ac74cc69d890b14fda7da938e"
 
 [[package]]
+name = "bande-disks"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-app-menu",
+ "bande-design",
+ "bande-fs",
+ "bande-l10n",
+ "bande-toolkit",
+ "bande-volumes",
+ "rustix",
+ "serde",
+ "tracing",
+ "zbus",
+ "zeroize",
+]
+
+[[package]]
 name = "bande-fs"
 version = "0.1.2"
 source = "git+https://github.com/bande-linux/desktop?rev=4c52920e8a98d06ac74cc69d890b14fda7da938e#4c52920e8a98d06ac74cc69d890b14fda7da938e"
@@ -959,6 +978,15 @@ dependencies = [
  "serde_json",
  "sha2",
  "ureq",
+ "zbus",
+]
+
+[[package]]
+name = "bande-volumes"
+version = "0.1.2"
+source = "git+https://github.com/bande-linux/desktop?rev=4c52920e8a98d06ac74cc69d890b14fda7da938e#4c52920e8a98d06ac74cc69d890b14fda7da938e"
+dependencies = [
+ "tracing",
  "zbus",
 ]
 

@@ -57,6 +57,7 @@ bande-status = { git = "https://github.com/bande-linux/desktop", rev = "4c52920e
 bande-thumbnails = { git = "https://github.com/bande-linux/desktop", rev = "4c52920e8a98d06ac74cc69d890b14fda7da938e" }
 bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "4c52920e8a98d06ac74cc69d890b14fda7da938e" }
 bande-watch = { git = "https://github.com/bande-linux/desktop", rev = "4c52920e8a98d06ac74cc69d890b14fda7da938e" }
+bande-volumes = { git = "https://github.com/bande-linux/desktop", rev = "4c52920e8a98d06ac74cc69d890b14fda7da938e" }
 bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "4c52920e8a98d06ac74cc69d890b14fda7da938e" }
 web-content = { git = "https://github.com/bande-linux/web", rev = "dd2cad638f1695896c0d87e27c4d982b06daffbf" }
 web-net = { git = "https://github.com/bande-linux/web", rev = "dd2cad638f1695896c0d87e27c4d982b06daffbf" }
