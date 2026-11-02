@@ -1,7 +1,7 @@
 [package]
 name = "bande-preview"
 description = "Bande Preview: views images and PDF documents"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
