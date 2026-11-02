@@ -70,8 +70,8 @@ impl Section {
 
     fn table(self) -> Table {
         match self {
-            Section::Info => Table::new(self.columns()).without_header(),
-            _ => Table::new(self.columns()),
+            Section::Info => Table::new(self.columns()).compact().without_header(),
+            _ => Table::new(self.columns()).compact(),
         }
     }
 

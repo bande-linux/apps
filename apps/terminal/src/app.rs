@@ -1218,6 +1218,9 @@ impl TerminalWindow {
             return;
         }
         self.painter.set_profile(settings.profile);
+        if self.settings.font != settings.font {
+            self.painter.set_font(&settings.font);
+        }
         if self.settings.font_size != settings.font_size {
             self.painter.set_metrics(settings.font_size, window.scale());
         }
@@ -1890,7 +1893,8 @@ impl View for TerminalWindow {
             .then(|| self.blink_from + BLINK * self.blink_phase.saturating_add(1))
     }
 
-    fn tick(&mut self, window: &mut Window, _now: Instant) -> bool {
+    fn tick(&mut self, window: &mut Window, now: Instant) -> bool {
+        self.blink_phase = self.blink_phase(now);
         window.request_redraw();
         true
     }

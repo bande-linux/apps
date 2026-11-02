@@ -42,7 +42,7 @@ ranked list at the end is what is left. Delete this plan when the list is done.
 |---|---|
 | Quit / Force Quit with confirmation | Have; apps are asked over the session bus first, PID reuse is guarded by start time |
 | Inspect: parent, user, CPU, threads, memory, open files and ports, statistics | Have Info (parent/children, command, unit, resources, statistics: page faults, context switches, read/write calls), Threads (with the kernel function each waits in), Open Files (with sockets and listening ports), Memory Map |
-| Sample Process / spindump | Missing |
+| Sample Process / spindump | Missing (Threads shows where each thread waits) |
 | Search by name or PID, sort any column | Have |
 | Sampling only while visible | Have: no process sampling while every window is hidden; the inspector samples its own process |
 
@@ -53,7 +53,12 @@ and search, default size 960×640); PID and other columns cut their values or ti
 fit the measured header); the memory footer mixed a usage bar into the readouts (now macOS's two
 columns around the graph); graphs were a single accent line on a muddy well (now coloured series
 with soft fills, framed well, caption above with span); footer height jumped between tabs (now
-fixed four rows).
+fixed four rows); lists use compact 24 pt rows (`Table::compact`), so about 20 processes show
+instead of 15.
+
+Cost: with Idle Wake Ups on the CPU tab (macOS's default) the release build uses about 1.6 % of
+one core while visible at the 2 s interval, against 0.9 % without it (it reads every thread's
+`status`); hidden, it samples nothing.
 
 ## Ranked remaining
 
@@ -61,7 +66,6 @@ fixed four rows).
    icon content.
 2. Sample Process in the inspector: user-space stacks need ptrace or perf (not permitted for other
    users' processes); a sampled call tree for the user's own processes would match macOS.
-3. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
-4. Ports column (socket count per process), packets in/out, and UDP traffic per process (needs
+3. Ports column (socket count per process), packets in/out, and UDP traffic per process (needs
    eBPF or nftables accounting).
-5. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).
+4. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).

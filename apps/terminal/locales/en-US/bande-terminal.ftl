@@ -87,6 +87,7 @@ settings-title = Terminal Settings
 settings-appearance = Appearance
 settings-profile = Profile
 settings-preview-sample = ~/bande $ cargo build --release
+settings-font = Font
 settings-font-size = Text size
 settings-points = { $size } pt
 settings-cursor = Cursor

@@ -4,6 +4,7 @@ use jiff::civil::{Date, DateTime, Time};
 use bande_toolkit::{Point, Rect};
 
 pub const HOUR_HEIGHT: f32 = 48.0;
+const SMALLEST_HOUR: f32 = 18.0;
 pub const GUTTER: f32 = 56.0;
 pub const DAY_HEADER: f32 = 44.0;
 pub const ALL_DAY_ROW: f32 = 22.0;
@@ -19,9 +20,17 @@ pub struct TimeGrid {
     pub days: usize,
     pub all_day_rows: usize,
     pub scroll: f32,
+    pub hour_height: f32,
 }
 
 impl TimeGrid {
+    pub fn showing(self, hours: u8) -> Self {
+        Self {
+            hour_height: (self.hours_area().height / f32::from(hours.max(1))).max(SMALLEST_HOUR),
+            ..self
+        }
+    }
+
     pub fn all_day_height(&self) -> f32 {
         ALL_DAY_ROW * self.all_day_rows.max(1) as f32 + 6.0
     }
@@ -41,7 +50,7 @@ impl TimeGrid {
     }
 
     pub fn content_height(&self) -> f32 {
-        HOUR_HEIGHT * 24.0
+        self.hour_height * 24.0
     }
 
     pub fn max_scroll(&self) -> f32 {
@@ -70,11 +79,11 @@ impl TimeGrid {
     }
 
     pub fn y_for_minutes(&self, minutes: i32) -> f32 {
-        self.hours_top() - self.scroll + minutes as f32 * HOUR_HEIGHT / 60.0
+        self.hours_top() - self.scroll + minutes as f32 * self.hour_height / 60.0
     }
 
     pub fn minutes_at(&self, y: f32) -> i32 {
-        let minutes = (y - self.hours_top() + self.scroll) * 60.0 / HOUR_HEIGHT;
+        let minutes = (y - self.hours_top() + self.scroll) * 60.0 / self.hour_height;
         (minutes.round() as i32).clamp(0, MINUTES_PER_DAY)
     }
 

@@ -195,7 +195,7 @@ fn tabs_control(list: &List, tabs: &[Tab], tab: Tab) -> SegmentedControl {
 impl MonitorView {
     pub fn new(monitor: Monitor, palette: Palette, mut text: TextSystem, mut icons: Icons) -> Self {
         let tab = monitor.tab();
-        let mut table = Table::new(table_columns(monitor.columns(), &mut text));
+        let mut table = Table::new(table_columns(monitor.columns(), &mut text)).compact();
         table.set_sort(table_sort(monitor.columns(), monitor.sort()));
         let mut list = List::new(table, palette, text);
         let send = sender(list.signals());

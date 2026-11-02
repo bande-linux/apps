@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Node, Role};
@@ -12,8 +12,8 @@ use bande_toolkit::{
 
 use crate::L10N;
 use crate::settings::{
-    COLUMN_RANGE, CloseAsk, CursorStyle, FONT_SIZES, NewTabFolder, ROW_RANGE, SCROLLBACK_CHOICES,
-    Settings,
+    COLUMN_RANGE, CloseAsk, CursorStyle, FONT_SIZES, FONTS, NewTabFolder, ROW_RANGE,
+    SCROLLBACK_CHOICES, Settings,
 };
 use crate::theme::{Profile, Theme};
 
@@ -25,7 +25,7 @@ const PREVIEW_PADDING: f32 = 12.0;
 
 struct Preview {
     id: WidgetId,
-    profile: Rc<Cell<Profile>>,
+    settings: SharedSettings,
     frame: Rect,
     items: Vec<Item>,
 }
@@ -45,7 +45,13 @@ impl Widget for Preview {
             scheme: cx.palette.scheme,
             ..Appearance::default()
         };
-        let theme = Theme::new(appearance, self.profile.get());
+        let (profile, font) = {
+            let settings = self.settings.borrow();
+            (settings.profile, settings.font.clone())
+        };
+        let theme = Theme::new(appearance, profile);
+        cx.text
+            .set_monospace_family((!font.is_empty()).then_some(font.as_str()));
         let rect = Rect::new(frame.x, frame.y + 4.0, frame.width, frame.height - 8.0);
         let sample = cx.text.paragraph(
             &L10N.tr("settings-preview-sample"),
@@ -140,7 +146,7 @@ fn pop_up<T: Copy + PartialEq + 'static>(
     })
 }
 
-fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
+fn form(settings: &SharedSettings, fonts: &[String]) -> Form {
     let current = settings.borrow().clone();
     let profiles: Vec<String> = Profile::ALL
         .iter()
@@ -151,15 +157,29 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
         .position(|candidate| *candidate == current.profile)
         .unwrap_or_default();
     let shared = settings.clone();
-    let shown = profile.clone();
     let profile_button = PopUpButton::new(
         &L10N.tr("settings-profile"),
         &profiles,
         chosen,
         move |index| {
             let profile = Profile::ALL.get(index).copied().unwrap_or_default();
-            shown.set(profile);
             shared.borrow_mut().profile = profile;
+        },
+    );
+    let shared = settings.clone();
+    let families = fonts.to_vec();
+    let font = PopUpButton::new(
+        &L10N.tr("settings-font"),
+        fonts,
+        fonts
+            .iter()
+            .position(|family| *family == current.font)
+            .unwrap_or_default(),
+        move |index| {
+            shared.borrow_mut().font = match index {
+                0 => String::new(),
+                index => families.get(index).cloned().unwrap_or_default(),
+            };
         },
     );
     let shared = settings.clone();
@@ -283,10 +303,11 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
             row("settings-profile", Box::new(profile_button)),
             FormLine::Wide(Box::new(Preview {
                 id: WidgetId::next(),
-                profile,
+                settings: settings.clone(),
                 frame: Rect::default(),
                 items: Vec::new(),
             })),
+            row("settings-font", Box::new(font)),
             row("settings-font-size", Box::new(size)),
             row("settings-columns", Box::new(columns)),
             row("settings-rows", Box::new(rows)),
@@ -311,10 +332,20 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
 }
 
 pub fn settings_view(appearance: Appearance, settings: &SharedSettings) -> Ui {
-    let profile = Rc::new(Cell::new(settings.borrow().profile));
+    let mut text = TextSystem::new();
+    let mut fonts: Vec<String> = FONTS
+        .iter()
+        .enumerate()
+        .filter(|(index, family)| *index == 0 || text.has_family(family))
+        .map(|(_, family)| (*family).to_owned())
+        .collect();
+    let chosen = settings.borrow().font.clone();
+    if !chosen.is_empty() && !fonts.contains(&chosen) {
+        fonts.push(chosen);
+    }
     let mut ui = Ui::new(
-        Box::new(ScrollView::new(form(settings, profile))),
-        Context::new(TextSystem::new(), appearance.palette()),
+        Box::new(ScrollView::new(form(settings, &fonts))),
+        Context::new(text, appearance.palette()),
     );
     ui.set_appearance(appearance);
     ui

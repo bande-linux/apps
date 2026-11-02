@@ -79,6 +79,7 @@ impl Terminals {
             self.settings.font_size,
             1.0,
         );
+        painter.set_font(&self.settings.font);
         let (width, height) = painter.metrics.content_size(grid);
         let size = (width.ceil() as u32, height.ceil() as u32);
         let mut sessions = Vec::new();
