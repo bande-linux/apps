@@ -7,7 +7,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use bande_packages::{Client, Progress};
 
-use crate::deb::{Deb, Machine};
+use crate::deb::{self, Deb, Identity, Machine};
 use crate::flow::{self, Outcome, State};
 
 #[derive(Debug, Clone)]
@@ -21,6 +21,7 @@ pub enum Job {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Read(Option<Deb>),
+    Identity(Option<Identity>),
     State(State),
     Progress(Progress),
     Back,
@@ -62,9 +63,19 @@ fn run(client: &Client, path: &Path, machine: &Machine, jobs: Receiver<Job>, out
     };
     for job in jobs {
         if let Job::Inspect = job {
-            let (read, state) = flow::inspect(client, path, machine);
-            deb.clone_from(&read);
-            if !out.send(Message::Read(read)) || !out.send(Message::State(state)) {
+            deb = deb::read(path);
+            if !out.send(Message::Read(deb.clone())) {
+                break;
+            }
+            if deb.is_some() && !out.send(Message::Identity(deb::identity(path))) {
+                break;
+            }
+            if !out.send(Message::State(flow::inspect(
+                client,
+                path,
+                machine,
+                deb.as_ref(),
+            ))) {
                 break;
             }
             continue;

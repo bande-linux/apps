@@ -2,7 +2,7 @@
 
 use std::process::Command;
 
-use bande_installer::read;
+use bande_installer::{identity, read};
 
 #[test]
 fn a_built_deb_opens_with_its_fields_and_a_truncated_download_is_refused() {
@@ -13,6 +13,12 @@ fn a_built_deb_opens_with_its_fields_and_a_truncated_download_is_refused() {
         root.join("DEBIAN/control"),
         "Package: tool\nVersion: 1.2-1\nArchitecture: arm64\nMaintainer: Ada <ada@example.org>\n\
          Installed-Size: 2048\nDescription: A handy tool\n Does handy things.\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(root.join("usr/share/applications")).unwrap();
+    std::fs::write(
+        root.join("usr/share/applications/tool.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Handy Tool\nExec=tool\n",
     )
     .unwrap();
     let deb = dir.path().join("tool_1.2-1_arm64.deb");
@@ -33,8 +39,10 @@ fn a_built_deb_opens_with_its_fields_and_a_truncated_download_is_refused() {
         ("arm64", 2048 * 1024)
     );
     assert_eq!(opened.summary, "A handy tool");
+    assert_eq!(identity(&deb).unwrap().name, "Handy Tool");
     let bytes = std::fs::read(&deb).unwrap();
     let truncated = dir.path().join("partial.deb");
     std::fs::write(&truncated, &bytes[..bytes.len() / 3]).unwrap();
     assert_eq!(read(&truncated), None);
+    assert_eq!(identity(&truncated), None);
 }

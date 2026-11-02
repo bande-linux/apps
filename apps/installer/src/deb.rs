@@ -1,7 +1,10 @@
 use std::cmp::Ordering;
 use std::io;
-use std::path::Path;
-use std::process::Command;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
+use bande_toolkit::Image;
+use bande_xdg::DesktopEntry;
 
 const SHOW_FORMAT: &str = "${Package}\\n${Version}\\n${Architecture}\\n${Maintainer}\\n${Installed-Size}\\n${Homepage}\\n${Description}";
 
@@ -119,4 +122,139 @@ pub fn missing_requirements(details: &str) -> Vec<String> {
         .collect();
     missing.dedup();
     missing
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Identity {
+    pub name: String,
+    pub icon: Option<Image>,
+}
+
+const APPLICATIONS: &str = "usr/share/applications";
+const HICOLOR: &str = "usr/share/icons/hicolor";
+const PIXMAPS: &str = "usr/share/pixmaps";
+const WANTED: [&str; 3] = [
+    "./usr/share/applications/*.desktop",
+    "./usr/share/icons/hicolor/*/apps/*",
+    "./usr/share/pixmaps/*",
+];
+const ICON_PIXELS: u32 = 128;
+
+struct Scratch(PathBuf);
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        if let Err(error) = std::fs::remove_dir_all(&self.0) {
+            tracing::debug!("cannot remove {}: {error}", self.0.display());
+        }
+    }
+}
+
+fn extract(path: &Path) -> Option<Scratch> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or_default();
+    let dir = Scratch(
+        std::env::temp_dir().join(format!("bande-installer-{}-{stamp}", std::process::id())),
+    );
+    std::fs::create_dir(&dir.0).ok()?;
+    let mut archive = Command::new("dpkg-deb")
+        .arg("--fsys-tarfile")
+        .arg(path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let extracted = Command::new("tar")
+        .args([
+            "--extract",
+            "--no-same-owner",
+            "--no-same-permissions",
+            "--wildcards",
+            "--no-wildcards-match-slash",
+            "--file",
+            "-",
+            "--directory",
+        ])
+        .arg(&dir.0)
+        .args(WANTED)
+        .stdin(archive.stdout.take()?)
+        .stderr(Stdio::null())
+        .status();
+    if let Err(error) = archive.wait() {
+        tracing::debug!("dpkg-deb did not finish: {error}");
+    }
+    extracted.ok().map(|_| dir)
+}
+
+fn regular(path: PathBuf) -> Option<PathBuf> {
+    std::fs::symlink_metadata(&path)
+        .ok()
+        .filter(|metadata| metadata.is_file())
+        .map(|_| path)
+}
+
+fn files(dir: &Path) -> Vec<PathBuf> {
+    let mut found: Vec<PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| regular(entry.path()))
+        .collect();
+    found.sort();
+    found
+}
+
+fn icon_file(root: &Path, icon: &str) -> Option<PathBuf> {
+    let named = |dir: &Path| {
+        ["svg", "png"]
+            .into_iter()
+            .find_map(|extension| regular(dir.join(format!("{icon}.{extension}"))))
+    };
+    let mut sizes: Vec<(u32, PathBuf)> = std::fs::read_dir(root.join(HICOLOR))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let size = entry.file_name().into_string().ok()?;
+            let rank = match size.as_str() {
+                "scalable" => u32::MAX,
+                _ => size.split('x').next()?.parse().ok()?,
+            };
+            Some((rank, named(&entry.path().join("apps"))?))
+        })
+        .collect();
+    sizes.sort();
+    sizes
+        .pop()
+        .map(|(_, path)| path)
+        .or_else(|| named(&root.join(PIXMAPS)))
+}
+
+pub fn identity(path: &Path) -> Option<Identity> {
+    let scratch = extract(path)?;
+    let locale = bande_xdg::Locale::from_env();
+    let desktops = bande_xdg::current_desktops();
+    let entry = files(&scratch.0.join(APPLICATIONS))
+        .into_iter()
+        .filter(|file| {
+            file.extension()
+                .is_some_and(|extension| extension == "desktop")
+        })
+        .find_map(|file| {
+            let text = std::fs::read_to_string(&file).ok()?;
+            let id = file.file_name()?.to_str()?.to_owned();
+            DesktopEntry::parse(&id, &file, &text, locale.as_ref(), &desktops)
+        })?;
+    let icon = entry
+        .icon
+        .as_deref()
+        .filter(|icon| !icon.contains('/'))
+        .and_then(|icon| icon_file(&scratch.0, icon))
+        .and_then(|file| Image::load(&file, ICON_PIXELS));
+    Some(Identity {
+        name: entry.name,
+        icon,
+    })
 }
