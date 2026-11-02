@@ -7,6 +7,26 @@ use crate::store::AccountId;
 
 pub const MAX_PREVIEW_LINES: u8 = 5;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortBy {
+    #[default]
+    Date,
+    From,
+    Subject,
+}
+
+impl SortBy {
+    pub const ALL: [Self; 3] = [Self::Date, Self::From, Self::Subject];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Date => "date",
+            Self::From => "from",
+            Self::Subject => "subject",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MailSettings {
     pub notify: bool,
@@ -18,6 +38,8 @@ pub struct MailSettings {
     pub fixed_width: bool,
     pub quote: bool,
     pub send_from: String,
+    pub sort: SortBy,
+    pub ascending: bool,
 }
 
 impl Default for MailSettings {
@@ -32,6 +54,8 @@ impl Default for MailSettings {
             fixed_width: false,
             quote: true,
             send_from: String::new(),
+            sort: SortBy::Date,
+            ascending: false,
         }
     }
 }
@@ -62,6 +86,13 @@ impl Stored for MailSettings {
                 }
                 "quote" => settings.quote = flag(value).unwrap_or(settings.quote),
                 "send-from" => settings.send_from = value.to_owned(),
+                "sort" => {
+                    settings.sort = SortBy::ALL
+                        .into_iter()
+                        .find(|sort| sort.name() == value)
+                        .unwrap_or_default();
+                }
+                "ascending" => settings.ascending = flag(value).unwrap_or(settings.ascending),
                 _ => {}
             }
         }
@@ -70,7 +101,7 @@ impl Stored for MailSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\n",
+            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\n",
             self.notify,
             self.sound,
             self.load_remote,
@@ -80,6 +111,8 @@ impl Stored for MailSettings {
             self.fixed_width,
             self.quote,
             self.send_from.trim(),
+            self.sort.name(),
+            self.ascending,
         )
     }
 }

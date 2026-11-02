@@ -15,14 +15,15 @@ apt install bande-mail
   servers are found, or they cannot be reached, the sheet shows the server fields, filled with
   whatever was found. When Gmail, iCloud, Yahoo, AOL or Fastmail refuse the password, the sheet
   says where to create an app password. Several accounts work side by side.
-- **Settings** (Ctrl+,) has four tabs. General: notifications for new mail and their sound.
+- **Settings** (Ctrl+,) has five tabs. General: notifications for new mail and their sound.
   Accounts: whether each account is used, its full name, signature and server settings (user
-  name, hosts, ports, TLS or STARTTLS), Add Account… and Remove…; changed servers are checked with the saved
-  password before they are kept. Viewing: list preview lines, conversations, plain text over HTML,
-  a fixed-width font for plain text, and whether remote content loads by itself (off by
-  default). Composing: the account new messages are sent from
-  and whether replies quote the original. They are kept in `~/.config/bande/mail.conf`; signatures and
-  servers in the offline store.
+  name, hosts, ports, TLS or STARTTLS), Add Account… and Remove…; changed servers are checked
+  with the saved password before they are kept. Viewing: list preview lines, conversations,
+  plain text over HTML, a fixed-width font for plain text, and whether remote content loads by
+  itself (off by default). Composing: the account new messages are sent from and whether replies
+  quote the original. Rules: if From, To or Cc, or Subject contains a text, move new unread
+  Inbox mail to a mailbox, flag it or mark it read, while Mail is open. They are kept in
+  `~/.config/bande/mail.conf`; signatures, servers and rules in the offline store.
 - **Finding servers**, in this order: the provider's own autoconfig
   (`autoconfig.<domain>`, then `<domain>/.well-known/autoconfig`), Mozilla's ISPDB
   (`autoconfig.thunderbird.net`), DNS SRV records (RFC 6186), the ISPDB entry of the domain's
@@ -52,7 +53,8 @@ apt install bande-mail
   Delete (Delete or Backspace), Junk (Shift+Ctrl+J), Reply (Ctrl+R), Reply All (Shift+Ctrl+R),
   Forward (Shift+Ctrl+F), Flag (Shift+Ctrl+L), Mark as Read or Unread (Shift+Ctrl+U), Send
   (Shift+Ctrl+D), Close Window (Ctrl+W), Quit (Ctrl+Q) and Search (Ctrl+F), which searches
-  sender, recipients, subject and text. Mailbox → Mark All as Read marks the shown mailbox read, and Message → Move To files the
+  sender, recipients, subject and text. View sorts the list by date, sender or subject, either
+  way. Mailbox → Mark All as Read marks the shown mailbox read, and Message → Move To files the
   message in any mailbox of its account. Ctrl+click, Shift+click, Shift+Up/Down and Select All
   (Ctrl+A) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then
   act on all of them, and dragging them onto a mailbox in the sidebar moves them. Undo (Ctrl+Z)

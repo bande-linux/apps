@@ -63,6 +63,13 @@ CREATE TABLE IF NOT EXISTS messages (
     UNIQUE (mailbox, uid)
 );
 CREATE INDEX IF NOT EXISTS messages_by_date ON messages (mailbox, date DESC);
+CREATE TABLE IF NOT EXISTS rules (
+    id INTEGER PRIMARY KEY,
+    field TEXT NOT NULL,
+    pattern TEXT NOT NULL,
+    action TEXT NOT NULL,
+    mailbox INTEGER REFERENCES mailboxes(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS pending (
     id INTEGER PRIMARY KEY,
     account INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -144,6 +151,48 @@ pub enum Action {
     Flag(Flag, bool),
     Move(String),
     Expunge,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleField {
+    From,
+    To,
+    Subject,
+}
+
+impl RuleField {
+    pub const ALL: [Self; 3] = [Self::From, Self::To, Self::Subject];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::From => "from",
+            Self::To => "to",
+            Self::Subject => "subject",
+        }
+    }
+
+    fn columns(self) -> &'static str {
+        match self {
+            Self::From => "(sender_name LIKE ?1 ESCAPE '\\' OR sender_email LIKE ?1 ESCAPE '\\')",
+            Self::To => "recipients LIKE ?1 ESCAPE '\\'",
+            Self::Subject => "subject LIKE ?1 ESCAPE '\\'",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleAction {
+    Move(MailboxId),
+    Flag,
+    Read,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rule {
+    pub id: i64,
+    pub field: RuleField,
+    pub pattern: String,
+    pub action: RuleAction,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -816,6 +865,78 @@ impl Store {
             })?
             .collect::<rusqlite::Result<_>>()?;
         Ok(pending)
+    }
+
+    pub fn rules(&self) -> Result<Vec<Rule>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT id, field, pattern, action, mailbox FROM rules ORDER BY id")?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<MailboxId>>(4)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|(id, field, pattern, action, mailbox)| {
+                let field = RuleField::ALL
+                    .into_iter()
+                    .find(|known| known.name() == field)?;
+                let action = match (action.as_str(), mailbox) {
+                    ("move", Some(mailbox)) => RuleAction::Move(mailbox),
+                    ("flag", _) => RuleAction::Flag,
+                    ("read", _) => RuleAction::Read,
+                    _ => return None,
+                };
+                Some(Rule {
+                    id,
+                    field,
+                    pattern,
+                    action,
+                })
+            })
+            .collect())
+    }
+
+    pub fn add_rule(&self, rule: &Rule) -> Result<()> {
+        let (action, mailbox) = match rule.action {
+            RuleAction::Move(mailbox) => ("move", Some(mailbox)),
+            RuleAction::Flag => ("flag", None),
+            RuleAction::Read => ("read", None),
+        };
+        self.connection.execute(
+            "INSERT INTO rules (field, pattern, action, mailbox) VALUES (?1, ?2, ?3, ?4)",
+            params![rule.field.name(), rule.pattern, action, mailbox],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_rule(&self, id: i64) -> Result<()> {
+        self.connection
+            .execute("DELETE FROM rules WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    pub fn matching(&self, ids: &[MessageId], rule: &Rule) -> Result<Vec<MessageId>> {
+        let query = format!(
+            "SELECT id FROM messages WHERE id IN ({}) AND {}",
+            ids.iter()
+                .map(MessageId::to_string)
+                .collect::<Vec<_>>()
+                .join(","),
+            rule.field.columns()
+        );
+        let mut statement = self.connection.prepare(&query)?;
+        let matched = statement
+            .query_map([like_pattern(&rule.pattern)], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(matched)
     }
 
     pub fn finish_pending(&self, id: i64) -> Result<()> {
