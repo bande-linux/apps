@@ -5,6 +5,7 @@ use web_paint::DisplayList;
 
 const TILE_HEIGHT: f32 = 1024.0;
 const GLYPH_REACH: f32 = 0.5;
+const DAMAGE_MARGIN: f32 = 32.0;
 
 enum Node {
     Leaf {
@@ -84,6 +85,26 @@ impl Tiles {
             list,
             nodes,
             built: vec![None; count],
+        }
+    }
+
+    pub(crate) fn relaid(
+        &mut self,
+        list: Arc<DisplayList>,
+        damage: web_paint::Rect,
+        images: &mut Images,
+    ) {
+        images.keep_only(&list);
+        self.nodes = tree(&list);
+        self.list = list;
+        if damage.width > 0.0 && damage.height > 0.0 {
+            let top = damage.y - DAMAGE_MARGIN;
+            let bottom = damage.y + damage.height + DAMAGE_MARGIN;
+            for index in self.range(top, bottom) {
+                if let Some(slot) = self.built.get_mut(index) {
+                    *slot = None;
+                }
+            }
         }
     }
 

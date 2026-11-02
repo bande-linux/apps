@@ -23,7 +23,7 @@ use crate::view::{Ask, BrowserView, CarriedTab, SavedWindow};
 const ENGLISH: &str = include_str!("../locales/en-US/bande-browser.ftl");
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-static INFO: Info = Info {
+pub(crate) static INFO: Info = Info {
     id: "org.bande.Browser",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),

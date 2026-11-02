@@ -96,11 +96,22 @@ impl PageView {
         self.jump = None;
     }
 
-    pub(crate) fn relaid(&mut self, list: Arc<DisplayList>, links: Arc<Links>) {
-        if matches!(self.content, Content::Document { .. }) {
-            self.content = Content::Document { list, links };
-            self.laid_out_width = None;
+    pub(crate) fn relaid(
+        &mut self,
+        list: Arc<DisplayList>,
+        links: Arc<Links>,
+        damage: Option<web_paint::Rect>,
+    ) {
+        if !matches!(self.content, Content::Document { .. }) {
+            return;
         }
+        match (&mut self.tiles, damage) {
+            (Some(tiles), Some(damage)) => {
+                tiles.relaid(Arc::clone(&list), damage, &mut self.images)
+            }
+            _ => self.laid_out_width = None,
+        }
+        self.content = Content::Document { list, links };
     }
 
     pub(crate) fn has_document(&self) -> bool {

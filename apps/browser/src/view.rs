@@ -523,8 +523,8 @@ impl BrowserView {
         let pending = tab.pending.as_ref().map(|pending| pending.load);
         let shown = tab.shown;
         match update.outcome {
-            Outcome::Relaid(list, links) if Some(update.load) == shown => {
-                self.with_page(index, |page| page.relaid(list, links));
+            Outcome::Relaid(list, links, damage) if Some(update.load) == shown => {
+                self.with_page(index, |page| page.relaid(list, links, damage));
             }
             Outcome::Scroll(y) if Some(update.load) == shown => {
                 self.with_page(index, |page| page.jump_to(y));

@@ -30,7 +30,7 @@ workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "web"
-depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, publicsuffix"
 extended-description = """\
 A web browser built on Bande's own web engine, written from scratch in \
 Rust: private by default, no telemetry, no ads."""
