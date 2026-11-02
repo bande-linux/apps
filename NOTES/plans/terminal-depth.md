@@ -16,7 +16,7 @@ is what is left. Delete this plan when the list is done.
 | Shell: run command, startup | Use another shell or tmux | Have Run command (through `/bin/sh -c exec …`; empty = login shell) |
 | When the shell exits, Ask before closing: Always / Never / Only if processes other than the shell run | Don't lose a running job | Have Always / When a program is running / Never, for panes, tabs, windows and quit |
 | New tabs/windows open with: same working directory / home | Keep the folder | Have The same folder / Your home folder |
-| Window size in columns × rows | Default size | 80 × 24 fixed |
+| Window size in columns × rows | Default size | Have Columns and Rows (80 × 24 by default) |
 | Notify when long commands finish (not in macOS) | Background work | Have |
 
 ## Everyday features
@@ -40,9 +40,8 @@ is what is left. Delete this plan when the list is done.
 1. Editable profiles: duplicate a built-in profile, change colours, font size and cursor per
    profile, choose a profile per window or tab, import iTerm/Terminal colour schemes.
 2. Font family choice (any installed monospace font).
-3. Default window size in columns × rows.
-4. Drag tabs to reorder and out into a new window.
-5. Edit Title for a tab, and a per-tab profile badge.
-6. Alt+click to move the shell cursor; triple-click selects a command's output.
-7. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
+3. Drag tabs to reorder and out into a new window.
+4. Edit Title for a tab, and a per-tab profile badge.
+5. Alt+click to move the shell cursor; triple-click selects a command's output.
+6. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
    password).

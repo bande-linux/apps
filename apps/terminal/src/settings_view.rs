@@ -12,7 +12,8 @@ use bande_toolkit::{
 
 use crate::L10N;
 use crate::settings::{
-    CloseAsk, CursorStyle, FONT_SIZES, NewTabFolder, SCROLLBACK_CHOICES, Settings,
+    COLUMN_RANGE, CloseAsk, CursorStyle, FONT_SIZES, NewTabFolder, ROW_RANGE, SCROLLBACK_CHOICES,
+    Settings,
 };
 use crate::theme::{Profile, Theme, ansi_colors};
 
@@ -174,6 +175,22 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
         move |value| shared.borrow_mut().font_size = value as f32,
     )
     .format(|value| L10N.tr_args("settings-points", [("size", (value as i64).into())]));
+    let shared = settings.clone();
+    let columns = Stepper::new(
+        &L10N.tr("settings-columns"),
+        current.columns as f64,
+        (COLUMN_RANGE.0 as f64, COLUMN_RANGE.1 as f64),
+        1.0,
+        move |value| shared.borrow_mut().columns = value as usize,
+    );
+    let shared = settings.clone();
+    let rows = Stepper::new(
+        &L10N.tr("settings-rows"),
+        current.rows as f64,
+        (ROW_RANGE.0 as f64, ROW_RANGE.1 as f64),
+        1.0,
+        move |value| shared.borrow_mut().rows = value as usize,
+    );
     let cursors: Vec<String> = CursorStyle::ALL
         .iter()
         .map(|style| L10N.tr(style.message()))
@@ -275,6 +292,8 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
                 items: Vec::new(),
             })),
             row("settings-font-size", Box::new(size)),
+            row("settings-columns", Box::new(columns)),
+            row("settings-rows", Box::new(rows)),
             row("settings-cursor", Box::new(cursor)),
             row("settings-blink", Box::new(blink)),
             heading("settings-shell"),

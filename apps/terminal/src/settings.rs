@@ -2,9 +2,9 @@ use alacritty_terminal::tty::Shell;
 use alacritty_terminal::vte::ansi::CursorShape;
 use bande_app_settings::{Stored, flag, pairs};
 
-use crate::SCROLLBACK;
 use crate::render::DEFAULT_FONT_SIZE;
 use crate::theme::Profile;
+use crate::{COLUMNS, ROWS, SCROLLBACK};
 
 pub const FONT_SIZES: (f32, f32) = (9.0, 32.0);
 
@@ -101,6 +101,9 @@ impl NewTabFolder {
     }
 }
 
+pub const COLUMN_RANGE: (usize, usize) = (20, 400);
+pub const ROW_RANGE: (usize, usize) = (5, 200);
+
 pub const SCROLLBACK_CHOICES: [usize; 4] = [1_000, 10_000, 100_000, 1_000_000];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -110,6 +113,8 @@ pub struct Settings {
     pub cursor: CursorStyle,
     pub blink: bool,
     pub scrollback: usize,
+    pub columns: usize,
+    pub rows: usize,
     pub alt_as_meta: bool,
     pub paste_warning: bool,
     pub close_ask: CloseAsk,
@@ -129,6 +134,8 @@ impl Default for Settings {
             cursor: CursorStyle::default(),
             blink: false,
             scrollback: SCROLLBACK,
+            columns: COLUMNS,
+            rows: ROWS,
             alt_as_meta: true,
             paste_warning: true,
             close_ask: CloseAsk::default(),
@@ -152,6 +159,13 @@ impl Settings {
             )
         })
     }
+}
+
+fn within(value: &str, (low, high): (usize, usize)) -> Option<usize> {
+    value
+        .parse()
+        .ok()
+        .filter(|number| (low..=high).contains(number))
 }
 
 fn named<T: Copy>(all: &[T], name: fn(T) -> &'static str, value: &str) -> Option<T> {
@@ -184,6 +198,10 @@ impl Stored for Settings {
                         .filter(|lines| SCROLLBACK_CHOICES.contains(lines))
                         .unwrap_or(settings.scrollback);
                 }
+                "columns" => {
+                    settings.columns = within(value, COLUMN_RANGE).unwrap_or(settings.columns);
+                }
+                "rows" => settings.rows = within(value, ROW_RANGE).unwrap_or(settings.rows),
                 "alt-as-meta" => settings.alt_as_meta = flag(value).unwrap_or(settings.alt_as_meta),
                 "paste-warning" => {
                     settings.paste_warning = flag(value).unwrap_or(settings.paste_warning);
@@ -222,6 +240,8 @@ impl Stored for Settings {
             format!("cursor = {}", self.cursor.name()),
             format!("blink = {}", self.blink),
             format!("scrollback = {}", self.scrollback),
+            format!("columns = {}", self.columns),
+            format!("rows = {}", self.rows),
             format!("alt-as-meta = {}", self.alt_as_meta),
             format!("paste-warning = {}", self.paste_warning),
             format!("close-ask = {}", self.close_ask.name()),
