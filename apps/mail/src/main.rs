@@ -518,9 +518,20 @@ impl Mail {
         }
     }
 
+    fn show_viewer(&mut self, cx: &mut Cx<Self>) {
+        self.reopen(cx);
+        if let Some((window, _)) = self.main.and_then(|main| cx.window(main))
+            && let Err(error) = window
+                .activation_token(APP_ID)
+                .and_then(|token| window.activate(&token))
+        {
+            tracing::warn!("cannot raise the viewer: {error}");
+        }
+    }
+
     fn apply(&mut self, cx: &mut Cx<Self>, change: Change) {
-        if change == Change::AddAccount && self.main.is_none() {
-            self.reopen(cx);
+        if change == Change::AddAccount {
+            self.show_viewer(cx);
         }
         let Some(view) = main_view(cx, self.main, &mut self.parked) else {
             return;
@@ -532,14 +543,6 @@ impl Mail {
             Change::AddAccount => view.present_setup(Mode::Add),
         }
         if let Some(main) = self.main {
-            if let Some((window, _)) = cx.window(main)
-                && matches!(change, Change::AddAccount)
-                && let Err(error) = window
-                    .activation_token(APP_ID)
-                    .and_then(|token| window.activate(&token))
-            {
-                tracing::warn!("cannot raise the viewer: {error}");
-            }
             self.serve(cx, main);
         }
     }
@@ -600,22 +603,32 @@ impl Program for Mail {
     }
 
     fn menus(&self, cx: &Cx<Self>) -> Menus {
+        let view = match self.main.and_then(|main| cx.view(main)) {
+            Some(Pane::Main(view)) => Some(view.as_ref()),
+            _ => self.parked.as_deref(),
+        };
+        let windowed = cx.windows().next().is_some();
         Menus {
-            menus: match self.main.and_then(|main| cx.view(main)) {
-                Some(Pane::Main(view)) => menus::app_menus(view),
-                _ => Vec::new(),
-            },
-            window: Vec::new(),
+            menus: view
+                .map(|view| menus::app_menus(view, self.main.is_some(), windowed))
+                .unwrap_or_default(),
+            window: menus::window_menu(),
         }
     }
 
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
+        if command == menus::VIEWER {
+            return self.show_viewer(cx);
+        }
+        if menus::opens_viewer(command) {
+            self.reopen(cx);
+        }
         let handled = match window.and_then(|window| cx.window(window)) {
             Some((_, Pane::Main(view))) => view.menu_action(command),
             Some((_, Pane::Compose(view))) => view.menu_action(command),
             None => false,
         };
-        if !handled && window != self.main {
+        if !handled && (window.is_none() || window != self.main) {
             if let Some(view) = main_view(cx, self.main, &mut self.parked) {
                 view.menu_action(command);
             }

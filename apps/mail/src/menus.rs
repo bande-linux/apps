@@ -11,12 +11,23 @@ fn item(message: &str, action: &str) -> Entry {
     }
 }
 
-pub fn app_menus(view: &MailView) -> Vec<Entry> {
+pub const VIEWER: &str = "viewer";
+
+pub fn opens_viewer(action: &str) -> bool {
+    matches!(action, "add-account" | "new-mailbox")
+}
+
+pub fn window_menu() -> Vec<Entry> {
+    vec![Entry::item(&L10N.tr("menu-viewer"), VIEWER)]
+}
+
+pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
     let targets = view
         .move_targets()
         .into_iter()
         .map(|(name, id)| Entry::item(&name, &format!("move-to:{id}")))
         .collect::<Vec<_>>();
+    let selection = |message: &str, action: &str| item(message, action).enabled(viewer);
     vec![
         Entry::submenu(
             &L10N.tr("menu-file"),
@@ -25,7 +36,7 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
                 Entry::separator(),
                 item("menu-add-account", "add-account"),
                 Entry::separator(),
-                item("menu-find", "find"),
+                selection("menu-find", "find"),
             ],
         ),
         edit_submenu(Vec::new()),
@@ -57,7 +68,7 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
             vec![
                 item("action-get-mail", "get-mail"),
                 Entry::separator(),
-                item("menu-mark-all-read", "mark-all-read"),
+                selection("menu-mark-all-read", "mark-all-read"),
                 Entry::separator(),
                 item("menu-new-mailbox", "new-mailbox"),
             ],
@@ -65,19 +76,19 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
         Entry::submenu(
             &L10N.tr("menu-message"),
             vec![
-                item("compose-send", "send"),
+                item("compose-send", "send").enabled(windowed),
                 Entry::separator(),
-                item("action-reply", "reply"),
-                item("action-reply-all", "reply-all"),
-                item("action-forward", "forward"),
+                selection("action-reply", "reply"),
+                selection("action-reply-all", "reply-all"),
+                selection("action-forward", "forward"),
                 Entry::separator(),
-                item("menu-toggle-read", "toggle-read"),
-                item("menu-toggle-flag", "toggle-flag"),
+                selection("menu-toggle-read", "toggle-read"),
+                selection("menu-toggle-flag", "toggle-flag"),
                 Entry::separator(),
-                item("action-archive", "archive"),
-                item("action-junk", "junk"),
-                Entry::submenu(&L10N.tr("menu-move-to"), targets),
-                item("action-delete", "delete"),
+                selection("action-archive", "archive"),
+                selection("action-junk", "junk"),
+                Entry::submenu(&L10N.tr("menu-move-to"), targets).enabled(viewer),
+                selection("action-delete", "delete"),
             ],
         ),
     ]

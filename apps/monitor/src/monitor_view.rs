@@ -1399,11 +1399,12 @@ fn search_field(list: &List, filter: Filter, text: &str) -> SearchField {
 }
 
 impl Screen for MonitorView {
-    fn app_menus(&self) -> Option<Vec<Entry>> {
+    fn app_menus(&self, windowed: bool) -> Option<Vec<Entry>> {
         Some(app_menus(
             &self.monitor.tabs(),
             self.monitor.filter(),
             self.monitor.frequency(),
+            windowed,
         ))
     }
 

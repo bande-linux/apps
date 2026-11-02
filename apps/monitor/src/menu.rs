@@ -150,7 +150,8 @@ fn entry(message: &str, command: MenuCommand) -> Entry {
     Entry::item(&L10N.tr(message), command.action())
 }
 
-pub fn app_menus(tabs: &[Tab], shown: Filter, frequency: Frequency) -> Vec<Entry> {
+pub fn app_menus(tabs: &[Tab], shown: Filter, frequency: Frequency, windowed: bool) -> Vec<Entry> {
+    let process = |message: &str, command: MenuCommand| entry(message, command).enabled(windowed);
     let mut view = tabs
         .iter()
         .zip(1..)
@@ -176,24 +177,25 @@ pub fn app_menus(tabs: &[Tab], shown: Filter, frequency: Frequency) -> Vec<Entry
         ),
         entry("menu-show-cores", MenuCommand::ShowCores),
         Entry::separator(),
-        entry("menu-quit-process", MenuCommand::Quit).shortcut("Ctrl+E"),
-        entry("menu-force-quit-process", MenuCommand::ForceQuit),
+        process("menu-quit-process", MenuCommand::Quit).shortcut("Ctrl+E"),
+        process("menu-force-quit-process", MenuCommand::ForceQuit),
         Entry::submenu(
             &L10N.tr("menu-send-signal"),
             Stop::SENDABLE
                 .map(|how| Entry::item(&signal_item_title(how), MenuCommand::Signal(how).action()))
                 .to_vec(),
-        ),
-        entry("menu-inspect", MenuCommand::Inspect).shortcut("Ctrl+I"),
+        )
+        .enabled(windowed),
+        process("menu-inspect", MenuCommand::Inspect).shortcut("Ctrl+I"),
         Entry::separator(),
-        entry("menu-show-in-files", MenuCommand::ShowInFiles).shortcut("Shift+Ctrl+R"),
+        process("menu-show-in-files", MenuCommand::ShowInFiles).shortcut("Shift+Ctrl+R"),
     ]);
     vec![
         edit_submenu(vec![
-            entry("menu-copy-name", MenuCommand::CopyName),
-            entry("menu-copy-pid", MenuCommand::CopyPid),
+            process("menu-copy-name", MenuCommand::CopyName),
+            process("menu-copy-pid", MenuCommand::CopyPid),
             Entry::separator(),
-            entry("menu-find", MenuCommand::Find).shortcut("Ctrl+F"),
+            process("menu-find", MenuCommand::Find).shortcut("Ctrl+F"),
         ]),
         Entry::submenu(&L10N.tr("menu-view"), view),
     ]

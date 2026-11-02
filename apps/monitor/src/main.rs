@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use accesskit::TreeUpdate;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
+use bande_app_menu::Entry;
 use bande_monitor::{
     Asked, BatteryReport, Catalog, INSPECTOR_SIZE, Icons, InspectorView, L10N, MenuCommand,
     Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop, TOOLBAR_HEIGHT,
@@ -28,6 +29,7 @@ const FILES_APP_ID: &str = "org.bande.Files";
 const PROC_ROOT: &str = "/";
 const STATE_FILE: &str = "monitor";
 const MEMORY_FLAG: &str = "--memory";
+const SHOW_MONITOR: &str = "show-monitor";
 
 static INFO: Info = Info {
     id: APP_ID,
@@ -105,6 +107,7 @@ impl View for Pane {
 
 struct ActivityMonitor {
     main: Option<WindowId>,
+    closed_menus: Vec<Entry>,
     sampling: bool,
     sampler: Sampler,
     snapshot: Snapshot,
@@ -334,6 +337,19 @@ fn open_main(
     Ok((main, snapshot))
 }
 
+impl ActivityMonitor {
+    fn show_main(&mut self, cx: &mut Cx<Self>) {
+        self.reopen(cx);
+        if let Some((window, _)) = self.main.and_then(|main| cx.window(main))
+            && let Err(error) = window
+                .activation_token(APP_ID)
+                .and_then(|token| window.activate(&token))
+        {
+            tracing::warn!("cannot raise Activity Monitor: {error}");
+        }
+    }
+}
+
 impl Program for ActivityMonitor {
     type View = Pane;
 
@@ -343,6 +359,7 @@ impl Program for ActivityMonitor {
         let (main, snapshot) = open_main(cx, &mut sampler, memory)?;
         Ok(Self {
             main: Some(main),
+            closed_menus: Vec::new(),
             sampling: true,
             sampler,
             snapshot,
@@ -357,14 +374,22 @@ impl Program for ActivityMonitor {
             menus: self
                 .main
                 .and_then(|main| cx.view(main))
-                .and_then(|pane| pane.0.app_menus())
-                .unwrap_or_default(),
-            window: Vec::new(),
+                .and_then(|pane| pane.0.app_menus(true))
+                .unwrap_or_else(|| self.closed_menus.clone()),
+            window: vec![Entry::item(&L10N.tr("window-title"), SHOW_MONITOR)],
         }
     }
 
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
-        let Some(window) = window else {
+        let reopened = self.main.is_none();
+        if reopened || command == SHOW_MONITOR {
+            self.show_main(cx);
+        }
+        let target = match reopened {
+            true => self.main,
+            false => window.or(self.main),
+        };
+        let Some(window) = target else {
             return;
         };
         if let Some((shown, pane)) = cx.window(window)
@@ -400,9 +425,10 @@ impl Program for ActivityMonitor {
         }
     }
 
-    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, _view: Pane) {
+    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, view: Pane) {
         if self.main == Some(window) {
             self.main = None;
+            self.closed_menus = view.0.app_menus(false).unwrap_or_default();
         }
         self.sampling = on_screen(cx);
     }
