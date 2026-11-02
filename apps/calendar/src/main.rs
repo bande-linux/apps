@@ -32,6 +32,9 @@ use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp, Zoned};
 
 const APP_ID: &str = "org.bande.Calendar";
+const NEW_EVENT: &str = "new-event";
+const NEW_EVENT_FLAG: &str = "--new-event";
+const SHOW_CALENDAR: &str = "show-calendar";
 const WINDOW_SIZE: (u32, u32) = (1120, 740);
 const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
@@ -199,7 +202,7 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
         Entry::submenu(
             &L10N.tr("menu-file"),
             vec![
-                entry("new-event", "new-event").shortcut("Ctrl+N"),
+                entry("new-event", NEW_EVENT).shortcut("Ctrl+N"),
                 Entry::separator(),
                 entry("new-calendar", "new-calendar").shortcut("Alt+Ctrl+N"),
                 entry("add-account", "add-account"),
@@ -881,6 +884,7 @@ impl Program for CalendarApp {
     type View = Pane;
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        let (new_event, arguments) = new_event_asked(arguments);
         let zone = bande_datetime::local_zone();
         let library = Library::load(data_dir());
         let formats = DateFormats::from_env();
@@ -907,7 +911,7 @@ impl Program for CalendarApp {
             .as_deref()
             .and_then(|folder| SettingsWatch::start(folder, CalendarSettings::FILE));
         let main = show(cx, &title, Pane(view))?;
-        Ok(Self {
+        let mut app = Self {
             main: Some(main),
             parked: None,
             worker,
@@ -934,7 +938,11 @@ impl Program for CalendarApp {
             sync_again: false,
             title,
             errors: Vec::new(),
-        })
+        };
+        if new_event {
+            app.command(cx, Some(main), NEW_EVENT);
+        }
+        Ok(app)
     }
 
     fn menus(&self, cx: &Cx<Self>) -> Menus {
@@ -942,13 +950,19 @@ impl Program for CalendarApp {
             menus: self
                 .main
                 .and_then(|main| cx.view(main))
+                .or(self.parked.as_ref())
                 .map(|Pane(view)| app_menus(view, self.settings.time_zones))
                 .unwrap_or_default(),
-            window: Vec::new(),
+            window: vec![entry("app-name", SHOW_CALENDAR)],
         }
     }
 
     fn command(&mut self, cx: &mut Cx<Self>, _window: Option<WindowId>, command: &str) {
+        if self.main.is_none() {
+            self.reopen(cx);
+        } else if command == SHOW_CALENDAR {
+            self.raise(cx);
+        }
         self.with_view(cx, |_, view| {
             view.menu_action(command);
         });
@@ -956,9 +970,13 @@ impl Program for CalendarApp {
     }
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
+        let (new_event, arguments) = new_event_asked(arguments);
         self.with_view(cx, |_, view| open_arguments(view, &arguments, directory));
         self.reopen(cx);
         self.settle(cx);
+        if new_event {
+            self.command(cx, None, NEW_EVENT);
+        }
     }
 
     fn reopen(&mut self, cx: &mut Cx<Self>) {
@@ -1071,6 +1089,13 @@ impl Program for CalendarApp {
         self.follow_clock(cx);
         self.settle(cx);
     }
+}
+
+fn new_event_asked(arguments: Vec<String>) -> (bool, Vec<String>) {
+    let (flags, arguments): (Vec<String>, Vec<String>) = arguments
+        .into_iter()
+        .partition(|argument| argument == NEW_EVENT_FLAG);
+    (!flags.is_empty(), arguments)
 }
 
 fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Path) {

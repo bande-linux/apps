@@ -9,3 +9,8 @@ Categories=Office;Calendar;
 Keywords=calendar;event;meeting;caldav;ics;webcal;schedule;
 MimeType=text/calendar;x-scheme-handler/webcal;x-scheme-handler/webcals;
 StartupNotify=true
+Actions=new-event;
+
+[Desktop Action new-event]
+Name=New Event
+Exec=bande-calendar --new-event

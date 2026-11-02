@@ -120,6 +120,7 @@ mailbox-refused = The mailbox could not be changed
 menu-mark-all-read = Mark All as Read
 menu-add-account = Add Account…
 menu-find = Find
+menu-viewer = Message Viewer
 menu-toggle-read = Mark as Read or Unread
 menu-toggle-flag = Flag or Unflag
 remove-title = Remove { $email }?

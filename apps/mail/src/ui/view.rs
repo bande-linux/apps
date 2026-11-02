@@ -1779,6 +1779,10 @@ impl MailView {
         }
     }
 
+    pub fn has_sheet(&self) -> bool {
+        self.ui.has_sheet()
+    }
+
     pub fn present_setup(&mut self, mode: Mode) {
         let state: Shared = Rc::new(RefCell::new(SheetState::default()));
         if let Some(previous) = &self.setup {
