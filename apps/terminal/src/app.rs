@@ -9,7 +9,7 @@ use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
 use bande_app::View;
 use bande_app_settings::{Stored, settings_folder};
-use bande_spring::{Decay, State as SpringState};
+use bande_spring::{Animated, Decay, Spring, State as SpringState};
 use bande_terminal::{
     Axis, Banner, BannerAction, CellPoint, CloseAsk, Command, Divider, FULL_SCREEN_LEADING,
     GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind,
@@ -44,6 +44,7 @@ const FLASH: Duration = Duration::from_millis(220);
 const FLASH_OPACITY: f32 = 0.14;
 const MIN_PANE: f32 = 64.0;
 const BLINK: Duration = Duration::from_millis(530);
+const TAB_DRAG_SLOP: f32 = 4.0;
 
 struct Momentum {
     velocity: f64,
@@ -56,7 +57,8 @@ enum Gesture {
     Idle,
     Selecting,
     Reporting(MouseButton),
-    Tab(TabTarget),
+    Tab(TabTarget, f32),
+    Reorder { index: usize, grab: f32, left: f32 },
     Banner,
     Divider(Divider),
 }
@@ -79,6 +81,7 @@ struct Tab {
     focused: u32,
     bell: bool,
     title: Option<String>,
+    slide: Animated<Instant>,
 }
 
 impl Tab {
@@ -91,6 +94,7 @@ impl Tab {
             focused: id,
             bell: false,
             title: None,
+            slide: Animated::points(0.0),
         }
     }
 
@@ -149,6 +153,7 @@ pub struct TerminalWindow {
     link: Option<Link>,
     samples: VecDeque<(Duration, f32)>,
     momentum: Option<Momentum>,
+    sliding: bool,
     flash: Option<Instant>,
     badge: u32,
     badged: Option<Instant>,
@@ -205,6 +210,7 @@ impl TerminalWindow {
             link: None,
             samples: VecDeque::new(),
             momentum: None,
+            sliding: false,
             flash: None,
             badge: 0,
             badged: None,
@@ -1301,7 +1307,14 @@ impl TerminalWindow {
                 self.layout();
                 window.request_redraw();
             }
-            Gesture::Tab(_) => {}
+            Gesture::Tab(TabTarget::Select(index), from)
+                if (at.x - from).abs() > TAB_DRAG_SLOP && self.has_strip() =>
+            {
+                let grab = from - self.tab_layout().tabs.get(index).map_or(from, |tab| tab.x);
+                self.drag_tab(window, index, grab, at.x);
+            }
+            Gesture::Reorder { index, grab, .. } => self.drag_tab(window, index, grab, at.x),
+            Gesture::Tab(..) => {}
             Gesture::Idle if hover.is_none() && self.in_content(at) => {
                 if self.pane_at(at) == Some(self.tab().focused) {
                     self.report_mouse(MouseKind::Move, at, modifiers);
@@ -1398,8 +1411,66 @@ impl TerminalWindow {
                 self.offer_primary(window);
                 window.request_redraw();
             }
-            Gesture::Banner | Gesture::Divider(_) | Gesture::Tab(_) | Gesture::Idle => {}
+            Gesture::Reorder { index, left, .. } => self.settle_tab(window, index, left),
+            Gesture::Banner | Gesture::Divider(_) | Gesture::Tab(..) | Gesture::Idle => {}
         }
+    }
+
+    fn drag_tab(&mut self, window: &mut Window, from: usize, grab: f32, x: f32) {
+        let slots = self.tab_layout().tabs;
+        let (Some(first), Some(last)) = (slots.first(), slots.last()) else {
+            return;
+        };
+        let left = (x - grab).clamp(first.x, last.x);
+        let to = slots
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| (a.x - left).abs().total_cmp(&(b.x - left).abs()))
+            .map_or(from, |(index, _)| index);
+        if to != from && from < self.tabs.len() {
+            let now = window.frame_time().on_screen();
+            let reduce_motion = window.appearance().reduce_motion;
+            let active = self.tabs[self.active].id;
+            let tab = self.tabs.remove(from);
+            self.tabs.insert(to, tab);
+            self.active = self
+                .tabs
+                .iter()
+                .position(|tab| tab.id == active)
+                .unwrap_or(to);
+            let (low, high) = (from.min(to), from.max(to));
+            for index in (low..=high).filter(|index| *index != to) {
+                let old = if from < to { index + 1 } else { index - 1 };
+                let shift = slots[old].x - slots[index].x;
+                let slide = &mut self.tabs[index].slide;
+                let (current, _) = slide.value_at(now);
+                slide.jump_to(current + shift);
+                slide.animate_at(now, reduce_motion, 0.0, Spring::STANDARD);
+            }
+            self.save_window();
+        }
+        self.gesture = Gesture::Reorder {
+            index: to,
+            grab,
+            left,
+        };
+        window.request_redraw();
+    }
+
+    fn settle_tab(&mut self, window: &mut Window, index: usize, left: f32) {
+        let Some(slot) = self.tab_layout().tabs.get(index).map(|tab| tab.x) else {
+            return;
+        };
+        if let Some(tab) = self.tabs.get_mut(index) {
+            tab.slide.jump_to(left - slot);
+            tab.slide.animate_at(
+                window.frame_time().on_screen(),
+                window.appearance().reduce_motion,
+                0.0,
+                Spring::STANDARD,
+            );
+        }
+        window.request_redraw();
     }
 
     fn release(&mut self, window: &mut Window, pointer: Pointer) {
@@ -1419,7 +1490,7 @@ impl TerminalWindow {
                 }
                 window.request_redraw();
             }
-            Gesture::Tab(target) if self.tab_target(at) == Some(target) => match target {
+            Gesture::Tab(target, _) if self.tab_target(at) == Some(target) => match target {
                 TabTarget::Close(index) => self.request_close_tab(window, index),
                 TabTarget::NewTab => self.new_tab(window),
                 TabTarget::Select(_) => {}
@@ -1430,8 +1501,9 @@ impl TerminalWindow {
                     window.request_redraw();
                 }
             }
+            Gesture::Reorder { index, left, .. } => self.settle_tab(window, index, left),
             gesture @ (Gesture::Reporting(_) | Gesture::Selecting) => self.gesture = gesture,
-            Gesture::Divider(_) | Gesture::Tab(_) | Gesture::Idle => {}
+            Gesture::Divider(_) | Gesture::Tab(..) | Gesture::Idle => {}
         }
         self.update_cursor(window, pointer.modifiers);
     }
@@ -1455,7 +1527,7 @@ impl TerminalWindow {
             if let TabTarget::Select(index) = target {
                 self.select_tab(window, index);
             }
-            self.gesture = Gesture::Tab(target);
+            self.gesture = Gesture::Tab(target, at.x);
             return;
         }
         if self.in_banner(at) {
@@ -1746,16 +1818,37 @@ impl View for TerminalWindow {
             self.frame_window(window);
             self.layout();
         }
-        self.glide(window, window.frame_time().presentation);
+        let now = window.frame_time().presentation;
+        self.glide(window, now);
         let mut items = Vec::new();
+        self.sliding = false;
         if self.has_strip() {
             let titles = self.titles();
             let bells: Vec<bool> = self.tabs.iter().map(|tab| tab.bell).collect();
+            let lifted = match self.gesture {
+                Gesture::Reorder { index, left, .. } => self
+                    .tab_layout()
+                    .tabs
+                    .get(index)
+                    .map(|slot| (index, left - slot.x)),
+                _ => None,
+            };
+            let mut offsets = Vec::with_capacity(self.tabs.len());
+            for (index, tab) in self.tabs.iter().enumerate() {
+                let (offset, sliding) = tab.slide.value_at(now);
+                self.sliding |= sliding;
+                offsets.push(match lifted {
+                    Some((lifted, dragged)) if lifted == index => dragged,
+                    _ => offset,
+                });
+            }
             let bar = TabBar {
                 titles: &titles,
                 bells: &bells,
+                offsets: &offsets,
+                lifted: lifted.map(|(index, _)| index),
                 active: self.active,
-                hover: self.hover,
+                hover: self.hover.filter(|_| lifted.is_none()),
                 focused: self.focused,
                 leading: self.leading(),
             };
@@ -1904,7 +1997,7 @@ impl View for TerminalWindow {
     }
 
     fn animating(&self) -> bool {
-        self.momentum.is_some() || self.flash_opacity(Instant::now()).is_some()
+        self.momentum.is_some() || self.sliding || self.flash_opacity(Instant::now()).is_some()
     }
 
     fn deadline(&self) -> Option<Instant> {
