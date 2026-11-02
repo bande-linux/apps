@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS rules (
     action TEXT NOT NULL,
     mailbox INTEGER REFERENCES mailboxes(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS remote_senders (
+    email TEXT PRIMARY KEY
+);
 CREATE TABLE IF NOT EXISTS pending (
     id INTEGER PRIMARY KEY,
     account INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -171,12 +174,18 @@ impl RuleField {
         }
     }
 
-    fn columns(self) -> &'static str {
+    fn columns(self, slot: usize) -> String {
         match self {
-            Self::From => "(sender_name LIKE ?1 ESCAPE '\\' OR sender_email LIKE ?1 ESCAPE '\\')",
-            Self::To => "recipients LIKE ?1 ESCAPE '\\'",
-            Self::Subject => "subject LIKE ?1 ESCAPE '\\'",
+            Self::From => format!(
+                "(sender_name LIKE ?{slot} ESCAPE '\\' OR sender_email LIKE ?{slot} ESCAPE '\\')"
+            ),
+            Self::To => format!("recipients LIKE ?{slot} ESCAPE '\\'"),
+            Self::Subject => format!("subject LIKE ?{slot} ESCAPE '\\'"),
         }
+    }
+
+    fn named(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|field| field.name() == name)
     }
 }
 
@@ -190,8 +199,8 @@ pub enum RuleAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rule {
     pub id: i64,
-    pub field: RuleField,
-    pub pattern: String,
+    pub every: bool,
+    pub conditions: Vec<(RuleField, String)>,
     pub action: RuleAction,
 }
 
@@ -348,6 +357,22 @@ impl Store {
             migration.execute_batch(
                 "CREATE INDEX IF NOT EXISTS messages_by_thread ON messages (thread); \
                  PRAGMA user_version = 4;",
+            )?;
+        }
+        if version < 5 {
+            migration.execute_batch(
+                "ALTER TABLE rules ADD COLUMN every INTEGER NOT NULL DEFAULT 1; \
+                 CREATE TABLE rule_conditions ( \
+                     id INTEGER PRIMARY KEY, \
+                     rule INTEGER NOT NULL REFERENCES rules(id) ON DELETE CASCADE, \
+                     field TEXT NOT NULL, \
+                     pattern TEXT NOT NULL \
+                 ); \
+                 INSERT INTO rule_conditions (rule, field, pattern) \
+                     SELECT id, field, pattern FROM rules; \
+                 ALTER TABLE rules DROP COLUMN field; \
+                 ALTER TABLE rules DROP COLUMN pattern; \
+                 PRAGMA user_version = 5;",
             )?;
         }
         migration.commit()?;
@@ -947,53 +972,101 @@ impl Store {
         Ok(pending)
     }
 
+    pub fn trust_remote(&self, email: &str) -> Result<()> {
+        self.connection.execute(
+            "INSERT OR IGNORE INTO remote_senders (email) VALUES (?1)",
+            [email.trim().to_lowercase()],
+        )?;
+        Ok(())
+    }
+
+    pub fn trusts_remote(&self, email: &str) -> Result<bool> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT 1 FROM remote_senders WHERE email = ?1",
+                [email.trim().to_lowercase()],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    pub fn remote_senders(&self) -> Result<u32> {
+        Ok(self
+            .connection
+            .query_row("SELECT COUNT(*) FROM remote_senders", [], |row| row.get(0))?)
+    }
+
+    pub fn forget_remote_senders(&self) -> Result<()> {
+        self.connection.execute("DELETE FROM remote_senders", [])?;
+        Ok(())
+    }
+
     pub fn rules(&self) -> Result<Vec<Rule>> {
         let mut statement = self
             .connection
-            .prepare("SELECT id, field, pattern, action, mailbox FROM rules ORDER BY id")?;
+            .prepare("SELECT id, every, action, mailbox FROM rules ORDER BY id")?;
         let rows = statement
             .query_map([], |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
+                    row.get::<_, bool>(1)?,
                     row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, Option<MailboxId>>(4)?,
+                    row.get::<_, Option<MailboxId>>(3)?,
                 ))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(rows
-            .into_iter()
-            .filter_map(|(id, field, pattern, action, mailbox)| {
-                let field = RuleField::ALL
-                    .into_iter()
-                    .find(|known| known.name() == field)?;
-                let action = match (action.as_str(), mailbox) {
-                    ("move", Some(mailbox)) => RuleAction::Move(mailbox),
-                    ("flag", _) => RuleAction::Flag,
-                    ("read", _) => RuleAction::Read,
-                    _ => return None,
-                };
-                Some(Rule {
+        let mut conditions = self
+            .connection
+            .prepare("SELECT field, pattern FROM rule_conditions WHERE rule = ?1 ORDER BY id")?;
+        let mut rules = Vec::new();
+        for (id, every, action, mailbox) in rows {
+            let action = match (action.as_str(), mailbox) {
+                ("move", Some(mailbox)) => RuleAction::Move(mailbox),
+                ("flag", _) => RuleAction::Flag,
+                ("read", _) => RuleAction::Read,
+                _ => continue,
+            };
+            let conditions = conditions
+                .query_map([id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+                .into_iter()
+                .filter_map(|(field, pattern)| Some((RuleField::named(&field)?, pattern)))
+                .collect::<Vec<_>>();
+            if !conditions.is_empty() {
+                rules.push(Rule {
                     id,
-                    field,
-                    pattern,
+                    every,
+                    conditions,
                     action,
-                })
-            })
-            .collect())
+                });
+            }
+        }
+        Ok(rules)
     }
 
-    pub fn add_rule(&self, rule: &Rule) -> Result<()> {
+    pub fn add_rule(&mut self, rule: &Rule) -> Result<()> {
         let (action, mailbox) = match rule.action {
             RuleAction::Move(mailbox) => ("move", Some(mailbox)),
             RuleAction::Flag => ("flag", None),
             RuleAction::Read => ("read", None),
         };
-        self.connection.execute(
-            "INSERT INTO rules (field, pattern, action, mailbox) VALUES (?1, ?2, ?3, ?4)",
-            params![rule.field.name(), rule.pattern, action, mailbox],
+        let transaction = self.connection.transaction()?;
+        transaction.execute(
+            "INSERT INTO rules (every, action, mailbox) VALUES (?1, ?2, ?3)",
+            params![rule.every, action, mailbox],
         )?;
+        let id = transaction.last_insert_rowid();
+        for (field, pattern) in &rule.conditions {
+            transaction.execute(
+                "INSERT INTO rule_conditions (rule, field, pattern) VALUES (?1, ?2, ?3)",
+                params![id, field.name(), pattern],
+            )?;
+        }
+        transaction.commit()?;
         Ok(())
     }
 
@@ -1004,17 +1077,31 @@ impl Store {
     }
 
     pub fn matching(&self, ids: &[MessageId], rule: &Rule) -> Result<Vec<MessageId>> {
+        let joiner = match rule.every {
+            true => " AND ",
+            false => " OR ",
+        };
         let query = format!(
-            "SELECT id FROM messages WHERE id IN ({}) AND {}",
+            "SELECT id FROM messages WHERE id IN ({}) AND ({})",
             ids.iter()
                 .map(MessageId::to_string)
                 .collect::<Vec<_>>()
                 .join(","),
-            rule.field.columns()
+            rule.conditions
+                .iter()
+                .enumerate()
+                .map(|(index, (field, _))| field.columns(index + 1))
+                .collect::<Vec<_>>()
+                .join(joiner)
         );
         let mut statement = self.connection.prepare(&query)?;
+        let patterns = rule
+            .conditions
+            .iter()
+            .map(|(_, pattern)| like_pattern(pattern))
+            .collect::<Vec<_>>();
         let matched = statement
-            .query_map([like_pattern(&rule.pattern)], |row| row.get(0))?
+            .query_map(params_from_iter(patterns), |row| row.get(0))?
             .collect::<rusqlite::Result<_>>()?;
         Ok(matched)
     }

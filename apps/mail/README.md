@@ -19,10 +19,12 @@ apt install bande-mail
   Accounts: whether each account is used, its full name, signature and server settings (user
   name, hosts, ports, TLS or STARTTLS), Add Account… and Remove…; changed servers are checked
   with the saved password before they are kept. Viewing: list preview lines, conversations,
-  plain text over HTML, a fixed-width font for plain text, and whether remote content loads by
-  itself (off by default). Composing: the account new messages are sent from and whether replies
-  quote the original. Rules: if From, To or Cc, or Subject contains a text, move new unread
-  Inbox mail to a mailbox, flag it or mark it read, while Mail is open. They are kept in
+  plain text over HTML, a fixed-width font for plain text, whether remote content loads by
+  itself (off by default), and Forget for the senders Mail loads it for because you chose Load
+  Remote Content in one of their messages. Composing: the account new messages are sent from and whether replies
+  quote the original. Rules: if any or all of several conditions hold (From, To or Cc, or
+  Subject contains a text), move new unread Inbox mail to a mailbox, flag it or mark it read,
+  while Mail is open. They are kept in
   `~/.config/bande/mail.conf`; signatures, servers and rules in the offline store.
 - **Finding servers**, in this order: the provider's own autoconfig
   (`autoconfig.<domain>`, then `<domain>/.well-known/autoconfig`), Mozilla's ISPDB
@@ -51,7 +53,8 @@ apt install bande-mail
   quotes, links and pictures. Scripts, styles, forms and frames are dropped, and only `http`,
   `https` and `mailto` links survive. Pictures sent inside the message (`cid:`) show at once;
   remote pictures are not fetched until **Load Remote Content** is clicked in the reader's
-  banner (or by themselves when Settings → Viewing allows it), and then only over HTTPS, at
+  banner, which Mail then remembers for that sender (or by themselves when Settings → Viewing
+  allows it), and then only over HTTPS, at
   most 20 per message, 10 MB each, decoded with limits on their size.
 - **Toolbar and keys.** Get Mail (Shift+Ctrl+N), New Message (Ctrl+N), Archive (Shift+Ctrl+A),
   Delete (Delete or Backspace), Junk (Shift+Ctrl+J), Reply (Ctrl+R), Reply All (Shift+Ctrl+R),

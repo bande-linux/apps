@@ -17,7 +17,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Accounts | Enable/disable an account, change its password | Have "Use this account"; the password is changed in the sheet that appears when the server refuses it |
 | Junk | Junk filtering | Server-side only; Move to Junk files a message |
 | Fonts & Colors | Message font and size, fixed-width plain text | Fixed-width plain text and "show plain text" in Viewing; sizes follow the desktop text size |
-| Viewing | Remote content off by default | Have: blocked until Load Remote Content, or always loaded when turned on in Viewing |
+| Viewing | Remote content off by default | Have: blocked until Load Remote Content, remembered per sender (Forget in Viewing), or always loaded when turned on in Viewing |
 | Viewing | Privacy protection (hide IP) | Partly: remote pictures only over HTTPS, capped; no proxy, so loading reveals the IP |
 | Viewing | List preview lines | Have: None to 5 lines |
 | Viewing | Threading (conversations) | Have: one row per conversation with a count, expanded in place; on by default |
@@ -25,7 +25,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Composing | Quote original, default send account | Have: quote toggle, "Send new messages from" |
 | Composing | Check spelling | Missing (no desktop spell service) |
 | Signatures | Per-account signature | Have: in Accounts, added to new messages, replies and forwards above the quote, swapped when From changes |
-| Rules | Filters | Have: From/To/Subject contains → move, flag or mark read, on new unread Inbox mail while Mail runs; no all-of/any-of conditions or editing in place |
+| Rules | Filters | Have: any or all of several From/To/Subject contains conditions → move, flag or mark read, on new unread Inbox mail while Mail runs; no editing in place |
 
 ## Core features
 
@@ -49,10 +49,10 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 2. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses
    passwords.
 3. The known gaps below.
-4. Rules with several conditions, editing a rule, running rules on a mailbox by hand.
+4. Editing a rule, running rules on a mailbox by hand.
 5. Rich text compose and spelling (both need desktop services first).
 6. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
-7. Per-sender "always load remote content"; a privacy proxy for remote pictures.
+7. A privacy proxy for remote pictures.
 8. Redo; dragging messages out to other apps; flag colours; sorting by size or unread first.
 9. A Password field in Settings → Accounts; a message font apart from the desktop text size.
 

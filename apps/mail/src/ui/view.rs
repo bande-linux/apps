@@ -831,12 +831,18 @@ impl MailView {
             return;
         };
         let reading = self.reading_of(&summary);
-        let remote = reading.downloaded && reading.document.remote_images > 0;
+        let remote = reading.downloaded
+            && reading.document.remote_images > 0
+            && (self.settings.load_remote
+                || self
+                    .store
+                    .trusts_remote(&reading.content.envelope.sender().email)
+                    .unwrap_or(false));
         if let Some(entry) = self.thread.as_mut().and_then(|thread| thread.entry_mut(id)) {
             entry.reading = Some(reading);
         }
         self.layout = None;
-        if remote && self.settings.load_remote {
+        if remote {
             self.load_remote(id);
         }
     }
@@ -2406,7 +2412,21 @@ impl MailView {
                 self.focus_entry(id);
                 self.open_attachment(index);
             }
-            Target::LoadRemote(id) => self.load_remote(id),
+            Target::LoadRemote(id) => {
+                let sender = self
+                    .thread
+                    .as_ref()
+                    .and_then(|thread| thread.entry(id))
+                    .and_then(|entry| entry.reading.as_ref())
+                    .map(|reading| reading.content.envelope.sender().email)
+                    .filter(|email| !email.is_empty());
+                if let Some(email) = sender
+                    && let Err(error) = self.store.trust_remote(&email)
+                {
+                    tracing::warn!("cannot remember {email}: {error}");
+                }
+                self.load_remote(id);
+            }
         }
     }
 
