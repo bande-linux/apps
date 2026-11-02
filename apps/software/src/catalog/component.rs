@@ -25,6 +25,7 @@ pub struct Screenshot {
 pub struct Release {
     pub version: String,
     pub timestamp: Option<i64>,
+    pub notes: Vec<Block>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

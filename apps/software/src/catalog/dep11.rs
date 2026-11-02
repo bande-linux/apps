@@ -52,6 +52,8 @@ struct DebRelease {
     version: String,
     #[serde(rename = "unix-timestamp")]
     timestamp: Option<i64>,
+    #[serde(default)]
+    description: Localized<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -176,7 +178,14 @@ fn component(document: Document, header: &Header, locale: Option<&Locale>) -> Op
         releases: document
             .releases
             .into_iter()
-            .map(|release| Release {
+            .enumerate()
+            .map(|(index, release)| Release {
+                notes: match index {
+                    0 => pick(&release.description, locale)
+                        .map(|markup| description_blocks(&markup))
+                        .unwrap_or_default(),
+                    _ => Vec::new(),
+                },
                 version: release.version,
                 timestamp: release.timestamp,
             })
