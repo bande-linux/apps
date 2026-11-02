@@ -10,10 +10,13 @@ publish = false
 
 [dependencies]
 accesskit.workspace = true
+hayro.workspace = true
 image = { workspace = true, features = ["webp"] }
 kamadak-exif.workspace = true
 resvg = { workspace = true, features = ["text", "system-fonts", "memmap-fonts", "raster-images"] }
-rustix = { workspace = true, features = ["fs"] }
+rustix = { workspace = true, features = ["fs", "process"] }
+serde.workspace = true
+serde_json.workspace = true
 tracing.workspace = true
 bande-app.workspace = true
 bande-app-menu.workspace = true
@@ -39,7 +42,9 @@ extended-description = """\
 The image and PDF viewer of the Bande desktop: opens photos and pictures \
 from Files, zooms, rotates and flips them, steps through a folder, plays \
 animations and slideshows, copies them and shows their size, dimensions \
-and camera details."""
+and camera details. PDF documents scroll continuously with page \
+thumbnails and their table of contents; their text can be selected, \
+copied and searched, and locked documents open with their password."""
 assets = [
     ["target/release/bande-preview", "usr/bin/", "755"],
     ["data/org.bande.Preview.desktop", "usr/share/applications/", "644"],

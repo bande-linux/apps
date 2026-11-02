@@ -15,6 +15,7 @@ base64 = "=0.22.1"
 data-encoding = "2.11"
 fatfs = { version = "=0.3.6", default-features = false, features = ["std", "alloc"] }
 flate2 = "=1.1.10"
+hayro = "=0.8.0"
 html5ever = "0.40"
 httparse = "=1.10.1"
 image = { version = "=0.25.10", default-features = false, features = ["gif", "jpeg", "png"] }

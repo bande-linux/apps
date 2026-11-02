@@ -8,8 +8,8 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::Entry;
 use bande_inbox::Inbox;
 use bande_preview::{
-    InfoPanel, L10N, PreviewView, Request, Row, Zoom, argument_path, file_rows, info_ui,
-    picture_rows,
+    InfoPanel, L10N, PreviewView, Request, Row, SidebarMode, WORKER_FLAG, Zoom, argument_path,
+    document_rows, file_rows, info_ui, picture_rows,
 };
 use bande_toolkit::ui::{Ui, WidgetId};
 use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
@@ -45,6 +45,11 @@ const ROTATE_LEFT: &str = "rotate-left";
 const ROTATE_RIGHT: &str = "rotate-right";
 const FLIP_HORIZONTAL: &str = "flip-horizontal";
 const FLIP_VERTICAL: &str = "flip-vertical";
+const FIND: &str = "find";
+const FIND_NEXT: &str = "find-next";
+const FIND_PREVIOUS: &str = "find-previous";
+const THUMBNAILS: &str = "thumbnails";
+const CONTENTS: &str = "contents";
 const NEXT: &str = "next";
 const PREVIOUS: &str = "previous";
 
@@ -111,6 +116,7 @@ impl Preview {
                 "image/gif",
                 "image/webp",
                 "image/svg+xml",
+                "application/pdf",
             ]
             .into_iter()
             .map(|mime| (1, mime.to_owned()))
@@ -157,6 +163,9 @@ impl Preview {
         if let Some(picture) = view.picture() {
             sections.push(picture_rows(picture));
         }
+        if let Some(opened) = view.document() {
+            sections.push(document_rows(opened));
+        }
         sections
     }
 
@@ -168,7 +177,7 @@ impl Preview {
         }
         let opened = cx.open(
             Kind::Utility(INFO_TAG),
-            &L10N.tr("info-title"),
+            &L10N.tr("inspector-title"),
             INFO_SIZE,
             |appearance| {
                 let (ui, panel) = info_ui(appearance, sections);
@@ -250,9 +259,12 @@ impl Program for Preview {
     fn menus(&self, cx: &Cx<Self>) -> Menus {
         let view = Self::main_view(cx);
         let picture = view.is_some_and(PreviewView::has_picture);
+        let document = view.is_some_and(PreviewView::is_document);
         let file = view.is_some_and(|view| view.path().is_some());
         let animated = view.is_some_and(PreviewView::is_animated);
-        let several = view.is_some_and(|view| view.paths().len() > 1);
+        let copyable = view.is_some_and(PreviewView::can_copy);
+        let contents = view.is_some_and(PreviewView::has_contents);
+        let several = view.is_some_and(PreviewView::has_sidebar);
         let item = |key: &str, action: &str, shortcut: Option<&str>, enabled: bool| {
             let entry = Entry::item(&L10N.tr(key), action).enabled(enabled);
             match shortcut {
@@ -270,7 +282,18 @@ impl Program for Preview {
             ),
             item("menu-get-info", GET_INFO, Some("Ctrl+I"), file),
         ];
-        let edit = vec![item("menu-copy", COPY, Some("Ctrl+C"), picture)];
+        let edit = vec![
+            item("menu-copy", COPY, Some("Ctrl+C"), copyable),
+            Entry::separator(),
+            item("menu-find", FIND, Some("Ctrl+F"), document),
+            item("menu-find-next", FIND_NEXT, Some("Ctrl+G"), document),
+            item(
+                "menu-find-previous",
+                FIND_PREVIOUS,
+                Some("Shift+Ctrl+G"),
+                document,
+            ),
+        ];
         let sidebar_key = match view.is_some_and(PreviewView::sidebar_shown) && several {
             true => "menu-hide-sidebar",
             false => "menu-show-sidebar",
@@ -279,17 +302,29 @@ impl Program for Preview {
             true => "menu-stop-slideshow",
             false => "menu-slideshow",
         };
-        let view_menu = vec![
-            item(sidebar_key, SIDEBAR, Some("Alt+Ctrl+S"), several),
+        let mut view_menu = vec![item(sidebar_key, SIDEBAR, Some("Alt+Ctrl+S"), several)];
+        if document {
+            view_menu.extend([
+                item("menu-thumbnails", THUMBNAILS, Some("Alt+Ctrl+2"), several),
+                item("menu-contents", CONTENTS, Some("Alt+Ctrl+3"), contents),
+            ]);
+        }
+        let zoomable = picture || document;
+        view_menu.extend([
             Entry::separator(),
-            item("menu-actual-size", ACTUAL_SIZE, Some("Ctrl+0"), picture),
-            item("menu-zoom-to-fit", ZOOM_TO_FIT, Some("Ctrl+9"), picture),
-            item("menu-zoom-in", ZOOM_IN, Some("Ctrl+="), picture),
-            item("menu-zoom-out", ZOOM_OUT, Some("Ctrl+-"), picture),
+            item("menu-actual-size", ACTUAL_SIZE, Some("Ctrl+0"), zoomable),
+            item("menu-zoom-to-fit", ZOOM_TO_FIT, Some("Ctrl+9"), zoomable),
+            item("menu-zoom-in", ZOOM_IN, Some("Ctrl+="), zoomable),
+            item("menu-zoom-out", ZOOM_OUT, Some("Ctrl+-"), zoomable),
             Entry::separator(),
             item("menu-play", PLAY, None, animated),
-            item(slideshow_key, SLIDESHOW, Some("Shift+Ctrl+F"), file),
-        ];
+            item(
+                slideshow_key,
+                SLIDESHOW,
+                Some("Shift+Ctrl+F"),
+                file && !document,
+            ),
+        ]);
         let go = vec![
             item("menu-next", NEXT, Some("Alt+Ctrl+Down"), file),
             item("menu-previous", PREVIOUS, Some("Alt+Ctrl+Up"), file),
@@ -330,7 +365,12 @@ impl Program for Preview {
         }
         if let Some((shown, Pane::Main(view))) = cx.window(window) {
             match command {
-                COPY => view.copy(),
+                COPY => view.copy(Some(shown)),
+                FIND => view.focus_search(),
+                FIND_NEXT => view.find_next(true),
+                FIND_PREVIOUS => view.find_next(false),
+                THUMBNAILS => view.show_sidebar(SidebarMode::Thumbnails),
+                CONTENTS => view.show_sidebar(SidebarMode::Contents),
                 SIDEBAR => view.toggle_sidebar(),
                 ACTUAL_SIZE => view.set_zoom(Zoom::Scale(1.0)),
                 ZOOM_TO_FIT => view.set_zoom(Zoom::Fit),
@@ -459,5 +499,11 @@ impl View for Pane {
 }
 
 fn main() -> ExitCode {
+    let arguments: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    if let [flag, path] = arguments.as_slice()
+        && flag == WORKER_FLAG
+    {
+        return bande_preview::run_pdf_worker(Path::new(path));
+    }
     bande_app::run::<Preview>(&INFO)
 }

@@ -21,7 +21,7 @@ apt install bande-<name>
 | Browser | `bande-browser` (the engine is `bande-linux/web`, pinned by `ci/bump-web.sh`) |
 | Velox | `bande-velox` (containers of Docker Engine or Podman, and virtual machines on QEMU) |
 | Calculator | `bande-calculator` (Basic, Scientific and Programmer, paper tape, RPN) |
-| Preview | `bande-preview` (images; the default image viewer) |
+| Preview | `bande-preview` (images and PDF documents, the default viewer of both; PDFs render in a child process) |
 
 Every app is a `bande-app` app: like on macOS, it keeps running after its last window closes and
 reopens a window when activated, until Quit (Ctrl+Q). Without a window its menus stay full:

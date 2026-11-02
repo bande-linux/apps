@@ -1,3 +1,6 @@
+use std::cell::Cell;
+use std::ops::Range;
+
 use accesskit::{Action, ActionRequest, Node, NodeId, Role};
 use bande_toolkit::ui::{
     Context, Event, Key, Parts, PointerButton, ScrollState, Size, Widget, WidgetId,
@@ -24,6 +27,7 @@ pub struct Sidebar {
     chosen: Option<usize>,
     scroll: ScrollState,
     reveal: bool,
+    shown: Cell<(usize, usize)>,
 }
 
 impl Default for Sidebar {
@@ -43,6 +47,7 @@ impl Sidebar {
             chosen: None,
             scroll: ScrollState::default(),
             reveal: true,
+            shown: Cell::new((0, 0)),
         }
     }
 
@@ -68,7 +73,21 @@ impl Sidebar {
         self.chosen.take()
     }
 
-    pub fn visible_range(&self, cx: &Context) -> std::ops::Range<usize> {
+    pub fn shown_rows(&self) -> Range<usize> {
+        let (first, last) = self.shown.get();
+        first..last
+    }
+
+    pub fn missing(&self, rows: Range<usize>) -> Vec<usize> {
+        rows.filter(|row| {
+            self.thumbs
+                .get(*row)
+                .is_some_and(|thumb| thumb.image.is_none())
+        })
+        .collect()
+    }
+
+    fn visible_range(&self, cx: &Context) -> Range<usize> {
         let offset = self.scroll.offset(cx);
         let first = (offset / ROW).floor().max(0.0) as usize;
         let last = ((offset + self.frame.height) / ROW).ceil() as usize + 1;
@@ -130,6 +149,8 @@ impl Widget for Sidebar {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let offset = self.scroll.offset(cx);
         let mut content = Vec::new();
+        let rows = self.visible_range(cx);
+        self.shown.set((rows.start, rows.end));
         for index in self.visible_range(cx) {
             let row = self.row(index, offset);
             let box_rect = Rect::new(

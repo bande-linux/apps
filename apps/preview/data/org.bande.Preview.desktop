@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=Preview
-Comment=View images
+Comment=View images and PDF documents
 Icon=org.bande.Preview
 Exec=bande-preview %U
 StartupNotify=true
-MimeType=image/png;image/jpeg;image/pjpeg;image/gif;image/webp;image/svg+xml;
+MimeType=image/png;image/jpeg;image/pjpeg;image/gif;image/webp;image/svg+xml;application/pdf;
 Categories=Graphics;Viewer;

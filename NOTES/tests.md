@@ -23,6 +23,7 @@ this list.
 | `apps/velox/tests/engine.rs` `the_list_follows_events_and_reconciles_when_the_engine_stops_and_returns` | End to end against a fake Engine API on a unix socket (`DOCKER_HOST`): with no engine the not-ready view offers copyable steps; when the socket appears the list and live events arrive without a restart; when the engine goes away and comes back, Velox reconnects and lists again. |
 | `apps/velox/src/engine/http.rs` `chunked_bodies_decode_across_split_chunks_extensions_and_trailers` | Tricky parser: the engine's chunked streams split JSON across chunks and may carry extensions and trailers. |
 | `apps/preview/tests/open.rs` `a_folder_steps_through_pictures_and_hostile_files_never_panic_hang_or_wake` | End to end through Preview's window view: a picture opens, Next steps through its folder and wraps around, an animated GIF plays and schedules no wake-up once paused (nor does a still picture), and a truncated file, a GIF that declares 65535 × 65535 pixels and a FIFO each show an error instead of panicking, allocating the declared size or hanging. |
+| `apps/preview/tests/open.rs` `a_pdf_renders_in_its_own_process_finds_text_and_lists_its_outline` | End to end with the real `bande-preview --pdf-worker` child process: a two-page PDF opens with its outline, a search finds the text on page 2 and scrolls there, and a damaged PDF shows an error instead of taking Preview down. |
 
 `ci/gate.sh` runs all of them on a private session bus. `ci/check-app.sh` and `ci/smoke.sh` check
 packaging statically and on the installed package.

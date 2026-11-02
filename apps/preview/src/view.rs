@@ -8,7 +8,10 @@ use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_inbox::Inbox;
 use bande_thumbnails::{Request as ThumbRequest, ThumbnailSize, Thumbnails};
-use bande_toolkit::ui::{Button, Context, Event, FreeLayout, Key, Ui, WidgetId};
+use bande_toolkit::ui::{
+    Button, Context, Event, FreeLayout, Key, SearchField, SecureField, TEXT_FIELD_HEIGHT, Ui,
+    WidgetId,
+};
 use bande_toolkit::{
     Appearance, FrameRegions, Header, Image, Radius, Rect, SHEET_INSET, Scene, TextSystem,
     Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent, window_controls_end,
@@ -19,6 +22,10 @@ use crate::copy::encode_png;
 use crate::decode::{Decoded, Failure};
 use crate::files::{mime_of_name, neighbour};
 use crate::loader::{Loader, Opened};
+use crate::pdf::contents::Contents;
+use crate::pdf::document::{Fit, PdfView};
+use crate::pdf::protocol::{Opened as PdfOpened, Render, Use};
+use crate::pdf::session::{Change, Phase, Session};
 use crate::sidebar::{SIDEBAR_WIDTH, Sidebar, Thumb};
 use crate::{L10N, tr_with};
 
@@ -28,8 +35,12 @@ const GAP: f32 = 4.0;
 const SYMBOL_BUTTON: f32 = 28.0;
 const SYMBOL_PIXELS: u32 = 16;
 const TITLE_GAP: f32 = 16.0;
+const SEARCH_WIDTH: f32 = 180.0;
+const PASSWORD_WIDTH: f32 = 240.0;
+const PASSWORD_FONT: f32 = 13.0;
 const SLIDE: Duration = Duration::from_secs(3);
 const THUMB_PIXELS: u32 = 256;
+const PAGE_THUMB: f32 = 104.0;
 
 const SIDEBAR_SYMBOL: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="2" stroke="#201E1A" stroke-width="1.4" fill="none"/><path d="M6 3v10" stroke="#201E1A" stroke-width="1.4"/></svg>"##;
 const ZOOM_OUT_SYMBOL: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6" stroke="#201E1A" stroke-width="1.4" fill="none"/><path d="M10.4 10.4 14 14M4.8 7h4.4" stroke="#201E1A" stroke-width="1.4" stroke-linecap="round"/></svg>"##;
@@ -37,13 +48,15 @@ const ZOOM_IN_SYMBOL: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="
 const ROTATE_SYMBOL: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 7.5A5 5 0 1 1 5 11.5" stroke="#201E1A" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M1.8 5.2 3.5 7.6 5.9 5.9" stroke="#201E1A" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
 const INFO_SYMBOL: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" stroke="#201E1A" stroke-width="1.4" fill="none"/><path d="M8 7.2v4" stroke="#201E1A" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="4.9" r="0.95" fill="#201E1A"/></svg>"##;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Signal {
     Sidebar,
     ZoomIn,
     ZoomOut,
     RotateLeft,
     Info,
+    Search(String),
+    Password(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,11 +65,17 @@ pub enum Request {
     Changed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SidebarMode {
+    Thumbnails,
+    Contents,
+}
+
 type Signals = Rc<RefCell<Vec<Signal>>>;
 
 fn symbol(svg: &str, label: &str, signals: &Signals, signal: Signal) -> Button {
     let signals = Rc::clone(signals);
-    let click = move || signals.borrow_mut().push(signal);
+    let click = move || signals.borrow_mut().push(signal.clone());
     match Image::from_svg(svg.as_bytes(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
         Some(image) => Button::symbol(image, label, click),
         None => Button::new(label, click),
@@ -64,9 +83,19 @@ fn symbol(svg: &str, label: &str, signals: &Signals, signal: Signal) -> Button {
     .tooltip(label)
 }
 
+fn password_field(signals: &Signals) -> SecureField {
+    let signals = Rc::clone(signals);
+    SecureField::new(&L10N.tr("password"), PASSWORD_FONT, move |secret| {
+        signals
+            .borrow_mut()
+            .push(Signal::Password(secret.to_owned()))
+    })
+}
+
 struct Toolbar {
     sidebar: WidgetId,
     tools: [WidgetId; 4],
+    search: WidgetId,
 }
 
 pub struct PreviewView {
@@ -75,6 +104,9 @@ pub struct PreviewView {
     host: WidgetId,
     canvas: WidgetId,
     sidebar: WidgetId,
+    document: WidgetId,
+    contents: WidgetId,
+    password: WidgetId,
     toolbar: Toolbar,
     paths: Vec<PathBuf>,
     current: usize,
@@ -82,7 +114,10 @@ pub struct PreviewView {
     loading: bool,
     thumbnails: Option<Thumbnails>,
     copies: Option<Inbox<Option<Vec<u8>>>>,
+    session: Option<Session>,
     sidebar_shown: bool,
+    sidebar_mode: SidebarMode,
+    shown_page: usize,
     slideshow: Option<Instant>,
     hidden: bool,
     full_screen: bool,
@@ -133,8 +168,18 @@ impl PreviewView {
                 Rect::default(),
             )
         });
+        let searched = Rc::clone(&signals);
+        let search = host.insert_in_header(
+            SearchField::new(&L10N.tr("search-placeholder"), "", move |text| {
+                searched.borrow_mut().push(Signal::Search(text.to_owned()))
+            }),
+            Rect::default(),
+        );
         let sidebar = host.insert(Sidebar::new(), Rect::default());
+        let contents = host.insert(Contents::default(), Rect::default());
         let canvas = host.insert(Canvas::new(), Rect::default());
+        let document = host.insert(PdfView::new("", Vec::new()), Rect::default());
+        let password = host.insert(password_field(&signals), Rect::default());
         let host_id = bande_toolkit::ui::Widget::id(&host);
         let mut ui = Ui::new(
             Box::new(host),
@@ -148,9 +193,13 @@ impl PreviewView {
             host: host_id,
             canvas,
             sidebar,
+            document,
+            contents,
+            password,
             toolbar: Toolbar {
                 sidebar: sidebar_button,
                 tools,
+                search,
             },
             paths,
             current: 0,
@@ -160,7 +209,10 @@ impl PreviewView {
             loading: false,
             thumbnails: None,
             copies: None,
+            session: None,
             sidebar_shown: several,
+            sidebar_mode: SidebarMode::Thumbnails,
+            shown_page: 0,
             slideshow: None,
             hidden: false,
             full_screen: false,
@@ -189,9 +241,24 @@ impl PreviewView {
     }
 
     pub fn title(&self) -> String {
-        self.path()
+        let name = self
+            .path()
             .map(file_name)
-            .unwrap_or_else(|| L10N.tr("app-name"))
+            .unwrap_or_else(|| L10N.tr("app-name"));
+        match self.pdf_view().filter(|_| self.is_document()) {
+            Some(pdf) if pdf.page_count() > 1 => {
+                let (page, count) = pdf.page_label();
+                tr_with(
+                    "document-title",
+                    &[
+                        ("name", name),
+                        ("page", page.to_string()),
+                        ("count", count.to_string()),
+                    ],
+                )
+            }
+            _ => name,
+        }
     }
 
     pub fn take_requests(&mut self) -> Vec<Request> {
@@ -217,16 +284,49 @@ impl PreviewView {
         self.ui.widget_as::<Canvas>(self.canvas).map(update)
     }
 
+    fn with_pdf<T>(&mut self, update: impl FnOnce(&mut PdfView) -> T) -> Option<T> {
+        self.ui.widget_as::<PdfView>(self.document).map(update)
+    }
+
+    fn with_sidebar<T>(&mut self, update: impl FnOnce(&mut Sidebar) -> T) -> Option<T> {
+        self.ui.widget_as::<Sidebar>(self.sidebar).map(update)
+    }
+
     pub fn canvas(&self) -> Option<&Canvas> {
         self.ui.widget_ref::<Canvas>(self.canvas)
+    }
+
+    fn pdf_view(&self) -> Option<&PdfView> {
+        self.ui.widget_ref::<PdfView>(self.document)
     }
 
     pub fn picture(&self) -> Option<&Decoded> {
         self.canvas().and_then(Canvas::picture)
     }
 
+    pub fn document(&self) -> Option<&PdfOpened> {
+        self.session
+            .as_ref()
+            .filter(|session| session.phase() == Phase::Open)
+            .map(Session::opened)
+    }
+
+    pub fn is_document(&self) -> bool {
+        self.document().is_some()
+    }
+
     pub fn is_loading(&self) -> bool {
         self.loading
+            || self
+                .session
+                .as_ref()
+                .is_some_and(|session| session.phase() == Phase::Opening)
+    }
+
+    pub fn is_locked(&self) -> bool {
+        self.session
+            .as_ref()
+            .is_some_and(|session| matches!(session.phase(), Phase::Locked { .. }))
     }
 
     fn load_current(&mut self) {
@@ -235,6 +335,10 @@ impl PreviewView {
         };
         let name = file_name(&path);
         self.with_canvas(|canvas| canvas.clear(&name));
+        if self.session.take().is_some() {
+            self.reset_document();
+            self.fill_sidebar();
+        }
         self.loading = match self.loader.as_mut() {
             Some(loader) => {
                 loader.load(&path);
@@ -243,10 +347,32 @@ impl PreviewView {
             None => false,
         };
         let current = self.current;
-        if let Some(sidebar) = self.ui.widget_as::<Sidebar>(self.sidebar) {
-            sidebar.select(current);
-        }
+        self.with_sidebar(|sidebar| sidebar.select(current));
         self.requests.push(Request::Changed);
+    }
+
+    fn reset_document(&mut self) {
+        let replaced = self
+            .ui
+            .widget_as::<FreeLayout>(self.host)
+            .and_then(|host| host.replace(self.document, PdfView::new("", Vec::new())));
+        if let Some(id) = replaced {
+            self.document = id;
+        }
+        let contents = self
+            .ui
+            .widget_as::<FreeLayout>(self.host)
+            .and_then(|host| host.replace(self.contents, Contents::default()));
+        if let Some(id) = contents {
+            self.contents = id;
+        }
+        self.shown_page = 0;
+    }
+
+    fn show_failure(&mut self, name: String, failure: &Failure) {
+        let detail = failure_text(failure);
+        let title = tr_with("cannot-open", &[("name", name)]);
+        self.with_canvas(|canvas| canvas.show_message(&title, &detail));
     }
 
     fn take_loaded(&mut self) -> bool {
@@ -271,19 +397,118 @@ impl PreviewView {
                 );
                 self.with_canvas(|canvas| canvas.show(decoded, &label, now));
             }
-            Ok(Opened::Document) => {
-                let detail = failure_text(&Failure::NotSupported);
-                let title = tr_with("cannot-open", &[("name", name)]);
-                self.with_canvas(|canvas| canvas.show_message(&title, &detail));
-            }
-            Err(failure) => {
-                let detail = failure_text(&failure);
-                let title = tr_with("cannot-open", &[("name", name)]);
-                self.with_canvas(|canvas| canvas.show_message(&title, &detail));
-            }
+            Ok(Opened::Document) => match Session::open(&loaded.path) {
+                Ok(session) => self.session = Some(session),
+                Err(error) => {
+                    tracing::warn!("cannot start the PDF renderer: {error}");
+                    self.show_failure(name, &Failure::Unreadable);
+                }
+            },
+            Err(failure) => self.show_failure(name, &failure),
         }
         self.requests.push(Request::Changed);
         true
+    }
+
+    fn take_session(&mut self) -> bool {
+        let Some(changes) = self.session.as_mut().map(Session::take) else {
+            return false;
+        };
+        let mut changed = false;
+        for change in changes {
+            changed = true;
+            match change {
+                Change::Opened => self.document_opened(),
+                Change::Locked => self.document_locked(),
+                Change::Failed => {
+                    let name = self.path().map(file_name).unwrap_or_default();
+                    self.show_failure(name, &Failure::Damaged);
+                    self.requests.push(Request::Changed);
+                }
+                Change::Pixels(render, pixels) if render.purpose == Use::Thumbnail => {
+                    if let Some(image) =
+                        Image::from_premultiplied(render.width, render.height, pixels)
+                    {
+                        self.with_sidebar(|sidebar| sidebar.set_image(render.page, image));
+                    }
+                }
+                Change::Pixels(render, pixels) => {
+                    self.with_pdf(|pdf| pdf.set_render(render, pixels));
+                }
+                Change::Text(page, glyphs) => {
+                    self.with_pdf(|pdf| pdf.set_text(page, glyphs));
+                }
+            }
+        }
+        changed
+    }
+
+    fn document_opened(&mut self) {
+        let Some(opened) = self
+            .session
+            .as_ref()
+            .map(|session| session.opened().clone())
+        else {
+            return;
+        };
+        let name = self.path().map(file_name).unwrap_or_default();
+        let replaced = self.ui.widget_as::<FreeLayout>(self.host).and_then(|host| {
+            host.replace(self.document, PdfView::new(&name, opened.pages.clone()))
+        });
+        if let Some(id) = replaced {
+            self.document = id;
+            self.ui.set_focus(id);
+        }
+        let contents = self
+            .ui
+            .widget_as::<FreeLayout>(self.host)
+            .and_then(|host| host.replace(self.contents, Contents::new(opened.outline.clone())));
+        if let Some(id) = contents {
+            self.contents = id;
+        }
+        if self.paths.len() < 2 {
+            let thumbs = (1..=opened.pages.len())
+                .map(|page| Thumb {
+                    name: page.to_string(),
+                    image: None,
+                })
+                .collect();
+            self.with_sidebar(|sidebar| {
+                sidebar.set_thumbs(thumbs);
+                sidebar.select(0);
+            });
+            self.sidebar_shown = opened.pages.len() > 1;
+        }
+        self.sidebar_mode = SidebarMode::Thumbnails;
+        self.shown_page = 0;
+        let label = self.path().map(file_name).unwrap_or_default();
+        self.with_canvas(|canvas| canvas.clear(&label));
+        self.requests.push(Request::Changed);
+    }
+
+    fn document_locked(&mut self) {
+        let retry = matches!(
+            self.session.as_ref().map(Session::phase),
+            Some(Phase::Locked { retry: true })
+        );
+        let name = self.path().map(file_name).unwrap_or_default();
+        let title = tr_with("locked", &[("name", name)]);
+        let detail = L10N.tr(if retry {
+            "locked-wrong"
+        } else {
+            "locked-detail"
+        });
+        self.with_canvas(|canvas| canvas.show_message(&title, &detail));
+        let field = password_field(&self.signals);
+        let replaced = self
+            .ui
+            .widget_as::<FreeLayout>(self.host)
+            .and_then(|host| host.replace(self.password, field));
+        if let Some(id) = replaced {
+            self.password = id;
+        }
+        self.ui.set_focus(self.password);
+        self.requests.push(Request::Changed);
     }
 
     fn fill_sidebar(&mut self) {
@@ -299,10 +524,11 @@ impl PreviewView {
             false => Vec::new(),
         };
         let current = self.current;
-        if let Some(sidebar) = self.ui.widget_as::<Sidebar>(self.sidebar) {
+        self.with_sidebar(|sidebar| {
             sidebar.set_thumbs(thumbs);
             sidebar.select(current);
-        }
+        });
+        self.sidebar_shown = self.paths.len() > 1;
         if self.paths.len() < 2 {
             return;
         }
@@ -325,6 +551,9 @@ impl PreviewView {
     }
 
     fn take_thumbnails(&mut self) -> bool {
+        if self.pages_in_sidebar() {
+            return false;
+        }
         let Some(thumbnails) = self.thumbnails.as_mut() else {
             return false;
         };
@@ -337,17 +566,28 @@ impl PreviewView {
             let Some(index) = self.paths.iter().position(|path| *path == thumbnailed.path) else {
                 continue;
             };
-            if let Some(image) = Image::from_rgba(picture.width, picture.height, picture.rgba)
-                && let Some(sidebar) = self.ui.widget_as::<Sidebar>(self.sidebar)
-            {
-                sidebar.set_image(index, image);
+            if let Some(image) = Image::from_rgba(picture.width, picture.height, picture.rgba) {
+                self.with_sidebar(|sidebar| sidebar.set_image(index, image));
                 changed = true;
             }
         }
         changed
     }
 
+    fn pages_in_sidebar(&self) -> bool {
+        self.paths.len() < 2 && self.session.is_some()
+    }
+
     pub fn go(&mut self, forward: bool) {
+        if self.is_document() && self.paths.len() < 2 {
+            let page = self.pdf_view().map_or(0, |pdf| pdf.page_label().0 - 1);
+            let target = match forward {
+                true => page + 1,
+                false => page.saturating_sub(1),
+            };
+            self.with_pdf(|pdf| pdf.go_to_page(target));
+            return;
+        }
         if self.paths.len() > 1 {
             let count = self.paths.len();
             self.current = match forward {
@@ -367,6 +607,10 @@ impl PreviewView {
     }
 
     pub fn select(&mut self, index: usize) {
+        if self.is_document() && self.paths.len() < 2 {
+            self.with_pdf(|pdf| pdf.go_to_page(index));
+            return;
+        }
         if index < self.paths.len() && index != self.current {
             self.current = index;
             self.load_current();
@@ -374,10 +618,22 @@ impl PreviewView {
     }
 
     pub fn zoom_by(&mut self, steps: f32) {
+        if self.is_document() {
+            self.with_pdf(|pdf| pdf.zoom_by(steps));
+            return;
+        }
         self.with_canvas(|canvas| canvas.zoom_by(steps));
     }
 
     pub fn set_zoom(&mut self, zoom: Zoom) {
+        if self.is_document() {
+            let fit = match zoom {
+                Zoom::Scale(scale) => Fit::Scale(scale),
+                Zoom::Auto | Zoom::Fit => Fit::Width,
+            };
+            self.with_pdf(|pdf| pdf.set_fit(fit));
+            return;
+        }
         self.with_canvas(|canvas| canvas.set_zoom(zoom));
     }
 
@@ -410,6 +666,20 @@ impl PreviewView {
         self.sidebar_shown = !self.sidebar_shown;
     }
 
+    pub fn sidebar_mode(&self) -> SidebarMode {
+        self.sidebar_mode
+    }
+
+    pub fn show_sidebar(&mut self, mode: SidebarMode) {
+        self.sidebar_mode = mode;
+        self.sidebar_shown = true;
+    }
+
+    pub fn has_contents(&self) -> bool {
+        self.document()
+            .is_some_and(|opened| !opened.outline.is_empty())
+    }
+
     pub fn in_slideshow(&self) -> bool {
         self.slideshow.is_some()
     }
@@ -426,7 +696,46 @@ impl PreviewView {
         });
     }
 
-    pub fn copy(&mut self) {
+    pub fn focus_search(&mut self) {
+        if self.is_document() {
+            self.ui.set_focus(self.toolbar.search);
+        }
+    }
+
+    pub fn search(&mut self, query: &str) {
+        let pages = self.pdf_view().map_or(0, PdfView::page_count);
+        if !query.is_empty()
+            && let Some(session) = self.session.as_mut()
+        {
+            session.want_text(0..pages);
+        }
+        let query = query.to_owned();
+        self.with_pdf(|pdf| pdf.set_query(&query));
+    }
+
+    pub fn find_next(&mut self, forward: bool) {
+        self.with_pdf(|pdf| pdf.next_match(forward));
+    }
+
+    pub fn matches(&self) -> (Option<usize>, usize) {
+        self.pdf_view().map_or((None, 0), PdfView::matches)
+    }
+
+    pub fn can_copy(&self) -> bool {
+        self.has_picture()
+            || self
+                .pdf_view()
+                .is_some_and(|pdf| pdf.selected_text().is_some())
+    }
+
+    pub fn copy(&mut self, window: Option<&mut Window>) {
+        if self.is_document() {
+            let text = self.pdf_view().and_then(PdfView::selected_text);
+            if let (Some(text), Some(window)) = (text, window) {
+                window.copy_transfer(Transfer::text(&text));
+            }
+            return;
+        }
         let Some(picture) = self.picture() else {
             return;
         };
@@ -452,9 +761,13 @@ impl PreviewView {
         }
     }
 
-    fn serve_copies(&mut self, window: &mut Window) -> bool {
+    pub fn selected_text(&self) -> Option<String> {
+        self.pdf_view().and_then(PdfView::selected_text)
+    }
+
+    fn serve_copies(&mut self, window: &mut Window) {
         let Some(copies) = self.copies.as_mut() else {
-            return false;
+            return;
         };
         let uris = self
             .paths
@@ -464,7 +777,6 @@ impl PreviewView {
         for png in copies.drain().into_iter().flatten() {
             window.copy_transfer(Transfer::uris(uris.clone()).with_png(png));
         }
-        false
     }
 
     fn settle(&mut self) {
@@ -480,30 +792,57 @@ impl PreviewView {
                     Signal::ZoomOut => self.zoom_by(-1.0),
                     Signal::RotateLeft => self.rotate(false),
                     Signal::Info => self.requests.push(Request::ShowInfo),
+                    Signal::Search(query) => self.search(&query),
+                    Signal::Password(secret) => self.unlock(&secret),
                 }
             }
         }
-        let chosen = self
-            .ui
-            .widget_as::<Sidebar>(self.sidebar)
-            .and_then(Sidebar::take_chosen);
-        if let Some(index) = chosen {
+        if let Some(index) = self.with_sidebar(Sidebar::take_chosen).flatten() {
             self.select(index);
         }
-        let has_picture = self.has_picture();
-        for id in self.toolbar.tools.iter().skip(1) {
+        let chosen = self
+            .ui
+            .widget_as::<Contents>(self.contents)
+            .and_then(Contents::take_chosen);
+        if let Some(page) = chosen {
+            self.with_pdf(|pdf| pdf.go_to_page(page));
+        }
+        let picture = self.has_picture();
+        let zoomable = picture || self.is_document();
+        for (index, id) in self.toolbar.tools.iter().enumerate().skip(1) {
+            let enabled = match index {
+                3 => picture,
+                _ => zoomable,
+            };
             if let Some(button) = self.ui.widget_as::<Button>(*id) {
-                button.set_enabled(has_picture);
+                button.set_enabled(enabled);
             }
         }
-        let several = self.paths.len() > 1;
+        let has_sidebar = self.has_sidebar();
         if let Some(button) = self.ui.widget_as::<Button>(self.toolbar.sidebar) {
-            button.set_enabled(several);
+            button.set_enabled(has_sidebar);
+        }
+    }
+
+    pub fn unlock(&mut self, secret: &str) {
+        if let Some(session) = self.session.as_mut() {
+            session.unlock(secret);
+        }
+        let label = self.path().map(file_name).unwrap_or_default();
+        self.with_canvas(|canvas| canvas.clear(&label));
+    }
+
+    pub fn has_sidebar(&self) -> bool {
+        match self.document() {
+            Some(opened) if self.paths.len() < 2 => {
+                opened.pages.len() > 1 || !opened.outline.is_empty()
+            }
+            _ => self.paths.len() > 1,
         }
     }
 
     fn sidebar_visible(&self) -> bool {
-        self.sidebar_shown && self.paths.len() > 1 && self.slideshow.is_none()
+        self.sidebar_shown && self.has_sidebar() && self.slideshow.is_none()
     }
 
     fn sheet(&self, width: f32, height: f32) -> Rect {
@@ -536,12 +875,24 @@ impl PreviewView {
                 SYMBOL_BUTTON,
             ),
         )];
+        let searching = self.is_document();
+        let search_room = if searching { SEARCH_WIDTH + SIDE } else { 0.0 };
         let count = self.toolbar.tools.len() as f32;
-        let mut x = width - SIDE - count * SYMBOL_BUTTON - (count - 1.0) * GAP;
+        let mut x = width - SIDE - search_room - count * SYMBOL_BUTTON - (count - 1.0) * GAP;
         for id in self.toolbar.tools {
             frames.push((id, Rect::new(x, middle, SYMBOL_BUTTON, SYMBOL_BUTTON)));
             x += SYMBOL_BUTTON + GAP;
         }
+        let search = match searching {
+            true => Rect::new(
+                width - SIDE - SEARCH_WIDTH,
+                ((TOOLBAR_HEIGHT - TEXT_FIELD_HEIGHT) / 2.0).round(),
+                SEARCH_WIDTH,
+                TEXT_FIELD_HEIGHT,
+            ),
+            false => Rect::default(),
+        };
+        frames.push((self.toolbar.search, search));
         frames
     }
 
@@ -553,7 +904,11 @@ impl PreviewView {
         };
         Header {
             title_x,
-            items: frames.iter().map(|(_, frame)| *frame).collect(),
+            items: frames
+                .iter()
+                .map(|(_, frame)| *frame)
+                .filter(|frame| frame.width > 0.0)
+                .collect(),
             tabs: Vec::new(),
         }
     }
@@ -561,22 +916,37 @@ impl PreviewView {
     pub fn paint(&mut self, width: u32, height: u32) -> Scene {
         let (w, h) = (width as f32, height as f32);
         let sheet = self.sheet(w, h);
-        let sidebar_frame = match self.sidebar_visible() {
+        let side = Rect::new(
+            0.0,
+            TOOLBAR_HEIGHT,
+            SIDEBAR_WIDTH,
+            (h - TOOLBAR_HEIGHT).max(0.0),
+        );
+        let visible = self.sidebar_visible();
+        let contents_shown =
+            visible && self.is_document() && self.sidebar_mode == SidebarMode::Contents;
+        let document = self.is_document();
+        let locked = self.is_locked();
+        let password = match locked {
             true => Rect::new(
-                0.0,
-                TOOLBAR_HEIGHT,
-                SIDEBAR_WIDTH,
-                (h - TOOLBAR_HEIGHT).max(0.0),
+                (sheet.x + (sheet.width - PASSWORD_WIDTH) / 2.0).round(),
+                (sheet.y + sheet.height / 2.0 + 48.0).round(),
+                PASSWORD_WIDTH,
+                TEXT_FIELD_HEIGHT,
             ),
             false => Rect::default(),
         };
         let frames = self.tool_frames(w);
+        let shown = |on: bool, frame: Rect| if on { frame } else { Rect::default() };
         if let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) {
             for (id, frame) in frames {
                 host.set_frame(id, frame);
             }
-            host.set_frame(self.sidebar, sidebar_frame);
-            host.set_frame(self.canvas, sheet);
+            host.set_frame(self.sidebar, shown(visible && !contents_shown, side));
+            host.set_frame(self.contents, shown(contents_shown, side));
+            host.set_frame(self.canvas, shown(!document, sheet));
+            host.set_frame(self.document, shown(document, sheet));
+            host.set_frame(self.password, password);
         }
         let palette = self.ui.context().palette;
         let radius = match sheet.x > 0.0 && !self.full_screen && self.slideshow.is_none() {
@@ -584,13 +954,69 @@ impl PreviewView {
             false => 0.0,
         };
         self.with_canvas(|canvas| canvas.set_radius(radius));
+        self.with_pdf(|pdf| pdf.set_radius(radius));
         let (mut items, dialog) = self.ui.paint_layers(width, height);
         items.extend(dialog);
+        self.sync_document();
         Scene {
             width,
             height,
             background: palette.chassis,
             items,
+        }
+    }
+
+    fn sync_document(&mut self) {
+        if !self.is_document() {
+            return;
+        }
+        let (mut renders, visible, page) = match self.pdf_view() {
+            Some(pdf) => (pdf.wanted(), pdf.visible_pages(), pdf.current_page()),
+            None => return,
+        };
+        let missing = self
+            .pdf_view()
+            .map(|pdf| pdf.missing_text(visible))
+            .unwrap_or_default();
+        if self.sidebar_visible()
+            && self.sidebar_mode == SidebarMode::Thumbnails
+            && self.pages_in_sidebar()
+        {
+            let display = self.ui.context().display_scale as f32;
+            let pages = self
+                .document()
+                .map(|opened| opened.pages.clone())
+                .unwrap_or_default();
+            let wanted = self
+                .ui
+                .widget_ref::<Sidebar>(self.sidebar)
+                .map(|sidebar| sidebar.missing(sidebar.shown_rows()))
+                .unwrap_or_default();
+            renders.extend(wanted.into_iter().filter_map(|index| {
+                let (width, height) = *pages.get(index)?;
+                let scale = (PAGE_THUMB * display / width).min(PAGE_THUMB * display / height);
+                Some(Render {
+                    page: index,
+                    scale,
+                    x: 0,
+                    y: 0,
+                    width: (width * scale).ceil() as u32,
+                    height: (height * scale).ceil() as u32,
+                    purpose: Use::Thumbnail,
+                })
+            }));
+        }
+        if let Some(session) = self.session.as_mut() {
+            session.want(renders);
+            session.want_text(missing);
+        }
+        self.with_pdf(PdfView::forget_far);
+        if page != self.shown_page {
+            self.shown_page = page;
+            if self.pages_in_sidebar() {
+                self.with_sidebar(|sidebar| sidebar.select(page));
+            }
+            self.requests.push(Request::Changed);
         }
     }
 
@@ -608,9 +1034,21 @@ impl PreviewView {
         if modifiers.control || modifiers.alt || modifiers.logo {
             return false;
         }
+        let searching = self.ui.focus() == Some(self.toolbar.search);
         match key {
-            Key::Right | Key::PageDown => self.go(true),
-            Key::Left | Key::PageUp => self.go(false),
+            Key::Enter if searching => self.find_next(!modifiers.shift),
+            Key::Escape if searching => {
+                self.ui
+                    .update_widget(self.toolbar.search, |field: &mut SearchField, _| {
+                        let length = field.text().len();
+                        field.select(0..length);
+                    });
+                self.search("");
+                self.ui.set_focus(self.document);
+            }
+            Key::Right | Key::PageDown if !self.is_document() => self.go(true),
+            Key::Left | Key::PageUp if !self.is_document() => self.go(false),
+            Key::Right | Key::Left if self.is_document() => self.go(*key == Key::Right),
             Key::Space if self.is_animated() => self.toggle_playing(),
             Key::Escape if self.slideshow.is_some() => self.toggle_slideshow(),
             _ => return false,
@@ -620,9 +1058,10 @@ impl PreviewView {
 
     pub fn pump(&mut self) -> bool {
         let loaded = self.take_loaded();
+        let document = self.take_session();
         let thumbs = self.take_thumbnails();
         self.settle();
-        loaded || thumbs
+        loaded || document || thumbs
     }
 
     pub fn deadline(&self) -> Option<Instant> {
@@ -730,6 +1169,9 @@ impl View for PreviewView {
         }
         if let Some(copies) = &self.copies {
             fds.push(copies.fd());
+        }
+        if let Some(session) = &self.session {
+            fds.push(session.fd());
         }
         fds
     }

@@ -5,6 +5,7 @@ mod facts;
 mod files;
 mod info;
 mod loader;
+mod pdf;
 mod sidebar;
 mod view;
 
@@ -15,8 +16,10 @@ use bande_l10n::Localizer;
 pub use canvas::{Canvas, Orientation, Zoom};
 pub use decode::{Decoded, Failure, Kind, Pixels, decode_file};
 pub use files::{argument_path, is_image_name};
-pub use info::{InfoPanel, Row, file_rows, info_ui, picture_rows};
-pub use view::{PreviewView, Request, file_name};
+pub use info::{InfoPanel, Row, document_rows, file_rows, info_ui, picture_rows};
+pub use pdf::protocol::WORKER_FLAG;
+pub use pdf::worker::run as run_pdf_worker;
+pub use view::{PreviewView, Request, SidebarMode, file_name};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-preview.ftl");
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
