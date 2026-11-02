@@ -49,6 +49,7 @@ bande-spring = { git = "https://github.com/bande-linux/desktop", rev = "7edcf33e
 bande-status = { git = "https://github.com/bande-linux/desktop", rev = "7edcf33e98451eb1c5da8660143d9ae2166a6140" }
 bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "7edcf33e98451eb1c5da8660143d9ae2166a6140" }
 bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "7edcf33e98451eb1c5da8660143d9ae2166a6140" }
+web-net = { git = "https://github.com/bande-linux/web", rev = "82b7fa6b7416426f35b452e323973a9f291f664e" }
 
 
 [workspace.lints.clippy]
