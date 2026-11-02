@@ -178,6 +178,7 @@ impl Stored for CalendarSettings {
 pub enum Change {
     AddAccount,
     RemoveAccount(String),
+    Password(String),
 }
 
 static CHANGES: OnceLock<Outbox<Change>> = OnceLock::new();

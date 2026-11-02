@@ -817,6 +817,21 @@ fn submit_setup(view: &mut CalendarView) {
         return;
     }
     let password = setup.password.clone().unwrap_or_default();
+    if let Some(account) = setup.account.clone() {
+        if password.is_empty() {
+            return;
+        }
+        let user = setup.user.clone();
+        if let Some(setup) = view.setup.take() {
+            setup.close(&mut view.ui);
+        }
+        view.requests.push(Request::SetPassword {
+            account,
+            user,
+            password,
+        });
+        return;
+    }
     let request = match setup.kind {
         super::setup::Kind::CalDav if setup.user.is_empty() => None,
         super::setup::Kind::CalDav => Some(Request::AddAccount {

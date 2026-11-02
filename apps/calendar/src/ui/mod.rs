@@ -80,6 +80,11 @@ pub enum Request {
     Changed,
     Refresh,
     Import,
+    SetPassword {
+        account: String,
+        user: String,
+        password: String,
+    },
     Export {
         name: String,
         data: String,
@@ -620,6 +625,30 @@ impl CalendarView {
             name: format!("{}.ics", calendar.info.name),
             data,
         });
+    }
+
+    pub fn ask_password(&mut self, account: &str) {
+        if self.setup.is_some() {
+            return;
+        }
+        let Some((name, user)) =
+            self.library
+                .account(account)
+                .and_then(|known| match &known.kind {
+                    AccountKind::CalDav { user, .. } => Some((known.name.clone(), user.clone())),
+                    _ => None,
+                })
+        else {
+            return;
+        };
+        self.close_inspector(true);
+        let (panel, setup) = setup::Setup::sign_in(&self.signals, account, &name, &user);
+        let field = setup.password_field();
+        self.setup = Some(setup);
+        self.ui.present_sheet(panel);
+        if let Some(field) = field {
+            self.ui.set_focus(field);
+        }
     }
 
     pub fn open_account_setup(&mut self) {

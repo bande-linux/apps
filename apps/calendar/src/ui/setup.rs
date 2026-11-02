@@ -82,6 +82,7 @@ impl Preset {
 pub struct Setup {
     pub kind: Kind,
     pub preset: Preset,
+    pub account: Option<String>,
     pub user: String,
     pub server: String,
     pub password: Option<String>,
@@ -159,7 +160,59 @@ impl Setup {
         let setup = Self {
             kind: Kind::CalDav,
             preset: Preset::ICloud,
+            account: None,
             user: String::new(),
+            server: String::new(),
+            password: None,
+            password_field: panel.id_of(password),
+            collecting: false,
+            note: panel.id_of(note).unwrap_or_else(WidgetId::next),
+            cancel: panel.id_of(cancel).unwrap_or_else(WidgetId::next),
+            panel: bande_toolkit::ui::Widget::id(&panel),
+            dismissed: panel.dismisser(),
+            busy: false,
+        };
+        (panel, setup)
+    }
+
+    pub fn sign_in(signals: &Signals, account: &str, name: &str, user: &str) -> (Panel, Self) {
+        let title = L10N.tr_args("sign-in-title", [("name", name.to_owned().into())]);
+        let mut panel = Panel::new(Some(&title), WIDTH, LABEL_WIDTH).sheet();
+        let message = panel.add(Label::new(
+            &L10N.tr_args("sign-in-message", [("user", user.to_owned().into())]),
+        ));
+        panel.line(Line::new(None, vec![(message, Width::Fill)], 36.0));
+        let (send, submit) = (sender(signals), sender(signals));
+        let password = panel.add(SecureField::new("", 13.0, move |secret| {
+            send(Signal::SetupPassword(secret.to_owned()));
+            submit(Signal::SetupSubmit);
+        }));
+        panel.line(Line::new(
+            Some(&L10N.tr("account-password")),
+            vec![(password, Width::Fill)],
+            ROW,
+        ));
+        let note = panel.add(Label::new(""));
+        panel.line(Line::new(None, vec![(note, Width::Fill)], 18.0));
+        let send = sender(signals);
+        let cancel =
+            panel.add(Button::new(&L10N.tr("cancel"), move || send(Signal::SetupCancel)).cancel());
+        let send = sender(signals);
+        let sign_in = panel
+            .add(Button::new(&L10N.tr("sign-in"), move || send(Signal::SetupSubmit)).primary());
+        panel.line(
+            Line::new(
+                None,
+                vec![(cancel, Width::Fixed(96.0)), (sign_in, Width::Fixed(96.0))],
+                ROW,
+            )
+            .trailing(),
+        );
+        let setup = Self {
+            kind: Kind::CalDav,
+            preset: Preset::Other,
+            account: Some(account.to_owned()),
+            user: user.to_owned(),
             server: String::new(),
             password: None,
             password_field: panel.id_of(password),
@@ -187,6 +240,10 @@ impl Setup {
             }
             _ => {}
         }
+    }
+
+    pub fn password_field(&self) -> Option<WidgetId> {
+        self.password_field
     }
 
     pub fn server(&self) -> String {

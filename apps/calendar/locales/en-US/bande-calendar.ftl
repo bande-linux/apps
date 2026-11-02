@@ -148,3 +148,6 @@ end-repeat-never = Never
 end-repeat-after = After
 end-repeat-on = On Date
 end-repeat-placeholder = times or date
+sign-in-title = Sign in to “{ $name }”
+sign-in-message = Enter the password or app password for { $user }.
+change-password = Password…
