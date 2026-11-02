@@ -30,7 +30,7 @@ work and family calendars on it without a second app? Reviewed 2026-11-02.
 | Alerts while windowless | done while the app runs (window closed); not after login until Calendar is opened |
 | Time zones and DST | done: tz database, VTIMEZONE in and out, zone per event, DST-safe wall-clock timers |
 | Offline edits, conflicts | done: pending changes on disk; a 412 keeps the server copy and the local edit as a new event |
-| Invitations | done via implicit scheduling: invitees and answers shown, Accept/Maybe/Decline (an invitation's title and times stay read-only), add invitees, SEQUENCE raised by the organizer |
+| Invitations | done via implicit scheduling: invitees and answers shown, Accept/Maybe/Decline (an invitation's title and times stay read-only), add invitees, SEQUENCE raised by the organizer; your addresses come from `calendar-user-address-set` (accounts added before 2026-11-02 fall back to the login name) |
 | Wrong/expired password | done: asked again on 401, or from Settings, pending changes kept |
 
 ## Landed 2026-11-02 (apps main)
@@ -49,15 +49,13 @@ occurrence cache per shown range; slim sync jobs; unchanged sync-token skip.
    fixed first so it costs nothing.
 2. **Network-aware sync.** Sync on NetworkManager connectivity changes instead of waiting for
    the next deadline or the 15 min retry after a failure.
-3. **"Me" from `calendar-user-address-set`.** Today the account user name is used as the
-   address, so a Nextcloud login without `@` cannot answer invitations.
-4. **Custom repeat editor** (every N days/weeks on chosen days, monthly on the 2nd Tuesday,
+3. **Custom repeat editor** (every N days/weeks on chosen days, monthly on the 2nd Tuesday,
    yearly). Rules are kept and shown as Custom.
-5. **View in another time zone** (macOS toolbar zone pop-up when time zone support is on).
-6. **Per-subscription settings**: refresh interval, remove alerts (macOS default on), and the
+4. **View in another time zone** (macOS toolbar zone pop-up when time zone support is on).
+5. **Per-subscription settings**: refresh interval, remove alerts (macOS default on), and the
    subscription's URL editable; honour `REFRESH-INTERVAL` / `X-PUBLISHED-TTL` as the default.
-7. **Invitee autocomplete and free/busy** (needs Contacts and CalDAV scheduling outbox POST).
-8. **OAuth** for Google and Microsoft 365 (Basic only today; Google offered as a subscription).
-9. **Birthdays calendar** from Contacts.
-10. **Hours shown at a time** (day/week zoom) and event density in the year view.
-11. **Shared file chooser helper**: `portal.rs` repeats Mail's; move it to a desktop crate.
+6. **Invitee autocomplete and free/busy** (needs Contacts and CalDAV scheduling outbox POST).
+7. **OAuth** for Google and Microsoft 365 (Basic only today; Google offered as a subscription).
+8. **Birthdays calendar** from Contacts.
+9. **Hours shown at a time** (day/week zoom) and event density in the year view.
+10. **Shared file chooser helper**: `portal.rs` repeats Mail's; move it to a desktop crate.

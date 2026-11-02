@@ -414,6 +414,7 @@ impl CalendarApp {
                 server,
                 user,
                 home: found.home,
+                addresses: found.addresses,
             },
         };
         view.library_mut().add_account(account, calendars);

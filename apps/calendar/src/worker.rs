@@ -185,7 +185,7 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
                             }),
                         AccountKind::Local => continue,
                     };
-                if let Err(Error::Status { status: 401, .. }) = &result {
+                if let Err(Error::Unauthorized) = &result {
                     reply(Reply::SignInFailed {
                         account: account.clone(),
                     });

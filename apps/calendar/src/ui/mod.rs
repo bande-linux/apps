@@ -1019,10 +1019,13 @@ impl CalendarView {
         self.requests.push(Request::Changed);
     }
 
-    pub(crate) fn me(&self, calendar: usize) -> Option<String> {
+    pub(crate) fn me(&self, calendar: usize) -> Option<Vec<String>> {
         let info = &self.library.calendars.get(calendar)?.info;
         match &self.library.account(&info.account)?.kind {
-            AccountKind::CalDav { user, .. } if user.contains('@') => Some(user.clone()),
+            AccountKind::CalDav { addresses, .. } if !addresses.is_empty() => {
+                Some(addresses.clone())
+            }
+            AccountKind::CalDav { user, .. } if user.contains('@') => Some(vec![user.clone()]),
             _ => None,
         }
     }

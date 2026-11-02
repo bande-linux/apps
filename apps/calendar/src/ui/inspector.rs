@@ -194,7 +194,7 @@ fn end_of(end: EndRepeat) -> (usize, String) {
 
 pub struct Context<'a> {
     pub local: &'a TimeZone,
-    pub me: Option<&'a str>,
+    pub me: Option<&'a [String]>,
     pub time_zones: bool,
 }
 
@@ -250,7 +250,11 @@ impl Inspector {
         let answered = me.and_then(|me| my_answer(event, me));
         let organizing = me.is_some()
             && invited.first().is_none_or(|first| {
-                first.organizer && me.is_some_and(|me| first.address.eq_ignore_ascii_case(me))
+                first.organizer
+                    && me.is_some_and(|me| {
+                        me.iter()
+                            .any(|mine| first.address.eq_ignore_ascii_case(mine))
+                    })
             });
         let details = details_of(&found, event, context);
         let zone_text = (context.time_zones && !details.all_day)
