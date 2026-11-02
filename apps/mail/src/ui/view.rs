@@ -57,6 +57,7 @@ pub const LIST_WIDTH: f32 = 340.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const NOTIFIED_AT_ONCE: usize = 3;
 const UNDO_TRIES: u8 = 3;
+const UNDO_LEVELS: usize = 20;
 const DRAG_THRESHOLD: f32 = 6.0;
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 
@@ -212,7 +213,7 @@ pub struct MailView {
     setup: Option<SetupSheet>,
     pub(crate) settings: MailSettings,
     opened: Vec<(PathBuf, std::time::SystemTime)>,
-    undo: Vec<Moved>,
+    undo: Vec<Vec<Moved>>,
     undoing: Vec<Moved>,
     pub(crate) drag: Option<Drag>,
     pub(crate) conversations: Conversations,
@@ -812,22 +813,29 @@ impl MailView {
     fn move_each(&mut self, moves: Vec<(MessageId, Mailbox)>) -> Vec<MessageId> {
         let mut moved = Vec::new();
         let mut done = Vec::new();
-        self.undo.clear();
+        let mut undo = Vec::new();
         for (id, target) in &moves {
             if let (Some(from), Ok(Some(message_id))) = (
-                self.messages
-                    .iter()
-                    .find(|summary| summary.id == *id)
-                    .and_then(|summary| self.mailbox_of(summary)),
+                self.store
+                    .summary(*id)
+                    .ok()
+                    .flatten()
+                    .and_then(|summary| self.mailbox_of(&summary)),
                 self.store.message_id(*id),
             ) {
-                self.undo.push(Moved {
+                undo.push(Moved {
                     message_id,
                     from,
                     to: target.id,
                     tries: 0,
                 });
             }
+        }
+        if !undo.is_empty() {
+            if self.undo.len() == UNDO_LEVELS {
+                self.undo.remove(0);
+            }
+            self.undo.push(undo);
         }
         for (_, target) in &moves {
             if done.contains(&target.id) {
@@ -898,7 +906,7 @@ impl MailView {
     }
 
     pub fn undo(&mut self) {
-        let moves = std::mem::take(&mut self.undo);
+        let moves = self.undo.pop().unwrap_or_default();
         self.put_back(moves);
     }
 
@@ -941,7 +949,6 @@ impl MailView {
         }
         let mut gone = self.move_each(moves);
         if !expunged.is_empty() {
-            self.undo.clear();
             match self.store.expunge(&expunged) {
                 Ok(accounts) => {
                     self.flush(&accounts);

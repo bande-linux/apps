@@ -41,11 +41,11 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Drafts | Kept in Drafts when a message window closes or Mail quits; a local copy is saved while typing and reopens after a crash or an offline quit |
 | Notifications | Have, Inbox only |
 | Offline | Have: full offline store, queued changes |
-| Selection | Ctrl+click and Shift+click select several messages for delete, archive, junk, move, flag and read; Shift+Up/Down and Select All; Undo puts the last move or delete back; drag onto a sidebar mailbox moves |
+| Selection | Ctrl+click and Shift+click select several messages for delete, archive, junk, move, flag and read; Shift+Up/Down and Select All; Undo puts moves and deletes back, 20 steps; drag onto a sidebar mailbox moves |
 
 ## Remaining, ranked by how much users rely on it
 
-1. Redo and more than one level of Undo; dragging messages out to other apps.
+1. Redo; dragging messages out to other apps.
 2. Conversations: show the whole conversation in the reader and include replies from Sent; group by subject when References are missing.
 3. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses passwords.
 4. Sort order, flag colours (Mark All as Read is in the Mailbox menu).
