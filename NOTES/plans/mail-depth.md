@@ -10,7 +10,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | General | Default email reader | Mailto handler via Settings → Default Apps; the General tab points there |
 | General | Check for new messages | Not needed: IMAP IDLE on the Inbox, 5 min poll without IDLE, 15 min full sync |
 | General | New message sound / notifications | Have: toggles for notifications and their sound |
-| General | Downloads folder, remove unedited downloads | Opened attachments are private copies removed on quit unless edited; Save Attachment… and Save to Downloads Folder in their menu |
+| General | Downloads folder, remove unedited downloads | Opened attachments are private copies removed on quit unless edited or still open in another app; Save Attachment… and Save to Downloads Folder in their menu |
 | Accounts | Add, edit, remove IMAP/SMTP accounts | Have: list, Add Account… (setup sheet in the viewer), Remove… with confirmation, full name, server settings (user, hosts, ports, TLS/STARTTLS) checked against the servers before they are saved |
 | Accounts | Provider presets (Gmail, Outlook, iCloud, Fastmail) | Autodiscovery (provider autoconfig, ISPDB, SRV, MX) finds them; a refused password names the provider's app-password page |
 | Accounts | OAuth sign-in | Missing: Gmail and Outlook need app passwords |
@@ -61,5 +61,5 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 - A reopened unsent message forgets the draft it replaces, the message it answers and its Bcc.
 - Disabling an account or changing its servers drops its queued sends silently; the local copy
   reopens at the next start.
-- Undo gives up without a word when the moved message does not show up after six syncs.
+- Undo gives up without a word when the moved message does not show up after three syncs of the mailbox it went to.
 - From swaps the signature only when the old account had one.

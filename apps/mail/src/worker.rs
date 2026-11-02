@@ -55,6 +55,7 @@ pub enum MailboxChange {
 pub enum Event {
     Status(AccountId, Status),
     Changed(AccountId),
+    Synced(AccountId, MailboxId),
     Arrived(AccountId, Vec<MessageId>),
     Body(MessageId),
     LoginFailed(AccountId, String),
@@ -510,6 +511,7 @@ impl Runner {
                 self.emit(Event::Arrived(self.account.id, unseen));
             }
         }
+        self.emit(Event::Synced(self.account.id, mailbox.id));
         Ok(())
     }
 

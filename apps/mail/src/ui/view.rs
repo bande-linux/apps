@@ -5,7 +5,7 @@ use std::os::fd::BorrowedFd;
 use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
@@ -57,7 +57,8 @@ pub const SIDEBAR_WIDTH: f32 = 220.0;
 pub const LIST_WIDTH: f32 = 340.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const NOTIFIED_AT_ONCE: usize = 3;
-const UNDO_TRIES: u8 = 6;
+const UNDO_TRIES: u8 = 3;
+const MOVED_IN_KEPT: Duration = Duration::from_secs(10 * 60);
 const UNDO_LEVELS: usize = 20;
 const DRAG_THRESHOLD: f32 = 6.0;
 const MAX_PICTURE_BYTES: usize = 10 << 20;
@@ -235,7 +236,7 @@ pub struct MailView {
     opened: Vec<((PathBuf, usize), PathBuf, std::time::SystemTime)>,
     undo: Vec<Vec<Moved>>,
     undoing: Vec<Moved>,
-    moved_in: HashSet<String>,
+    moved_in: HashMap<(MailboxId, String), Instant>,
     pub(crate) drag: Option<Drag>,
     pub(crate) conversations: Conversations,
 }
@@ -291,7 +292,7 @@ impl MailView {
             opened: Vec::new(),
             undo: Vec::new(),
             undoing: Vec::new(),
-            moved_in: HashSet::new(),
+            moved_in: HashMap::new(),
             drag: None,
             conversations: Conversations::default(),
         };
@@ -853,10 +854,8 @@ impl MailView {
         let mut done = Vec::new();
         let mut undo = Vec::new();
         for (id, target) in &moves {
-            if target.role == Some(Role::Inbox)
-                && let Ok(Some(message_id)) = self.store.message_id(*id)
-            {
-                self.moved_in.insert(message_id);
+            if let Ok(Some(message_id)) = self.store.message_id(*id) {
+                self.expect_arrival(target, message_id);
             }
             if let (Some(from), Ok(Some(message_id))) = (
                 self.store
@@ -953,6 +952,26 @@ impl MailView {
         self.put_back(moves);
     }
 
+    fn expect_arrival(&mut self, mailbox: &Mailbox, message_id: String) {
+        let now = Instant::now();
+        self.moved_in
+            .retain(|_, since| now.duration_since(*since) < MOVED_IN_KEPT);
+        if mailbox.role == Some(Role::Inbox) {
+            self.moved_in.insert((mailbox.id, message_id), now);
+        }
+    }
+
+    fn expected_arrival(&mut self, id: MessageId) -> bool {
+        let (Ok(Some(summary)), Ok(Some(message_id))) =
+            (self.store.summary(id), self.store.message_id(id))
+        else {
+            return false;
+        };
+        self.moved_in
+            .remove(&(summary.mailbox, message_id))
+            .is_some_and(|since| since.elapsed() < MOVED_IN_KEPT)
+    }
+
     fn put_back(&mut self, moves: Vec<Moved>) {
         let mut waiting = Vec::new();
         for moved in moves {
@@ -966,9 +985,7 @@ impl MailView {
                             continue;
                         }
                     };
-                    if from.role == Some(Role::Inbox) {
-                        self.moved_in.insert(moved.message_id.clone());
-                    }
+                    self.expect_arrival(&from, moved.message_id.clone());
                     match self.store.move_messages(&[id], &from) {
                         Ok(accounts) => self.flush(&accounts),
                         Err(error) => tracing::warn!("cannot put the message back: {error}"),
@@ -1361,31 +1378,26 @@ impl MailView {
         let mut changed = false;
         let mut stale = false;
         for event in events {
-            changed = true;
+            changed |= !matches!(event, MailEvent::Synced(..));
             match event {
                 MailEvent::Status(account, status) => {
                     self.statuses.retain(|(known, _)| *known != account);
                     self.statuses.push((account, status));
                 }
-                MailEvent::Changed(account) => {
-                    stale = true;
+                MailEvent::Changed(_) => stale = true,
+                MailEvent::Synced(account, mailbox) => {
                     let (moves, waiting) = std::mem::take(&mut self.undoing)
                         .into_iter()
-                        .partition(|moved| moved.from.account == account);
+                        .partition(|moved| moved.from.account == account && moved.to == mailbox);
                     self.undoing = waiting;
                     if !moves.is_empty() {
+                        changed = true;
                         self.put_back(moves);
                     }
                 }
                 MailEvent::Arrived(account, mut ids) => {
                     stale = true;
-                    ids.retain(|id| {
-                        self.store
-                            .message_id(*id)
-                            .ok()
-                            .flatten()
-                            .is_none_or(|message_id| !self.moved_in.remove(&message_id))
-                    });
+                    ids.retain(|id| !self.expected_arrival(*id));
                     let left = self.apply_rules(account, ids);
                     self.notify(&left);
                 }
