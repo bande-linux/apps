@@ -55,3 +55,10 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 8. Per-sender "always load remote content"; a privacy proxy for remote pictures.
 9. A message font choice apart from the desktop text size.
 10. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
+
+## Known gaps in what landed (review, 2026-11-02)
+- A reopened unsent message forgets the draft it replaces, the message it answers and its Bcc.
+- Disabling an account or changing its servers drops its queued sends silently; the local copy
+  reopens at the next start.
+- Undo gives up without a word when the moved message does not show up after six syncs.
+- From swaps the signature only when the old account had one.

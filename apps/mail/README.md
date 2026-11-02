@@ -63,7 +63,8 @@ apt install bande-mail
   create, rename and delete mailboxes on the server; the special mailboxes keep their names.
 - **Compose** opens its own window, with From when there are several accounts. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's
-  signature goes above the quoted text and changes with From. Files are
+  signature goes above the quoted text and replaces the previous account's signature when From
+  changes. Files are
   attached through the desktop's file chooser (the portal), up to 25 MB each, and a click on an
   attachment removes it. A sent message is kept in Sent and the original is marked answered. If
   sending fails, the message comes back in a window with the error.

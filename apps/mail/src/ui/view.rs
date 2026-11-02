@@ -57,7 +57,7 @@ pub const SIDEBAR_WIDTH: f32 = 220.0;
 pub const LIST_WIDTH: f32 = 340.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const NOTIFIED_AT_ONCE: usize = 3;
-const UNDO_TRIES: u8 = 3;
+const UNDO_TRIES: u8 = 6;
 const UNDO_LEVELS: usize = 20;
 const DRAG_THRESHOLD: f32 = 6.0;
 const MAX_PICTURE_BYTES: usize = 10 << 20;
@@ -216,6 +216,7 @@ pub struct MailView {
     opened: Vec<(PathBuf, std::time::SystemTime)>,
     undo: Vec<Vec<Moved>>,
     undoing: Vec<Moved>,
+    moved_in: HashSet<String>,
     pub(crate) drag: Option<Drag>,
     pub(crate) conversations: Conversations,
 }
@@ -271,6 +272,7 @@ impl MailView {
             opened: Vec::new(),
             undo: Vec::new(),
             undoing: Vec::new(),
+            moved_in: HashSet::new(),
             drag: None,
             conversations: Conversations::default(),
         };
@@ -616,13 +618,8 @@ impl MailView {
         self.focus = Pane::List;
         self.scrolls[2] = ScrollState::default();
         self.load_reading(&summary);
-        let unread = std::iter::once(&summary)
-            .chain(self.conversations.collapsed(id).unwrap_or_default())
-            .filter(|summary| !summary.flags.seen)
-            .map(|summary| summary.id)
-            .collect::<Vec<_>>();
-        if !unread.is_empty() {
-            self.set_flag_on(&unread, Flag::Seen, true);
+        if !summary.flags.seen {
+            self.set_flag_on(&[id], Flag::Seen, true);
         }
         self.reveal_selected();
     }
@@ -837,6 +834,11 @@ impl MailView {
         let mut done = Vec::new();
         let mut undo = Vec::new();
         for (id, target) in &moves {
+            if target.role == Some(Role::Inbox)
+                && let Ok(Some(message_id)) = self.store.message_id(*id)
+            {
+                self.moved_in.insert(message_id);
+            }
             if let (Some(from), Ok(Some(message_id))) = (
                 self.store
                     .summary(*id)
@@ -936,12 +938,17 @@ impl MailView {
         let mut waiting = Vec::new();
         for moved in moves {
             match self.store.find_message(moved.to, &moved.message_id) {
-                Ok(Some(id)) => match self.store.move_messages(&[id], &moved.from) {
-                    Ok(accounts) => self.flush(&accounts),
-                    Err(error) => tracing::warn!("cannot put the message back: {error}"),
-                },
+                Ok(Some(id)) => {
+                    if moved.from.role == Some(Role::Inbox) {
+                        self.moved_in.insert(moved.message_id.clone());
+                    }
+                    match self.store.move_messages(&[id], &moved.from) {
+                        Ok(accounts) => self.flush(&accounts),
+                        Err(error) => tracing::warn!("cannot put the message back: {error}"),
+                    }
+                }
                 Ok(None) if moved.tries < UNDO_TRIES => {
-                    if !waiting.contains(&moved.to) {
+                    if moved.tries == 0 && !waiting.contains(&moved.to) {
                         waiting.push(moved.to);
                         self.send_command(moved.from.account, Command::Refresh(moved.to));
                     }
@@ -1311,15 +1318,25 @@ impl MailView {
                     self.statuses.retain(|(known, _)| *known != account);
                     self.statuses.push((account, status));
                 }
-                MailEvent::Changed(_) => {
+                MailEvent::Changed(account) => {
                     stale = true;
-                    if !self.undoing.is_empty() {
-                        let moves = std::mem::take(&mut self.undoing);
+                    let (moves, waiting) = std::mem::take(&mut self.undoing)
+                        .into_iter()
+                        .partition(|moved| moved.from.account == account);
+                    self.undoing = waiting;
+                    if !moves.is_empty() {
                         self.put_back(moves);
                     }
                 }
-                MailEvent::Arrived(account, ids) => {
+                MailEvent::Arrived(account, mut ids) => {
                     stale = true;
+                    ids.retain(|id| {
+                        self.store
+                            .message_id(*id)
+                            .ok()
+                            .flatten()
+                            .is_none_or(|message_id| !self.moved_in.remove(&message_id))
+                    });
                     let left = self.apply_rules(account, ids);
                     self.notify(&left);
                 }

@@ -1,5 +1,6 @@
 use std::hash::{BuildHasher, RandomState};
-use std::io;
+use std::io::{self, Write};
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64;
@@ -135,8 +136,22 @@ pub fn unsent_folder() -> Option<PathBuf> {
 }
 
 pub fn keep_unsent(path: &Path, draft: &Draft) -> io::Result<()> {
-    let message = build(draft, &Zoned::now());
-    bande_xdg::replace_file(path, &String::from_utf8_lossy(&message))
+    if let Some(folder) = path.parent() {
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(folder)?;
+    }
+    let staging = path.with_extension("eml.new");
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&staging)?;
+    file.write_all(&build(draft, &Zoned::now()))?;
+    file.sync_all()?;
+    std::fs::rename(&staging, path)
 }
 
 pub fn forget_unsent(outgoing: &Outgoing) {
