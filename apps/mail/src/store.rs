@@ -389,22 +389,8 @@ impl Store {
 
     pub fn update_account(&self, account: &Account) -> Result<()> {
         self.connection.execute(
-            "UPDATE accounts SET name = ?2, user = ?3, imap_host = ?4, imap_port = ?5, \
-             imap_security = ?6, smtp_host = ?7, smtp_port = ?8, smtp_security = ?9, \
-             signature = ?10, enabled = ?11 WHERE id = ?1",
-            params![
-                account.id,
-                account.name,
-                account.user,
-                account.imap.host,
-                account.imap.port,
-                account.imap.security.name(),
-                account.smtp.host,
-                account.smtp.port,
-                account.smtp.security.name(),
-                account.signature,
-                account.enabled,
-            ],
+            "UPDATE accounts SET name = ?2, signature = ?3, enabled = ?4 WHERE id = ?1",
+            params![account.id, account.name, account.signature, account.enabled],
         )?;
         Ok(())
     }

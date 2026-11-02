@@ -213,7 +213,7 @@ pub struct MailView {
     requests: Vec<Request>,
     setup: Option<SetupSheet>,
     pub(crate) settings: MailSettings,
-    opened: Vec<(PathBuf, std::time::SystemTime)>,
+    opened: Vec<((PathBuf, usize), PathBuf, std::time::SystemTime)>,
     undo: Vec<Vec<Moved>>,
     undoing: Vec<Moved>,
     moved_in: HashSet<String>,
@@ -939,10 +939,18 @@ impl MailView {
         for moved in moves {
             match self.store.find_message(moved.to, &moved.message_id) {
                 Ok(Some(id)) => {
-                    if moved.from.role == Some(Role::Inbox) {
+                    let from = match self.store.mailbox(moved.from.id) {
+                        Ok(Some(from)) => from,
+                        Ok(None) => continue,
+                        Err(error) => {
+                            tracing::warn!("cannot put the message back: {error}");
+                            continue;
+                        }
+                    };
+                    if from.role == Some(Role::Inbox) {
                         self.moved_in.insert(moved.message_id.clone());
                     }
-                    match self.store.move_messages(&[id], &moved.from) {
+                    match self.store.move_messages(&[id], &from) {
                         Ok(accounts) => self.flush(&accounts),
                         Err(error) => tracing::warn!("cannot put the message back: {error}"),
                     }
@@ -1250,9 +1258,19 @@ impl MailView {
         }) else {
             return;
         };
+        let key = (folder.clone(), index);
+        let ours = self
+            .opened
+            .iter()
+            .find(|(known, ..)| *known == key)
+            .map(|(_, path, _)| path.clone());
         let path = folder.join(&name);
-        let ours = self.opened.iter().any(|(known, _)| *known == path);
-        if ours || std::fs::read(&path).is_ok_and(|kept| kept == data) {
+        let kept = ours.or_else(|| {
+            std::fs::read(&path)
+                .is_ok_and(|kept| kept == data)
+                .then_some(path)
+        });
+        if let Some(path) = kept {
             self.requests.push(Request::OpenAttachment(path));
             return;
         }
@@ -1266,7 +1284,7 @@ impl MailView {
                 if let Ok(modified) =
                     std::fs::metadata(&path).and_then(|metadata| metadata.modified())
                 {
-                    self.opened.push((path.clone(), modified));
+                    self.opened.push((key, path.clone(), modified));
                 }
                 self.requests.push(Request::OpenAttachment(path));
             }
@@ -1294,7 +1312,7 @@ impl MailView {
     }
 
     fn remove_unedited_attachments(&mut self) {
-        for (path, opened) in self.opened.drain(..) {
+        for (_, path, opened) in self.opened.drain(..) {
             let unedited = std::fs::metadata(&path)
                 .and_then(|metadata| metadata.modified())
                 .is_ok_and(|modified| modified == opened);

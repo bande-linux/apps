@@ -151,7 +151,11 @@ pub fn keep_unsent(path: &Path, draft: &Draft) -> io::Result<()> {
         .open(&staging)?;
     file.write_all(&build(draft, &Zoned::now()))?;
     file.sync_all()?;
-    std::fs::rename(&staging, path)
+    std::fs::rename(&staging, path)?;
+    match path.parent() {
+        Some(folder) => std::fs::File::open(folder)?.sync_all(),
+        None => Ok(()),
+    }
 }
 
 pub fn forget_unsent(outgoing: &Outgoing) {
