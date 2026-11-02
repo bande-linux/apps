@@ -10,7 +10,7 @@ work and family calendars on it without a second app? Reviewed 2026-11-02.
 | Default calendar | done: Settings ▸ General, used for new events |
 | Start week on, day starts/ends, show N hours | done: start of week, day start/end (shaded, week opens there); hours-at-a-time zoom missing |
 | Show week numbers | done: month rows and week header |
-| Time zone support | done: Advanced toggle, zone per event in the inspector; whole-view zone missing |
+| Time zone support | done: Advanced toggle, zone per event in the inspector, View ▸ Time Zone for the whole view (zones the events use; no free search yet) |
 | Default alerts for events / all-day events / birthdays | done for events and all-day; birthdays need Contacts |
 | Birthdays calendar | missing (no Contacts store yet) |
 | Accounts: add, edit, remove, refresh interval | done: presets (iCloud, Fastmail, Google, Nextcloud), password again, remove, refresh interval (1 min…hourly, manual) |
@@ -47,11 +47,10 @@ occurrence cache per shown range; slim sync jobs; unchanged sync-token skip.
    entry. Owner decision: it would show as a running app in the taskbar (needs a desktop
    "background app" notion), and the idle-wake bug (twice a second, release-review) must be
    fixed first so it costs nothing.
-2. **View in another time zone** (macOS toolbar zone pop-up when time zone support is on).
-3. **Subscription URL edit and published TTL**: honour `REFRESH-INTERVAL` / `X-PUBLISHED-TTL`
+2. **Subscription URL edit and published TTL**: honour `REFRESH-INTERVAL` / `X-PUBLISHED-TTL`
    as a subscription's default interval, and let its URL be changed.
-4. **Invitee autocomplete and free/busy** (needs Contacts and CalDAV scheduling outbox POST).
-5. **OAuth** for Google and Microsoft 365 (Basic only today; Google offered as a subscription).
-6. **Birthdays calendar** from Contacts.
-7. **Hours shown at a time** (day/week zoom) and event density in the year view.
-8. **Shared file chooser helper**: `portal.rs` repeats Mail's; move it to a desktop crate.
+3. **Invitee autocomplete and free/busy** (needs Contacts and CalDAV scheduling outbox POST).
+4. **OAuth** for Google and Microsoft 365 (Basic only today; Google offered as a subscription).
+5. **Birthdays calendar** from Contacts.
+6. **Hours shown at a time** (day/week zoom) and event density in the year view.
+7. **Shared file chooser helper**: `portal.rs` repeats Mail's; move it to a desktop crate.

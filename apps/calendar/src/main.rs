@@ -35,7 +35,8 @@ const APP_ID: &str = "org.bande.Calendar";
 const WINDOW_SIZE: (u32, u32) = (1120, 740);
 const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
-const ALERT_HORIZON: SignedDuration = SignedDuration::from_hours(1);
+const ALERT_HORIZON: SignedDuration = SignedDuration::from_hours(24);
+const FIRED_MEMORY: SignedDuration = SignedDuration::from_hours(24);
 const NOTIFICATION_TIMEOUT: i32 = -1;
 
 static INFO: Info = Info {
@@ -121,7 +122,7 @@ struct CalendarApp {
     next_clock: Option<Timestamp>,
     alert_at: Timestamp,
     alerts_checked: Timestamp,
-    fired: HashSet<String>,
+    fired: HashMap<String, Timestamp>,
     syncing: bool,
     sync_again: bool,
     title: String,
@@ -151,8 +152,21 @@ fn entry(label: &str, action: &str) -> Entry {
     Entry::item(&L10N.tr(label), action)
 }
 
-fn app_menus(mode: Mode) -> Vec<Entry> {
-    let mut view: Vec<Entry> = Mode::ALL
+fn zone_menu(view: &CalendarView) -> Entry {
+    let shown = view.shown_zone();
+    let items =
+        std::iter::once(Entry::item(&L10N.tr("zone-system"), "zone:").radio(shown.is_none()))
+            .chain(view.zones().into_iter().map(|zone| {
+                let chosen = shown == Some(zone.as_str());
+                Entry::item(&zone, &format!("zone:{zone}")).radio(chosen)
+            }))
+            .collect();
+    Entry::submenu(&L10N.tr("zone-menu"), items)
+}
+
+fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
+    let mode = view.mode();
+    let mut view_menu: Vec<Entry> = Mode::ALL
         .iter()
         .enumerate()
         .map(|(index, shown)| {
@@ -167,7 +181,10 @@ fn app_menus(mode: Mode) -> Vec<Entry> {
                 .radio(*shown == mode)
         })
         .collect();
-    view.extend([
+    if time_zones {
+        view_menu.extend([Entry::separator(), zone_menu(view)]);
+    }
+    view_menu.extend([
         Entry::separator(),
         entry("go-to-today", "today").shortcut("Ctrl+T"),
         entry("previous-period", "previous"),
@@ -190,7 +207,7 @@ fn app_menus(mode: Mode) -> Vec<Entry> {
             ],
         ),
         edit_submenu(Vec::new()),
-        Entry::submenu(&L10N.tr("menu-view"), view),
+        Entry::submenu(&L10N.tr("menu-view"), view_menu),
     ]
 }
 
@@ -278,7 +295,14 @@ impl CalendarApp {
         )
     }
 
-    fn caldav_due(&self) -> Option<Timestamp> {
+    fn caldav_due(&self, library: &Library) -> Option<Timestamp> {
+        if !library
+            .accounts
+            .iter()
+            .any(|account| matches!(account.kind, AccountKind::CalDav { .. }))
+        {
+            return None;
+        }
         let every = self.settings.refresh()?;
         Some(
             self.synced
@@ -295,8 +319,11 @@ impl CalendarApp {
         }
         let now = Timestamp::now();
         let push = self.next_push.is_some_and(|at| Instant::now() >= at);
-        let caldav =
-            refresh == Refresh::All || push || self.caldav_due().is_some_and(|due| now >= due);
+        let caldav = refresh == Refresh::All
+            || push
+            || self
+                .caldav_due(view.library())
+                .is_some_and(|due| now >= due);
         let library = view.library();
         let calendars: Vec<_> = library
             .calendars
@@ -362,7 +389,7 @@ impl CalendarApp {
             .filter_map(|calendar| self.subscription_due(view.library(), &calendar.info))
             .min()
             .filter(|_| !syncing);
-        let caldav = self.caldav_due().filter(|_| !syncing);
+        let caldav = self.caldav_due(view.library()).filter(|_| !syncing);
         let at = [Some(self.alert_at), self.next_clock, caldav, subscriptions]
             .into_iter()
             .flatten()
@@ -678,10 +705,12 @@ impl CalendarApp {
             until,
             &self.zone,
         ) {
-            if self.fired.insert(due.key.clone()) {
+            if self.fired.insert(due.key.clone(), due.at).is_none() {
                 notify(&due, &self.zone, &self.formats);
             }
         }
+        let forget = now.saturating_sub(FIRED_MEMORY).unwrap_or(now);
+        self.fired.retain(|_, at| *at >= forget);
         self.alerts_checked = until;
         let horizon = now.saturating_add(ALERT_HORIZON).unwrap_or(now);
         let next = due_between(view.library(), until, horizon, &self.zone)
@@ -895,7 +924,7 @@ impl Program for CalendarApp {
             next_clock: Some(next_minute()),
             alert_at: Timestamp::now(),
             alerts_checked: Timestamp::now(),
-            fired: HashSet::new(),
+            fired: HashMap::new(),
             syncing: false,
             sync_again: false,
             title,
@@ -908,7 +937,7 @@ impl Program for CalendarApp {
             menus: self
                 .main
                 .and_then(|main| cx.view(main))
-                .map(|Pane(view)| app_menus(view.mode()))
+                .map(|Pane(view)| app_menus(view, self.settings.time_zones))
                 .unwrap_or_default(),
             window: Vec::new(),
         }
@@ -1010,7 +1039,7 @@ impl Program for CalendarApp {
                             self.zone = TimeZone::get(&name)
                                 .unwrap_or_else(|_| bande_datetime::local_zone());
                             self.with_view(cx, |app, view| {
-                                view.set_zone(app.zone.clone());
+                                view.set_system_zone(app.zone.clone());
                                 app.check_alerts(view);
                             });
                         }

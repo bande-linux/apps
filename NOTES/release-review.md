@@ -14,7 +14,6 @@ medium items.
 - Low: XML parsing has no recursion depth limit (64 MB body cap); 303 keeps PROPFIND.
 - Low: `Credentials`/`Job` derive `Debug` with the password (nothing logs them).
 - Low: the keyring prompt has no timeout and blocks the sync thread.
-- Low: `fired` alert keys are never pruned.
 - Low: the whole cache is parsed before the first frame.
 
 ## Mail

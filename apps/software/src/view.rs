@@ -1034,6 +1034,17 @@ impl Software {
         if let Some(size) = facts.map(|facts| facts.size).filter(|size| *size > 0) {
             cells.push(fact(&L10N.tr("info-size"), text(&format_size(size))));
         }
+        if let Some(facts) = facts.filter(|facts| facts.download > 0) {
+            let size = format_size(facts.download);
+            let value = match facts.extra {
+                0 => size,
+                extra => L10N.tr_args(
+                    "download-with",
+                    [("size", size.into()), ("count", extra.into())],
+                ),
+            };
+            cells.push(fact(&L10N.tr("info-download"), text(&value)));
+        }
         if let Some(category) = Category::of(&app.categories).first() {
             cells.push(fact(
                 &L10N.tr("info-category"),

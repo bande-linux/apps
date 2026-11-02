@@ -9,6 +9,7 @@ arch-arm64 = 64-bit ARM (arm64)
 arch-armhf = 32-bit ARM (armhf)
 arch-i386 = older 32-bit Intel and AMD computers (i386)
 version-size = Version { $version } · { $size }
+package-facts = { $package } · { $facts }
 present = Version { $version } is installed.
 upgrade-from = Upgrades from { $from } to { $to }
 downgrade-from = Downgrades from { $from } to { $to }
