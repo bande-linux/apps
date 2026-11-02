@@ -67,5 +67,3 @@ fixed four rows).
 5. Compact row density in the toolkit table (rows are 32 pt; macOS lists are about 22 pt).
 6. Ports column (socket count per process) and packets in/out.
 7. 12 hr average energy impact (needs a background sampler; only if it can stay asleep).
-8. Inspector windows could not be opened in the headless capture tool (the compositor stalled after
-   Ctrl+I); check Inspect on the machine.

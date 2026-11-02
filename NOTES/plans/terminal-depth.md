@@ -47,5 +47,3 @@ is what is left. Delete this plan when the list is done.
 7. Alt+click to move the shell cursor; triple-click selects a command's output.
 8. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
    password).
-9. Settings window opening could not be captured in the headless tool (second windows stalled the
-   capture); check Terminal → Settings on the machine.
