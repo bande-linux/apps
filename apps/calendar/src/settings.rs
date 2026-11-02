@@ -28,6 +28,7 @@ pub struct CalendarSettings {
     pub day_start: u8,
     pub day_end: u8,
     pub week_numbers: bool,
+    pub time_zones: bool,
     pub timed_alert: Alert,
     pub all_day_alert: Alert,
     pub refresh_minutes: u32,
@@ -42,6 +43,7 @@ impl Default for CalendarSettings {
             day_start: 8,
             day_end: 18,
             week_numbers: false,
+            time_zones: false,
             timed_alert: Alert::None,
             all_day_alert: Alert::None,
             refresh_minutes: 5,
@@ -131,6 +133,9 @@ impl Stored for CalendarSettings {
                 "week-numbers" => {
                     settings.week_numbers = flag(value).unwrap_or(settings.week_numbers);
                 }
+                "time-zone-support" => {
+                    settings.time_zones = flag(value).unwrap_or(settings.time_zones);
+                }
                 "event-alert" => {
                     settings.timed_alert =
                         parse_alert(value, &Alert::TIMED).unwrap_or(settings.timed_alert);
@@ -159,13 +164,14 @@ impl Stored for CalendarSettings {
     fn to_text(&self) -> String {
         format!(
             "default-calendar = {}\nstart-week-on = {}\nday-starts = {}\nday-ends = {}\n\
-             week-numbers = {}\nevent-alert = {}\nall-day-alert = {}\nrefresh-minutes = {}\n\
+             week-numbers = {}\ntime-zone-support = {}\nevent-alert = {}\nall-day-alert = {}\nrefresh-minutes = {}\n\
              subscription-minutes = {}\n",
             self.default_calendar,
             self.first_weekday.map_or("default", weekday_name),
             self.day_start,
             self.day_end,
             self.week_numbers,
+            self.time_zones,
             alert_text(self.timed_alert),
             alert_text(self.all_day_alert),
             self.refresh_minutes,
@@ -178,6 +184,7 @@ impl Stored for CalendarSettings {
 pub enum Change {
     AddAccount,
     RemoveAccount(String),
+    Password(String),
 }
 
 static CHANGES: OnceLock<Outbox<Change>> = OnceLock::new();

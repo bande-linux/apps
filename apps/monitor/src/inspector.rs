@@ -7,7 +7,9 @@ use bande_toolkit::ui::{
     Button, Cell, Column, Cursor, Event, Key, Row, SEGMENTED_HEIGHT, SegmentedControl, Table,
     WidgetId,
 };
-use bande_toolkit::{Appearance, Header, Palette, Rect, SHEET_INSET, Scene, TextSystem};
+use bande_toolkit::{
+    Appearance, Header, Palette, Rect, SHEET_INSET, Scene, TextSystem, window_controls_end,
+};
 
 use crate::L10N;
 use crate::format::{format_bytes, format_cpu_time, format_percent};
@@ -22,7 +24,7 @@ use crate::view::{
 pub const INSPECTOR_SIZE: (u32, u32) = (680, 520);
 const HEADER: f32 = bande_toolkit::WINDOW_HEADER_HEIGHT as f32;
 const SIDE: f32 = 12.0;
-const LEADING: f32 = 94.0;
+const LEADING: f32 = window_controls_end(true) + 16.0;
 const BUTTON_SIZE: f32 = 28.0;
 const ITEM_GAP: f32 = 16.0;
 const SEGMENT_WIDTH: f32 = 96.0;

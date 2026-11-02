@@ -191,6 +191,7 @@ pub struct Painter {
     appearance: Appearance,
     profile: Profile,
     font_size: f32,
+    pub cursor_hidden: bool,
 }
 
 impl Painter {
@@ -206,6 +207,7 @@ impl Painter {
             appearance,
             profile,
             font_size,
+            cursor_hidden: false,
         }
     }
 
@@ -523,7 +525,9 @@ impl Painter {
                 };
                 push_span(&mut selected, line, column, cells, color);
             }
-            let is_cursor = cursor.shape != CursorShape::Hidden && cursor.point == indexed.point;
+            let is_cursor = cursor.shape != CursorShape::Hidden
+                && cursor.point == indexed.point
+                && !(focused && self.cursor_hidden);
             let block_cursor = is_cursor && focused && cursor.shape == CursorShape::Block;
             if block_cursor {
                 background = theme.cursor;

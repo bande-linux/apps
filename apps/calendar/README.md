@@ -10,12 +10,16 @@ views. Packaged as `bande-calendar`.
   address. It tries `_caldavs._tcp` DNS SRV records, `/.well-known/caldav`, then
   `current-user-principal` → `calendar-home-set` → the calendars in the home set. Passwords go to
   the Secret Service (gnome-keyring), never to disk, and are sent only over HTTPS (or to this
-  computer, for a local server). Several accounts, plus a local calendar.
+  computer, for a local server). Several accounts, plus a local calendar. The account sheet
+  has iCloud, Fastmail, Google and Nextcloud presets that fill in the server and say which
+  password to use (Google needs OAuth, so it offers a subscription to the calendar's secret
+  iCal address instead). When the server refuses the password, Calendar asks for it again
+  (also from Password… in Settings) and keeps every offline change meanwhile.
 - **Subscriptions.** `webcal:` / `webcals:` links and plain `https:` `.ics` URLs, read-only,
   refreshed on a wall-clock deadline kept across restarts (every 5 minutes to every week, or
   never); the name and colour come from `X-WR-CALNAME` and `X-APPLE-CALENDAR-COLOR`.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
-  without a network and pushes changes later. Sync is incremental with `sync-token`
+  without a network and pushes changes as soon as NetworkManager says the network is back. Sync is incremental with `sync-token`
   (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
   `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
   version stays and the local edit is kept beside it as a new event, and the sidebar says so.
@@ -37,6 +41,11 @@ views. Packaged as `bande-calendar`.
   inspector popover with title, location, all-day, start and end, repeat and when it ends
   (never, after a number of times, or on a date), alert, calendar and notes. Changing a
   recurring event asks whether it is for this event only (an override) or all events.
+- **Invitations** through the server (RFC 6638 implicit scheduling, as iCloud, Fastmail,
+  Nextcloud and Google do it): the inspector lists the organizer and invitees with their
+  answers, Accept, Maybe and Decline update your own `PARTSTAT` (an invitation's title and
+  times stay read-only), and on an event you organise
+  in a CalDAV calendar you can add invitees by address; the server sends the mail.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed. Alerts,
   the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
@@ -44,11 +53,14 @@ views. Packaged as `bande-calendar`.
 - **Settings** (Calendar ▸ Settings…): default calendar, start of the week, the hours the day
   starts and ends (the rest is shaded, and the week opens at the start), week numbers, default
   alerts for new events and all-day events, how often accounts and subscriptions refresh, and
-  adding and removing accounts. Stored in `~/.config/bande/calendar.conf`.
+  adding, re-signing and removing accounts, and time zone support, which shows each timed
+  event's zone in the inspector: its times are shown and typed in that zone, and a new zone
+  keeps the wall times of the whole series (exceptions and the end date move with it). Stored
+  in `~/.config/bande/calendar.conf`.
 - **Files and links.** `bande-calendar file.ics` or File ▸ Import… offers to add its events;
   File ▸ Export… (or Export… on a calendar's menu) saves a calendar as one `.ics` file, through
-  the desktop's file chooser portal; `bande-calendar webcal://…` offers to subscribe. The desktop file registers `text/calendar` and the `webcal`
-  schemes.
+  the desktop's file chooser portal; `bande-calendar webcal://…` offers to subscribe. The
+  desktop file registers `text/calendar` and the `webcal` schemes.
 
 Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Left/Right previous/next, Ctrl+N new event,
 Alt+Ctrl+N new calendar, Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the
@@ -77,13 +89,15 @@ Settings; the desktop pin is shared by the workspace (see `../../README.md`).
 ## Tests
 
 `tests/untrusted.rs` opens a hostile `.ics` file without panicking, refuses a FIFO or a file over
-64 MiB, and never sends a password over plain HTTP to anything but this computer. The repo's
-whole test list and the reason for each is in `NOTES/tests.md`.
+64 MiB, and never sends a password over plain HTTP to anything but this computer.
+`tests/time_zone.rs` moves a repeating event to another zone and checks that its times,
+exceptions and end follow. The repo's whole test list and the reason for each is in
+`NOTES/tests.md`.
 
 ## Not done yet
 
-- Invitations (attendees, `METHOD:REQUEST`/`REPLY`), free/busy, tasks (`VTODO`).
+- Invitation e-mails (`METHOD:REQUEST`/`REPLY` over iMIP), free/busy, tasks (`VTODO`).
 - OAuth providers (Google, Microsoft); Basic authentication only, so iCloud and Fastmail work with
   an app password.
-- Editing the time zone of an event; custom repeat rules (they are kept and shown as Custom,
-  but not edited).
+- Custom repeat rules (they are kept and shown as Custom, but not edited); viewing the whole
+  calendar in another time zone. The ranked list is in `NOTES/plans/calendar-depth.md`.

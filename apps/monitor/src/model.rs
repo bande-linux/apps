@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::L10N;
 use crate::apps::{Catalog, Group, GroupKey};
@@ -37,6 +38,7 @@ pub enum Column {
     Pid,
     User,
     Memory,
+    Compressed,
     Resident,
     Read,
     Written,
@@ -74,6 +76,10 @@ pub struct Row {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Graph {
+    Stacked {
+        lower: Vec<f32>,
+        upper: Vec<f32>,
+    },
     Lines {
         primary: Vec<f32>,
         secondary: Option<Vec<f32>>,
@@ -84,6 +90,36 @@ pub enum Graph {
         charge: Vec<(f32, f32)>,
         charging: Vec<(f32, f32)>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Series {
+    Primary,
+    Secondary,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Readout {
+    pub label: String,
+    pub value: String,
+    pub series: Option<Series>,
+}
+
+impl Readout {
+    fn new(message: &str, value: String) -> Self {
+        Self {
+            label: L10N.tr(message),
+            value,
+            series: None,
+        }
+    }
+
+    fn keyed(message: &str, value: String, series: Series) -> Self {
+        Self {
+            series: Some(series),
+            ..Self::new(message, value)
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -201,12 +237,14 @@ impl Tab {
                 Column::Cpu,
                 Column::CpuTime,
                 Column::Threads,
+                Column::Wakeups,
                 Column::Pid,
                 Column::User,
             ],
             Tab::Memory => &[
                 Column::Name,
                 Column::Memory,
+                Column::Compressed,
                 Column::Resident,
                 Column::Threads,
                 Column::Pid,
@@ -279,7 +317,7 @@ impl Tab {
 }
 
 impl Column {
-    pub const CHOOSABLE: [Column; 17] = [
+    pub const CHOOSABLE: [Column; 18] = [
         Column::EnergyImpact,
         Column::Cpu,
         Column::CpuTime,
@@ -289,6 +327,7 @@ impl Column {
         Column::Pid,
         Column::User,
         Column::Memory,
+        Column::Compressed,
         Column::Resident,
         Column::Read,
         Column::Written,
@@ -326,6 +365,7 @@ impl Column {
             Column::Pid => "pid",
             Column::User => "user",
             Column::Memory => "memory",
+            Column::Compressed => "compressed",
             Column::Resident => "resident",
             Column::Read => "read",
             Column::Written => "written",
@@ -361,6 +401,7 @@ impl Column {
             Column::Pid => L10N.tr("column-pid"),
             Column::User => L10N.tr("column-user"),
             Column::Memory => L10N.tr("column-memory"),
+            Column::Compressed => L10N.tr("column-compressed"),
             Column::Resident => L10N.tr("column-resident"),
             Column::Read => L10N.tr("column-read"),
             Column::Written => L10N.tr("column-written"),
@@ -395,6 +436,7 @@ impl Column {
             Column::CpuTime | Column::GpuTime => format_cpu_time(*value),
             Column::GpuMemory
             | Column::Memory
+            | Column::Compressed
             | Column::Resident
             | Column::ReadTotal
             | Column::WrittenTotal
@@ -462,6 +504,16 @@ impl Column {
             Column::Pid => Measure::Number(f64::from(leader.pid)),
             Column::User => Measure::Text(leader.identity.user.clone()),
             Column::Memory => sum(|process| process.footprint.unwrap_or(process.resident) as f64),
+            Column::Compressed => {
+                let known = processes
+                    .iter()
+                    .filter_map(|process| process.swapped)
+                    .collect::<Vec<_>>();
+                match known.is_empty() {
+                    true => Measure::Missing,
+                    false => Measure::Number(known.into_iter().sum::<u64>() as f64),
+                }
+            }
             Column::Resident => sum(|process| process.resident as f64),
             Column::Read => disk(|rates| rates.read_per_second),
             Column::Written => disk(|rates| rates.written_per_second),
@@ -568,6 +620,7 @@ pub struct Monitor {
     cores_shown: bool,
     uid: u32,
     filter: Filter,
+    frequency: Frequency,
     impacts: HashMap<(u32, u64), VecDeque<f64>>,
     energy: VecDeque<(f64, f64)>,
     power: Option<BatteryReport>,
@@ -587,20 +640,58 @@ pub struct CoreGroup {
 
 const CORES_STATE: &str = "cores";
 const FILTER_STATE: &str = "filter";
+const FREQUENCY_STATE: &str = "frequency";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Frequency {
+    VeryOften,
+    #[default]
+    Often,
+    Normally,
+}
+
+impl Frequency {
+    pub const ALL: [Frequency; 3] = [Frequency::VeryOften, Frequency::Often, Frequency::Normally];
+
+    pub fn interval(self) -> Duration {
+        Duration::from_secs(match self {
+            Frequency::VeryOften => 1,
+            Frequency::Often => 2,
+            Frequency::Normally => 5,
+        })
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Frequency::VeryOften => "very-often",
+            Frequency::Often => "often",
+            Frequency::Normally => "normally",
+        }
+    }
+
+    pub fn title(self) -> String {
+        L10N.tr_args(
+            &format!("frequency-{}", self.id()),
+            [("seconds", self.interval().as_secs().into())],
+        )
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Filter {
     All,
+    Hierarchy,
     Mine,
     Apps,
 }
 
 impl Filter {
-    pub const ALL: [Filter; 3] = [Filter::All, Filter::Mine, Filter::Apps];
+    pub const ALL: [Filter; 4] = [Filter::All, Filter::Hierarchy, Filter::Mine, Filter::Apps];
 
     pub fn id(self) -> &'static str {
         match self {
             Filter::All => "all",
+            Filter::Hierarchy => "hierarchy",
             Filter::Mine => "mine",
             Filter::Apps => "apps",
         }
@@ -609,6 +700,7 @@ impl Filter {
     pub fn title(self) -> String {
         match self {
             Filter::All => L10N.tr("filter-all"),
+            Filter::Hierarchy => L10N.tr("filter-hierarchy"),
             Filter::Mine => L10N.tr("filter-mine"),
             Filter::Apps => L10N.tr("filter-apps"),
         }
@@ -645,6 +737,7 @@ impl Monitor {
             cores_shown: false,
             uid,
             filter: Filter::All,
+            frequency: Frequency::default(),
             impacts: HashMap::new(),
             energy: VecDeque::new(),
             power: None,
@@ -790,6 +883,9 @@ impl Monitor {
         if self.filter != Filter::All {
             state.push_str(&format!("{FILTER_STATE} {}\n", self.filter.id()));
         }
+        if self.frequency != Frequency::default() {
+            state.push_str(&format!("{FREQUENCY_STATE} {}\n", self.frequency.id()));
+        }
         state
     }
 
@@ -804,6 +900,15 @@ impl Monitor {
                     .find(|filter| filter.id() == id.trim())
             })
             .unwrap_or(Filter::All);
+        self.frequency = text
+            .lines()
+            .find_map(|line| line.strip_prefix(FREQUENCY_STATE)?.strip_prefix(' '))
+            .and_then(|id| {
+                Frequency::ALL
+                    .into_iter()
+                    .find(|frequency| frequency.id() == id.trim())
+            })
+            .unwrap_or_default();
         for line in text.lines() {
             let mut words = line.split_whitespace();
             let Some(tab) = words
@@ -869,7 +974,9 @@ impl Monitor {
     }
 
     pub fn measures_footprint(&self) -> bool {
-        self.columns().contains(&Column::Memory)
+        self.columns()
+            .iter()
+            .any(|column| matches!(column, Column::Memory | Column::Compressed))
     }
 
     pub fn measures_gpu(&self) -> bool {
@@ -1006,6 +1113,8 @@ impl Monitor {
         let processes = &self.snapshot.processes;
         self.rows = if self.tab == Tab::Network {
             self.interface_rows(&query)
+        } else if self.filter == Filter::Hierarchy {
+            self.tree_rows(columns, &query)
         } else {
             let mut groups = Vec::new();
             for group in &self.groups {
@@ -1028,31 +1137,10 @@ impl Monitor {
                 let leader = &processes[group.leader];
                 let mut children = Vec::new();
                 if members.len() > 1 {
-                    for process in &shown {
-                        let name = &process.identity.name;
-                        children.push(Candidate {
-                            row: Row {
-                                key: RowKey::Process {
-                                    pid: process.pid,
-                                    start_ticks: process.start_ticks,
-                                },
-                                name: name.clone(),
-                                icon: None,
-                                cells: columns
-                                    .iter()
-                                    .map(|column| {
-                                        column.text(&column.measure(&[process], name, process))
-                                    })
-                                    .collect(),
-                                responding: self.unresponsive.process_responds(process.pid),
-                                revealed: false,
-                                children: Vec::new(),
-                            },
-                            measure: sort.measure(&[process], name, process),
-                            name: name.clone(),
-                            pid: process.pid,
-                        });
-                    }
+                    children = shown
+                        .iter()
+                        .map(|process| self.process_candidate(process, columns, Vec::new()))
+                        .collect();
                     children.sort_by(|a, b| order(a, b, descending));
                 }
                 let row = Row {
@@ -1078,6 +1166,77 @@ impl Monitor {
             groups.into_iter().map(|group| group.row).collect()
         };
         self.keep_shown_selection();
+    }
+
+    fn process_candidate(
+        &self,
+        process: &Process,
+        columns: &[Column],
+        children: Vec<Row>,
+    ) -> Candidate {
+        let name = &process.identity.name;
+        Candidate {
+            row: Row {
+                key: RowKey::Process {
+                    pid: process.pid,
+                    start_ticks: process.start_ticks,
+                },
+                name: name.clone(),
+                icon: None,
+                cells: columns
+                    .iter()
+                    .map(|column| column.text(&column.measure(&[process], name, process)))
+                    .collect(),
+                responding: self.unresponsive.process_responds(process.pid),
+                revealed: !children.is_empty() && !process.identity.kernel_thread,
+                children,
+            },
+            measure: self.sort.measure(&[process], name, process),
+            name: name.clone(),
+            pid: process.pid,
+        }
+    }
+
+    fn tree_rows(&self, columns: &[Column], query: &str) -> Vec<Row> {
+        let processes = &self.snapshot.processes;
+        let known = processes
+            .iter()
+            .map(|process| process.pid)
+            .collect::<HashSet<_>>();
+        let mut children: HashMap<u32, Vec<&Process>> = HashMap::new();
+        let mut roots = Vec::new();
+        for process in processes {
+            let has_parent = process.ppid != process.pid && known.contains(&process.ppid);
+            if query.is_empty() && has_parent {
+                children.entry(process.ppid).or_default().push(process);
+            } else if query.is_empty() || self.matches(process, query) {
+                roots.push(process);
+            }
+        }
+        self.level_rows(&roots, &children, columns)
+    }
+
+    fn level_rows(
+        &self,
+        level: &[&Process],
+        children: &HashMap<u32, Vec<&Process>>,
+        columns: &[Column],
+    ) -> Vec<Row> {
+        let mut candidates = level
+            .iter()
+            .map(|process| {
+                let below = children
+                    .get(&process.pid)
+                    .map(|below| self.level_rows(below, children, columns))
+                    .unwrap_or_default();
+                self.process_candidate(process, columns, below)
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(|a, b| order(a, b, self.descending));
+        candidates
+            .into_iter()
+            .map(|candidate| candidate.row)
+            .collect()
     }
 
     fn interface_rows(&self, query: &str) -> Vec<Row> {
@@ -1126,14 +1285,13 @@ impl Monitor {
     pub fn graph(&self) -> Graph {
         let full = || "100 %".to_owned();
         match self.tab {
-            Tab::Cpu => Graph::Lines {
-                primary: self
+            Tab::Cpu => Graph::Stacked {
+                lower: self.cpu.iter().map(|(system, _)| *system).collect(),
+                upper: self
                     .cpu
                     .iter()
                     .map(|(system, user)| system + user)
                     .collect(),
-                secondary: Some(self.cpu.iter().map(|(system, _)| *system).collect()),
-                scale: full(),
             },
             Tab::Memory => Graph::Pressure(self.memory.iter().copied().collect()),
             Tab::Energy => match self.battery_history() {
@@ -1171,6 +1329,19 @@ impl Monitor {
         self.filter
     }
 
+    pub fn frequency(&self) -> Frequency {
+        self.frequency
+    }
+
+    pub fn set_frequency(&mut self, frequency: Frequency) {
+        self.frequency = frequency;
+    }
+
+    pub fn span(&self) -> String {
+        let minutes = HISTORY as u64 * self.frequency.interval().as_secs() / 60;
+        L10N.tr_args("graph-span", [("minutes", minutes.into())])
+    }
+
     pub fn set_filter(&mut self, filter: Filter) {
         self.filter = filter;
         self.rebuild();
@@ -1178,7 +1349,7 @@ impl Monitor {
 
     fn passes_filter(&self, group: &Group, process: &Process) -> bool {
         match self.filter {
-            Filter::All => true,
+            Filter::All | Filter::Hierarchy => true,
             Filter::Mine => process.identity.uid == self.uid,
             Filter::Apps => group.app.is_some(),
         }
@@ -1224,21 +1395,6 @@ impl Monitor {
             ],
             false => vec![group(None)],
         }
-    }
-
-    pub fn memory_bar(&self) -> Option<Vec<(usize, f32)>> {
-        let memory = &self.snapshot.memory;
-        (self.tab == Tab::Memory).then(|| {
-            [
-                (2, memory.app),
-                (3, memory.kernel),
-                (4, memory.compressed),
-                (5, memory.cached),
-            ]
-            .into_iter()
-            .map(|(readout, bytes)| (readout, share(bytes, memory.total)))
-            .collect()
-        })
     }
 
     pub fn graph_description(&self) -> String {
@@ -1306,77 +1462,90 @@ impl Monitor {
         }
     }
 
-    pub fn summary(&self) -> Vec<(String, String)> {
+    pub fn summary(&self) -> Vec<Vec<Readout>> {
         let snapshot = &self.snapshot;
         let percent = |share: f32| format!("{} %", format_percent(f64::from(share) * 100.0));
         match self.tab {
             Tab::Cpu => vec![
-                (L10N.tr("summary-system"), percent(snapshot.cpu.system)),
-                (L10N.tr("summary-user"), percent(snapshot.cpu.user)),
-                (L10N.tr("summary-idle"), percent(snapshot.cpu.idle)),
-                (
-                    L10N.tr("summary-processes"),
-                    snapshot.processes.len().to_string(),
-                ),
-                (
-                    L10N.tr("summary-threads"),
-                    snapshot
-                        .processes
-                        .iter()
-                        .map(|process| u64::from(process.threads))
-                        .sum::<u64>()
-                        .to_string(),
-                ),
+                vec![
+                    Readout::keyed(
+                        "summary-system",
+                        percent(snapshot.cpu.system),
+                        Series::Secondary,
+                    ),
+                    Readout::keyed("summary-user", percent(snapshot.cpu.user), Series::Primary),
+                    Readout::new("summary-idle", percent(snapshot.cpu.idle)),
+                ],
+                vec![
+                    Readout::new(
+                        "summary-threads",
+                        snapshot
+                            .processes
+                            .iter()
+                            .map(|process| u64::from(process.threads))
+                            .sum::<u64>()
+                            .to_string(),
+                    ),
+                    Readout::new("summary-processes", snapshot.processes.len().to_string()),
+                ],
             ],
             Tab::Memory => {
                 let memory = &snapshot.memory;
                 vec![
-                    (L10N.tr("summary-physical"), format_bytes(memory.total)),
-                    (L10N.tr("summary-used"), format_bytes(memory.used)),
-                    (L10N.tr("summary-app"), format_bytes(memory.app)),
-                    (L10N.tr("summary-kernel"), format_bytes(memory.kernel)),
-                    (
-                        L10N.tr("summary-compressed"),
-                        format_bytes(memory.compressed),
-                    ),
-                    (L10N.tr("summary-cached"), format_bytes(memory.cached)),
-                    (L10N.tr("summary-swap"), format_bytes(memory.swap_used)),
+                    vec![
+                        Readout::new("summary-physical", format_bytes(memory.total)),
+                        Readout::new("summary-used", format_bytes(memory.used)),
+                        Readout::new("summary-cached", format_bytes(memory.cached)),
+                        Readout::new("summary-swap", format_bytes(memory.swap_used)),
+                    ],
+                    vec![
+                        Readout::new("summary-app", format_bytes(memory.app)),
+                        Readout::new("summary-kernel", format_bytes(memory.kernel)),
+                        Readout::new("summary-compressed", format_bytes(memory.compressed)),
+                    ],
                 ]
             }
             Tab::Energy => {
                 let (impact, wakeups) = self.energy.back().copied().unwrap_or((0.0, 0.0));
-                let mut readouts = vec![
-                    (L10N.tr("summary-energy-impact"), format_percent(impact)),
-                    (L10N.tr("summary-wakeups"), format!("{wakeups:.0}")),
-                ];
-                readouts.extend(self.battery_readouts());
-                readouts
+                let mut columns = vec![vec![
+                    Readout::keyed(
+                        "summary-energy-impact",
+                        format_percent(impact),
+                        Series::Primary,
+                    ),
+                    Readout::new("summary-wakeups", format!("{wakeups:.0}")),
+                ]];
+                let battery = self.battery_readouts();
+                if !battery.is_empty() {
+                    columns.push(battery);
+                }
+                columns
             }
             Tab::Disk => vec![
-                (
-                    L10N.tr("summary-reads"),
-                    format!("{:.0}", snapshot.disk_operations.reads_per_second),
-                ),
-                (
-                    L10N.tr("summary-writes"),
-                    format!("{:.0}", snapshot.disk_operations.writes_per_second),
-                ),
-                (
-                    L10N.tr("summary-read-rate"),
-                    format_rate(snapshot.disk.read_per_second),
-                ),
-                (
-                    L10N.tr("summary-written-rate"),
-                    format_rate(snapshot.disk.written_per_second),
-                ),
-                (
-                    L10N.tr("summary-read"),
-                    format_bytes(snapshot.disk.read_total),
-                ),
-                (
-                    L10N.tr("summary-written"),
-                    format_bytes(snapshot.disk.written_total),
-                ),
+                vec![
+                    Readout::keyed(
+                        "summary-read-rate",
+                        format_rate(snapshot.disk.read_per_second),
+                        Series::Primary,
+                    ),
+                    Readout::keyed(
+                        "summary-written-rate",
+                        format_rate(snapshot.disk.written_per_second),
+                        Series::Secondary,
+                    ),
+                    Readout::new(
+                        "summary-reads",
+                        format!("{:.0}", snapshot.disk_operations.reads_per_second),
+                    ),
+                    Readout::new(
+                        "summary-writes",
+                        format!("{:.0}", snapshot.disk_operations.writes_per_second),
+                    ),
+                ],
+                vec![
+                    Readout::new("summary-read", format_bytes(snapshot.disk.read_total)),
+                    Readout::new("summary-written", format_bytes(snapshot.disk.written_total)),
+                ],
             ],
             Tab::Network => {
                 let interfaces = &snapshot.interfaces;
@@ -1384,22 +1553,28 @@ impl Monitor {
                     interfaces.iter().map(value).sum::<f64>()
                 };
                 vec![
-                    (
-                        L10N.tr("summary-received-rate"),
-                        format_rate(total(|interface| interface.received_per_second)),
-                    ),
-                    (
-                        L10N.tr("summary-sent-rate"),
-                        format_rate(total(|interface| interface.sent_per_second)),
-                    ),
-                    (
-                        L10N.tr("summary-received"),
-                        format_bytes(total(|interface| interface.received_total as f64) as u64),
-                    ),
-                    (
-                        L10N.tr("summary-sent"),
-                        format_bytes(total(|interface| interface.sent_total as f64) as u64),
-                    ),
+                    vec![
+                        Readout::keyed(
+                            "summary-received-rate",
+                            format_rate(total(|interface| interface.received_per_second)),
+                            Series::Primary,
+                        ),
+                        Readout::keyed(
+                            "summary-sent-rate",
+                            format_rate(total(|interface| interface.sent_per_second)),
+                            Series::Secondary,
+                        ),
+                    ],
+                    vec![
+                        Readout::new(
+                            "summary-received",
+                            format_bytes(total(|interface| interface.received_total as f64) as u64),
+                        ),
+                        Readout::new(
+                            "summary-sent",
+                            format_bytes(total(|interface| interface.sent_total as f64) as u64),
+                        ),
+                    ],
                 ]
             }
             Tab::Gpu => {
@@ -1409,17 +1584,18 @@ impl Monitor {
                     .filter_map(|process| process.gpu)
                     .filter(|used| used.percent > 0.0 || used.memory > 0)
                     .collect::<Vec<_>>();
-                vec![
-                    (
-                        L10N.tr("summary-gpu"),
+                vec![vec![
+                    Readout::keyed(
+                        "summary-gpu",
                         format!("{} %", format_percent(gpu_percent(snapshot))),
+                        Series::Primary,
                     ),
-                    (
-                        L10N.tr("summary-gpu-memory"),
+                    Readout::new(
+                        "summary-gpu-memory",
                         format_bytes(users.iter().map(|used| used.memory).sum()),
                     ),
-                    (L10N.tr("summary-gpu-processes"), users.len().to_string()),
-                ]
+                    Readout::new("summary-gpu-processes", users.len().to_string()),
+                ]]
             }
         }
     }
@@ -1460,7 +1636,7 @@ impl Monitor {
             .filter(|report| !report.history.is_empty())
     }
 
-    fn battery_readouts(&self) -> Vec<(String, String)> {
+    fn battery_readouts(&self) -> Vec<Readout> {
         let Some(report) = &self.power else {
             return Vec::new();
         };
@@ -1473,11 +1649,13 @@ impl Monitor {
             })
         };
         let time = match battery.power {
-            Power::Battery { remaining } => (L10N.tr("summary-time-remaining"), hours(remaining)),
-            Power::Charging { until_full } => {
-                (L10N.tr("summary-time-until-full"), hours(until_full))
+            Power::Battery { remaining } => {
+                Readout::new("summary-time-remaining", hours(remaining))
             }
-            Power::Full => (L10N.tr("summary-time-until-full"), MISSING.to_owned()),
+            Power::Charging { until_full } => {
+                Readout::new("summary-time-until-full", hours(until_full))
+            }
+            Power::Full => Readout::new("summary-time-until-full", MISSING.to_owned()),
         };
         let on_battery = match battery.power {
             Power::Battery { .. } => time_on_battery(&report.history, report.now)
@@ -1487,12 +1665,12 @@ impl Monitor {
             _ => MISSING.to_owned(),
         };
         vec![
-            (
-                L10N.tr("summary-remaining-charge"),
+            Readout::new(
+                "summary-remaining-charge",
                 format!("{:.0} %", battery.percent),
             ),
             time,
-            (L10N.tr("summary-time-on-battery"), on_battery),
+            Readout::new("summary-time-on-battery", on_battery),
         ]
     }
 }

@@ -45,6 +45,7 @@ pub struct Client {
 pub struct Discovered {
     pub principal: String,
     pub home: String,
+    pub addresses: Vec<String>,
     pub calendars: Vec<RemoteCalendar>,
 }
 
@@ -201,9 +202,34 @@ impl Client {
         if calendars.is_empty() {
             return Err(Error::NotFound(home));
         }
+        let addresses = self
+            .multistatus(
+                "PROPFIND",
+                &principal,
+                "0",
+                &xml::propfind(&["c:calendar-user-address-set"]),
+            )
+            .map(|(_, status)| {
+                status
+                    .entries
+                    .iter()
+                    .find_map(|entry| entry.prop(CALDAV, "calendar-user-address-set"))
+                    .map(|set| set.hrefs())
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|href| {
+                href.get(..7)
+                    .filter(|scheme| scheme.eq_ignore_ascii_case("mailto:"))
+                    .and_then(|_| href.get(7..))
+                    .map(str::to_owned)
+            })
+            .collect();
         Ok(Discovered {
             principal,
             home,
+            addresses,
             calendars,
         })
     }

@@ -188,10 +188,17 @@ fn hit_at(view: &CalendarView, point: Point) -> Option<Hit> {
 }
 
 fn writable(view: &CalendarView, found: &Found) -> bool {
-    view.library
-        .calendars
-        .get(found.calendar)
-        .is_some_and(|calendar| !calendar.info.read_only)
+    let invited = view.me(found.calendar).is_some_and(|me| {
+        view.library
+            .event(found)
+            .is_some_and(|event| crate::invite::my_answer(event, &me).is_some())
+    });
+    !invited
+        && view
+            .library
+            .calendars
+            .get(found.calendar)
+            .is_some_and(|calendar| !calendar.info.read_only)
 }
 
 fn over_controls(view: &CalendarView, point: Point) -> bool {
@@ -787,8 +794,24 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
                 view.ask_delete(found);
             }
         }
+        Signal::Answer(index) => {
+            if let Some(found) = view
+                .inspector
+                .as_ref()
+                .map(|inspector| inspector.found.clone())
+            {
+                view.close_inspector(true);
+                view.answer(&found, index);
+            }
+        }
         Signal::Choice(action) => choose(view, &action),
         Signal::SetupSubmit => submit_setup(view),
+        Signal::SetupKind(_) => {
+            if let Some(setup) = &mut view.setup {
+                let hint = setup.preset.hint();
+                setup.show_note(&mut view.ui, &hint);
+            }
+        }
         Signal::NameSubmit => view.submit_naming(),
         Signal::NameCancel => view.cancel_naming(),
         Signal::SetupCancel => {
@@ -811,10 +834,25 @@ fn submit_setup(view: &mut CalendarView) {
         return;
     }
     let password = setup.password.clone().unwrap_or_default();
+    if let Some(account) = setup.account.clone() {
+        if password.is_empty() {
+            return;
+        }
+        let user = setup.user.clone();
+        if let Some(setup) = view.setup.take() {
+            setup.close(&mut view.ui);
+        }
+        view.requests.push(Request::SetPassword {
+            account,
+            user,
+            password,
+        });
+        return;
+    }
     let request = match setup.kind {
         super::setup::Kind::CalDav if setup.user.is_empty() => None,
         super::setup::Kind::CalDav => Some(Request::AddAccount {
-            server: setup.server.clone(),
+            server: setup.server(),
             user: setup.user.clone(),
             password,
         }),

@@ -152,9 +152,9 @@ pub fn escape_regex(text: &str) -> String {
     escaped
 }
 
-fn config(shape: CursorShape) -> Config {
+fn config(shape: CursorShape, scrollback: usize) -> Config {
     Config {
-        scrolling_history: SCROLLBACK,
+        scrolling_history: scrollback,
         default_cursor_style: CursorStyle {
             shape,
             blinking: false,
@@ -181,14 +181,18 @@ pub struct Terminal {
     search: Option<Search>,
     urls: Option<RegexSearch>,
     shift: f32,
-    cursor_shape: CursorShape,
+    options: (CursorShape, usize),
 }
 
 impl Terminal {
     pub fn new(size: GridSize) -> Self {
         let events = Listener::default();
         Self {
-            term: Term::new(config(CursorShape::Block), &size, events.clone()),
+            term: Term::new(
+                config(CursorShape::Block, SCROLLBACK),
+                &size,
+                events.clone(),
+            ),
             parser: Processor::new(),
             events,
             size,
@@ -196,14 +200,14 @@ impl Terminal {
             search: None,
             urls: None,
             shift: 0.0,
-            cursor_shape: CursorShape::Block,
+            options: (CursorShape::Block, SCROLLBACK),
         }
     }
 
-    pub fn set_cursor_shape(&mut self, shape: CursorShape) {
-        if self.cursor_shape != shape {
-            self.cursor_shape = shape;
-            self.term.set_options(config(shape));
+    pub fn set_options(&mut self, shape: CursorShape, scrollback: usize) {
+        if self.options != (shape, scrollback) {
+            self.options = (shape, scrollback);
+            self.term.set_options(config(shape, scrollback));
         }
     }
 

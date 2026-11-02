@@ -9,8 +9,9 @@ use jiff::tz::TimeZone;
 
 use super::panel::{Arrow, Line, Panel, Width};
 use super::{L10N, Signal, Signals, sender};
-use crate::edit::{Alert, Details, EndRepeat, Repeat};
+use crate::edit::{Alert, Details, EndRepeat, Repeat, zone_name};
 use crate::ical::Event;
+use crate::invite::{Answer, Invitee, invitees, my_answer, parse_addresses};
 use crate::store::Found;
 
 const WIDTH: f32 = 320.0;
@@ -28,6 +29,8 @@ pub struct Inspector {
     texts: [String; 4],
     end_kind: usize,
     end_text: String,
+    invite_text: String,
+    zone_text: Option<String>,
     calendars: Vec<usize>,
     calendar_choice: usize,
     original_calendar: usize,
@@ -124,6 +127,63 @@ pub(crate) fn alert_title(alert: Alert) -> String {
     }
 }
 
+fn answer_title(answer: Answer) -> String {
+    L10N.tr(match answer {
+        Answer::Accepted => "answer-accept",
+        Answer::Tentative => "answer-maybe",
+        Answer::Declined => "answer-decline",
+        Answer::Pending => "answer-pending",
+    })
+}
+
+fn invitee_lines(panel: &mut Panel, invited: &[Invitee]) {
+    if invited.is_empty() {
+        return;
+    }
+    let text = invited
+        .iter()
+        .map(|invitee| {
+            let name = match invitee.name.is_empty() {
+                true => invitee.address.clone(),
+                false => invitee.name.clone(),
+            };
+            let status = match invitee.organizer {
+                true => L10N.tr("invitee-organizer"),
+                false => L10N.tr(match invitee.answer {
+                    Answer::Accepted => "invitee-accepted",
+                    Answer::Tentative => "invitee-tentative",
+                    Answer::Declined => "invitee-declined",
+                    Answer::Pending => "invitee-pending",
+                }),
+            };
+            format!("{name} · {status}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let shown = invited.len().min(8);
+    let label = panel.add(Label::new(&text));
+    panel.line(Line::new(
+        Some(&L10N.tr("invitees")),
+        vec![(label, Width::Fill)],
+        18.0 * shown as f32,
+    ));
+}
+
+fn header(panel: &mut Panel, details: &Details, texts: &[String; 4]) {
+    let title = panel.add(Label::heading(&details.summary));
+    panel.line(Line::new(None, vec![(title, Width::Fill)], 24.0));
+    if !details.location.is_empty() {
+        let location = panel.add(Label::new(&details.location));
+        panel.line(Line::new(None, vec![(location, Width::Fill)], 18.0));
+    }
+    let when = match details.all_day {
+        true => format!("{} – {}", texts[0], texts[2]),
+        false => format!("{} {} – {}", texts[0], texts[1], texts[3]),
+    };
+    let when = panel.add(Label::new(&when));
+    panel.line(Line::new(None, vec![(when, Width::Fill)], 18.0).separated());
+}
+
 fn end_of(end: EndRepeat) -> (usize, String) {
     match end {
         EndRepeat::Never => (0, String::new()),
@@ -132,10 +192,26 @@ fn end_of(end: EndRepeat) -> (usize, String) {
     }
 }
 
-fn details_of(found: &Found, event: &Event, local: &TimeZone) -> Details {
-    let start = found.occurrence.start.datetime();
-    let end = found.occurrence.end.datetime();
+pub struct Context<'a> {
+    pub local: &'a TimeZone,
+    pub me: Option<&'a [String]>,
+    pub time_zones: bool,
+}
+
+fn details_of(found: &Found, event: &Event, context: &Context) -> Details {
+    let local = context.local;
     let all_day = found.occurrence.all_day;
+    let time_zone = zone_name(&event.start).filter(|_| context.time_zones && !all_day);
+    let shown = match time_zone {
+        Some(_) => event.start.zone(local),
+        None => local.clone(),
+    };
+    let start = found
+        .occurrence
+        .start
+        .with_time_zone(shown.clone())
+        .datetime();
+    let end = found.occurrence.end.with_time_zone(shown).datetime();
     Details {
         summary: event.summary.clone(),
         location: event.location.clone(),
@@ -146,6 +222,8 @@ fn details_of(found: &Found, event: &Event, local: &TimeZone) -> Details {
         repeat: Repeat::of(event.rule.as_ref()),
         end_repeat: EndRepeat::of(event.rule.as_ref(), &event.start, local),
         alert: Alert::of(&event.alarms, all_day),
+        invitees: Vec::new(),
+        time_zone,
     }
 }
 
@@ -165,9 +243,22 @@ impl Inspector {
         read_only: bool,
         calendars: Vec<(usize, String)>,
         anchor: Option<Rect>,
-        local: &TimeZone,
+        context: &Context,
     ) -> (Panel, Self) {
-        let details = details_of(&found, event, local);
+        let me = context.me;
+        let invited = invitees(event);
+        let answered = me.and_then(|me| my_answer(event, me));
+        let organizing = me.is_some()
+            && invited.first().is_none_or(|first| {
+                first.organizer
+                    && me.is_some_and(|me| {
+                        me.iter()
+                            .any(|mine| first.address.eq_ignore_ascii_case(mine))
+                    })
+            });
+        let details = details_of(&found, event, context);
+        let zone_text = (context.time_zones && !details.all_day)
+            .then(|| details.time_zone.clone().unwrap_or_default());
         let (end_kind, end_text) = end_of(details.end_repeat);
         let last_day = match details.all_day {
             true => details
@@ -192,18 +283,7 @@ impl Inspector {
         let mut panel = Panel::new(None, WIDTH, LABEL_WIDTH);
         let mut title_field = None;
         if read_only {
-            let title = panel.add(Label::heading(&details.summary));
-            panel.line(Line::new(None, vec![(title, Width::Fill)], 24.0));
-            if !details.location.is_empty() {
-                let location = panel.add(Label::new(&details.location));
-                panel.line(Line::new(None, vec![(location, Width::Fill)], 18.0));
-            }
-            let when = match details.all_day {
-                true => format!("{} – {}", texts[0], texts[2]),
-                false => format!("{} {} – {}", texts[0], texts[1], texts[3]),
-            };
-            let when = panel.add(Label::new(&when));
-            panel.line(Line::new(None, vec![(when, Width::Fill)], 18.0).separated());
+            header(&mut panel, &details, &texts);
             if !details.notes.is_empty() {
                 let notes = panel.add(Label::new(&details.notes));
                 panel.line(Line::new(
@@ -212,101 +292,121 @@ impl Inspector {
                     18.0 * details.notes.lines().count().clamp(1, 6) as f32,
                 ));
             }
+            invitee_lines(&mut panel, &invited);
             let note = panel.add(Label::new(&L10N.tr("read-only")));
             panel.line(Line::new(None, vec![(note, Width::Fill)], 18.0).separated());
         } else {
-            let send = sender(signals);
-            let title = panel.add(
-                TextField::new(
-                    &L10N.tr("title-placeholder"),
-                    &details.summary,
-                    move |text| send(Signal::Title(text.to_owned())),
-                )
-                .in_place(17.0),
-            );
-            title_field = panel.id_of(title);
-            panel.line(Line::new(None, vec![(title, Width::Fill)], 28.0));
-            let send = sender(signals);
-            let location = panel.add(
-                TextField::new(
-                    &L10N.tr("location-placeholder"),
-                    &details.location,
-                    move |text| send(Signal::Location(text.to_owned())),
-                )
-                .borderless(13.0),
-            );
-            panel.line(Line::new(None, vec![(location, Width::Fill)], ROW));
-            let send = sender(signals);
-            let state = match details.all_day {
-                true => CheckState::On,
-                false => CheckState::Off,
-            };
-            let all_day = panel.add(Checkbox::new("", state, move |on| send(Signal::AllDay(on))));
-            panel.line(
-                Line::new(
-                    Some(&L10N.tr("all-day-label")),
-                    vec![(all_day, Width::Fixed(20.0))],
-                    ROW,
-                )
-                .separated(),
-            );
-            let field = |text: &str, signal: fn(String) -> Signal| {
+            if answered.is_some() {
+                header(&mut panel, &details, &texts);
+            } else {
                 let send = sender(signals);
-                TextField::new("", text, move |text| send(signal(text.to_owned())))
-            };
-            let start_date = panel.add(field(&texts[0], Signal::StartDate));
-            let start_time = panel.add(field(&texts[1], Signal::StartTime));
-            panel.line(Line::new(
-                Some(&L10N.tr("starts")),
-                vec![(start_date, Width::Fill), (start_time, Width::Fixed(64.0))],
-                ROW,
-            ));
-            let end_date = panel.add(field(&texts[2], Signal::EndDate));
-            let end_time = panel.add(field(&texts[3], Signal::EndTime));
-            panel.line(Line::new(
-                Some(&L10N.tr("ends")),
-                vec![(end_date, Width::Fill), (end_time, Width::Fixed(64.0))],
-                ROW,
-            ));
-            let send = sender(signals);
-            let titles: Vec<String> = repeats.iter().map(|repeat| repeat_title(*repeat)).collect();
-            let selected = repeats
-                .iter()
-                .position(|repeat| *repeat == details.repeat)
-                .unwrap_or(0);
-            let repeat = panel.add(PopUpButton::new(
-                &L10N.tr("repeat"),
-                &titles,
-                selected,
-                move |index| send(Signal::Repeat(index)),
-            ));
-            panel.line(Line::new(
-                Some(&L10N.tr("repeat")),
-                vec![(repeat, Width::Fill)],
-                ROW,
-            ));
-            let send = sender(signals);
-            let ends: Vec<String> = ["end-repeat-never", "end-repeat-after", "end-repeat-on"]
-                .iter()
-                .map(|message| L10N.tr(message))
-                .collect();
-            let end_choice = panel.add(PopUpButton::new(
-                &L10N.tr("end-repeat"),
-                &ends,
-                end_kind,
-                move |index| send(Signal::EndRepeatKind(index)),
-            ));
-            let send = sender(signals);
-            let end_field = panel.add(TextField::new(
-                &L10N.tr("end-repeat-placeholder"),
-                &end_text,
-                move |text| send(Signal::EndRepeatText(text.to_owned())),
-            ));
-            panel.line(Line::new(
-                Some(&L10N.tr("end-repeat")),
-                vec![(end_choice, Width::Fill), (end_field, Width::Fixed(96.0))],
-                ROW,
-            ));
+                let title = panel.add(
+                    TextField::new(
+                        &L10N.tr("title-placeholder"),
+                        &details.summary,
+                        move |text| send(Signal::Title(text.to_owned())),
+                    )
+                    .in_place(17.0),
+                );
+                title_field = panel.id_of(title);
+                panel.line(Line::new(None, vec![(title, Width::Fill)], 28.0));
+                let send = sender(signals);
+                let location = panel.add(
+                    TextField::new(
+                        &L10N.tr("location-placeholder"),
+                        &details.location,
+                        move |text| send(Signal::Location(text.to_owned())),
+                    )
+                    .borderless(13.0),
+                );
+                panel.line(Line::new(None, vec![(location, Width::Fill)], ROW));
+                let send = sender(signals);
+                let state = match details.all_day {
+                    true => CheckState::On,
+                    false => CheckState::Off,
+                };
+                let all_day =
+                    panel.add(Checkbox::new("", state, move |on| send(Signal::AllDay(on))));
+                panel.line(
+                    Line::new(
+                        Some(&L10N.tr("all-day-label")),
+                        vec![(all_day, Width::Fixed(20.0))],
+                        ROW,
+                    )
+                    .separated(),
+                );
+                let field = |text: &str, signal: fn(String) -> Signal| {
+                    let send = sender(signals);
+                    TextField::new("", text, move |text| send(signal(text.to_owned())))
+                };
+                let start_date = panel.add(field(&texts[0], Signal::StartDate));
+                let start_time = panel.add(field(&texts[1], Signal::StartTime));
+                panel.line(Line::new(
+                    Some(&L10N.tr("starts")),
+                    vec![(start_date, Width::Fill), (start_time, Width::Fixed(64.0))],
+                    ROW,
+                ));
+                let end_date = panel.add(field(&texts[2], Signal::EndDate));
+                let end_time = panel.add(field(&texts[3], Signal::EndTime));
+                panel.line(Line::new(
+                    Some(&L10N.tr("ends")),
+                    vec![(end_date, Width::Fill), (end_time, Width::Fixed(64.0))],
+                    ROW,
+                ));
+                if let Some(zone) = &zone_text {
+                    let send = sender(signals);
+                    let field = panel.add(TextField::new(
+                        &L10N.tr("time-zone-floating"),
+                        zone,
+                        move |text| send(Signal::TimeZone(text.to_owned())),
+                    ));
+                    panel.line(Line::new(
+                        Some(&L10N.tr("time-zone")),
+                        vec![(field, Width::Fill)],
+                        ROW,
+                    ));
+                }
+                let send = sender(signals);
+                let titles: Vec<String> =
+                    repeats.iter().map(|repeat| repeat_title(*repeat)).collect();
+                let selected = repeats
+                    .iter()
+                    .position(|repeat| *repeat == details.repeat)
+                    .unwrap_or(0);
+                let repeat = panel.add(PopUpButton::new(
+                    &L10N.tr("repeat"),
+                    &titles,
+                    selected,
+                    move |index| send(Signal::Repeat(index)),
+                ));
+                panel.line(Line::new(
+                    Some(&L10N.tr("repeat")),
+                    vec![(repeat, Width::Fill)],
+                    ROW,
+                ));
+                let send = sender(signals);
+                let ends: Vec<String> = ["end-repeat-never", "end-repeat-after", "end-repeat-on"]
+                    .iter()
+                    .map(|message| L10N.tr(message))
+                    .collect();
+                let end_choice = panel.add(PopUpButton::new(
+                    &L10N.tr("end-repeat"),
+                    &ends,
+                    end_kind,
+                    move |index| send(Signal::EndRepeatKind(index)),
+                ));
+                let send = sender(signals);
+                let end_field = panel.add(TextField::new(
+                    &L10N.tr("end-repeat-placeholder"),
+                    &end_text,
+                    move |text| send(Signal::EndRepeatText(text.to_owned())),
+                ));
+                panel.line(Line::new(
+                    Some(&L10N.tr("end-repeat")),
+                    vec![(end_choice, Width::Fill), (end_field, Width::Fixed(96.0))],
+                    ROW,
+                ));
+            }
             let send = sender(signals);
             let titles: Vec<String> = alerts.iter().map(|alert| alert_title(*alert)).collect();
             let selected = alerts
@@ -324,6 +424,35 @@ impl Inspector {
                 vec![(alert, Width::Fill)],
                 ROW,
             ));
+            invitee_lines(&mut panel, &invited);
+            if let Some(answered) = answered {
+                let buttons: Vec<_> = Answer::CHOICES
+                    .iter()
+                    .enumerate()
+                    .map(|(index, choice)| {
+                        let send = sender(signals);
+                        let button = Button::new(&answer_title(*choice), move || {
+                            send(Signal::Answer(index))
+                        });
+                        let button = match *choice == answered {
+                            true => button.primary(),
+                            false => button,
+                        };
+                        (panel.add(button), Width::Fill)
+                    })
+                    .collect();
+                panel.line(Line::new(Some(&L10N.tr("my-answer")), buttons, ROW));
+            } else if organizing {
+                let send = sender(signals);
+                let field = panel.add(TextField::new(&L10N.tr("add-invitees"), "", move |text| {
+                    send(Signal::Invitees(text.to_owned()))
+                }));
+                panel.line(Line::new(
+                    Some(&L10N.tr("invitees")),
+                    vec![(field, Width::Fill)],
+                    ROW,
+                ));
+            }
             let send = sender(signals);
             let names: Vec<&str> = calendars.iter().map(|(_, name)| name.as_str()).collect();
             let selected = calendars
@@ -374,6 +503,8 @@ impl Inspector {
             texts,
             end_kind,
             end_text,
+            invite_text: String::new(),
+            zone_text,
             calendars: calendars.into_iter().map(|(index, _)| index).collect(),
             calendar_choice: selected,
             repeats,
@@ -441,6 +572,8 @@ impl Inspector {
             Signal::Calendar(index) => self.calendar_choice = *index,
             Signal::EndRepeatKind(index) => self.end_kind = *index,
             Signal::EndRepeatText(text) => self.end_text = text.clone(),
+            Signal::Invitees(text) => self.invite_text = text.clone(),
+            Signal::TimeZone(text) => self.zone_text = Some(text.trim().to_owned()),
             _ => {}
         }
     }
@@ -498,6 +631,11 @@ impl Inspector {
             start,
             end,
             end_repeat,
+            invitees: parse_addresses(&self.invite_text),
+            time_zone: match self.zone_text.as_deref() {
+                Some("") | None => self.original.time_zone.clone(),
+                Some(name) => Some(name.to_owned()),
+            },
             ..self.details.clone()
         };
         (details != self.original || self.calendar_choice != self.original_calendar)

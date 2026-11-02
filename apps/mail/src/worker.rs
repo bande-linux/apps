@@ -464,11 +464,22 @@ impl Runner {
             MailboxChange::Rename(from, to) => session.rename(from, to),
             MailboxChange::Delete(path) => session.delete(path),
         };
+        let account = self.account.id;
         match changed {
             Err(Error::Refused(text)) => self.emit(Event::MailboxRefused(text)),
-            other => other?,
+            Err(error) => return Err(error),
+            Ok(()) => {
+                if let MailboxChange::Rename(from, to) = change {
+                    let delimiter = self
+                        .store
+                        .mailboxes(account)?
+                        .into_iter()
+                        .find(|mailbox| mailbox.path == *from)
+                        .and_then(|mailbox| mailbox.delimiter);
+                    self.store.rename_mailbox(account, from, to, delimiter)?;
+                }
+            }
         }
-        let account = self.account.id;
         let (session, store) = self.connected()?;
         sync_folders(session, store, account)?;
         self.emit(Event::Changed(account));

@@ -3,18 +3,20 @@ use std::rc::Rc;
 
 use accesskit::{Node, Role};
 use bande_toolkit::ui::{
-    Context, Form, FormLine, PopUpButton, ScrollView, SegmentedControl, Size, Stepper, Toggle, Ui,
-    Widget, WidgetId,
+    Context, Form, FormLine, PopUpButton, ScrollView, SegmentedControl, Size, Stepper, TextField,
+    Toggle, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
     Appearance, Item, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle, TextSystem,
 };
 
 use crate::L10N;
-use crate::settings::{CursorStyle, FONT_SIZES, Settings};
+use crate::settings::{
+    CloseAsk, CursorStyle, FONT_SIZES, NewTabFolder, SCROLLBACK_CHOICES, Settings,
+};
 use crate::theme::{Profile, Theme, ansi_colors};
 
-pub const SETTINGS_SIZE: (u32, u32) = (500, 480);
+pub const SETTINGS_SIZE: (u32, u32) = (520, 600);
 const PREVIEW: f32 = 76.0;
 const SWATCH: f32 = 14.0;
 const SWATCH_GAP: f32 = 4.0;
@@ -107,8 +109,30 @@ fn toggle(
     Toggle::new(label, on, move |on| set(&mut settings.borrow_mut(), on))
 }
 
+fn pop_up<T: Copy + PartialEq + 'static>(
+    settings: &SharedSettings,
+    label: &str,
+    choices: &[T],
+    title: impl Fn(T) -> String,
+    current: T,
+    set: fn(&mut Settings, T),
+) -> PopUpButton {
+    let titles: Vec<String> = choices.iter().map(|choice| title(*choice)).collect();
+    let chosen = choices
+        .iter()
+        .position(|choice| *choice == current)
+        .unwrap_or_default();
+    let shared = settings.clone();
+    let choices = choices.to_vec();
+    PopUpButton::new(label, &titles, chosen, move |index| {
+        if let Some(choice) = choices.get(index) {
+            set(&mut shared.borrow_mut(), *choice);
+        }
+    })
+}
+
 fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
-    let current = *settings.borrow();
+    let current = settings.borrow().clone();
     let profiles: Vec<String> = Profile::ALL
         .iter()
         .map(|profile| L10N.tr(profile.message()))
@@ -171,6 +195,54 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
         current.notify_finished,
         |settings, on| settings.notify_finished = on,
     );
+    let blink = toggle(
+        settings,
+        &L10N.tr("settings-blink"),
+        current.blink,
+        |settings, on| settings.blink = on,
+    );
+    let shared = settings.clone();
+    let shell = TextField::new(
+        &L10N.tr("settings-shell-placeholder"),
+        &current.shell,
+        move |text| shared.borrow_mut().shell = text.to_owned(),
+    );
+    let folder = pop_up(
+        settings,
+        &L10N.tr("settings-new-tabs"),
+        &NewTabFolder::ALL,
+        |folder| L10N.tr(folder.message()),
+        current.new_tab_folder,
+        |settings, folder| settings.new_tab_folder = folder,
+    );
+    let close = pop_up(
+        settings,
+        &L10N.tr("settings-close-ask"),
+        &CloseAsk::ALL,
+        |ask| L10N.tr(ask.message()),
+        current.close_ask,
+        |settings, ask| settings.close_ask = ask,
+    );
+    let scrollback = pop_up(
+        settings,
+        &L10N.tr("settings-scrollback"),
+        &SCROLLBACK_CHOICES,
+        |lines| L10N.tr_args("settings-lines", [("count", lines.into())]),
+        current.scrollback,
+        |settings, lines| settings.scrollback = lines,
+    );
+    let meta = toggle(
+        settings,
+        &L10N.tr("settings-alt-as-meta"),
+        current.alt_as_meta,
+        |settings, on| settings.alt_as_meta = on,
+    );
+    let paste = toggle(
+        settings,
+        &L10N.tr("settings-paste-warning"),
+        current.paste_warning,
+        |settings, on| settings.paste_warning = on,
+    );
     let heading = |message: &str| FormLine::Heading(L10N.tr(message));
     let row = |message: &str, control: Box<dyn Widget>| FormLine::Row(L10N.tr(message), control);
     Form::new(
@@ -186,6 +258,15 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
             })),
             row("settings-font-size", Box::new(size)),
             row("settings-cursor", Box::new(cursor)),
+            row("settings-blink", Box::new(blink)),
+            heading("settings-shell"),
+            row("settings-shell-command", Box::new(shell)),
+            row("settings-new-tabs", Box::new(folder)),
+            row("settings-close-ask", Box::new(close)),
+            heading("settings-input"),
+            row("settings-alt-as-meta", Box::new(meta)),
+            row("settings-paste-warning", Box::new(paste)),
+            row("settings-scrollback", Box::new(scrollback)),
             heading("settings-bell"),
             row("settings-flash", Box::new(flash)),
             row("settings-badge", Box::new(badge)),

@@ -108,6 +108,7 @@ struct CalendarApp {
     alarm: WallAlarm,
     changes: Inbox<Change>,
     chosen: Inbox<Chosen>,
+    online: Inbox<()>,
     settings: CalendarSettings,
     settings_watch: Option<SettingsWatch>,
     zone: TimeZone,
@@ -115,6 +116,7 @@ struct CalendarApp {
     next_push: Option<Instant>,
     synced: Option<Timestamp>,
     retry: HashMap<String, Timestamp>,
+    asked: HashSet<String>,
     next_clock: Option<Timestamp>,
     alert_at: Timestamp,
     alerts_checked: Timestamp,
@@ -413,6 +415,7 @@ impl CalendarApp {
                 server,
                 user,
                 home: found.home,
+                addresses: found.addresses,
             },
         };
         view.library_mut().add_account(account, calendars);
@@ -513,6 +516,11 @@ impl CalendarApp {
                         None => tracing::warn!("{calendar} did not answer with a calendar"),
                     }
                 }
+                Reply::SignInFailed { account } => {
+                    if self.asked.insert(account.clone()) {
+                        view.ask_password(&account);
+                    }
+                }
                 Reply::Failed { calendar, error } => {
                     let name = Self::calendar_name(view, &calendar);
                     tracing::warn!("cannot sync {name}: {error}");
@@ -599,6 +607,19 @@ impl CalendarApp {
                 }
                 Request::Refresh => self.sync(view, Refresh::All),
                 Request::Import => choose(self.chosen.outbox(), None),
+                Request::SetPassword {
+                    account,
+                    user,
+                    password,
+                } => {
+                    self.asked.remove(&account);
+                    self.worker.send(Job::SetPassword {
+                        account,
+                        user,
+                        password,
+                    });
+                    self.push_soon(Duration::ZERO);
+                }
                 Request::Export { name, data } => choose(self.chosen.outbox(), Some((name, data))),
                 Request::Collection {
                     account,
@@ -754,6 +775,7 @@ impl CalendarApp {
         self.with_view(cx, |_, view| match &change {
             Change::AddAccount => view.open_account_setup(),
             Change::RemoveAccount(id) => view.ask_remove_account(id),
+            Change::Password(id) => view.ask_password(id),
         });
     }
 
@@ -815,6 +837,8 @@ impl Program for CalendarApp {
         let worker = Worker::start()?;
         let changes = Inbox::new()?;
         listen(changes.outbox());
+        let online = Inbox::new()?;
+        bande_calendar::online::watch(online.outbox());
         let settings_watch = settings_folder()
             .as_deref()
             .and_then(|folder| SettingsWatch::start(folder, CalendarSettings::FILE));
@@ -826,6 +850,7 @@ impl Program for CalendarApp {
             alarm: WallAlarm::new()?,
             changes,
             chosen: Inbox::new()?,
+            online,
             settings,
             settings_watch,
             zone,
@@ -833,6 +858,7 @@ impl Program for CalendarApp {
             next_push: Some(Instant::now()),
             synced: None,
             retry: HashMap::new(),
+            asked: HashSet::new(),
             next_clock: Some(next_minute()),
             alert_at: Timestamp::now(),
             alerts_checked: Timestamp::now(),
@@ -905,6 +931,7 @@ impl Program for CalendarApp {
             self.alarm.fd(),
             self.changes.fd(),
             self.chosen.fd(),
+            self.online.fd(),
         ]
         .into_iter()
         .chain(self.settings_watch.iter().map(SettingsWatch::fd))
@@ -938,6 +965,11 @@ impl Program for CalendarApp {
                         Chosen::Failed(error) => view.set_status(Some(error)),
                     });
                 }
+            }
+            4 => {
+                self.online.drain();
+                self.retry.clear();
+                self.push_soon(Duration::ZERO);
             }
             _ => self.follow_settings(cx),
         }

@@ -80,6 +80,11 @@ pub enum Request {
     Changed,
     Refresh,
     Import,
+    SetPassword {
+        account: String,
+        user: String,
+        password: String,
+    },
     Export {
         name: String,
         data: String,
@@ -104,6 +109,9 @@ pub(crate) enum Signal {
     EndTime(String),
     Repeat(usize),
     EndRepeatKind(usize),
+    Invitees(String),
+    TimeZone(String),
+    Answer(usize),
     EndRepeatText(String),
     Alert(usize),
     Calendar(usize),
@@ -622,6 +630,30 @@ impl CalendarView {
         });
     }
 
+    pub fn ask_password(&mut self, account: &str) {
+        if self.setup.is_some() {
+            return;
+        }
+        let Some((name, user)) =
+            self.library
+                .account(account)
+                .and_then(|known| match &known.kind {
+                    AccountKind::CalDav { user, .. } => Some((known.name.clone(), user.clone())),
+                    _ => None,
+                })
+        else {
+            return;
+        };
+        self.close_inspector(true);
+        let (panel, setup) = setup::Setup::sign_in(&self.signals, account, &name, &user);
+        let field = setup.password_field();
+        self.setup = Some(setup);
+        self.ui.present_sheet(panel);
+        if let Some(field) = field {
+            self.ui.set_focus(field);
+        }
+    }
+
     pub fn open_account_setup(&mut self) {
         self.close_inspector(true);
         let (panel, setup) = setup::Setup::build(&self.signals);
@@ -926,7 +958,7 @@ impl CalendarView {
         let Some(object) = self.library.object(found.calendar, found.object) else {
             return;
         };
-        let moved = crate::edit::reschedule(
+        let mut moved = crate::edit::reschedule(
             object,
             found.occurrence.event,
             found.occurrence.key,
@@ -936,6 +968,9 @@ impl CalendarView {
             scope,
             &self.zone,
         );
+        if let Some(me) = self.me(found.calendar) {
+            crate::invite::revise(&mut moved, &me);
+        }
         self.library.put_object(found.calendar, moved);
         self.requests.push(Request::Changed);
     }
@@ -958,6 +993,13 @@ impl CalendarView {
             scope,
             &self.zone,
         );
+        let mut edited = edited;
+        if let Some(me) = self.me(found.calendar) {
+            crate::invite::revise(&mut edited, &me);
+            if let Some(master) = edited.master_mut() {
+                crate::invite::invite(master, &me, &details.invitees);
+            }
+        }
         let uid = edited.uid().to_owned();
         let target = calendar.filter(|target| *target != found.calendar);
         let Some(index) = self.library.put_object(found.calendar, edited) else {
@@ -974,6 +1016,32 @@ impl CalendarView {
             uid,
             key: found.occurrence.key,
         });
+        self.requests.push(Request::Changed);
+    }
+
+    pub(crate) fn me(&self, calendar: usize) -> Option<Vec<String>> {
+        let info = &self.library.calendars.get(calendar)?.info;
+        match &self.library.account(&info.account)?.kind {
+            AccountKind::CalDav { addresses, .. } if !addresses.is_empty() => {
+                Some(addresses.clone())
+            }
+            AccountKind::CalDav { user, .. } if user.contains('@') => Some(vec![user.clone()]),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn answer(&mut self, found: &Found, index: usize) {
+        let (Some(me), Some(answer)) = (
+            self.me(found.calendar),
+            crate::invite::Answer::CHOICES.get(index),
+        ) else {
+            return;
+        };
+        let Some(object) = self.library.object(found.calendar, found.object) else {
+            return;
+        };
+        let answered = crate::invite::answer(object, &me, *answer);
+        self.library.put_object(found.calendar, answered);
         self.requests.push(Request::Changed);
     }
 
@@ -1007,6 +1075,7 @@ impl CalendarView {
             .iter()
             .find(|(_, hit)| matches!(hit, Hit::Event(index, Part::Body) if self.shown.get(*index) == Some(&found)))
             .map(|(rect, _)| *rect);
+        let me = self.me(found.calendar);
         let (panel, inspector) = inspector::Inspector::build(
             &self.signals,
             found,
@@ -1014,7 +1083,11 @@ impl CalendarView {
             read_only,
             calendars,
             anchor,
-            &self.zone,
+            &inspector::Context {
+                local: &self.zone,
+                me: me.as_deref(),
+                time_zones: self.settings.time_zones,
+            },
         );
         if let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) {
             host.insert(panel, Rect::default());

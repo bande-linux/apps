@@ -237,6 +237,82 @@ pub struct Details {
     pub repeat: Repeat,
     pub end_repeat: EndRepeat,
     pub alert: Alert,
+    pub invitees: Vec<String>,
+    pub time_zone: Option<String>,
+}
+
+pub fn zone_name(moment: &Moment) -> Option<String> {
+    match moment {
+        Moment::Zoned {
+            tzid: Some(tzid), ..
+        } => Some(tzid.clone()),
+        Moment::Zoned { tzid: None, .. } => Some("UTC".to_owned()),
+        _ => None,
+    }
+}
+
+fn in_zone(at: jiff::Zoned, name: &str) -> Moment {
+    match name {
+        "UTC" => Moment::utc(at.timestamp()),
+        _ => Moment::Zoned {
+            at,
+            tzid: Some(name.to_owned()),
+        },
+    }
+}
+
+fn keep_wall(moment: &Moment, zone: &TimeZone, name: &str) -> Moment {
+    let wall = match moment {
+        Moment::Date(_) => return moment.clone(),
+        Moment::Floating(wall) => *wall,
+        Moment::Zoned { at, .. } => at.datetime(),
+    };
+    zone.to_ambiguous_zoned(wall)
+        .compatible()
+        .map_or_else(|_| moment.clone(), |at| in_zone(at, name))
+}
+
+fn keep_instant(moment: &Moment, zone: &TimeZone, name: &str) -> Moment {
+    match moment {
+        Moment::Zoned { at, .. } => in_zone(at.with_time_zone(zone.clone()), name),
+        other => keep_wall(other, zone, name),
+    }
+}
+
+fn rezone(
+    object: &mut CalendarObject,
+    target: usize,
+    name: &str,
+    zone: &TimeZone,
+    local: &TimeZone,
+) {
+    for (index, event) in object.events.iter_mut().enumerate() {
+        let old = event.start.zone(local);
+        let edge = match index == target {
+            true => keep_instant,
+            false => keep_wall,
+        };
+        event.start = edge(&event.start, zone, name);
+        event.end = edge(&event.end, zone, name);
+        for moment in event
+            .exdates
+            .iter_mut()
+            .chain(event.rdates.iter_mut())
+            .chain(event.recurrence_id.iter_mut())
+        {
+            *moment = keep_wall(moment, zone, name);
+        }
+        if let Some(rule) = event.rule.as_mut()
+            && let Some(Moment::Zoned { at, .. }) = &rule.until
+        {
+            let wall = at.with_time_zone(old.clone()).datetime();
+            rule.until = zone
+                .to_ambiguous_zoned(wall)
+                .compatible()
+                .ok()
+                .map(|at| Moment::utc(at.timestamp()));
+        }
+    }
 }
 
 pub fn moment_of(key: InstanceKey, like: &Moment) -> Moment {
@@ -417,6 +493,18 @@ pub fn apply_details(
     scope: Scope,
     local: &TimeZone,
 ) -> CalendarObject {
+    let shown = object.events.get(event_index).map(|event| &event.start);
+    let current = shown.and_then(zone_name);
+    let shown_zone = shown.map_or_else(|| local.clone(), |start| start.zone(local));
+    let (edit_zone, moved) = match (details.time_zone.as_deref(), current) {
+        (Some(name), Some(current)) if name == current => (shown_zone, None),
+        (Some(name), _) if !details.all_day => match TimeZone::get(name) {
+            Ok(zone) => (zone.clone(), Some((name.to_owned(), zone))),
+            Err(_) => (shown_zone, None),
+        },
+        (Some(_), _) => (shown_zone, None),
+        (None, _) => (local.clone(), None),
+    };
     let mut object = reschedule(
         object,
         event_index,
@@ -425,7 +513,7 @@ pub fn apply_details(
         details.end,
         details.all_day,
         scope,
-        local,
+        &edit_zone,
     );
     let editing_override = object
         .events
@@ -457,6 +545,9 @@ pub fn apply_details(
                 details.end_repeat.apply(rule, &start, local);
             }
         }
+    }
+    if let Some((name, zone)) = moved {
+        rezone(&mut object, target, &name, &zone, local);
     }
     object
 }

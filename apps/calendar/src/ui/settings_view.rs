@@ -6,7 +6,8 @@ use bande_app::View;
 use bande_app_settings::{SettingsWatch, SettingsWindow, Shared, settings_folder};
 use bande_datetime::DateFormats;
 use bande_toolkit::ui::{
-    Button, Context, Form, FormLine, Label, PopUpButton, ScrollView, Toggle, Ui, Widget,
+    Axis, Button, Context, Form, FormLine, Label, PopUpButton, ScrollView, Stack, Toggle, Ui,
+    Widget,
 };
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 use jiff::civil::{Date, Time};
@@ -176,6 +177,22 @@ fn general(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormLi
     ]
 }
 
+fn advanced(settings: &Shared<CalendarSettings>) -> Vec<FormLine> {
+    let shared = settings.clone();
+    let time_zones = Toggle::new(
+        &L10N.tr("settings-time-zones"),
+        settings.borrow().time_zones,
+        move |on| shared.borrow_mut().time_zones = on,
+    );
+    vec![
+        FormLine::Heading(L10N.tr("settings-advanced")),
+        FormLine::Row(L10N.tr("settings-time-zones"), Box::new(time_zones)),
+        FormLine::Wide(Box::new(
+            Label::new(&L10N.tr("settings-time-zones-note")).secondary(),
+        )),
+    ]
+}
+
 fn alerts(settings: &Shared<CalendarSettings>) -> Vec<FormLine> {
     let current = settings.borrow().clone();
     let choices = |all: &[Alert]| -> Vec<(Alert, String)> {
@@ -239,6 +256,15 @@ fn accounts(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormL
         ),
     ];
     for account in &summary.accounts {
+        let password = match &account.kind {
+            AccountKind::CalDav { .. } => {
+                let id = account.id.clone();
+                Some(Button::new(&L10N.tr("change-password"), move || {
+                    announce(Change::Password(id.clone()))
+                }))
+            }
+            _ => None,
+        };
         let kind = match &account.kind {
             AccountKind::Local => continue,
             AccountKind::CalDav { server, .. } => {
@@ -253,7 +279,15 @@ fn accounts(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormL
             announce(Change::RemoveAccount(id.clone()))
         })
         .tooltip(&kind);
-        lines.push(FormLine::Row(account.name.clone(), Box::new(remove)));
+        let buttons: Vec<Box<dyn Widget>> = password
+            .into_iter()
+            .map(|button| Box::new(button) as Box<dyn Widget>)
+            .chain([Box::new(remove) as Box<dyn Widget>])
+            .collect();
+        lines.push(FormLine::Row(
+            account.name.clone(),
+            Box::new(Stack::new(Axis::Horizontal, 8.0, 0.0, buttons).trailing()),
+        ));
     }
     let add = Button::new(&L10N.tr("add-account"), || announce(Change::AddAccount));
     lines.push(FormLine::Row(String::new(), Box::new(add)));
@@ -268,6 +302,7 @@ fn settings_form(appearance: Appearance, settings: &Shared<CalendarSettings>) ->
     let mut lines = general(settings, &summary);
     lines.extend(alerts(settings));
     lines.extend(accounts(settings, &summary));
+    lines.extend(advanced(settings));
     let form = Form::new(&L10N.tr("settings-title"), lines);
     let mut ui = Ui::new(
         Box::new(ScrollView::new(form)),
