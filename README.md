@@ -23,6 +23,7 @@ apt install bande-<name>
 | Calculator | `bande-calculator` (Basic, Scientific and Programmer, paper tape, RPN) |
 | Preview | `bande-preview` (images; the default image viewer) |
 | Clock | `bande-clock` (alarms, timers, a stopwatch and a world clock; rings with its window closed) |
+| TextEdit | `bande-textedit` (plain text in any encoding; the desktop maps `text/plain` to it) |
 
 Every app is a `bande-app` app: like on macOS, it keeps running after its last window closes and
 reopens a window when activated, until Quit (Ctrl+Q). Without a window its menus stay full:

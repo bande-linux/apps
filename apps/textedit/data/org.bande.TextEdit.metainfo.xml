@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.TextEdit</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>TextEdit</name>
+  <summary>Write and edit text documents</summary>
+  <description>
+    <p>A simple editor for text documents, in the spirit of macOS TextEdit.</p>
+    <ul>
+      <li>Opens plain text in any common encoding and keeps its line endings</li>
+      <li>Find and replace, with regular expressions</li>
+      <li>Documents are saved automatically and come back after a crash or quit</li>
+      <li>Opens large log files without stalling</li>
+    </ul>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.TextEdit.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+  <provides>
+    <mediatype>text/plain</mediatype>
+  </provides>
+</component>
