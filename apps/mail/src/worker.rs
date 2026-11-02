@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::compose::{Draft, Outgoing, build, forget_unsent};
+use crate::compose::{Draft, Original, Outgoing, build, build_kept, forget_unsent};
 use crate::error::{Error, Result};
 use crate::imap::{Flag, Role, Session};
 use crate::net::{Closer, Network};
@@ -450,7 +450,7 @@ impl Runner {
             Command::Mailbox(change) => self.change_mailbox(change),
             Command::Send(outgoing) => self.send(outgoing),
             Command::SaveDraft(outgoing) => {
-                self.save_draft(&outgoing.draft, outgoing.replaces)?;
+                self.save_draft(&outgoing.draft, outgoing.replaces.as_ref())?;
                 forget_unsent(outgoing);
                 Ok(())
             }
@@ -585,9 +585,16 @@ impl Runner {
         Ok(())
     }
 
-    fn replace_draft(&mut self, replaces: Option<MessageId>) -> Result<()> {
-        if let Some(old) = replaces {
-            self.store.expunge(&[old])?;
+    fn still(&self, original: &Original) -> Result<bool> {
+        Ok(original.message_id.is_empty()
+            || self.store.message_id(original.id)?.as_ref() == Some(&original.message_id))
+    }
+
+    fn replace_draft(&mut self, replaces: Option<&Original>) -> Result<()> {
+        if let Some(old) = replaces
+            && self.still(old)?
+        {
+            self.store.expunge(&[old.id])?;
             self.flush()?;
         }
         if let Some(drafts) = self
@@ -600,7 +607,7 @@ impl Runner {
         Ok(())
     }
 
-    fn save_draft(&mut self, draft: &Draft, replaces: Option<MessageId>) -> Result<()> {
+    fn save_draft(&mut self, draft: &Draft, replaces: Option<&Original>) -> Result<()> {
         let Some(drafts) = self
             .store
             .mailbox_with_role(self.account.id, Role::Drafts)?
@@ -609,7 +616,7 @@ impl Runner {
                 "the account has no Drafts mailbox".to_owned(),
             ));
         };
-        let raw = build(draft, &jiff::Zoned::now());
+        let raw = build_kept(draft, &jiff::Zoned::now());
         let session = self.session()?;
         session.append(&drafts.path, &[Flag::Seen, Flag::Draft], &raw)?;
         self.replace_draft(replaces)
@@ -622,7 +629,7 @@ impl Runner {
             replaces,
             ..
         } = outgoing;
-        let (answering, replaces) = (*answering, *replaces);
+        let (answering, replaces) = (answering.as_ref(), replaces.as_ref());
         let raw = build(draft, &jiff::Zoned::now());
         let recipients = draft.recipients();
         let password = self.password()?;
@@ -655,8 +662,8 @@ impl Runner {
     fn file_sent(
         &mut self,
         raw: &[u8],
-        answering: Option<MessageId>,
-        replaces: Option<MessageId>,
+        answering: Option<&Original>,
+        replaces: Option<&Original>,
     ) -> Result<()> {
         let sent = self.store.mailbox_with_role(self.account.id, Role::Sent)?;
         if let Some(sent) = sent.filter(|_| !saves_sent_mail(&self.account.imap.host)) {
@@ -666,8 +673,10 @@ impl Runner {
                 Ok(()) => {}
             }
         }
-        if let Some(original) = answering {
-            self.store.set_flag(&[original], Flag::Answered, true)?;
+        if let Some(original) = answering
+            && self.still(original)?
+        {
+            self.store.set_flag(&[original.id], Flag::Answered, true)?;
             self.flush()?;
         }
         if let Some(sent) = self.store.mailbox_with_role(self.account.id, Role::Sent)? {

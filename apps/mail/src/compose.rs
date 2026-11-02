@@ -1,10 +1,11 @@
 use std::hash::{BuildHasher, RandomState};
 use std::io::{self, Write};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use data_encoding::BASE64;
 use jiff::Zoned;
+use mailparse::MailHeaderMap;
 
 use crate::message::{Address, Attachment, Content, parse_addresses};
 use crate::store::MessageId;
@@ -25,13 +26,41 @@ pub struct Draft {
     pub attachments: Vec<Attachment>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Original {
+    pub id: MessageId,
+    pub message_id: String,
+}
+
+impl Original {
+    fn header(&self, name: &str) -> String {
+        format!(
+            "{name}: {} {}\r\n",
+            self.id,
+            sanitized_header_text(&self.message_id)
+        )
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        let value = value.trim();
+        let (id, message_id) = value.split_once(' ').unwrap_or((value, ""));
+        Some(Self {
+            id: id.parse().ok()?,
+            message_id: message_id.trim().to_owned(),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Outgoing {
     pub draft: Draft,
-    pub answering: Option<MessageId>,
-    pub replaces: Option<MessageId>,
+    pub answering: Option<Original>,
+    pub replaces: Option<Original>,
     pub unsent: Option<PathBuf>,
 }
+
+const ANSWERING: &str = "X-Bande-Answering";
+const REPLACES: &str = "X-Bande-Replaces";
 
 impl Draft {
     pub fn recipients(&self) -> Vec<String> {
@@ -135,7 +164,10 @@ pub fn unsent_folder() -> Option<PathBuf> {
     bande_xdg::data_home().map(|data| data.join("bande-mail/unsent"))
 }
 
-pub fn keep_unsent(path: &Path, draft: &Draft) -> io::Result<()> {
+pub fn keep_unsent(outgoing: &Outgoing) -> io::Result<()> {
+    let Some(path) = &outgoing.unsent else {
+        return Ok(());
+    };
     if let Some(folder) = path.parent() {
         std::fs::DirBuilder::new()
             .recursive(true)
@@ -149,7 +181,21 @@ pub fn keep_unsent(path: &Path, draft: &Draft) -> io::Result<()> {
         .truncate(true)
         .mode(0o600)
         .open(&staging)?;
-    file.write_all(&build(draft, &Zoned::now()))?;
+    let mut metadata = String::new();
+    metadata.extend(
+        outgoing
+            .answering
+            .as_ref()
+            .map(|original| original.header(ANSWERING)),
+    );
+    metadata.extend(
+        outgoing
+            .replaces
+            .as_ref()
+            .map(|original| original.header(REPLACES)),
+    );
+    file.write_all(metadata.as_bytes())?;
+    file.write_all(&build_kept(&outgoing.draft, &Zoned::now()))?;
     file.sync_all()?;
     std::fs::rename(&staging, path)?;
     match path.parent() {
@@ -167,20 +213,31 @@ pub fn forget_unsent(outgoing: &Outgoing) {
     }
 }
 
-fn recovered(raw: &[u8]) -> Draft {
+fn recovered(raw: &[u8], unsent: PathBuf) -> Outgoing {
+    let original = |name: &str| {
+        mailparse::parse_headers(raw)
+            .ok()
+            .and_then(|(headers, _)| headers.get_first_value(name))
+            .and_then(|value| Original::parse(&value))
+    };
     let content = Content::parse(raw);
     let body = content.text().replace("\r\n", "\n");
     let envelope = content.envelope;
-    Draft {
-        from: envelope.from.into_iter().next().unwrap_or_default(),
-        to: envelope.to,
-        cc: envelope.cc,
-        bcc: Vec::new(),
-        subject: envelope.subject,
-        body,
-        in_reply_to: envelope.references.last().cloned(),
-        references: envelope.references,
-        attachments: content.attachments,
+    Outgoing {
+        draft: Draft {
+            from: envelope.from.into_iter().next().unwrap_or_default(),
+            to: envelope.to,
+            cc: envelope.cc,
+            bcc: envelope.bcc,
+            subject: envelope.subject,
+            body,
+            in_reply_to: envelope.references.last().cloned(),
+            references: envelope.references,
+            attachments: content.attachments,
+        },
+        answering: original(ANSWERING),
+        replaces: original(REPLACES),
+        unsent: Some(unsent),
     }
 }
 
@@ -197,11 +254,7 @@ pub fn left_unsent() -> Vec<Outgoing> {
             let raw = std::fs::read(&path)
                 .inspect_err(|error| tracing::warn!("cannot read {}: {error}", path.display()))
                 .ok()?;
-            Some(Outgoing {
-                draft: recovered(&raw),
-                unsent: Some(path),
-                ..Outgoing::default()
-            })
+            Some(recovered(&raw, path))
         })
         .collect()
 }
@@ -363,6 +416,14 @@ fn parameter(key: &str, value: &str) -> String {
         })
         .collect::<String>();
     format!("{key}*=utf-8''{encoded}")
+}
+
+pub fn build_kept(draft: &Draft, now: &Zoned) -> Vec<u8> {
+    let mut kept = address_header("Bcc", &draft.bcc)
+        .unwrap_or_default()
+        .into_bytes();
+    kept.extend(build(draft, now));
+    kept
 }
 
 pub fn build(draft: &Draft, now: &Zoned) -> Vec<u8> {

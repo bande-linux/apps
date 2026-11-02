@@ -234,9 +234,7 @@ fn save_attachment(name: String, data: Vec<u8>) {
 }
 
 fn keep_locally(outgoing: &Outgoing) {
-    if let Some(path) = &outgoing.unsent
-        && let Err(error) = keep_unsent(path, &outgoing.draft)
-    {
+    if let Err(error) = keep_unsent(outgoing) {
         tracing::warn!("cannot keep the unsent message: {error}");
     }
 }
@@ -594,6 +592,10 @@ impl Program for Mail {
         }
         mail.serve(cx, main);
         for outgoing in left_unsent() {
+            let outgoing = match main_view(cx, mail.main, &mut mail.parked) {
+                Some(view) => view.recover(outgoing),
+                None => outgoing,
+            };
             mail.open_compose(cx, outgoing);
         }
         Ok(mail)

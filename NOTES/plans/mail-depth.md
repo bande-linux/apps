@@ -57,7 +57,6 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 9. A Password field in Settings → Accounts; a message font apart from the desktop text size.
 
 ## Known gaps in what landed (review, 2026-11-02)
-- A reopened unsent message forgets the draft it replaces, the message it answers and its Bcc.
 - Disabling an account or changing its servers drops its queued sends silently; the local copy
   reopens at the next start.
 - Undo gives up without a word when the moved message does not show up after three syncs of the mailbox it went to.

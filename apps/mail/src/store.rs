@@ -787,6 +787,24 @@ impl Store {
             .flatten())
     }
 
+    pub fn locate(
+        &self,
+        account: AccountId,
+        message_id: &str,
+        role: Option<Role>,
+    ) -> Result<Option<MessageId>> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT m.id FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
+                 WHERE b.account = ?1 AND m.message_id = ?2 AND m.deleted = 0 \
+                 AND (?3 IS NULL OR b.role = ?3) ORDER BY m.id DESC LIMIT 1",
+                params![account, message_id, role.map(Role::name)],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
     pub fn find_message(&self, mailbox: MailboxId, message_id: &str) -> Result<Option<MessageId>> {
         Ok(self
             .connection

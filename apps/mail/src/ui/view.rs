@@ -20,7 +20,7 @@ use jiff::tz::TimeZone;
 use zeroize::Zeroizing;
 
 use crate::L10N;
-use crate::compose::{Draft, Outgoing, forward, reply, signed};
+use crate::compose::{Draft, Original, Outgoing, forward, reply, signed};
 use crate::discover::Settings;
 use crate::error::Result;
 use crate::imap::{Flag, Role};
@@ -1257,7 +1257,10 @@ impl MailView {
         draft.body = signed(&draft.body, &account.signature);
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
-            answering: Some(summary.id),
+            answering: Some(Original {
+                id: summary.id,
+                message_id: envelope.message_id.clone().unwrap_or_default(),
+            }),
             replaces: None,
             unsent: None,
         })));
@@ -1291,8 +1294,17 @@ impl MailView {
         };
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
-            answering: None,
-            replaces: Some(summary.id),
+            answering: envelope.references.last().and_then(|parent| {
+                let id = self.store.locate(summary.account, parent, None).ok()??;
+                Some(Original {
+                    id,
+                    message_id: parent.clone(),
+                })
+            }),
+            replaces: Some(Original {
+                id: summary.id,
+                message_id: envelope.message_id.clone().unwrap_or_default(),
+            }),
             unsent: None,
         })));
     }
@@ -1350,6 +1362,30 @@ impl MailView {
             .map(|(account, _)| account)
             .find(|account| account.email.eq_ignore_ascii_case(&draft.from.email))
             .map(|account| account.id)
+    }
+
+    pub fn recover(&self, mut outgoing: Outgoing) -> Outgoing {
+        let account = self.account_for(&outgoing.draft);
+        let located = |original: Option<Original>, role: Option<Role>| {
+            let original = original?;
+            if original.message_id.is_empty() {
+                return None;
+            }
+            if self.store.message_id(original.id).ok().flatten().as_ref()
+                == Some(&original.message_id)
+            {
+                return Some(original);
+            }
+            let id = self
+                .store
+                .locate(account?, &original.message_id, role)
+                .ok()
+                .flatten()?;
+            Some(Original { id, ..original })
+        };
+        outgoing.answering = located(outgoing.answering.take(), None);
+        outgoing.replaces = located(outgoing.replaces.take(), Some(Role::Drafts));
+        outgoing
     }
 
     pub fn save_draft(&mut self, outgoing: Outgoing) -> bool {

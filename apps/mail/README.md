@@ -75,7 +75,8 @@ apt install bande-mail
 - **Drafts.** Closing a message that was changed and not sent keeps it in the account's Drafts
   mailbox (also on quit). While a message is written, a copy is kept every few seconds in
   `~/.local/share/bande-mail/unsent/` until the server has it, so a message survives a crash or
-  quitting offline: it opens again the next time Mail starts. Double-click a draft, or press Return, to carry on; saving it again or
+  quitting offline: it opens again the next time Mail starts, still replacing the draft it came
+  from and answering the message it replies to. Both copies keep the Bcc recipients. Double-click a draft, or press Return, to carry on; saving it again or
   sending it removes the older copy.
 - **Offline store.** One SQLite database in `~/.local/share/bande-mail/` holds the accounts,
   folders, headers, flags and message bodies (bodies up to 2 MB are fetched ahead, larger ones
