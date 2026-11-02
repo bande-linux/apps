@@ -11,9 +11,9 @@ use bande_app::{
 };
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_terminal::{
-    CLOSE_WINDOW, COLUMNS, Command, GridSize, L10N, MenuCommand, Painter, ROWS, SETTINGS_SIZE,
-    Session, Settings, Terminal, app_menus, claim, left_behind, settings_view, window_file,
-    windows_folder,
+    CLOSE_WINDOW, COLUMNS, CloseAsk, Command, GridSize, L10N, MenuCommand, Painter, ROWS,
+    SETTINGS_SIZE, Session, Settings, Terminal, app_menus, claim, left_behind, settings_view,
+    window_file, windows_folder,
 };
 use bande_toolkit::Appearance;
 
@@ -89,7 +89,9 @@ impl Terminals {
             let folder = folder
                 .filter(|folder| folder.is_dir())
                 .or_else(|| self.home.clone());
-            match Session::spawn(terminal, command.take(), folder) {
+            terminal.set_options(self.settings.cursor.shape(), self.settings.scrollback);
+            let shell = command.take().or_else(|| self.settings.shell());
+            match Session::spawn(terminal, shell, folder) {
                 Ok(session) => sessions.push(session),
                 Err(error) if !sessions.is_empty() => {
                     tracing::warn!("cannot restore a tab: {error}");
@@ -102,7 +104,11 @@ impl Terminals {
             active,
             saved_file,
         };
-        let (settings, home, bus) = (self.settings, self.home.clone(), Rc::clone(&self.bus));
+        let (settings, home, bus) = (
+            self.settings.clone(),
+            self.home.clone(),
+            Rc::clone(&self.bus),
+        );
         let window = cx.open(Kind::Main, &L10N.tr("title"), size, |appearance| {
             painter.set_appearance(appearance);
             TerminalWindow::new(painter, settings, opened, home, bus, serial)
@@ -256,7 +262,12 @@ impl Program for Terminals {
             .filter_map(|window| cx.view(*window))
             .map(TerminalWindow::busy_tabs)
             .sum();
-        if busy == 0 {
+        let asks = match self.settings.close_ask {
+            CloseAsk::Always => !windows.is_empty(),
+            CloseAsk::WhenRunning => busy > 0,
+            CloseAsk::Never => false,
+        };
+        if !asks {
             return true;
         }
         let asking = cx.focused().filter(|window| windows.contains(window));

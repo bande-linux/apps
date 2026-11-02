@@ -2,7 +2,7 @@ use bande_app_menu::{Entry, edit_submenu};
 use bande_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
-use crate::model::{Column, Filter, Tab};
+use crate::model::{Column, Filter, Frequency, Tab};
 
 pub const COLUMN_ACTION: &str = "column:";
 
@@ -18,9 +18,10 @@ pub enum MenuCommand {
     Show(Tab),
     ShowCores,
     Filter(Filter),
+    Frequency(Frequency),
 }
 
-const ACTIONS: [(MenuCommand, &str); 17] = [
+const ACTIONS: [(MenuCommand, &str); 21] = [
     (MenuCommand::Quit, "quit"),
     (MenuCommand::ForceQuit, "force-quit"),
     (MenuCommand::ShowInFiles, "show-in-files"),
@@ -36,8 +37,18 @@ const ACTIONS: [(MenuCommand, &str); 17] = [
     (MenuCommand::Show(Tab::Gpu), "show-gpu"),
     (MenuCommand::ShowCores, "show-cores"),
     (MenuCommand::Filter(Filter::All), "filter-all"),
+    (MenuCommand::Filter(Filter::Hierarchy), "filter-hierarchy"),
     (MenuCommand::Filter(Filter::Mine), "filter-mine"),
     (MenuCommand::Filter(Filter::Apps), "filter-apps"),
+    (
+        MenuCommand::Frequency(Frequency::VeryOften),
+        "frequency-very-often",
+    ),
+    (MenuCommand::Frequency(Frequency::Often), "frequency-often"),
+    (
+        MenuCommand::Frequency(Frequency::Normally),
+        "frequency-normally",
+    ),
 ];
 
 impl MenuCommand {
@@ -108,7 +119,7 @@ fn entry(message: &str, command: MenuCommand) -> Entry {
     Entry::item(&L10N.tr(message), command.action())
 }
 
-pub fn app_menus(tabs: &[Tab], shown: Filter) -> Vec<Entry> {
+pub fn app_menus(tabs: &[Tab], shown: Filter, frequency: Frequency) -> Vec<Entry> {
     let mut view = tabs
         .iter()
         .zip(1..)
@@ -123,6 +134,15 @@ pub fn app_menus(tabs: &[Tab], shown: Filter) -> Vec<Entry> {
     }));
     view.extend([
         Entry::separator(),
+        Entry::submenu(
+            &L10N.tr("menu-frequency"),
+            Frequency::ALL
+                .map(|choice| {
+                    Entry::item(&choice.title(), MenuCommand::Frequency(choice).action())
+                        .radio(choice == frequency)
+                })
+                .to_vec(),
+        ),
         entry("menu-show-cores", MenuCommand::ShowCores),
         Entry::separator(),
         entry("menu-quit-process", MenuCommand::Quit).shortcut("Ctrl+E"),

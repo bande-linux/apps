@@ -27,7 +27,7 @@ pub use process::{Report, Reports};
 pub use render::{DEFAULT_FONT_SIZE, Painter, Pane, TabBar};
 pub use restore::{SavedWindow, claim, left_behind, window_file, windows_folder};
 pub use session::{Notice, Session};
-pub use settings::{CursorStyle, FONT_SIZES, Settings};
+pub use settings::{CloseAsk, CursorStyle, FONT_SIZES, NewTabFolder, SCROLLBACK_CHOICES, Settings};
 pub use settings_view::{SETTINGS_SIZE, settings_view};
 pub use tabs::{FULL_SCREEN_LEADING, HEADER_LEADING, STRIP_HEIGHT, TabBarLayout, TabTarget};
 pub use terminal::{
