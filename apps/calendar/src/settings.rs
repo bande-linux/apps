@@ -17,6 +17,8 @@ pub const WEEKDAYS: [Weekday; 7] = [
     Weekday::Saturday,
 ];
 
+pub const HOURS_SHOWN: [u8; 5] = [6, 8, 12, 16, 24];
+
 pub const REFRESH_MINUTES: [u32; 6] = [1, 5, 15, 30, 60, 0];
 
 pub const SUBSCRIPTION_MINUTES: [u32; 6] = [5, 15, 60, 24 * 60, 7 * 24 * 60, 0];
@@ -27,6 +29,7 @@ pub struct CalendarSettings {
     pub first_weekday: Option<Weekday>,
     pub day_start: u8,
     pub day_end: u8,
+    pub hours_shown: u8,
     pub week_numbers: bool,
     pub time_zones: bool,
     pub timed_alert: Alert,
@@ -42,6 +45,7 @@ impl Default for CalendarSettings {
             first_weekday: None,
             day_start: 8,
             day_end: 18,
+            hours_shown: 12,
             week_numbers: false,
             time_zones: false,
             timed_alert: Alert::None,
@@ -130,6 +134,13 @@ impl Stored for CalendarSettings {
                         .filter(|hour| (1..=24).contains(hour))
                         .unwrap_or(settings.day_end);
                 }
+                "hours-shown" => {
+                    settings.hours_shown = value
+                        .parse()
+                        .ok()
+                        .filter(|hours| HOURS_SHOWN.contains(hours))
+                        .unwrap_or(settings.hours_shown);
+                }
                 "week-numbers" => {
                     settings.week_numbers = flag(value).unwrap_or(settings.week_numbers);
                 }
@@ -163,13 +174,14 @@ impl Stored for CalendarSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "default-calendar = {}\nstart-week-on = {}\nday-starts = {}\nday-ends = {}\n\
+            "default-calendar = {}\nstart-week-on = {}\nday-starts = {}\nday-ends = {}\nhours-shown = {}\n\
              week-numbers = {}\ntime-zone-support = {}\nevent-alert = {}\nall-day-alert = {}\nrefresh-minutes = {}\n\
              subscription-minutes = {}\n",
             self.default_calendar,
             self.first_weekday.map_or("default", weekday_name),
             self.day_start,
             self.day_end,
+            self.hours_shown,
             self.week_numbers,
             self.time_zones,
             alert_text(self.timed_alert),

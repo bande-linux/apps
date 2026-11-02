@@ -230,6 +230,7 @@ pub struct CalendarView {
     focus: Date,
     mini_month: Date,
     scroll: f32,
+    hour_height: f32,
     size: (f32, f32),
     full_screen: bool,
     shown: Vec<Found>,
@@ -285,6 +286,7 @@ impl CalendarView {
             focus: today,
             mini_month: today.first_of_month(),
             scroll: f32::from(settings.day_start) * geometry::HOUR_HEIGHT,
+            hour_height: geometry::HOUR_HEIGHT,
             settings,
             size: (0.0, 0.0),
             full_screen: false,
@@ -345,7 +347,7 @@ impl CalendarView {
             self.view_in(None);
         }
         if settings.day_start != self.settings.day_start {
-            self.scroll = f32::from(settings.day_start) * geometry::HOUR_HEIGHT;
+            self.scroll = f32::from(settings.day_start) * self.hour_height;
         }
         self.settings = settings;
     }
@@ -805,6 +807,7 @@ impl CalendarView {
             first_weekday: self.first_weekday(),
             work_hours: self.settings.work_hours(),
             week_numbers: self.settings.week_numbers,
+            hours_shown: self.settings.hours_shown,
             zone: &self.zone,
             now: &self.now,
             mode: self.mode,
@@ -916,14 +919,18 @@ impl CalendarView {
             self.first_weekday(),
             sheet,
             self.scroll,
-            1,
+            self.settings.hours_shown,
         ) {
+            if grid.hour_height != self.hour_height {
+                self.scroll *= grid.hour_height / self.hour_height;
+                self.hour_height = grid.hour_height;
+            }
             if !self.scrolled_once {
                 self.scrolled_once = true;
                 let now =
-                    geometry::minutes_of(self.now.datetime()) as f32 * geometry::HOUR_HEIGHT / 60.0;
+                    geometry::minutes_of(self.now.datetime()) as f32 * grid.hour_height / 60.0;
                 let visible = grid.hours_area().height;
-                if now > self.scroll + visible - geometry::HOUR_HEIGHT {
+                if now > self.scroll + visible - grid.hour_height {
                     self.scroll = now - visible / 2.0;
                 }
             }
@@ -1062,7 +1069,7 @@ impl CalendarView {
             &self.zone,
         );
         if let Some(me) = self.me(found.calendar) {
-            crate::invite::revise(&mut moved, &me);
+            crate::invite::revise(object, &mut moved, &me);
         }
         self.library.put_object(found.calendar, moved);
         self.requests.push(Request::Changed);
@@ -1088,7 +1095,7 @@ impl CalendarView {
         );
         let mut edited = edited;
         if let Some(me) = self.me(found.calendar) {
-            crate::invite::revise(&mut edited, &me);
+            crate::invite::revise(object, &mut edited, &me);
             if let Some(master) = edited.master_mut() {
                 crate::invite::invite(master, &me, &details.invitees);
             }
@@ -1253,6 +1260,7 @@ pub(crate) struct ViewModel<'a> {
     pub first_weekday: Weekday,
     pub work_hours: (u8, u8),
     pub week_numbers: bool,
+    pub hours_shown: u8,
     pub zone: &'a TimeZone,
     pub now: &'a Zoned,
     pub mode: Mode,

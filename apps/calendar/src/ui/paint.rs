@@ -73,20 +73,24 @@ pub fn time_grid(
     first_weekday: Weekday,
     area: Rect,
     scroll: f32,
-    all_day_rows: usize,
+    hours_shown: u8,
 ) -> Option<TimeGrid> {
     let days = match mode {
         Mode::Day => 1,
         Mode::Week => 7,
         Mode::Month | Mode::Year => return None,
     };
-    Some(TimeGrid {
-        area,
-        first: period(mode, focus, first_weekday).0,
-        days,
-        all_day_rows,
-        scroll,
-    })
+    Some(
+        TimeGrid {
+            area,
+            first: period(mode, focus, first_weekday).0,
+            days,
+            all_day_rows: 1,
+            scroll,
+            hour_height: geometry::HOUR_HEIGHT,
+        }
+        .showing(hours_shown),
+    )
 }
 
 pub fn calendar_color(model: &ViewModel, calendar: usize) -> Color {
@@ -355,7 +359,7 @@ fn paint_week(
         model.first_weekday,
         area,
         model.scroll,
-        1,
+        model.hours_shown,
     )?;
     let mut bars: Vec<(usize, usize, usize)> = Vec::new();
     for (index, found) in shown.iter().enumerate() {

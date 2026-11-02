@@ -51,11 +51,13 @@ views. Packaged as `bande-calendar`.
   times stay read-only), and on an event you organise
   in a CalDAV calendar you can add invitees by address; the server sends the mail.
 - **Search** over title, location and notes, nearest occurrence first.
-- **Alerts** through `org.freedesktop.Notifications`, also while the window is closed. Alerts,
+- **Alerts** through `org.freedesktop.Notifications`, also while the window is closed, with
+  Snooze (5 minutes) and a click that opens Calendar on the event's day. Alerts,
   the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
   suspend or a clock change, and the view follows a change of the system time zone at once.
 - **Settings** (Calendar ▸ Settings…): default calendar, start of the week, the hours the day
-  starts and ends (the rest is shaded, and the week opens at the start), week numbers, default
+  starts and ends (the rest is shaded, and the week opens at the start), how many hours the
+  day and week show at a time, week numbers, default
   alerts for new events and all-day events, how often accounts and subscriptions refresh, and
   adding, re-signing and removing accounts, and time zone support, which shows each timed
   event's zone in the inspector: its times are shown and typed in that zone, and a new zone

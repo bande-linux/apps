@@ -324,8 +324,8 @@ fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Eve
         Key::Right => menu_command(view, ACTION_NEXT),
         Key::Up | Key::Down if matches!(view.mode, Mode::Day | Mode::Week) => {
             view.scroll += match key {
-                Key::Up => -geometry::HOUR_HEIGHT,
-                _ => geometry::HOUR_HEIGHT,
+                Key::Up => -view.hour_height,
+                _ => view.hour_height,
             };
             true
         }

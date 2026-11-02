@@ -16,7 +16,8 @@ use super::L10N;
 use super::inspector::alert_title;
 use crate::edit::Alert;
 use crate::settings::{
-    CalendarSettings, Change, REFRESH_MINUTES, SUBSCRIPTION_MINUTES, WEEKDAYS, announce,
+    CalendarSettings, Change, HOURS_SHOWN, REFRESH_MINUTES, SUBSCRIPTION_MINUTES, WEEKDAYS,
+    announce,
 };
 use crate::store::{ACCOUNTS_FILE, AccountKind, Summary, data_dir};
 
@@ -171,6 +172,24 @@ fn general(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormLi
                     settings.day_end = hour;
                     settings.day_start = settings.day_start.min(hour - 1);
                 },
+            ),
+        ),
+        FormLine::Row(
+            L10N.tr("settings-hours-shown"),
+            pop_up(
+                settings,
+                "settings-hours-shown",
+                HOURS_SHOWN
+                    .iter()
+                    .map(|hours| {
+                        (
+                            *hours,
+                            L10N.tr_args("settings-hours", [("hours", (*hours).into())]),
+                        )
+                    })
+                    .collect(),
+                current.hours_shown,
+                |settings, hours| settings.hours_shown = hours,
             ),
         ),
         FormLine::Row(L10N.tr("settings-week-numbers"), Box::new(week_numbers)),
