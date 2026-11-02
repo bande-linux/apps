@@ -104,7 +104,7 @@ resvg).
 
 | Order | App | Effort | Value | Notes |
 |---:|---|:---:|---|---|
-| 1 | Calculator (basic, scientific, programmer, paper tape, like macOS) | S | 288 MB today, the biggest single cut | pure logic: parser, decimal arithmetic, a keypad grid; scientific mode is a second keypad |
+| 1 | Calculator | done | 288 MB today, the biggest single cut | `apps/calculator`; left: unit conversions, the decimal-places setting, non-integer x! (gamma) |
 | 2 | Preview: images | S–M | 93 MB (loupe), and the default image handler | zoom, pan, rotate, next/previous in the folder, slideshow, copy; decoders from bande-preview (add HEIC/AVIF later) |
 | 3 | TextEdit | M | 115 MB, the default text handler | the editor widget exists; needed: open/save with encodings and line endings, find and replace, autosave and restore, plain text only first (RTF later) |
 | 4 | Clock: timers, alarms, stopwatch, world clock in the Clock menu | S | small (gnome-clocks is only a Suggests) | in the shell's Clock menu with bande-datetime and bande-notify, no separate app |
