@@ -133,3 +133,6 @@ heading-0 = Body
 heading-1 = Title
 heading-2 = Heading
 heading-3 = Subheading
+lossy-title = “{ $name }” has pictures or tables that TextEdit can’t keep.
+lossy-message = Saving over it would lose them. Save a copy as rich text instead?
+save-copy = Save a Copy…

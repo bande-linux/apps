@@ -25,6 +25,10 @@ macOS TextEdit. Delete this plan when the gaps below are done.
   styles; Make Plain Text and Make Rich Text convert. RTF, Markdown and HTML open as styled text
   and save back in their own format; a Markdown file can be shown as its source with Make Plain
   Text.
+- **Office documents.** `.docx` and `.odt` open with text, bold/italic/underline/strike, size,
+  colour, typeface, alignment, headings, bullet and numbered lists and links; tables become
+  tab-separated lines and pictures `[image]`. They save back as `.docx`/`.odt`, except when the
+  file had pictures or tables: then Save offers a rich-text copy instead of losing them.
 
 ## Libraries
 
@@ -37,12 +41,15 @@ macOS TextEdit. Delete this plan when the gaps below are done.
   TextEdit writes and macOS/Word produce, linear in the input, with nesting capped. HTML reuses
   `html5ever`'s tokenizer (as Mail does), so entities and broken markup are handled by the
   standard algorithm; scripts and styles are skipped.
+- `.docx` and `.odt`: `zip` (the desktop's, with `deflate-flate2`) and `roxmltree` (already used),
+  with each part capped at 64 MB, DTDs refused and at most 4 million XML nodes. A full office
+  library (`docx-rs`) would bring a large dependency for a reader we need only a few hundred lines
+  of.
 
 ## Gaps
 
 - Windows only, no tabs in one window (the Window menu lists the documents).
 - No spell checking: the desktop has no spell service yet.
-- Word and OpenDocument files come next.
 - No format bar: styles are in the Format menu.
 - Pictures and tables are not shown; there is no page setup or printing.
 - A file changed by another program while open is not noticed.

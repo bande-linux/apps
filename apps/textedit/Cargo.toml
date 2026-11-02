@@ -13,11 +13,13 @@ accesskit.workspace = true
 encoding_rs.workspace = true
 html5ever.workspace = true
 regex.workspace = true
+roxmltree.workspace = true
 rustix = { workspace = true, features = ["fs"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 zbus.workspace = true
+zip.workspace = true
 bande-app.workspace = true
 bande-app-menu.workspace = true
 bande-inbox.workspace = true
@@ -38,8 +40,8 @@ section = "editors"
 depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 extended-description = """\
 The text editor of the Bande desktop, in the spirit of macOS TextEdit: \
-plain text in any encoding and line ending, rich text, RTF, Markdown and \
-HTML, find and replace with regular \
+plain text in any encoding and line ending, rich text, RTF, Markdown, HTML, \
+Word and OpenDocument files, find and replace with regular \
 expressions, and documents that are saved automatically and come back after \
 a crash or quit."""
 assets = [

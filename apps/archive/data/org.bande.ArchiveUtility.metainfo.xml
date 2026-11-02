@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.ArchiveUtility</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Archive Utility</name>
+  <summary>Expand and create compressed archives</summary>
+  <description>
+    <p>Opens zip, tar, gzip, bzip2, xz, zstd and 7-Zip archives by expanding them next to themselves, asks for the password of encrypted ones and makes the archives of Files' Compress command.</p>
+    <p>Items that would land outside the folder, decompression bombs and setuid permissions are refused.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.ArchiveUtility.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+  <provides>
+    <mediatype>application/zip</mediatype>
+    <mediatype>application/x-tar</mediatype>
+    <mediatype>application/x-compressed-tar</mediatype>
+    <mediatype>application/x-7z-compressed</mediatype>
+  </provides>
+</component>

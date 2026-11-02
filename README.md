@@ -23,8 +23,9 @@ apt install bande-<name>
 | Calculator | `bande-calculator` (Basic, Scientific and Programmer, paper tape, RPN) |
 | Preview | `bande-preview` (images and PDF documents, the default viewer of both; PDFs render in a child process) |
 | Clock | `bande-clock` (alarms, timers, a stopwatch and a world clock; rings with its window closed) |
-| TextEdit | `bande-textedit` (plain and rich text, Markdown and HTML; the desktop maps `text/plain` to it) |
+| TextEdit | `bande-textedit` (plain and rich text, Markdown, HTML, Word and OpenDocument; the desktop maps `text/plain` to it) |
 | Disk Utility | `bande-disks` (disks, volumes and disk images through UDisks2; replaces gnome-disk-utility) |
+| Archive Utility | `bande-archive` (the desktop maps zip, tar, gzip, bzip2, xz, zstd and 7-Zip files to it, and Files' Compress) |
 
 Every app is a `bande-app` app: like on macOS, it keeps running after its last window closes and
 reopens a window when activated, until Quit (Ctrl+Q). Without a window its menus stay full:
