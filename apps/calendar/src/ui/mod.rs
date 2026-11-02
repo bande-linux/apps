@@ -348,6 +348,12 @@ impl CalendarView {
             .unwrap_or(self.formats.first_weekday())
     }
 
+    pub fn set_zone(&mut self, zone: TimeZone) {
+        self.now = self.now.with_time_zone(zone.clone());
+        self.zone = zone;
+        self.refresh_search();
+    }
+
     pub fn set_now(&mut self, now: Zoned) {
         self.now = now;
     }
