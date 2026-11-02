@@ -31,7 +31,7 @@ scorer exists (W1).
   glyph runs from given outlines, repeating images, and retained sub-scenes translated without
   re-encoding.
 - **W4 Processes.**
-  - Builds: network process, per-site renderers, IPC, landlock and seccomp, the memory cgroup per
+  - Builds: network process with the paused-request hook for extensions, per-site renderers, IPC, landlock and seccomp, the memory cgroup per
     tab.
   - **Done:** the sandbox regression test passes; a killed renderer shows "page crashed".
 - **D2** Terminal's tab bar moves into the toolkit as a widget.
@@ -58,16 +58,20 @@ scorer exists (W1).
 - `web-js` starts.
 - **Done at phase end:** 55–70% of the list; Browser becomes usable as a daily second browser.
 
-## Phase 4: broad web (6–9 engineer-years)
+## Phase 4: broad web (7–11 engineer-years)
+
+- **Extensions first:** the WebExtensions surface uBlock Origin needs (`extensions.md`).
 
 - **Graphics and documents:** canvas 2D over vello; SVG DOM, layout and paint; `contenteditable`
   and editing; print.
 - **Workers and storage:** workers and service workers; IndexedDB on SQLite.
 - **Networking:** WebSocket, HTTP/3.
-- **Media:** the media element and MSE through the media process. **D4:** a video subsurface
-  with dmabuf in the toolkit.
+- **Media** (`media.md`): **K1** (kernel repo) puts the AVD driver in the build with `avd-fw`.
+  **D4/D5** (desktop) add NV12 multi-planar dmabufs in the compositor and a video subsurface in
+  the toolkit. Then the media element, our demuxers, the AVD path, rav1d, Opus, symphonia, MSE.
+- **DRM:** **W-EME**, with Clear Key and the CDM host; Widevine is turned on once licensed.
 - **GPU:** WebGL and WebGPU through the GPU process.
-- **The rest:** WASM through wasmtime; WebExtensions MV2 and MV3; the baseline JIT.
+- **The rest:** WASM through wasmtime; the baseline JIT.
 - **Done at phase end:** 85–90% of the list.
 
 ## Phase 5: parity (7–10 engineer-years)
@@ -89,3 +93,5 @@ scorer exists (W1).
 5. Security: owning the parsers means owning their bugs. The sandbox, fuzzing and Rust are the
    defence.
 6. Sites that block unknown engines (decision 5).
+7. Widevine depends on Google's licence; without it, DRM sites stay in the system browser.
+8. The AVD driver is held, not yet upstream; until K1, video decodes in software.

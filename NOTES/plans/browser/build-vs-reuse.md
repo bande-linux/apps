@@ -17,6 +17,8 @@ are our estimates for a first complete version, in lines of Rust.
 | Scheduler, event loop | — | the HTML event loop on epoll: tasks, microtasks, timers as deadlines, rendering opportunities on `wl_surface.frame`, background throttling | 3–5k | 4 eng-mo |
 | Network policy | hyper's pool, which reaps idle connections on an interval timer: avoid | Fetch (CORS, CSP, referrer, mixed content, redirects, priorities), cookies (RFC 6265bis, partitioned), HTTP cache, HSTS, connection pools with deadlines and no intervals; a small epoll executor instead of tokio | 15–25k | 1.5 eng-years |
 | Process model, IPC, sandbox | Chromium's site-per-process, broker and seccomp baseline; WebKit's single network process | see `engine.md` | 6–10k | 6 eng-mo |
+| Demuxers, AVD bitstream parsers, Opus, MSE, EME host | — | see `media.md` | 30–45k | 2–3 eng-years |
+| WebExtensions | Firefox's API | see `extensions.md` | 20–30k | 1–1.5 eng-years |
 | JS bindings, then the JS engine | Boa, Nova, SpiderMonkey | see `js.md` | 30–50k bindings, 200k+ engine | see `js.md` |
 | SVG, canvas, forms, media element, editing, accessibility tree | — | part of the DOM and layout, not separate libraries (usvg is for static images, not the SVG DOM) | 40–60k | in phases 3–5 |
 
@@ -28,7 +30,7 @@ are our estimates for a first complete version, in lines of Rust.
 | hyper 1 and h2; quinn and h3 for HTTP/3 | protocol framing is spec-locked and heavily fuzzed; we own everything above it (Fetch, pools, priorities) and drive it with our own executor through `hyper::rt` and quinn's runtime traits. h3 is still experimental (0.0.8), so it waits for phase 4 |
 | zlib-rs or flate2, brotli-decompressor, zstd | content encodings; spec-locked, fuzzed, speed tuned |
 | png, zune-jpeg, image-webp, gif, jxl-oxide, rav1d (AVIF and AV1) | decoders are a known attack surface where mature fuzzed code beats new code; they run only inside sandboxed processes; our image cache owns decoding at display size and memory budgets |
-| GStreamer or FFmpeg (Debian), for H.264, VP9, AAC and Opus | no pure-Rust decoder of quality exists; isolated in a sandboxed media process (decision 4) |
+| symphonia (AAC-LC, MP3, Vorbis, FLAC); Debian's libavcodec only where the AVD is missing | see `media.md`: our own demuxers, Opus and AVD bitstream parsers; these decoders run only in the sandboxed media process |
 | skrifa, read-fonts, harfrust, fontique | font parsing and shaping are spec-locked (OpenType) and shared with Bande's toolkit; web fonts are parsed only in sandboxed renderers |
 | ICU4X (segmenter, normalizer, collator, plural rules, data), unicode-bidi, encoding_rs | Unicode and WHATWG Encoding data and algorithms; ICU4X also serves JS `Intl` |
 | url | the WHATWG URL parser, small and conformant; replace only if WPT `url` shows gaps |
@@ -36,7 +38,6 @@ are our estimates for a first complete version, in lines of Rust.
 | accesskit | shared with the toolkit, so page accessibility joins the window's tree |
 | rustix, landlock, seccompiler | thin system-call layers; the policy is ours |
 | rusqlite | history, bookmarks, and the storage under IndexedDB, as Firefox does |
-| adblock-rust | uBlock and Adblock Plus filter syntax as it is used in the wild; replaceable behind our request-blocking hook |
 | wasmtime (Cranelift) | WebAssembly in phase 4 until our JS engine has its own WASM tier (WASM GC must share the JS heap) |
 
 Not used: Stylo, taffy, Blitz, html5ever, cssparser, parley, usvg, tokio, reqwest, serde for IPC.

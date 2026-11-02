@@ -14,12 +14,15 @@ One Cargo workspace with one lock. Dependencies run only downward in this list.
 | `web-text` | inline formatting context over harfrust, skrifa and ICU4X |
 | `web-layout` | box tree, fragment trees, every formatting context |
 | `web-paint` | display lists, stacking contexts, hit testing |
-| `web-net` | Fetch, cookies, cache, HSTS, blocking hook, the epoll executor, HTTP over hyper, h2, rustls |
+| `web-net` | Fetch, cookies, cache, HSTS, the webRequest hook, the epoll executor, HTTP over hyper, h2, rustls |
 | `web-script` | WebIDL bindings generator and Web APIs over a narrow engine interface |
 | `web-js` | our JavaScript engine (from phase 3) |
+| `web-media` | demuxers, MSE, AVD bitstream parsers over V4L2, Opus, A/V sync |
+| `web-cdm` | EME and the CDM host |
+| `web-extensions` | the WebExtensions APIs |
 | `web-ipc` | message schema, shared memory, process launch and sandbox |
 | `web-compositor` | in the app process: layers, async scroll and animation, drawing into the toolkit `Scene` |
-| `web-content`, `web-netd`, `web-media`, `web-gpu` | the helper processes' `main`s |
+| `web-content`, `web-netd`, `web-mediad`, `web-cdmd`, `web-gpu` | the helper processes' `main`s |
 | `tools/wpt`, `fuzz/` | the conformance runner and the fuzz targets |
 
 ## Processes
@@ -27,12 +30,14 @@ One Cargo workspace with one lock. Dependencies run only downward in this list.
 - **The app process** (`bande-browser`, a bande-app app) runs the UI, the compositor and the GPU
   device. It holds no page data beyond display lists and accessibility trees, which it validates
   as untrusted.
-- **The network process** does all sockets, TLS, cookies, cache and blocking.
+- **The network process** does all sockets, TLS, cookies, cache and the webRequest hook.
 - **One renderer per site** (scheme plus registrable domain; cross-site iframes get their own)
   runs HTML, style, layout, paint and script. It has no files (landlock: read-only fonts and its
   own executable), no sockets (seccomp), no GPU, no Wayland, `PR_SET_NO_NEW_PRIVS`, and a memory
   cgroup at its tab budget.
-- **The media process** (phase 4) decodes into shared buffers.
+- **The media process** (phase 4) demuxes and decodes into NV12 dmabufs (`media.md`).
+- **The CDM process** (phase 4, per site) hosts Widevine once licensed.
+- **The extension process** (phase 4, one per extension) runs the extension's pages.
 - **The GPU process** (phase 4) runs WebGL and WebGPU through wgpu and hands frames over as
   dmabuf, so untrusted shaders never run in the app.
 

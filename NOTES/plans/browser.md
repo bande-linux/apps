@@ -5,8 +5,7 @@ The owner's note (`NOTES/browser.md`) and the owner's decisions (November 2026) 
 - **Our own engine, forking nothing**: modern, hyper-efficient, lean Rust with a clean code base.
 - **Process:** private by default, no telemetry, no ads, independent of Google, maintained by agents.
 
-The engine lives in a new repo, `bande-linux/web` (approved; the coordinator creates it when
-implementation starts). The app is `apps/browser` here (`bande-browser`, `org.bande.Browser`),
+The engine lives in `bande-linux/web` (its `CLAUDE.md` and README are on `main`). The app is `apps/browser` here (`bande-browser`, `org.bande.Browser`),
 pinned to the engine by git `rev`, as it pins the desktop. Delete these notes as their milestones
 finish.
 
@@ -16,12 +15,14 @@ finish.
 | [browser/engine.md](browser/engine.md) | crates, process model, data layouts, pipeline, efficiency targets |
 | [browser/js.md](browser/js.md) | the JavaScript engine: sizes and the recommendation |
 | [browser/quality.md](browser/quality.md) | module rules, `unsafe`, errors, conformance testing, fuzzing, security, CI |
+| [browser/media.md](browser/media.md) | media stack, MSE, EME and Widevine |
+| [browser/extensions.md](browser/extensions.md) | the WebExtensions surface that runs uBlock Origin |
 | [browser/app.md](browser/app.md) | the Safari-like app on bande-app, packaging |
 | [browser/roadmap.md](browser/roadmap.md) | phases, milestones and done-criteria, desktop work |
 
 ## The size of it, honestly
 
-Full parity with Chromium and Firefox is **21–30 engineer-years** of focused work, then a
+Full parity with Chromium and Firefox is **22–32 engineer-years** of focused work, then a
 permanent load of security fixes and new web features. For comparison:
 - SpiderMonkey's `js/src` alone is 1.2 million lines of C++.
 - Stylo is 137k lines of Rust.
@@ -36,15 +37,15 @@ as the fallback for pages it can't handle yet.
 | 1 Document browser | HTML, CSS, images, links, no JS: docs, wikis, articles | 3–4 | 25–35% readable |
 | 2 Script | DOM, events and fetch on Boa; menus, progressive enhancement | 2–3 | 40–50% |
 | 3 Applications | forms, cookies, storage, auth, passwords, flex and grid complete; our own JS engine starts | 3–4 | 55–70% |
-| 4 Broad web | canvas, SVG, workers, WebSocket, media and MSE, IndexedDB, editing, WebGL and WebGPU, WASM, HTTP/3, WebExtensions | 6–9 | 85–90% |
+| 4 Broad web | WebExtensions (uBlock Origin) first, then canvas, SVG, workers, WebSocket, our media stack and MSE, IndexedDB, editing, WebGL and WebGPU, WASM, HTTP/3, EME and Widevine | 7–11 | 85–90% |
 | 5 Parity | our own JIT, Speedometer and JetStream parity, WebRTC, WebAuthn, the long tail of quirks | 7–10 | 95%+: YouTube, Docs, banking |
 
 **What "our own" means here.** We own everything that decides speed, memory and architecture,
 and the parsers too: the HTML parser, the CSS parser and style system, the DOM, layout, text
 layout, the display list and compositing, the scheduler, the process model, network policy, the
-JS bindings and, in time, the JS engine. Dependencies are kept only for commodity,
+JS bindings and, in time, the JS engine, plus demuxers and codec bitstream parsers. Dependencies are kept only for commodity,
 security-sensitive parts where a rewrite adds risk and no speed: TLS and crypto, compression,
-image and video codecs, font parsing and shaping, Unicode data, Bande's render stack (wgpu and
+the decoders we don't write (rav1d, symphonia, libavcodec without hardware), font parsing and shaping, Unicode data, Bande's render stack (wgpu and
 vello), and HTTP framing. Each is listed with its reason in `build-vs-reuse.md`. Everything is
 used as a plain dependency; nothing is forked or vendored.
 
@@ -58,23 +59,26 @@ used as a plain dependency; nothing is forked or vendored.
 3. **W3 Layout and images.** Margin collapsing, floats, positioning, replaced elements, the image
    cache with its memory budget.
 
-## Open owner decisions
+## Owner decisions (November 2026)
 
-1. **JavaScript** (`js.md`). Boa as a plain dependency for phases 2–3 while our own engine is
-   built, or our own engine from day one. *Recommend Boa first*: it saves about 2–3 years before
-   phase 2 ships, and the bindings are engine-neutral.
-2. **Conformance as the test suite.** The web repo's tests are WPT, html5lib-tests and test262,
-   with an expectations file. Our own tests stay few, as in Bande's rules. *Recommend yes.*
-3. **DRM.** Widevine isn't licensed to independent Linux arm64 browsers, so Netflix-type sites
-   won't play. YouTube and banking need no DRM. *Recommend no DRM.*
-4. **Media decoding.** Debian's GStreamer or FFmpeg in a sandboxed media process for H.264,
-   VP9, AAC and Opus; pure-Rust decoders where they're good (rav1d for AV1). *Recommend yes.*
-5. **User-Agent.** An honest "Bande" token plus a compatibility token, with per-site overrides
-   for sites that sniff. *Recommend yes.*
-6. **Extensions.** A full WebExtensions API (MV2 and MV3 with blocking webRequest, so the real
-   uBlock Origin runs) in phase 4; built-in uBlock-syntax blocking from phase 1. *Recommend yes.*
-7. **Default browser.** Become the default when the top-sites list scores 90% "works"; until then
-   firefox-esr stays the default. *Recommend yes.*
-8. **Throughput.** How many parallel agent streams the coordinator may run on the web repo. The
-   engineer-year figures are calendar years at one stream. *Recommend 3–4 streams:* parser and
-   style, layout, net and processes, app.
+Decided:
+1. **JavaScript:** Boa first, then our own engine (`js.md`).
+2. **Tests:** WPT including reftests, html5lib-tests and test262 are the web repo's tests.
+3. **DRM is wanted:** EME with the Widevine CDM, licence permitting (`media.md`).
+4. **Media:** whichever is best, even if it is more work. The recommendation (`media.md`): our
+   own demuxers and bitstream parsers driving the M2's video decoder, rav1d for AV1, our own
+   Opus, symphonia for the other audio codecs. Open item 2 is its only remaining choice.
+5. **User-Agent:** a "Bande" token plus a compatibility token, with per-site overrides.
+6. **Extensions:** no built-in blocker. The real uBlock Origin runs through WebExtensions in
+   phase 4 (`extensions.md`).
+7. **Default browser:** Browser becomes the default and ships with bande-desktop in time, no
+   rush.
+8. **Throughput:** 3–4 parallel agent streams (parser and style, layout, net and processes, app).
+
+Open:
+1. **Owner action: ask Google for a Widevine CDM licence** for Browser on Linux arm64 (Widevine
+   partner contact). Approval is uncertain for a small independent browser. Without it, DRM
+   sites open in chromium or firefox-esr with Asahi's `widevine-installer`. *Recommend asking now:
+   it is the longest lead time in the plan.*
+2. **Software fallback for H.264, HEVC and VP9 without the AVD** (the dev VM, other machines):
+   Debian's libavcodec in the sandboxed media process, or no fallback. *Recommend libavcodec.*

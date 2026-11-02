@@ -38,8 +38,7 @@ history, and a darker search field.
 - **History**: Back Ctrl+[, Forward Ctrl+], Reopen Last Closed Tab Shift+Ctrl+T, Show All History
   Ctrl+Y, recent pages, Clear History…
 - **Bookmarks**: Add Bookmark Ctrl+D, Show Bookmarks, Favourites.
-- **Develop** (when turned on): page source, the DOM, style and network inspector, disable
-  blocking.
+- **Develop** (when turned on): page source, the DOM, style and network inspector.
 - **Window**: Next and Previous Tab Ctrl+Tab and Shift+Ctrl+Tab, tabs 1–9 with Ctrl+1–9.
 
 ## Places, downloads, portals
@@ -57,10 +56,10 @@ history, and a darker search field.
 - **Tabs**: open links in tabs, Ctrl+click opens in the background.
 - **AutoFill and Passwords.**
 - **Search**: the engine (DuckDuckGo by default), suggestions off by default.
-- **Privacy**: third-party cookies blocked, HTTPS-only with an interstitial, filter lists.
+- **Privacy**: third-party cookies blocked, partitioned storage, HTTPS-only with an interstitial.
 - **Websites**: per-site camera, microphone, location, notifications, pop-ups, autoplay, zoom,
-  blocking, memory budget.
-- **Extensions** (phase 4).
+  memory budget.
+- **Extensions** (phase 4): installed extensions, their permissions and site access.
 - **Advanced**: show the full address, the Develop menu.
 
 No telemetry, no Safe Browsing (it's Google's), no ads.
@@ -70,8 +69,8 @@ No telemetry, no Safe Browsing (it's Google's), no ads.
 `bande-browser` installs the app and the helpers (`/usr/libexec/bande-browser/`: content, netd,
 then media and gpu). The helpers are built from the web repo's crates as `[[bin]]` targets of the
 app.
-- **Depends:** `$auto` plus the three font packages. The media process adds GStreamer or FFmpeg
-  in phase 4.
+- **Depends:** `$auto` plus the three font packages. Phase 4 adds the media and CDM helpers;
+  libavcodec is a Recommends, used only without the AVD.
 - **`smoke.sh`:** `bande-browser --version`, the helpers present, and `desktop-file-validate` with
   the MimeType line.
 - **Also:** the theme icon in the desktop's `apps.py` and a row in the README table. Join
