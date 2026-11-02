@@ -4883,7 +4883,7 @@ dependencies = [
 [[package]]
 name = "web-atoms"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac#fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac"
+source = "git+https://github.com/bande-linux/web?rev=dd2cad638f1695896c0d87e27c4d982b06daffbf#dd2cad638f1695896c0d87e27c4d982b06daffbf"
 dependencies = [
  "hashbrown 0.16.1",
 ]
@@ -4891,7 +4891,7 @@ dependencies = [
 [[package]]
 name = "web-content"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac#fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac"
+source = "git+https://github.com/bande-linux/web?rev=dd2cad638f1695896c0d87e27c4d982b06daffbf#dd2cad638f1695896c0d87e27c4d982b06daffbf"
 dependencies = [
  "encoding_rs",
  "web-atoms",
@@ -4908,7 +4908,7 @@ dependencies = [
 [[package]]
 name = "web-css"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac#fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac"
+source = "git+https://github.com/bande-linux/web?rev=dd2cad638f1695896c0d87e27c4d982b06daffbf#dd2cad638f1695896c0d87e27c4d982b06daffbf"
 dependencies = [
  "encoding_rs",
  "web-atoms",
@@ -4917,7 +4917,7 @@ dependencies = [
 [[package]]
 name = "web-dom"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac#fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac"
+source = "git+https://github.com/bande-linux/web?rev=dd2cad638f1695896c0d87e27c4d982b06daffbf#dd2cad638f1695896c0d87e27c4d982b06daffbf"
 dependencies = [
  "web-atoms",
  "web-html",
@@ -4926,7 +4926,7 @@ dependencies = [
 [[package]]
 name = "web-html"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac#fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac"
+source = "git+https://github.com/bande-linux/web?rev=dd2cad638f1695896c0d87e27c4d982b06daffbf#dd2cad638f1695896c0d87e27c4d982b06daffbf"
 dependencies = [
  "encoding_rs",
  "web-atoms",
@@ -4935,7 +4935,7 @@ dependencies = [
 [[package]]
 name = "web-image"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac#fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac"
+source = "git+https://github.com/bande-linux/web?rev=dd2cad638f1695896c0d87e27c4d982b06daffbf#dd2cad638f1695896c0d87e27c4d982b06daffbf"
 dependencies = [
  "gif",
  "image-webp",
@@ -4947,7 +4947,7 @@ dependencies = [
 [[package]]
 name = "web-layout"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac#fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac"
+source = "git+https://github.com/bande-linux/web?rev=dd2cad638f1695896c0d87e27c4d982b06daffbf#dd2cad638f1695896c0d87e27c4d982b06daffbf"
 dependencies = [
  "web-atoms",
  "web-dom",
@@ -4958,7 +4958,7 @@ dependencies = [
 [[package]]
 name = "web-net"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac#fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac"
+source = "git+https://github.com/bande-linux/web?rev=dd2cad638f1695896c0d87e27c4d982b06daffbf#dd2cad638f1695896c0d87e27c4d982b06daffbf"
 dependencies = [
  "brotli-decompressor",
  "encoding_rs",
@@ -4973,7 +4973,7 @@ dependencies = [
 [[package]]
 name = "web-paint"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac#fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac"
+source = "git+https://github.com/bande-linux/web?rev=dd2cad638f1695896c0d87e27c4d982b06daffbf#dd2cad638f1695896c0d87e27c4d982b06daffbf"
 dependencies = [
  "linebender_resource_handle",
  "web-dom",
@@ -4986,7 +4986,7 @@ dependencies = [
 [[package]]
 name = "web-style"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac#fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac"
+source = "git+https://github.com/bande-linux/web?rev=dd2cad638f1695896c0d87e27c4d982b06daffbf#dd2cad638f1695896c0d87e27c4d982b06daffbf"
 dependencies = [
  "web-atoms",
  "web-css",
@@ -5006,7 +5006,7 @@ dependencies = [
 [[package]]
 name = "web-text"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac#fbb99677f8d2fbb2b6dd2adc08d0bba76f0d40ac"
+source = "git+https://github.com/bande-linux/web?rev=dd2cad638f1695896c0d87e27c4d982b06daffbf#dd2cad638f1695896c0d87e27c4d982b06daffbf"
 dependencies = [
  "fontique",
  "harfrust",
