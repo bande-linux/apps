@@ -39,6 +39,11 @@ pub(crate) enum Content {
         kind: String,
     },
     Crashed(Url),
+    Insecure {
+        https: Url,
+        http: Url,
+        message: String,
+    },
     Document {
         list: Arc<DisplayList>,
         links: Arc<Links>,
@@ -63,6 +68,7 @@ pub(crate) struct PageView {
     reload_pressed: bool,
     hovered: Option<(f32, f32)>,
     shown_offset: Cell<f32>,
+    zoom: f32,
 }
 
 impl PageView {
@@ -85,6 +91,7 @@ impl PageView {
             reload_pressed: false,
             hovered: None,
             shown_offset: Cell::new(0.0),
+            zoom: 1.0,
         }
     }
 
@@ -119,17 +126,48 @@ impl PageView {
     }
 
     pub(crate) fn jump_to(&mut self, y: f32) {
-        self.jump = Some(y);
+        self.jump = Some(y * self.document_zoom());
+    }
+
+    pub(crate) fn restore_offset(&mut self, offset: f32) {
+        self.jump = Some(offset);
+    }
+
+    pub(crate) fn set_zoom(&mut self, zoom: f32) {
+        if self.zoom != zoom {
+            self.zoom = zoom;
+            self.laid_out_width = None;
+        }
+    }
+
+    fn document_zoom(&self) -> f32 {
+        match self.content {
+            Content::Document { .. } => self.zoom,
+            _ => 1.0,
+        }
+    }
+
+    fn document_point(&self, point: Point) -> (f32, f32) {
+        let zoom = self.document_zoom();
+        (
+            (point.x - self.frame.x) / zoom,
+            (point.y - self.frame.y + self.shown_offset.get()) / zoom,
+        )
     }
 
     pub(crate) fn offset(&self) -> f32 {
         self.shown_offset.get()
     }
 
+    pub(crate) fn frame_size(&self) -> Option<(f32, f32)> {
+        (self.frame.width > 0.0 && self.frame.height > 0.0)
+            .then_some((self.frame.width, self.frame.height))
+    }
+
     pub(crate) fn viewport(&self) -> Option<Viewport> {
         (self.frame.width > 0.0 && self.frame.height > 0.0).then_some(Viewport {
-            width: self.frame.width,
-            height: self.frame.height,
+            width: (self.frame.width / self.zoom).round(),
+            height: (self.frame.height / self.zoom).round(),
         })
     }
 
@@ -142,10 +180,7 @@ impl PageView {
             return;
         }
         self.hovered = Some(match point {
-            Some(point) => (
-                point.x - self.frame.x,
-                point.y - self.frame.y + self.shown_offset.get(),
-            ),
+            Some(point) => self.document_point(point),
             None => (-1.0, -1.0),
         });
     }
@@ -177,10 +212,8 @@ impl PageView {
         let Content::Document { links, .. } = &self.content else {
             return None;
         };
-        links.at(
-            point.x - self.frame.x,
-            point.y - self.frame.y + self.shown_offset.get(),
-        )
+        let (x, y) = self.document_point(point);
+        links.at(x, y)
     }
 
     fn lay_out(&mut self, cx: &mut Context, width: f32) {
@@ -190,7 +223,7 @@ impl PageView {
         self.tiles = None;
         if let Content::Document { list, .. } = &self.content {
             let tiles = Tiles::new(Arc::clone(list), &mut self.images);
-            self.height = tiles.height();
+            self.height = tiles.height() * self.zoom;
             self.tiles = Some(tiles);
             return;
         }
@@ -209,9 +242,14 @@ impl PageView {
             });
             y += height + size * 0.6;
         }
-        if matches!(self.content, Content::Crashed(_)) {
+        let action = match &self.content {
+            Content::Crashed(_) => Some(L10N.tr("reload")),
+            Content::Insecure { .. } => Some(L10N.tr("continue-insecure")),
+            _ => None,
+        };
+        if let Some(action) = action {
             let label = cx.text.paragraph(
-                &L10N.tr("reload"),
+                &action,
                 TextStyle::new(BODY_SIZE, TEXT).weight(TextStyle::SEMIBOLD),
                 None,
                 TextAlign::Start,
@@ -259,6 +297,20 @@ impl PageView {
                 body(L10N.tr("page-crashed-body"), TEXT),
                 body(url.to_string(), SECONDARY),
             ],
+            Content::Insecure {
+                https,
+                http,
+                message,
+            } => vec![
+                title(L10N.tr("insecure-title")),
+                body(
+                    L10N.tr("insecure-body")
+                        .replace("HOST", http.host_str().unwrap_or_default()),
+                    TEXT,
+                ),
+                body(message.clone(), SECONDARY),
+                body(https.to_string(), SECONDARY),
+            ],
         }
     }
 
@@ -296,7 +348,10 @@ impl PageView {
                     return false;
                 }
                 if self.reload_at(pointer.position) {
-                    self.reload_pressed = true;
+                    match &self.content {
+                        Content::Insecure { http, .. } => self.followed = Some(http.clone()),
+                        _ => self.reload_pressed = true,
+                    }
                     return true;
                 }
                 self.followed = self.link_at(pointer.position).cloned();
@@ -326,10 +381,11 @@ impl Widget for PageView {
             self.scroll.follow(cx, y, y + frame.height);
         }
         let offset = self.scroll.offset(cx);
+        let zoom = self.document_zoom();
         if let Some(tiles) = &mut self.tiles {
             tiles.prepare(
-                offset - frame.height,
-                offset + 2.0 * frame.height,
+                (offset - frame.height) / zoom,
+                (offset + 2.0 * frame.height) / zoom,
                 &mut self.images,
             );
         }
@@ -342,11 +398,20 @@ impl Widget for PageView {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let offset = self.scroll.offset(cx);
         self.shown_offset.set(offset);
+        let zoom = self.document_zoom();
         let (visible, canvas) = match &self.tiles {
-            Some(tiles) => (
-                tiles.visible(offset, offset + self.frame.height),
-                tiles.background(),
-            ),
+            Some(tiles) => {
+                let shown = tiles.visible(offset / zoom, (offset + self.frame.height) / zoom);
+                let shown = match zoom == 1.0 {
+                    true => shown,
+                    false => vec![Item::Scale {
+                        origin: Point::new(0.0, 0.0),
+                        factor: zoom,
+                        items: shown,
+                    }],
+                };
+                (shown, tiles.background())
+            }
             None => (self.message.clone(), CANVAS),
         };
         let content = vec![

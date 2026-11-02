@@ -1,5 +1,7 @@
 mod address;
 mod page;
+mod pages;
+mod places;
 mod renderer;
 mod session;
 mod tiles;
@@ -17,6 +19,7 @@ use bande_app_menu::Entry;
 use bande_l10n::Localizer;
 use web_host::Url;
 
+use crate::places::{Place, Places};
 use crate::renderer::{Renderer, Session};
 use crate::view::{Ask, BrowserView, CarriedTab, SavedWindow};
 
@@ -46,6 +49,19 @@ const REOPEN_TAB: &str = "reopen-tab";
 const NEXT_TAB: &str = "next-tab";
 const PREVIOUS_TAB: &str = "previous-tab";
 const SHOW_TAB: &str = "show-tab-";
+const PLACES_FILE: &str = "browser-places.sqlite";
+const SCHEME_TYPE: &str = "x-scheme-handler/https";
+const MENU_LABEL: usize = 60;
+const SHOW_HISTORY: &str = "show-history";
+const RECENT_PAGE: &str = "recent-page-";
+const RECENT_SHOWN: usize = 10;
+const ADD_BOOKMARK: &str = "add-bookmark";
+const SHOW_BOOKMARKS: &str = "show-bookmarks";
+const BOOKMARK: &str = "bookmark-";
+const ZOOM_IN: &str = "zoom-in";
+const ZOOM_OUT: &str = "zoom-out";
+const ACTUAL_SIZE: &str = "actual-size";
+const SYSTEM_BROWSER: &str = "open-in-system-browser";
 
 struct Browser {
     renderer: Renderer,
@@ -55,6 +71,7 @@ struct Browser {
     quitting: bool,
     carried_session: Session,
     session_file: Option<PathBuf>,
+    places: Rc<Places>,
 }
 
 fn addresses(arguments: &[String]) -> Vec<Url> {
@@ -78,10 +95,14 @@ impl Browser {
         session: Session,
         size: (u32, u32),
     ) -> Result<WindowId, bande_app::Error> {
-        let (renderer, ids) = (self.renderer.link(), Rc::clone(&self.ids));
+        let (renderer, ids, places) = (
+            self.renderer.link(),
+            Rc::clone(&self.ids),
+            Rc::clone(&self.places),
+        );
         Ok(
             cx.open(Kind::Main, &L10N.tr("app-name"), size, move |appearance| {
-                BrowserView::new(appearance, session, renderer, ids)
+                BrowserView::new(appearance, session, renderer, ids, places)
             })?,
         )
     }
@@ -93,7 +114,7 @@ impl Browser {
         };
         if let Some((_, view)) = cx.window(window) {
             if saved.tabs.is_empty() {
-                view.open_tab(None, true);
+                view.new_tab();
             }
             for (index, url) in saved.tabs.into_iter().enumerate() {
                 view.open_tab(Some(url), index == saved.active);
@@ -213,6 +234,7 @@ impl Program for Browser {
             quitting: false,
             carried_session: Session::Default,
             session_file: cx.state_file(SESSION_FILE),
+            places: Rc::new(open_places(cx.state_file(PLACES_FILE))?),
         };
         let urls = addresses(&arguments);
         if !urls.is_empty() {
@@ -232,12 +254,6 @@ impl Program for Browser {
             Entry::item(&L10N.tr("new-tab"), NEW_TAB).shortcut("Ctrl+T"),
             Entry::item(&L10N.tr("open-location"), OPEN_LOCATION).shortcut("Ctrl+L"),
         ];
-        let page = vec![
-            Entry::item(&L10N.tr("reload"), RELOAD).shortcut("Ctrl+R"),
-            Entry::item(&L10N.tr("stop"), STOP)
-                .shortcut("Ctrl+.")
-                .enabled(view.is_some_and(BrowserView::is_loading)),
-        ];
         let history = vec![
             Entry::item(&L10N.tr("back"), BACK)
                 .shortcut("Ctrl+[")
@@ -249,6 +265,56 @@ impl Program for Browser {
                 .shortcut("Shift+Ctrl+T")
                 .enabled(view.is_some_and(BrowserView::can_reopen_closed_tab)),
         ];
+        let page = vec![
+            Entry::item(&L10N.tr("reload"), RELOAD).shortcut("Ctrl+R"),
+            Entry::item(&L10N.tr("stop"), STOP)
+                .shortcut("Ctrl+.")
+                .enabled(view.is_some_and(BrowserView::is_loading)),
+            Entry::separator(),
+            Entry::item(&L10N.tr("zoom-in"), ZOOM_IN).shortcut("Ctrl+="),
+            Entry::item(&L10N.tr("zoom-out"), ZOOM_OUT).shortcut("Ctrl+-"),
+            Entry::item(&L10N.tr("actual-size"), ACTUAL_SIZE).shortcut("Ctrl+0"),
+        ];
+        let mut history = history;
+        history.push(Entry::separator());
+        history.push(Entry::item(&L10N.tr("show-history"), SHOW_HISTORY).shortcut("Ctrl+Y"));
+        let recent = self.places.recent(RECENT_SHOWN);
+        if !recent.is_empty() {
+            history.push(Entry::separator());
+        }
+        history.extend(recent.iter().enumerate().map(|(index, place)| {
+            Entry::item(&menu_label(place), &format!("{RECENT_PAGE}{index}"))
+        }));
+        let bookmarked = view.is_some_and(BrowserView::is_bookmarked);
+        let mut bookmarks = vec![
+            Entry::item(
+                &L10N.tr(if bookmarked {
+                    "remove-bookmark"
+                } else {
+                    "add-bookmark"
+                }),
+                ADD_BOOKMARK,
+            )
+            .shortcut("Ctrl+D")
+            .enabled(view.and_then(BrowserView::current_page).is_some()),
+            Entry::item(&L10N.tr("show-bookmarks"), SHOW_BOOKMARKS).shortcut("Shift+Ctrl+B"),
+        ];
+        let saved = self.places.bookmarks();
+        if !saved.is_empty() {
+            bookmarks.push(Entry::separator());
+        }
+        bookmarks.extend(
+            saved.iter().enumerate().map(|(index, place)| {
+                Entry::item(&menu_label(place), &format!("{BOOKMARK}{index}"))
+            }),
+        );
+        let mut file = file;
+        file.push(Entry::separator());
+        file.push(
+            Entry::item(&L10N.tr("open-in-system-browser"), SYSTEM_BROWSER)
+                .shortcut("Shift+Ctrl+O")
+                .enabled(view.and_then(BrowserView::current_page).is_some()),
+        );
         let tabs = view.map_or(0, BrowserView::tab_count);
         let mut window = vec![
             Entry::item(&L10N.tr("next-tab"), NEXT_TAB)
@@ -272,6 +338,7 @@ impl Program for Browser {
                 Entry::submenu(&L10N.tr("menu-file"), file),
                 Entry::submenu(&L10N.tr("menu-view"), page),
                 Entry::submenu(&L10N.tr("menu-history"), history),
+                Entry::submenu(&L10N.tr("menu-bookmarks"), bookmarks),
             ],
             window,
         }
@@ -293,9 +360,36 @@ impl Program for Browser {
             }
             return;
         };
+        if command == SYSTEM_BROWSER {
+            if let Some(url) = cx.view(window).and_then(BrowserView::current_page) {
+                open_in_system_browser(&url);
+            }
+            return;
+        }
+        let place = |prefix: &str, places: Vec<Place>| {
+            command
+                .strip_prefix(prefix)
+                .and_then(|index| index.parse::<usize>().ok())
+                .and_then(|index| places.into_iter().nth(index))
+        };
+        let picked = place(RECENT_PAGE, self.places.recent(RECENT_SHOWN))
+            .or_else(|| place(BOOKMARK, self.places.bookmarks()));
         if let Some((shown, view)) = cx.window(window) {
             match command {
+                _ if picked.is_some() => {
+                    if let Some(place) = picked {
+                        view.navigate(place.url);
+                    }
+                }
                 NEW_TAB => view.new_tab(),
+                SHOW_HISTORY => view.show_history(),
+                SHOW_BOOKMARKS => view.show_bookmarks(),
+                ADD_BOOKMARK => {
+                    view.toggle_bookmark();
+                }
+                ZOOM_IN => view.zoom(Some(1)),
+                ZOOM_OUT => view.zoom(Some(-1)),
+                ACTUAL_SIZE => view.zoom(None),
                 OPEN_LOCATION => view.focus_address(),
                 RELOAD => view.reload(),
                 STOP => view.stop(),
@@ -380,6 +474,46 @@ impl Program for Browser {
         for window in touched {
             self.serve(cx, window);
         }
+    }
+}
+
+fn open_places(file: Option<PathBuf>) -> rusqlite::Result<Places> {
+    match file {
+        Some(file) => Places::open(&file).or_else(|error| {
+            tracing::warn!("cannot open history and bookmarks: {error}");
+            Places::in_memory()
+        }),
+        None => Places::in_memory(),
+    }
+}
+
+fn menu_label(place: &Place) -> String {
+    let label = match place.title.is_empty() {
+        true => place.url.as_str(),
+        false => place.title.as_str(),
+    };
+    label.chars().take(MENU_LABEL).collect()
+}
+
+fn open_in_system_browser(url: &Url) {
+    let apps = bande_xdg::Apps::load(bande_xdg::data_dirs(), &bande_xdg::config_dirs());
+    let desktop = format!("{}.desktop", INFO.id);
+    let browser = apps
+        .apps_for(SCHEME_TYPE)
+        .into_iter()
+        .find(|app| app.id != desktop);
+    let Some(browser) = browser else {
+        return tracing::warn!("no other browser is installed");
+    };
+    let launched = browser
+        .command_for_uri(url.as_str())
+        .map_err(|error| error.to_string())
+        .and_then(|command| {
+            bande_xdg::spawn_detached(browser.app_id(), &command, None, None)
+                .map_err(|error| error.to_string())
+        });
+    if let Err(error) = launched {
+        tracing::warn!("cannot open {url} in {}: {error}", browser.id);
     }
 }
 

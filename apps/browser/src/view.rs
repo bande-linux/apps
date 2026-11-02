@@ -9,13 +9,16 @@ use bande_toolkit::ui::{
     WidgetId, frame_time,
 };
 use bande_toolkit::{
-    Appearance, FrameRegions, Header, Image, Item, Point, Radius, Rect, SHEET_INSET, Scene, Shape,
-    TextSystem, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent, window_controls_end,
+    Appearance, Elevation, FrameRegions, Header, Image, Item, Point, Radius, Rect, SHEET_INSET,
+    Scene, Shape, TextStyle, TextSystem, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
+    window_controls_end,
 };
 use web_host::Url;
 use web_host::Viewport;
 
 use crate::page::{Content, PageView};
+use crate::pages;
+use crate::places::{Place, Places};
 use crate::renderer::{Command, Link, LoadId, Outcome, Session, Update, Verdict, ViewId};
 use crate::{L10N, address};
 
@@ -28,6 +31,12 @@ const SYMBOL_PIXELS: u32 = 16;
 const ADDRESS_MIN: f32 = 240.0;
 const ADDRESS_MAX: f32 = 680.0;
 const CLOSED_KEPT: usize = 32;
+const SUGGESTIONS: usize = 6;
+const SUGGESTION_ROW: f32 = 40.0;
+const SUGGESTION_INSET: f32 = 6.0;
+const HISTORY_SHOWN: usize = 500;
+const ZOOMS: [f32; 9] = [0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 2.0];
+const DEFAULT_ZOOM: usize = 4;
 const FIRST_VIEWPORT: Viewport = Viewport {
     width: 1088.0,
     height: 706.0,
@@ -43,6 +52,7 @@ enum Signal {
     Forward,
     Reload,
     Stop,
+    Typed(String),
 }
 
 type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -61,6 +71,13 @@ fn reload_button(signals: &Signals, loading: bool) -> Button {
     match loading {
         true => symbol(STOP, &L10N.tr("stop"), signals, || Signal::Stop),
         false => symbol(RELOAD, &L10N.tr("reload"), signals, || Signal::Reload),
+    }
+}
+
+fn address_text(url: &Url) -> &str {
+    match url.scheme() {
+        "http" | "https" => url.as_str(),
+        _ => "",
     }
 }
 
@@ -84,6 +101,7 @@ struct Entry {
 struct Pending {
     load: LoadId,
     target: Target,
+    fallback: Option<Url>,
 }
 
 struct Tab {
@@ -98,6 +116,7 @@ struct Tab {
     sent_viewport: Option<Viewport>,
     title: Option<String>,
     deferred: Option<Url>,
+    zoom: f32,
 }
 
 impl Tab {
@@ -114,6 +133,7 @@ impl Tab {
             sent_viewport: None,
             title: None,
             deferred: None,
+            zoom: 1.0,
         }
     }
 
@@ -122,6 +142,11 @@ impl Tab {
             .and_then(|current| self.entries.get(current))
             .map(|entry| &entry.url)
             .or(self.deferred.as_ref())
+    }
+
+    fn shown_url(&self) -> Option<&Url> {
+        self.current_url()
+            .filter(|url| matches!(url.scheme(), "http" | "https"))
     }
 
     fn label(&self) -> String {
@@ -185,6 +210,10 @@ pub(crate) struct BrowserView {
     full_screen: bool,
     focused: bool,
     changed: bool,
+    places: Rc<Places>,
+    page_size: Option<(f32, f32)>,
+    suggestions: Vec<Place>,
+    suggested: Option<usize>,
 }
 
 impl BrowserView {
@@ -193,6 +222,7 @@ impl BrowserView {
         session: Session,
         renderer: Link,
         ids: Rc<Cell<u64>>,
+        places: Rc<Places>,
     ) -> Self {
         let signals: Signals = Rc::default();
         let mut host = FreeLayout::new();
@@ -208,8 +238,13 @@ impl BrowserView {
             Session::Default => L10N.tr("address-placeholder"),
             Session::Private(_) => L10N.tr("private-placeholder"),
         };
-        let address =
-            host.insert_in_header(TextField::new(&placeholder, "", |_| {}), Rect::default());
+        let typed = Rc::clone(&signals);
+        let address = host.insert_in_header(
+            TextField::new(&placeholder, "", move |text| {
+                typed.borrow_mut().push(Signal::Typed(text.to_owned()));
+            }),
+            Rect::default(),
+        );
         let reload = host.insert_in_header(reload_button(&signals, false), Rect::default());
         let host_id = bande_toolkit::ui::Widget::id(&host);
         let mut ui = Ui::new(
@@ -244,6 +279,10 @@ impl BrowserView {
             full_screen: false,
             focused: true,
             changed: false,
+            places,
+            page_size: None,
+            suggestions: Vec::new(),
+            suggested: None,
         };
         view.refresh_navigation();
         view
@@ -319,9 +358,209 @@ impl BrowserView {
     }
 
     pub(crate) fn new_tab(&mut self) {
-        self.open_tab(None, true);
+        let palette = self.ui.context().palette;
+        let start = pages::favourites(&self.places.bookmarks(), &palette);
+        self.open_tab(start, true);
         self.set_address("");
         self.focus_address();
+    }
+
+    pub(crate) fn open_page(&mut self, url: Option<Url>) {
+        if url.is_some() {
+            self.open_tab(url, true);
+        }
+    }
+
+    pub(crate) fn show_history(&mut self) {
+        let palette = self.ui.context().palette;
+        let history = self.places.history(HISTORY_SHOWN);
+        let page = pages::listing(
+            &L10N.tr("history-title"),
+            &history,
+            &palette,
+            &L10N.tr("history-empty"),
+        );
+        self.open_page(page);
+    }
+
+    pub(crate) fn show_bookmarks(&mut self) {
+        let palette = self.ui.context().palette;
+        let bookmarks = self.places.bookmarks();
+        let page = pages::listing(
+            &L10N.tr("bookmarks-title"),
+            &bookmarks,
+            &palette,
+            &L10N.tr("bookmarks-empty"),
+        );
+        self.open_page(page);
+    }
+
+    pub(crate) fn current_page(&self) -> Option<Url> {
+        self.tabs.get(self.active)?.shown_url().cloned()
+    }
+
+    pub(crate) fn toggle_bookmark(&mut self) -> bool {
+        let Some(tab) = self.tabs.get(self.active) else {
+            return false;
+        };
+        let Some(url) = tab.shown_url().cloned() else {
+            return false;
+        };
+        let title = tab.title.clone().unwrap_or_default();
+        match self.places.toggle_bookmark(&url, &title) {
+            Ok(added) => added,
+            Err(error) => {
+                tracing::warn!("cannot change the bookmark: {error}");
+                false
+            }
+        }
+    }
+
+    pub(crate) fn is_bookmarked(&self) -> bool {
+        self.current_page()
+            .is_some_and(|url| self.places.is_bookmarked(&url))
+    }
+
+    pub(crate) fn zoom(&mut self, step: Option<i32>) {
+        let index = self.active;
+        let Some(tab) = self.tabs.get_mut(index) else {
+            return;
+        };
+        let current = ZOOMS
+            .iter()
+            .position(|zoom| (*zoom - tab.zoom).abs() < 0.01)
+            .unwrap_or(DEFAULT_ZOOM);
+        let next = match step {
+            Some(step) => current
+                .saturating_add_signed(step as isize)
+                .min(ZOOMS.len() - 1),
+            None => DEFAULT_ZOOM,
+        };
+        tab.zoom = ZOOMS[next];
+        let zoom = tab.zoom;
+        self.with_page(index, |page| page.set_zoom(zoom));
+    }
+
+    fn suggest(&mut self, text: &str) {
+        self.suggested = None;
+        self.suggestions = match self.address_focused() {
+            true => self.places.suggest(text, SUGGESTIONS),
+            false => Vec::new(),
+        };
+    }
+
+    fn suggestion_frame(&self) -> Option<Rect> {
+        if self.suggestions.is_empty() {
+            return None;
+        }
+        let address = self.frames(self.width)[2].1;
+        let height = SUGGESTION_ROW * self.suggestions.len() as f32 + 2.0 * SUGGESTION_INSET;
+        Some(Rect::new(
+            address.x,
+            address.y + address.height + 4.0,
+            address.width,
+            height,
+        ))
+    }
+
+    fn suggestion_at(&self, point: Point) -> Option<usize> {
+        let frame = self.suggestion_frame()?;
+        if !frame.contains(point) {
+            return None;
+        }
+        let row = ((point.y - frame.y - SUGGESTION_INSET) / SUGGESTION_ROW).floor();
+        (row >= 0.0)
+            .then_some(row as usize)
+            .filter(|row| *row < self.suggestions.len())
+    }
+
+    fn open_suggestion(&mut self, index: usize) -> bool {
+        let Some(place) = self.suggestions.get(index) else {
+            return false;
+        };
+        let url = place.url.clone();
+        self.suggestions.clear();
+        self.suggested = None;
+        self.navigate(url);
+        true
+    }
+
+    fn paint_suggestions(&mut self, items: &mut Vec<Item>) {
+        let Some(frame) = self.suggestion_frame() else {
+            return;
+        };
+        let palette = self.ui.context().palette;
+        items.extend(Item::shadows(
+            Shape::rounded(frame, Radius::M),
+            Elevation::Overlay,
+            palette.scheme,
+            true,
+        ));
+        items.push(Item::Fill {
+            shape: Shape::rounded(frame, Radius::M),
+            paint: palette.raised.into(),
+        });
+        let width = (frame.width - 2.0 * SUGGESTION_INSET - 16.0).max(0.0);
+        for (index, place) in self.suggestions.iter().enumerate() {
+            let row = Rect::new(
+                frame.x + SUGGESTION_INSET,
+                frame.y + SUGGESTION_INSET + index as f32 * SUGGESTION_ROW,
+                frame.width - 2.0 * SUGGESTION_INSET,
+                SUGGESTION_ROW,
+            );
+            if self.suggested == Some(index) {
+                items.push(Item::Fill {
+                    shape: Shape::rounded(row, Radius::S),
+                    paint: palette.accent_soft.into(),
+                });
+            }
+            let title = match place.title.is_empty() {
+                true => place.url.host_str().unwrap_or_default().to_owned(),
+                false => place.title.clone(),
+            };
+            let text = &mut self.ui.context().text;
+            let heading = text.fitted(&title, TextStyle::new(13.0, palette.ink), width);
+            let detail = text.fitted(
+                place.url.as_str(),
+                TextStyle::new(11.0, palette.ink2),
+                width,
+            );
+            items.push(Item::Text {
+                origin: Point::new(row.x + 8.0, row.y + 4.0),
+                paragraph: heading,
+            });
+            items.push(Item::Text {
+                origin: Point::new(row.x + 8.0, row.y + 21.0),
+                paragraph: detail,
+            });
+        }
+    }
+
+    fn suggestion_input(&mut self, window: &mut Window, input: &Event) -> Option<bool> {
+        let frame = self.suggestion_frame()?;
+        match input {
+            Event::PointerMove(pointer) | Event::PointerEnter(pointer)
+                if frame.contains(pointer.position) =>
+            {
+                let hovered = self.suggestion_at(pointer.position);
+                if hovered != self.suggested {
+                    self.suggested = hovered;
+                    window.request_redraw();
+                }
+                Some(true)
+            }
+            Event::PointerDown(pointer) if frame.contains(pointer.position) => {
+                if let Some(index) = self.suggestion_at(pointer.position) {
+                    self.open_suggestion(index);
+                }
+                Some(true)
+            }
+            Event::PointerDown(_) => {
+                self.suggestions.clear();
+                None
+            }
+            _ => None,
+        }
     }
 
     pub(crate) fn select(&mut self, index: usize) {
@@ -330,7 +569,7 @@ impl BrowserView {
         }
         self.save_scroll(self.active);
         self.active = index;
-        let url = self.tabs[index].current_url().map(Url::to_string);
+        let url = self.tabs[index].shown_url().map(Url::to_string);
         self.set_address(url.as_deref().unwrap_or_default());
         self.window_title = Some(self.tabs[index].label());
         if let Some(url) = self.tabs[index].deferred.take() {
@@ -424,6 +663,17 @@ impl BrowserView {
         }
     }
 
+    pub(crate) fn navigate_typed(&mut self, typed: address::Typed) {
+        self.navigate(typed.url);
+        if let Some(pending) = self
+            .tabs
+            .get_mut(self.active)
+            .and_then(|tab| tab.pending.as_mut())
+        {
+            pending.fallback = typed.fallback;
+        }
+    }
+
     pub(crate) fn navigate(&mut self, url: Url) {
         if self.tabs.is_empty() {
             return self.open_tab(Some(url), true);
@@ -452,7 +702,7 @@ impl BrowserView {
             scroll: 0.0,
         });
         tab.current = Some(next);
-        self.set_address(url.as_str());
+        self.set_address(address_text(&url));
         self.scroll_to_fragment(index, &url);
         self.refresh_navigation();
         self.changed = true;
@@ -476,10 +726,14 @@ impl BrowserView {
 
     fn start(&mut self, index: usize, url: Url, target: Target) {
         self.save_scroll(index);
+        let zoom = self.tabs.get(index).map_or(1.0, |tab| tab.zoom);
         let viewport = self
             .with_page(index, |page| page.viewport())
             .flatten()
-            .or(self.viewport)
+            .or(self.page_size.map(|(width, height)| Viewport {
+                width: (width / zoom).round(),
+                height: (height / zoom).round(),
+            }))
             .unwrap_or(FIRST_VIEWPORT);
         let Some(tab) = self.tabs.get_mut(index) else {
             return;
@@ -488,7 +742,11 @@ impl BrowserView {
         let load = LoadId(tab.next_load);
         tab.sent_viewport = Some(viewport);
         tab.deferred = None;
-        tab.pending = Some(Pending { load, target });
+        tab.pending = Some(Pending {
+            load,
+            target,
+            fallback: None,
+        });
         self.renderer.send(Command::Load {
             view: tab.id,
             load,
@@ -503,7 +761,7 @@ impl BrowserView {
             self.with_page(index, |page| page.show(Content::Loading(url.clone())));
         }
         if index == self.active {
-            self.set_address(url.as_str());
+            self.set_address(address_text(&url));
             self.focus_page();
         }
         self.refresh_navigation();
@@ -563,7 +821,18 @@ impl BrowserView {
             }
             Outcome::Failed { url, message } => {
                 tab.shown = None;
-                (url.clone(), None, Content::Failed { url, message }, None)
+                let content = match pending.fallback.clone() {
+                    Some(http) => Content::Insecure {
+                        https: url.clone(),
+                        http,
+                        message,
+                    },
+                    None => Content::Failed {
+                        url: url.clone(),
+                        message,
+                    },
+                };
+                (url, None, content, None)
             }
             Outcome::Unsupported { url, kind } => {
                 tab.shown = None;
@@ -594,15 +863,25 @@ impl BrowserView {
         };
         tab.title = title;
         let label = tab.label();
+        let record = tab.session == Session::Default && matches!(content, Content::Document { .. });
+        if record
+            && let Err(error) = self
+                .places
+                .visit(&url, tab.title.as_deref().unwrap_or_default())
+        {
+            tracing::warn!("cannot record the visit: {error}");
+        }
         self.with_page(index, |page| {
             page.show(content);
-            if let Some(y) = restored.or(scroll) {
-                page.jump_to(y);
+            match (restored, scroll) {
+                (Some(offset), _) => page.restore_offset(offset),
+                (None, Some(y)) => page.jump_to(y),
+                (None, None) => {}
             }
         });
         if index == self.active {
             if !self.address_focused() {
-                self.set_address(url.as_str());
+                self.set_address(address_text(&url));
             }
             self.window_title = Some(label);
         }
@@ -620,7 +899,7 @@ impl BrowserView {
         }
         self.renderer.send(Command::Stop { view: tab.id });
         let shown = tab.shown.is_some();
-        let url = tab.current_url().map(Url::to_string);
+        let url = tab.shown_url().map(Url::to_string);
         self.set_address(url.as_deref().unwrap_or_default());
         if !shown {
             self.with_page(index, |page| page.show(Content::Blank));
@@ -690,8 +969,8 @@ impl BrowserView {
         }
         self.save_scroll(index);
         self.tabs[index].current = Some(entry);
-        self.set_address(url.as_str());
-        self.with_page(index, |page| page.jump_to(scroll));
+        self.set_address(address_text(&url));
+        self.with_page(index, |page| page.restore_offset(scroll));
         self.refresh_navigation();
         self.changed = true;
     }
@@ -769,9 +1048,9 @@ impl BrowserView {
         let Some(field) = self.ui.widget_as::<TextField>(self.toolbar.address) else {
             return false;
         };
-        match address::parse(&field.text()) {
-            Some(url) => {
-                self.navigate(url);
+        match address::typed(&field.text()) {
+            Some(typed) => {
+                self.navigate_typed(typed);
                 true
             }
             None => false,
@@ -815,6 +1094,7 @@ impl BrowserView {
                     Signal::Forward => self.go_forward(),
                     Signal::Reload => self.reload(),
                     Signal::Stop => self.stop(),
+                    Signal::Typed(text) => self.suggest(&text),
                 }
             }
         }
@@ -925,6 +1205,9 @@ impl BrowserView {
         let palette = self.ui.context().palette;
         let (controls, dialog) = self.ui.paint_layers(width, height);
         self.viewport = self.with_page(active, |page| page.viewport()).flatten();
+        if let Some(size) = self.with_page(active, |page| page.frame_size()).flatten() {
+            self.page_size = Some(size);
+        }
         self.follow_viewport();
         let mut items = vec![Item::Fill {
             shape: Shape::rounded(sheet, radius),
@@ -958,6 +1241,7 @@ impl BrowserView {
             });
         }
         items.extend(controls);
+        self.paint_suggestions(&mut items);
         items.extend(dialog);
         Scene {
             width,
@@ -1112,16 +1396,37 @@ impl BrowserView {
             return false;
         };
         match input {
+            Event::Key { key: Key::Down, .. }
+                if self.address_focused() && !self.suggestions.is_empty() =>
+            {
+                let last = self.suggestions.len() - 1;
+                self.suggested = Some(self.suggested.map_or(0, |index| (index + 1).min(last)));
+                true
+            }
+            Event::Key { key: Key::Up, .. }
+                if self.address_focused() && !self.suggestions.is_empty() =>
+            {
+                self.suggested = self.suggested.and_then(|index| index.checked_sub(1));
+                true
+            }
             Event::Key {
                 key: Key::Enter, ..
-            } if self.address_focused() => self.submit_address(),
+            } if self.address_focused() => match self.suggested {
+                Some(index) => self.open_suggestion(index),
+                None => self.submit_address(),
+            },
             Event::Key {
                 key: Key::Escape, ..
             } if self.address_focused() => {
+                if !self.suggestions.is_empty() {
+                    self.suggestions.clear();
+                    self.suggested = None;
+                    return true;
+                }
                 let url = self
                     .tabs
                     .get(self.active)
-                    .and_then(Tab::current_url)
+                    .and_then(Tab::shown_url)
                     .map(Url::to_string);
                 self.set_address(url.as_deref().unwrap_or_default());
                 self.focus_page();
@@ -1181,7 +1486,9 @@ impl View for BrowserView {
             return true;
         }
         if let WindowEvent::Input(input) = &event
-            && let Some(handled) = self.strip_input(window, input)
+            && let Some(handled) = self
+                .suggestion_input(window, input)
+                .or_else(|| self.strip_input(window, input))
         {
             self.settle();
             return handled;
