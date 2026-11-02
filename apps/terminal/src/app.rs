@@ -68,6 +68,7 @@ enum Pending {
     CloseWindow,
     Quit,
     Paste(String),
+    Rename(u32),
 }
 
 struct Tab {
@@ -76,6 +77,7 @@ struct Tab {
     layout: Layout,
     focused: u32,
     bell: bool,
+    title: Option<String>,
 }
 
 impl Tab {
@@ -87,6 +89,7 @@ impl Tab {
             layout: Layout::Pane(id),
             focused: id,
             bell: false,
+            title: None,
         }
     }
 
@@ -398,6 +401,9 @@ impl TerminalWindow {
     }
 
     fn tab_title(&self, tab: &Tab) -> String {
+        if let Some(title) = &tab.title {
+            return title.clone();
+        }
         let title = tab.focused().title(self.home.as_deref());
         if title.is_empty() {
             L10N.tr("title")
@@ -658,6 +664,7 @@ impl TerminalWindow {
         let button = match pending {
             Pending::Quit => L10N.tr("quit"),
             Pending::Paste(_) => L10N.tr("paste"),
+            Pending::Rename(_) => L10N.tr("rename"),
             Pending::CloseTab(_)
             | Pending::ClosePane(_)
             | Pending::CloseOtherTabs(_)
@@ -674,6 +681,7 @@ impl TerminalWindow {
 
     fn confirm(&mut self, window: &mut Window) {
         let pending = self.pending.take();
+        let query = self.banner.as_ref().map(Banner::query);
         self.close_banner();
         match pending {
             Some(Pending::CloseTab(id)) => {
@@ -694,6 +702,14 @@ impl TerminalWindow {
             }
             Some(Pending::Quit) => self.asks.push(Ask::Quit),
             Some(Pending::Paste(text)) => self.paste_now(&text),
+            Some(Pending::Rename(id)) => {
+                if let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == id) {
+                    tab.title = query
+                        .map(|title| title.trim().to_owned())
+                        .filter(|title| !title.is_empty());
+                }
+                self.sync_title(window);
+            }
             None => {}
         }
     }
@@ -782,6 +798,7 @@ impl TerminalWindow {
         let stale = match &self.pending {
             Some(Pending::CloseTab(id) | Pending::CloseOtherTabs(id)) => *id == closed.id,
             Some(Pending::Paste(_)) => was_active,
+            Some(Pending::Rename(id)) => *id == closed.id,
             Some(Pending::ClosePane(id)) => closed.session(*id).is_some(),
             Some(Pending::CloseWindow | Pending::Quit) | None => false,
         };
@@ -903,6 +920,7 @@ impl TerminalWindow {
             Command::SelectTab(index) => self.select_tab(window, index),
             Command::LastTab => self.select_tab(window, self.tabs.len() - 1),
             Command::Find => self.open_find(window),
+            Command::EditTitle => self.edit_title(window),
             Command::FindNext => self.find_again(window, SearchDirection::Newer),
             Command::FindPrevious => self.find_again(window, SearchDirection::Older),
             Command::SplitSideBySide => self.split(window, Axis::SideBySide),
@@ -1028,6 +1046,18 @@ impl TerminalWindow {
 
     fn find_banner(&mut self) -> Option<&mut Banner> {
         self.banner.as_mut().filter(|banner| banner.is_find())
+    }
+
+    fn edit_title(&mut self, window: &mut Window) {
+        self.close_banner();
+        let title = self.tab_title(self.tab());
+        let text = self.painter.text_system().sharing_fonts();
+        self.banner = Some(Banner::rename(window.appearance(), text, &title));
+        self.pending = Some(Pending::Rename(self.tab().id));
+        self.banner_focused = true;
+        self.focus_terminal(false);
+        self.layout();
+        window.request_redraw();
     }
 
     fn open_find(&mut self, window: &Window) {
