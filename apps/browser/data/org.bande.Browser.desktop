@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Browser
+Comment=Browse the web
+Icon=org.bande.Browser
+Exec=bande-browser %U
+StartupNotify=true
+Categories=Network;WebBrowser;
+MimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;

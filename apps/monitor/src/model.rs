@@ -3,9 +3,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::time::Duration;
 
+use bande_toolkit::ui::{Band, GraphKind, Series, SeriesColor};
+
 use crate::L10N;
 use crate::apps::{Catalog, Group, GroupKey};
-use bande_status::history::{charging_spans, time_on_battery};
+use bande_status::history::{ChargeSample, charging_spans, time_on_battery};
 use bande_status::status::Power;
 
 use crate::format::{format_bytes, format_cpu_time, format_hours, format_percent, format_rate};
@@ -15,6 +17,7 @@ use crate::signal::{SignalError, Stop, stop};
 use crate::system::PressureLevel;
 
 pub const HISTORY: usize = 60;
+const BATTERY_SAMPLES: usize = 145;
 const ENERGY_SAMPLES: usize = 15;
 const WAKEUPS_PER_IMPACT: f64 = 10.0;
 const MISSING: &str = "\u{2013}";
@@ -74,34 +77,21 @@ pub struct Row {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Graph {
-    Stacked {
-        lower: Vec<f32>,
-        upper: Vec<f32>,
-    },
-    Lines {
-        primary: Vec<f32>,
-        secondary: Option<Vec<f32>>,
-        scale: String,
-    },
-    Pressure(Vec<(f32, PressureLevel)>),
-    Battery {
-        charge: Vec<(f32, f32)>,
-        charging: Vec<(f32, f32)>,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Series {
-    Primary,
-    Secondary,
+pub struct Graph {
+    pub title: String,
+    pub span: String,
+    pub kind: GraphKind,
+    pub samples: usize,
+    pub series: Vec<Series>,
+    pub bands: Vec<Band>,
+    pub scale: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Readout {
     pub label: String,
     pub value: String,
-    pub series: Option<Series>,
+    pub series: Option<SeriesColor>,
 }
 
 impl Readout {
@@ -113,7 +103,7 @@ impl Readout {
         }
     }
 
-    fn keyed(message: &str, value: String, series: Series) -> Self {
+    fn keyed(message: &str, value: String, series: SeriesColor) -> Self {
         Self {
             series: Some(series),
             ..Self::new(message, value)
@@ -1301,44 +1291,61 @@ impl Monitor {
     }
 
     pub fn graph(&self) -> Graph {
-        let full = || "100 %".to_owned();
+        let titled = |message: &str| Graph {
+            title: L10N.tr(message),
+            span: self.span(),
+            kind: GraphKind::Area,
+            samples: HISTORY,
+            series: Vec::new(),
+            bands: Vec::new(),
+            scale: None,
+        };
         match self.tab {
-            Tab::Cpu => Graph::Stacked {
-                lower: self.cpu.iter().map(|(system, _)| *system).collect(),
-                upper: self
-                    .cpu
-                    .iter()
-                    .map(|(system, user)| system + user)
-                    .collect(),
+            Tab::Cpu => Graph {
+                kind: GraphKind::Stacked,
+                series: vec![
+                    Series::new(
+                        SeriesColor::Secondary,
+                        self.cpu.iter().map(|(system, _)| *system),
+                    ),
+                    Series::new(SeriesColor::Primary, self.cpu.iter().map(|(_, user)| *user)),
+                ],
+                ..titled("graph-cpu-title")
             },
-            Tab::Memory => Graph::Pressure(self.memory.iter().copied().collect()),
+            Tab::Memory => Graph {
+                series: pressure_series(&self.memory),
+                ..titled("graph-pressure")
+            },
             Tab::Energy => match self.battery_history() {
-                Some(report) => battery_graph(report),
+                Some(report) => Graph {
+                    span: L10N.tr("graph-battery-span"),
+                    samples: BATTERY_SAMPLES,
+                    ..battery_graph(report, titled("graph-battery"))
+                },
                 None => {
                     let peak = self
                         .energy
                         .iter()
                         .fold(0.0, |peak: f64, (impact, _)| peak.max(*impact));
-                    Graph::Lines {
-                        primary: self
-                            .energy
-                            .iter()
-                            .map(|(impact, _)| match peak > 0.0 {
+                    Graph {
+                        series: vec![Series::new(
+                            SeriesColor::Primary,
+                            self.energy.iter().map(|(impact, _)| match peak > 0.0 {
                                 true => (impact / peak) as f32,
                                 false => 0.0,
-                            })
-                            .collect(),
-                        secondary: None,
-                        scale: format_percent(peak),
+                            }),
+                        )],
+                        scale: Some(format_percent(peak)),
+                        ..titled("graph-energy-title")
                     }
                 }
             },
-            Tab::Disk => rates_graph(&self.disk),
-            Tab::Network => rates_graph(&self.network),
-            Tab::Gpu => Graph::Lines {
-                primary: self.gpu.iter().copied().collect(),
-                secondary: None,
-                scale: full(),
+            Tab::Disk => rates_graph(&self.disk, titled("graph-disk-title")),
+            Tab::Network => rates_graph(&self.network, titled("graph-network-title")),
+            Tab::Gpu => Graph {
+                series: vec![Series::new(SeriesColor::Primary, self.gpu.iter().copied())],
+                scale: Some("100 %".to_owned()),
+                ..titled("graph-gpu-title")
             },
         }
     }
@@ -1516,9 +1523,13 @@ impl Monitor {
                     Readout::keyed(
                         "summary-system",
                         percent(snapshot.cpu.system),
-                        Series::Secondary,
+                        SeriesColor::Secondary,
                     ),
-                    Readout::keyed("summary-user", percent(snapshot.cpu.user), Series::Primary),
+                    Readout::keyed(
+                        "summary-user",
+                        percent(snapshot.cpu.user),
+                        SeriesColor::Primary,
+                    ),
                     Readout::new("summary-idle", percent(snapshot.cpu.idle)),
                 ],
                 vec![
@@ -1556,7 +1567,7 @@ impl Monitor {
                     Readout::keyed(
                         "summary-energy-impact",
                         format_percent(impact),
-                        Series::Primary,
+                        SeriesColor::Primary,
                     ),
                     Readout::new("summary-wakeups", format!("{wakeups:.0}")),
                 ]];
@@ -1571,12 +1582,12 @@ impl Monitor {
                     Readout::keyed(
                         "summary-read-rate",
                         format_rate(snapshot.disk.read_per_second),
-                        Series::Primary,
+                        SeriesColor::Primary,
                     ),
                     Readout::keyed(
                         "summary-written-rate",
                         format_rate(snapshot.disk.written_per_second),
-                        Series::Secondary,
+                        SeriesColor::Secondary,
                     ),
                     Readout::new(
                         "summary-reads",
@@ -1602,12 +1613,12 @@ impl Monitor {
                         Readout::keyed(
                             "summary-received-rate",
                             format_rate(total(|interface| interface.received_per_second)),
-                            Series::Primary,
+                            SeriesColor::Primary,
                         ),
                         Readout::keyed(
                             "summary-sent-rate",
                             format_rate(total(|interface| interface.sent_per_second)),
-                            Series::Secondary,
+                            SeriesColor::Secondary,
                         ),
                     ],
                     vec![
@@ -1633,7 +1644,7 @@ impl Monitor {
                     Readout::keyed(
                         "summary-gpu",
                         format!("{} %", format_percent(gpu_percent(snapshot))),
-                        Series::Primary,
+                        SeriesColor::Primary,
                     ),
                     Readout::new(
                         "summary-gpu-memory",
@@ -1720,30 +1731,74 @@ impl Monitor {
     }
 }
 
-fn battery_graph(report: &BatteryReport) -> Graph {
+fn pressure_series(history: &VecDeque<(f32, PressureLevel)>) -> Vec<Series> {
+    let levels = history.iter().map(|(_, level)| *level).collect::<Vec<_>>();
+    let mut series = Vec::new();
+    let mut start = 0;
+    while let Some(level) = levels.get(start).copied() {
+        let end = levels[start..]
+            .iter()
+            .position(|other| *other != level)
+            .map_or(levels.len(), |offset| start + offset);
+        let color = match level {
+            PressureLevel::Normal => SeriesColor::Success,
+            PressureLevel::Elevated => SeriesColor::Warning,
+            PressureLevel::Critical => SeriesColor::Danger,
+        };
+        let values = history
+            .iter()
+            .enumerate()
+            .map(|(index, (used, _))| (start..=end).contains(&index).then_some(*used))
+            .collect();
+        series.push(Series { color, values });
+        start = end;
+    }
+    series
+}
+
+fn charge_at(history: &[ChargeSample], at: f64) -> Option<f32> {
+    let after = history
+        .iter()
+        .position(|sample| f64::from(sample.at) >= at)?;
+    let next = &history[after];
+    let percent = match after.checked_sub(1) {
+        Some(before) => {
+            let previous = &history[before];
+            let (from, to) = (f64::from(previous.at), f64::from(next.at));
+            previous.percent + (next.percent - previous.percent) * (at - from) / (to - from)
+        }
+        None if f64::from(next.at) <= at => next.percent,
+        None => return None,
+    };
+    Some((percent / 100.0).clamp(0.0, 1.0) as f32)
+}
+
+fn battery_graph(report: &BatteryReport, graph: Graph) -> Graph {
     let start = report.now.saturating_sub(BATTERY_HISTORY);
     let along =
         |at: u32| (at.saturating_sub(start) as f32 / BATTERY_HISTORY as f32).clamp(0.0, 1.0);
-    Graph::Battery {
-        charge: report
-            .history
-            .iter()
-            .map(|sample| {
-                (
-                    along(sample.at),
-                    (sample.percent / 100.0).clamp(0.0, 1.0) as f32,
-                )
+    let slot = f64::from(BATTERY_HISTORY) / (BATTERY_SAMPLES - 1) as f64;
+    Graph {
+        series: vec![Series {
+            color: SeriesColor::Primary,
+            values: (0..BATTERY_SAMPLES)
+                .map(|index| charge_at(&report.history, f64::from(start) + index as f64 * slot))
+                .collect(),
+        }],
+        bands: charging_spans(&report.history, report.now)
+            .into_iter()
+            .map(|(from, to)| along(from)..along(to))
+            .filter(|along| along.end > along.start)
+            .map(|along| Band {
+                color: SeriesColor::Success,
+                along,
             })
             .collect(),
-        charging: charging_spans(&report.history, report.now)
-            .into_iter()
-            .map(|(from, to)| (along(from), along(to)))
-            .filter(|(from, to)| to > from)
-            .collect(),
+        ..graph
     }
 }
 
-fn rates_graph(history: &VecDeque<(f64, f64)>) -> Graph {
+fn rates_graph(history: &VecDeque<(f64, f64)>, graph: Graph) -> Graph {
     let peak = history.iter().fold(0.0, |peak: f64, (primary, secondary)| {
         peak.max(*primary).max(*secondary)
     });
@@ -1751,17 +1806,18 @@ fn rates_graph(history: &VecDeque<(f64, f64)>) -> Graph {
         true => (value / peak) as f32,
         false => 0.0,
     };
-    Graph::Lines {
-        primary: history
-            .iter()
-            .map(|(primary, _)| scaled(*primary))
-            .collect(),
-        secondary: Some(
-            history
-                .iter()
-                .map(|(_, secondary)| scaled(*secondary))
-                .collect(),
-        ),
-        scale: format_rate(peak),
+    Graph {
+        series: vec![
+            Series::new(
+                SeriesColor::Primary,
+                history.iter().map(|(primary, _)| scaled(*primary)),
+            ),
+            Series::new(
+                SeriesColor::Secondary,
+                history.iter().map(|(_, secondary)| scaled(*secondary)),
+            ),
+        ],
+        scale: Some(format_rate(peak)),
+        ..graph
     }
 }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Browser</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Browser</name>
+  <summary>Browse the web</summary>
+  <description>
+    <p>A web browser built on Bande's own web engine: private by default, with no telemetry and no ads.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Browser.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+</component>

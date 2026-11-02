@@ -1,0 +1,16 @@
+app-name = Browser
+menu-file = File
+menu-view = View
+menu-history = History
+new-window = New Window
+open-location = Open Location
+reload = Reload Page
+stop = Stop Loading
+back = Back
+forward = Forward
+address-placeholder = Search or enter website name
+loading = Loading…
+cannot-open = Browser can’t open the page
+page-loaded = { $status } · { $type } · { $size } bytes
+engine-pending = The engine draws this page once its display list lands.
+new-page = New Page
