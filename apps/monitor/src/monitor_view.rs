@@ -3,14 +3,14 @@ use std::time::{Duration, Instant};
 
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use bande_toolkit::ui::{
-    Animated, BUTTON_HEIGHT, Button, Cell, Column as TableColumn, Cursor, Event, Key, Modifiers,
-    Pointer, Row as TableRow, SEGMENTED_HEIGHT, SearchField, SegmentedControl, Sort, Spring,
-    TEXT_FIELD_HEIGHT, Table, WidgetId,
+    self, Animated, BUTTON_HEIGHT, Button, Cell, Column as TableColumn, Context, Cursor, Event,
+    GraphKind, Key, Modifiers, Pointer, Row as TableRow, SEGMENTED_HEIGHT, SearchField,
+    SegmentedControl, Series, SeriesColor, Sort, Spring, TEXT_FIELD_HEIGHT, Table, Widget,
+    WidgetId,
 };
 use bande_toolkit::{
-    Appearance, Color, Header, Item, Palette, Path, Point, Radius, Rect, SHEET_INSET, Scene,
-    Scheme, Shape, TextAlign, TextRole, TextSize, TextStyle, TextSystem, grown_line,
-    window_controls_end,
+    Appearance, Color, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape,
+    TextAlign, TextRole, TextSize, TextStyle, TextSystem, grown_line, window_controls_end,
 };
 
 use bande_app_menu::Entry;
@@ -19,12 +19,10 @@ use crate::L10N;
 use crate::list::{List, Signal, group_id, sender};
 use crate::menu::{COLUMN_ACTION, MenuCommand, Selected, app_menus, columns_menu, process_menu};
 use crate::model::{
-    Column, CoreGroup, CoreKind, Filter, Graph, HISTORY, Monitor, Row, RowKey, Series, StopTarget,
-    Tab,
+    Column, CoreGroup, CoreKind, Filter, Graph, HISTORY, Monitor, Row, RowKey, StopTarget, Tab,
 };
 use crate::sampler::Snapshot;
 use crate::signal::Stop;
-use crate::system::PressureLevel;
 use crate::view::{
     ALERT_ICON, FORCE_QUIT, INSPECT_SYMBOL, Icons, Painter, QUIT, Request, SEND, Screen,
     answer_stop, is_secondary, opens_menu, send_signal, signal_alert, stop_alert, stop_button,
@@ -39,12 +37,6 @@ const READOUT_GAP: f32 = 32.0;
 const READOUT_ROW: f32 = 24.0;
 const READOUT_ROWS: usize = 4;
 const GRAPH_SMALLEST_WIDTH: f32 = 120.0;
-const GRAPH_CAPTION: f32 = 20.0;
-const GRAPH_SCALE_PAD: f32 = 6.0;
-const CHARGING_BAND: f32 = 3.0;
-const SERIES_WIDTH: f32 = 1.5;
-const AREA_OPACITY: f32 = 0.3;
-const GRAPH_LABEL: f32 = 14.0;
 const STRIP_HEIGHT: f32 = 28.0;
 const STRIP_GAP: f32 = 4.0;
 const STRIP_MIN_WIDTH: f32 = 200.0;
@@ -919,275 +911,14 @@ impl MonitorView {
     }
 }
 
-fn series_points(values: &[f32], plot: Rect) -> Vec<Point> {
-    let step = plot.width / (HISTORY - 1) as f32;
-    let right = plot.x + plot.width;
-    let bottom = plot.y + plot.height;
-    let first = values.len().saturating_sub(HISTORY);
-    let shown = &values[first..];
-    shown
-        .iter()
-        .enumerate()
-        .map(|(index, value)| {
-            Point::new(
-                right - (shown.len() - 1 - index) as f32 * step,
-                bottom - value.clamp(0.0, 1.0) * plot.height,
-            )
-        })
-        .collect()
-}
-
-fn polyline(points: &[Point]) -> Option<Path> {
-    let (first, rest) = points.split_first()?;
-    Some(
-        rest.iter()
-            .fold(Path::new().move_to(*first), |path, point| {
-                path.line_to(*point)
-            }),
-    )
-}
-
-fn series_color(series: Series, palette: Palette) -> Color {
-    let (lightness, chroma) = match palette.scheme {
-        Scheme::Light => (0.56, 0.18),
-        Scheme::Dark => (0.72, 0.14),
-    };
-    match series {
-        Series::Primary => Color::oklch(lightness, chroma, 255.0),
-        Series::Secondary => Color::oklch(lightness, chroma + 0.02, 25.0),
-    }
-}
-
-fn paint_area(painter: &mut Painter, points: &[Point], bottom: f32, color: Color) {
-    let (Some(path), Some(first), Some(last)) = (polyline(points), points.first(), points.last())
-    else {
-        return;
-    };
-    painter.items.push(Item::FillPath {
-        path: path
-            .clone()
-            .line_to(Point::new(last.x, bottom))
-            .line_to(Point::new(first.x, bottom))
-            .close(),
-        paint: color.with_opacity(AREA_OPACITY).into(),
-    });
-    painter.items.push(Item::StrokePath {
-        path,
-        width: SERIES_WIDTH,
-        paint: color.into(),
-    });
-}
-
-fn paint_series(painter: &mut Painter, values: &[f32], plot: Rect, color: Color) {
-    let points = series_points(values, plot);
-    paint_area(painter, &points, plot.y + plot.height, color);
-}
-
-fn paint_battery(
-    painter: &mut Painter,
-    charge: &[(f32, f32)],
-    charging: &[(f32, f32)],
-    plot: Rect,
-    palette: Palette,
-) {
-    let bottom = plot.y + plot.height;
-    let points: Vec<Point> = charge
-        .iter()
-        .map(|(along, level)| {
-            Point::new(
-                plot.x + along * plot.width,
-                bottom - level.clamp(0.0, 1.0) * plot.height,
-            )
-        })
-        .collect();
-    paint_area(
-        painter,
-        &points,
-        bottom,
-        series_color(Series::Primary, palette),
-    );
-    for (from, to) in charging {
-        painter.fill(
-            Shape::rect(Rect::new(
-                plot.x + from * plot.width,
-                bottom - CHARGING_BAND,
-                (to - from) * plot.width,
-                CHARGING_BAND,
-            )),
-            palette.success,
-        );
-    }
-}
-
-fn pressure_color(level: PressureLevel, palette: Palette) -> Color {
-    match level {
-        PressureLevel::Normal => palette.success,
-        PressureLevel::Elevated => palette.warning,
-        PressureLevel::Critical => palette.danger_text,
-    }
-}
-
-fn paint_pressure(
-    painter: &mut Painter,
-    samples: &[(f32, PressureLevel)],
-    plot: Rect,
-    palette: Palette,
-) {
-    let values = samples.iter().map(|(used, _)| *used).collect::<Vec<_>>();
-    let points = series_points(&values, plot);
-    let first = samples.len().saturating_sub(HISTORY);
-    let levels = &samples[first..];
-    let bottom = plot.y + plot.height;
-    let mut start = 0;
-    while start < levels.len() {
-        let level = levels[start].1;
-        let end = levels[start..]
-            .iter()
-            .position(|(_, other)| *other != level)
-            .map_or(levels.len(), |offset| start + offset);
-        let run = &points[start..(end + 1).min(points.len())];
-        let run = match run.len() {
-            1 => vec![Point::new(run[0].x - 1.0, run[0].y), run[0]],
-            _ => run.to_vec(),
-        };
-        paint_area(painter, &run, bottom, pressure_color(level, palette));
-        start = end;
-    }
-}
-
-fn graph_title(graph: &Graph, tab: Tab) -> String {
-    match graph {
-        Graph::Pressure(_) => L10N.tr("graph-pressure"),
-        Graph::Battery { .. } => L10N.tr("graph-battery"),
-        Graph::Stacked { .. } | Graph::Lines { .. } => L10N.tr(match tab {
-            Tab::Cpu => "graph-cpu-title",
-            Tab::Energy => "graph-energy-title",
-            Tab::Disk => "graph-disk-title",
-            Tab::Network => "graph-network-title",
-            Tab::Memory | Tab::Gpu => "graph-gpu-title",
-        }),
-    }
-}
-
-fn paint_well(painter: &mut Painter, frame: Rect, palette: Palette) -> Shape {
-    let well = Shape::rounded(frame, Radius::S);
-    let background = match palette.scheme {
-        Scheme::Light => palette.well.mix(palette.sheet, 0.55),
-        Scheme::Dark => palette.well.mix(palette.chassis, 0.5),
-    };
-    painter.fill(well, background);
-    for quarter in 1..4 {
-        let y = (frame.y + frame.height * quarter as f32 / 4.0).round();
-        painter.fill(
-            Shape::rect(Rect::new(frame.x, y, frame.width, 1.0)),
-            palette.hairline.with_opacity(0.6),
-        );
-    }
-    well
-}
-
-fn paint_graph(monitor: &Monitor, palette: Palette, painter: &mut Painter, area: Rect) {
-    let graph_kind = monitor.graph();
-    let caption = Rect::new(area.x, area.y, area.width, GRAPH_CAPTION);
-    let label = readout_label(palette);
-    painter.text_in(
-        &graph_title(&graph_kind, monitor.tab()),
-        label,
-        caption,
-        TextAlign::Center,
-    );
-    let span = match graph_kind {
-        Graph::Battery { .. } => L10N.tr("graph-battery-span"),
-        _ => monitor.span(),
-    };
-    painter.text_in(&span, label, caption, TextAlign::End);
-    let frame = Rect::new(
-        area.x,
-        area.y + GRAPH_CAPTION,
-        area.width,
-        (area.height - GRAPH_CAPTION).max(1.0),
-    );
-    let mut graph = Painter {
-        text: &mut *painter.text,
-        items: Vec::new(),
-    };
-    let well = paint_well(&mut graph, frame, palette);
-    let plot = Rect::new(
-        frame.x,
-        frame.y + SERIES_WIDTH,
-        frame.width,
-        (frame.height - SERIES_WIDTH).max(1.0),
-    );
-    let scale = match graph_kind {
-        Graph::Stacked { lower, upper } => {
-            paint_series(
-                &mut graph,
-                &upper,
-                plot,
-                series_color(Series::Primary, palette),
-            );
-            paint_series(
-                &mut graph,
-                &lower,
-                plot,
-                series_color(Series::Secondary, palette),
-            );
-            None
-        }
-        Graph::Lines {
-            primary,
-            secondary,
-            scale,
-        } => {
-            paint_series(
-                &mut graph,
-                &primary,
-                plot,
-                series_color(Series::Primary, palette),
-            );
-            if let Some(secondary) = &secondary {
-                paint_series(
-                    &mut graph,
-                    secondary,
-                    plot,
-                    series_color(Series::Secondary, palette),
-                );
-            }
-            Some(scale)
-        }
-        Graph::Pressure(samples) => {
-            paint_pressure(&mut graph, &samples, plot, palette);
-            None
-        }
-        Graph::Battery { charge, charging } => {
-            paint_battery(&mut graph, &charge, &charging, plot, palette);
-            None
-        }
-    };
-    if let Some(scale) = scale {
-        graph.text_in(
-            &scale,
-            TextStyle {
-                caps: false,
-                ..label
-            }
-            .tabular(),
-            Rect::new(
-                frame.x + GRAPH_SCALE_PAD,
-                frame.y + GRAPH_SCALE_PAD / 2.0,
-                frame.width - 2.0 * GRAPH_SCALE_PAD,
-                GRAPH_CAPTION - GRAPH_SCALE_PAD,
-            ),
-            TextAlign::Start,
-        );
-    }
-    let items = std::mem::take(&mut graph.items);
-    painter.items.push(Item::Clip { shape: well, items });
-    painter.items.push(Item::Stroke {
-        shape: Shape::rounded(frame.inset(0.5), Radius::S - 0.5),
-        width: 1.0,
-        paint: palette.hairline.into(),
-    });
+fn paint_graph(graph: Graph, frame: Rect, cx: &mut Context, items: &mut Vec<Item>) {
+    let mut widget =
+        ui::Graph::new(&graph.title, graph.kind, graph.samples).caption(&graph.title, &graph.span);
+    widget.set_series(graph.series);
+    widget.set_bands(graph.bands);
+    widget.set_note(graph.scale.as_deref());
+    widget.place(cx, frame);
+    widget.paint(cx, items);
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1260,8 +991,18 @@ fn footer_layout(sheet: Rect, widths: &[f32], row: f32, cores: f32) -> Footer {
     }
 }
 
-fn paint_footer(monitor: &Monitor, palette: Palette, footer: &Footer, painter: &mut Painter) {
+fn paint_footer(
+    monitor: &Monitor,
+    palette: Palette,
+    footer: &Footer,
+    cx: &mut Context,
+    items: &mut Vec<Item>,
+) {
     let sheet = footer.sheet;
+    let mut painter = Painter {
+        text: &mut cx.text,
+        items: Vec::new(),
+    };
     painter.fill(
         Shape::rect(Rect::new(sheet.x, footer.top, sheet.width, 1.0)),
         palette.hairline,
@@ -1276,7 +1017,7 @@ fn paint_footer(monitor: &Monitor, palette: Palette, footer: &Footer, painter: &
             );
             let value = match readout.series {
                 Some(series) => TextStyle {
-                    color: series_color(series, palette),
+                    color: series.color(&palette),
                     ..readout_value(palette)
                 },
                 None => readout_value(palette),
@@ -1290,11 +1031,12 @@ fn paint_footer(monitor: &Monitor, palette: Palette, footer: &Footer, painter: &
             painter.text_in(&readout.value, value, row, TextAlign::End);
         }
     }
+    items.extend(painter.items);
     if let Some(graph) = footer.graph {
-        paint_graph(monitor, palette, painter, graph);
+        paint_graph(monitor.graph(), graph, cx, items);
     }
     if footer.cores.height > 0.0 {
-        paint_cores(monitor, palette, footer.cores, painter);
+        paint_cores(monitor, palette, footer.cores, cx, items);
     }
 }
 
@@ -1346,7 +1088,13 @@ fn core_slots(groups: &[CoreGroup], origin: Point, width: f32) -> (Vec<CoreSlot>
     (slots, y - origin.y + FOOTER_PAD - STRIP_GAP)
 }
 
-fn paint_cores(monitor: &Monitor, palette: Palette, area: Rect, painter: &mut Painter) {
+fn paint_cores(
+    monitor: &Monitor,
+    palette: Palette,
+    area: Rect,
+    cx: &mut Context,
+    items: &mut Vec<Item>,
+) {
     let (slots, _) = core_slots(
         &monitor.core_groups(),
         Point::new(area.x, area.y),
@@ -1355,33 +1103,20 @@ fn paint_cores(monitor: &Monitor, palette: Palette, area: Rect, painter: &mut Pa
     for slot in slots {
         match slot {
             CoreSlot::Label(title, frame) => {
-                painter.text_in(&title, readout_label(palette), frame, TextAlign::Start)
-            }
-            CoreSlot::Strip(core, history, frame) => {
-                let mut strip = Painter {
-                    text: &mut *painter.text,
+                let mut painter = Painter {
+                    text: &mut cx.text,
                     items: Vec::new(),
                 };
-                let well = paint_well(&mut strip, frame, palette);
-                paint_series(
-                    &mut strip,
-                    &history,
-                    frame,
-                    series_color(Series::Primary, palette),
-                );
-                strip.text_in(
-                    &L10N.tr_args("core-label", [("number", (core + 1).into())]),
-                    readout_label(palette),
-                    Rect::new(
-                        frame.x + GRAPH_SCALE_PAD,
-                        frame.y + 2.0,
-                        frame.width - 2.0 * GRAPH_SCALE_PAD,
-                        GRAPH_LABEL,
-                    ),
-                    TextAlign::Start,
-                );
-                let items = std::mem::take(&mut strip.items);
-                painter.items.push(Item::Clip { shape: well, items });
+                painter.text_in(&title, readout_label(palette), frame, TextAlign::Start);
+                items.extend(painter.items);
+            }
+            CoreSlot::Strip(core, history, frame) => {
+                let name = L10N.tr_args("core-label", [("number", (core + 1).into())]);
+                let mut strip = ui::Graph::new(&name, GraphKind::Area, HISTORY);
+                strip.set_series(vec![Series::new(SeriesColor::Primary, history)]);
+                strip.set_note(Some(&name.to_uppercase()));
+                strip.place(cx, frame);
+                strip.paint(cx, items);
             }
         }
     }
@@ -1524,11 +1259,13 @@ impl Screen for MonitorView {
         let nothing_found = self.nothing_found();
         let empty_message = self.empty_message_frame();
         let (monitor, palette) = (&self.monitor, self.palette);
+        let cx = self.list.context();
+        let mut items = Vec::new();
+        paint_footer(monitor, palette, &footer, cx, &mut items);
         let mut painter = Painter {
-            text: self.list.text(),
-            items: Vec::new(),
+            text: &mut cx.text,
+            items,
         };
-        paint_footer(monitor, palette, &footer, &mut painter);
         if nothing_found {
             painter.text_in(
                 &L10N.tr_args("no-match", [("text", monitor.search().to_owned().into())]),

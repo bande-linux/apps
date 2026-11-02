@@ -1,0 +1,47 @@
+[package]
+name = "bande-velox"
+description = "Velox: containers and virtual machines on Bande"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+accesskit.workspace = true
+httparse.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+bande-app.workspace = true
+bande-app-menu.workspace = true
+bande-l10n.workspace = true
+bande-toolkit.workspace = true
+bande-watch.workspace = true
+bande-xdg.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+copyright = "2026 Mikael Hug"
+section = "admin"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+suggests = "docker-compose, podman"
+extended-description = """\
+Velox shows the containers of the computer's Docker Engine or Podman, grouped \
+by Compose project, and starts and stops them. It follows the engine live and \
+never installs or configures one: when none is found it shows the steps to \
+set one up."""
+assets = [
+    ["target/release/bande-velox", "usr/bin/", "755"],
+    ["data/org.bande.Velox.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.Velox.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["data/org.bande.Velox.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+]

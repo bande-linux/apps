@@ -173,6 +173,10 @@ impl List {
         self.ui.set_appearance(appearance);
     }
 
+    pub(crate) fn context(&mut self) -> &mut Context {
+        self.ui.context()
+    }
+
     pub(crate) fn text(&mut self) -> &mut TextSystem {
         &mut self.ui.context().text
     }

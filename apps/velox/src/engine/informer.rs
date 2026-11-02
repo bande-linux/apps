@@ -1,0 +1,235 @@
+use std::io::{self, Read, Write};
+use std::net::Shutdown;
+use std::os::fd::{AsFd, BorrowedFd};
+use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
+
+use bande_watch::{Changes, FolderWatch};
+
+use super::client::{Container, Engine, EngineInfo, Event};
+use super::socket;
+use crate::readiness::{self, Probe, Readiness};
+
+const REMOVED: &str = "destroy";
+const IGNORED_PREFIX: &str = "exec_";
+const RETRY: Duration = Duration::from_secs(1);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    Start,
+    Stop,
+}
+
+#[derive(Debug)]
+pub enum Update {
+    Blocked(Readiness),
+    Ready(EngineInfo),
+    Listed(Vec<Container>),
+    Changed(Container),
+    Removed(String),
+    Failed {
+        id: String,
+        action: Action,
+        message: String,
+    },
+}
+
+#[derive(Clone)]
+struct Updates {
+    sender: Sender<Update>,
+    wake: Arc<UnixStream>,
+}
+
+impl Updates {
+    fn send(&self, update: Update) -> bool {
+        self.sender.send(update).is_ok() && (&*self.wake).write_all(&[1]).is_ok()
+    }
+}
+
+type Stream = Arc<Mutex<Option<UnixStream>>>;
+
+pub struct Informer {
+    updates: Receiver<Update>,
+    wake: UnixStream,
+    sender: Updates,
+    recheck: Sender<()>,
+    stopped: Arc<AtomicBool>,
+    events: Stream,
+    _watch: Option<FolderWatch>,
+}
+
+fn shut(events: &Stream) {
+    if let Some(stream) = events.lock().unwrap_or_else(PoisonError::into_inner).take() {
+        let _ = stream.shutdown(Shutdown::Both);
+    }
+}
+
+fn follow(engine: &Engine, events: &Stream, stopped: &AtomicBool, out: &Updates) -> io::Result<()> {
+    let (handle, body) = engine.events().map_err(io::Error::other)?;
+    *events.lock().unwrap_or_else(PoisonError::into_inner) = Some(handle);
+    if stopped.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    let listed = engine.containers().map_err(io::Error::other)?;
+    if !out.send(Update::Listed(listed)) {
+        return Ok(());
+    }
+    for event in serde_json::Deserializer::from_reader(body).into_iter::<Event>() {
+        let event = event.map_err(io::Error::other)?;
+        let Some(actor) = event.actor else {
+            continue;
+        };
+        if event.action.starts_with(IGNORED_PREFIX) {
+            continue;
+        }
+        let update = match event.action.as_str() {
+            REMOVED => Update::Removed(actor.id),
+            _ => match engine.container(&actor.id).map_err(io::Error::other)? {
+                Some(container) => Update::Changed(container),
+                None => Update::Removed(actor.id),
+            },
+        };
+        if !out.send(update) {
+            return Ok(());
+        }
+    }
+    Ok(())
+}
+
+fn run(
+    candidates: &[PathBuf],
+    recheck: &Receiver<()>,
+    events: &Stream,
+    stopped: &AtomicBool,
+    out: &Updates,
+) {
+    while !stopped.load(Ordering::SeqCst) {
+        while recheck.try_recv().is_ok() {}
+        match readiness::probe(candidates) {
+            Probe::Ready(info) => {
+                let engine = Engine::new(&info.socket);
+                if !out.send(Update::Ready(info)) {
+                    return;
+                }
+                if let Err(error) = follow(&engine, events, stopped, out) {
+                    tracing::info!("lost the engine's events: {error}");
+                }
+                shut(events);
+                if recheck.recv_timeout(RETRY) == Err(RecvTimeoutError::Disconnected) {
+                    return;
+                }
+            }
+            Probe::Blocked(state) => {
+                if !out.send(Update::Blocked(state)) || recheck.recv().is_err() {
+                    return;
+                }
+            }
+        }
+    }
+}
+
+impl Informer {
+    pub fn start() -> io::Result<Self> {
+        let (reader, writer) = UnixStream::pair()?;
+        reader.set_nonblocking(true)?;
+        let (sender, updates) = mpsc::channel();
+        let out = Updates {
+            sender,
+            wake: Arc::new(writer),
+        };
+        let (recheck, rechecks) = mpsc::channel();
+        let candidates = socket::candidates();
+        let notify = recheck.clone();
+        let watch = FolderWatch::spawn(Changes::Any, move |_| {
+            let _ = notify.send(());
+        })
+        .inspect_err(|error| tracing::warn!("cannot watch for an engine: {error}"))
+        .ok();
+        if let Some(watch) = &watch {
+            for folder in socket::watched_folders(&candidates) {
+                if let Err(error) = watch.watch(&folder) {
+                    tracing::debug!("cannot watch {}: {error}", folder.display());
+                }
+            }
+        }
+        let stopped = Arc::new(AtomicBool::new(false));
+        let events = Stream::default();
+        let thread = (Arc::clone(&stopped), Arc::clone(&events), out.clone());
+        std::thread::Builder::new()
+            .name("velox-informer".to_owned())
+            .spawn(move || {
+                let (stopped, events, out) = thread;
+                run(&candidates, &rechecks, &events, &stopped, &out);
+            })?;
+        Ok(Self {
+            updates,
+            wake: reader,
+            sender: out,
+            recheck,
+            stopped,
+            events,
+            _watch: watch,
+        })
+    }
+
+    pub fn fd(&self) -> BorrowedFd<'_> {
+        self.wake.as_fd()
+    }
+
+    pub fn drain(&self) -> Vec<Update> {
+        let mut bytes = [0; 64];
+        while matches!((&self.wake).read(&mut bytes), Ok(read) if read > 0) {}
+        self.updates.try_iter().collect()
+    }
+
+    pub fn act(&self, engine: Engine, action: Action, ids: Vec<String>) {
+        let out = self.sender.clone();
+        let spawned = std::thread::Builder::new()
+            .name("velox-action".to_owned())
+            .spawn(move || {
+                for id in ids {
+                    let done = match action {
+                        Action::Start => engine.start(&id),
+                        Action::Stop => engine.stop(&id),
+                    };
+                    if let Err(error) = done {
+                        out.send(Update::Failed {
+                            id,
+                            action,
+                            message: error.to_string(),
+                        });
+                    }
+                }
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot reach the engine: {error}");
+        }
+    }
+
+    pub fn relist(&self, engine: Engine) {
+        let out = self.sender.clone();
+        let spawned = std::thread::Builder::new()
+            .name("velox-list".to_owned())
+            .spawn(move || match engine.containers() {
+                Ok(containers) => {
+                    out.send(Update::Listed(containers));
+                }
+                Err(error) => tracing::info!("cannot list the containers: {error}"),
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot reach the engine: {error}");
+        }
+    }
+}
+
+impl Drop for Informer {
+    fn drop(&mut self) {
+        self.stopped.store(true, Ordering::SeqCst);
+        shut(&self.events);
+        let _ = self.recheck.send(());
+    }
+}
