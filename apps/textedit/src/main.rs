@@ -6,10 +6,11 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_inbox::Inbox;
 use bande_textedit::{
-    CHOICES, DocumentView, L10N, LineEnding, Loaded, MAX_FILE_BYTES, Message, Opening, Request,
-    Session, Settings, TextEncoding, choose_files, choose_save_path, encoding_name, new_id, now,
-    read, read_bounded, spawn,
+    CHOICES, COLORS, DocumentView, FAMILIES, Format, L10N, LineEnding, Loaded, MAX_FILE_BYTES,
+    Message, Opening, Request, Session, Settings, TextEncoding, choose_files, choose_save_path,
+    encoding_name, new_id, now, open, read, read_bounded, spawn,
 };
+use bande_toolkit::ui::{Alignment, ListMarker};
 
 const APP_ID: &str = "org.bande.TextEdit";
 const WINDOW_SIZE: (u32, u32) = (760, 640);
@@ -54,7 +55,7 @@ fn load(path: &Path, chosen: Option<&'static encoding_rs::Encoding>) -> Result<L
             std::io::ErrorKind::FileTooLarge => L10N.tr("too-large"),
             _ => error.to_string(),
         })
-        .and_then(|bytes| read(bytes, chosen))
+        .and_then(|bytes| open(path, bytes, chosen))
 }
 
 impl TextEdit {
@@ -74,6 +75,7 @@ impl TextEdit {
         untitled: String,
         opened: u128,
         settings: Settings,
+        format: Format,
     ) -> Option<(WindowId, u64)> {
         self.next_token += 1;
         let token = self.next_token;
@@ -86,6 +88,7 @@ impl TextEdit {
             untitled,
             opened,
             settings,
+            format,
         };
         let opened = cx.open(Kind::Main, &title, WINDOW_SIZE, move |appearance| {
             DocumentView::new(appearance, opening, outbox, session)
@@ -109,7 +112,7 @@ impl TextEdit {
 
     fn new_document(&mut self, cx: &mut Cx<Self>) {
         let untitled = self.next_untitled();
-        let opened = self.open_view(cx, new_id(), untitled, now(), Settings::PLAIN);
+        let opened = self.open_view(cx, new_id(), untitled, now(), Settings::RICH, Format::Rtf);
         if let Some((window, _)) = opened {
             self.serve(cx, window);
         }
@@ -127,7 +130,7 @@ impl TextEdit {
         let name = path
             .file_name()
             .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-        let opened = self.open_view(cx, new_id(), name, now(), Settings::PLAIN);
+        let opened = self.open_view(cx, new_id(), name, now(), Settings::PLAIN, Format::Plain);
         let Some((window, token)) = opened else {
             return;
         };
@@ -172,17 +175,20 @@ impl TextEdit {
                 size: record.size,
             };
             let encoding = TextEncoding::named(&record.encoding, record.bom);
+            let format = Format::parse(&record.format).unwrap_or(Format::Plain);
             let Some((window, token)) = self.open_view(
                 cx,
                 id.clone(),
                 record.title.clone(),
                 record.opened,
                 settings,
+                format,
             ) else {
                 continue;
             };
             if let Some(view) = Self::view(cx, window) {
                 view.start_loading(record.path.clone());
+                view.rich = record.rich;
                 if let Some(encoding) = encoding {
                     view.encoding = encoding;
                 }
@@ -193,11 +199,15 @@ impl TextEdit {
             match (record.edited, record.path) {
                 (true, _) => {
                     let (outbox, session, id) = (self.inbox.outbox(), session.clone(), id.clone());
+                    let kept = match record.rich {
+                        true => Format::Rtf,
+                        false => Format::Plain,
+                    };
                     spawn("restore", move || {
                         let loaded = session
                             .text(&id)
                             .map_err(|error| error.to_string())
-                            .and_then(|bytes| read(bytes, Some(encoding_rs::UTF_8)))
+                            .and_then(|bytes| read(bytes, kept, Some(encoding_rs::UTF_8)))
                             .map(|loaded| Loaded {
                                 from_disk: false,
                                 ..loaded
@@ -268,6 +278,7 @@ impl TextEdit {
         let windowed = view.is_some();
         let edited = view.is_some_and(DocumentView::is_edited);
         let on_disk = view.is_some_and(|view| view.path.is_some() && !view.loading);
+        let text_format = view.is_some_and(|view| view.format.is_text());
         let recent = self
             .recent
             .iter()
@@ -303,7 +314,7 @@ impl TextEdit {
                     .enabled(windowed),
                 item("revert", "revert").enabled(on_disk && edited),
                 Entry::submenu(&L10N.tr("reopen-with-encoding"), reopen)
-                    .enabled(on_disk && !edited),
+                    .enabled(on_disk && !edited && text_format),
             ],
         )
     }
@@ -337,25 +348,38 @@ impl TextEdit {
                 .radio(ending == Some(line_ending))
             })
             .collect();
-        let entries = vec![
-            Entry::submenu(
-                &L10N.tr("menu-font"),
-                vec![
-                    item("font-monospace", "font-monospace").radio(windowed && monospace),
-                    item("font-proportional", "font-proportional").radio(windowed && !monospace),
-                    Entry::separator(),
-                    item("bigger", "bigger").shortcut("Ctrl+="),
-                    item("smaller", "smaller").shortcut("Ctrl+-"),
-                    item("actual-size", "actual-size").shortcut("Ctrl+0"),
-                ],
-            ),
-            Entry::separator(),
+        let rich = view.is_some_and(|view| view.rich);
+        let text_format = view.is_none_or(|view| view.format.is_text());
+        let wrapping = [
             item("wrap-window", "wrap-window").radio(windowed && !page),
             item("wrap-page", "wrap-page").radio(windowed && page),
-            Entry::separator(),
-            Entry::submenu(&L10N.tr("text-encoding"), encodings),
-            Entry::submenu(&L10N.tr("line-endings"), endings),
         ];
+        let mut entries = match rich {
+            true => Self::rich_entries(view),
+            false => vec![
+                Entry::submenu(
+                    &L10N.tr("menu-font"),
+                    vec![
+                        item("font-monospace", "font-monospace").radio(windowed && monospace),
+                        item("font-proportional", "font-proportional")
+                            .radio(windowed && !monospace),
+                        Entry::separator(),
+                        item("bigger", "bigger").shortcut("Ctrl+="),
+                        item("smaller", "smaller").shortcut("Ctrl+-"),
+                        item("actual-size", "actual-size").shortcut("Ctrl+0"),
+                    ],
+                ),
+                Entry::separator(),
+                item("make-rich", "make-rich").shortcut("Shift+Ctrl+T"),
+            ],
+        };
+        entries.push(Entry::separator());
+        entries.extend(wrapping);
+        if text_format {
+            entries.push(Entry::separator());
+            entries.push(Entry::submenu(&L10N.tr("text-encoding"), encodings));
+            entries.push(Entry::submenu(&L10N.tr("line-endings"), endings));
+        }
         Entry::submenu(
             &L10N.tr("menu-format"),
             entries
@@ -363,6 +387,90 @@ impl TextEdit {
                 .map(|entry| entry.enabled(windowed))
                 .collect(),
         )
+    }
+
+    fn rich_entries(view: Option<&DocumentView>) -> Vec<Entry> {
+        let (attributes, paragraph) = view.map(DocumentView::attributes).unwrap_or_default();
+        let families = FAMILIES
+            .iter()
+            .map(|(key, family)| {
+                item(&format!("family-{key}"), &format!("style:family:{key}"))
+                    .radio(attributes.family.as_deref() == *family)
+            })
+            .collect();
+        let colors = COLORS
+            .iter()
+            .map(|(key, color)| {
+                let current = attributes.color.map(|color| {
+                    u32::from(color.r) << 16 | u32::from(color.g) << 8 | u32::from(color.b)
+                });
+                item(&format!("color-{key}"), &format!("style:color:{key}"))
+                    .radio(current == *color)
+            })
+            .collect();
+        let alignments = [
+            ("start", Alignment::Start),
+            ("center", Alignment::Center),
+            ("end", Alignment::End),
+            ("justify", Alignment::Justify),
+        ]
+        .into_iter()
+        .map(|(key, alignment)| {
+            item(&format!("align-{key}"), &format!("style:align:{key}"))
+                .radio(paragraph.alignment == alignment)
+        })
+        .collect();
+        let lists = [
+            ("none", None),
+            ("bullet", Some(ListMarker::Bullet)),
+            ("number", Some(ListMarker::Number)),
+        ]
+        .into_iter()
+        .map(|(key, list)| {
+            item(&format!("list-{key}"), &format!("style:list:{key}")).radio(paragraph.list == list)
+        })
+        .chain([
+            Entry::separator(),
+            item("indent", "style:indent").shortcut("Ctrl+]"),
+            item("outdent", "style:outdent").shortcut("Ctrl+["),
+        ])
+        .collect();
+        let headings = (0..=3)
+            .map(|level| {
+                item(
+                    &format!("heading-{level}"),
+                    &format!("style:heading:{level}"),
+                )
+            })
+            .collect();
+        vec![
+            Entry::submenu(
+                &L10N.tr("menu-font"),
+                vec![
+                    item("bold", "style:bold")
+                        .shortcut("Ctrl+B")
+                        .radio(attributes.bold),
+                    item("italic", "style:italic")
+                        .shortcut("Ctrl+I")
+                        .radio(attributes.italic),
+                    item("underline", "style:underline")
+                        .shortcut("Ctrl+U")
+                        .radio(attributes.underline),
+                    item("strikethrough", "style:strikethrough").radio(attributes.strikethrough),
+                    Entry::separator(),
+                    item("bigger", "style:bigger").shortcut("Ctrl+="),
+                    item("smaller", "style:smaller").shortcut("Ctrl+-"),
+                    Entry::separator(),
+                    Entry::submenu(&L10N.tr("menu-family"), families),
+                    Entry::submenu(&L10N.tr("menu-color"), colors),
+                ],
+            ),
+            Entry::submenu(&L10N.tr("menu-text"), alignments),
+            Entry::submenu(&L10N.tr("menu-list"), lists),
+            Entry::submenu(&L10N.tr("menu-styles"), headings),
+            Entry::separator(),
+            item("make-plain", "make-plain").shortcut("Shift+Ctrl+T"),
+        ]
     }
 
     fn document_command(&mut self, cx: &mut Cx<Self>, window: WindowId, command: &str) -> bool {
@@ -388,6 +496,8 @@ impl TextEdit {
             "actual-size" => view.zoom(None),
             "wrap-window" => view.set_page(false),
             "wrap-page" => view.set_page(true),
+            "make-plain" => view.make_plain(false),
+            "make-rich" => view.make_rich(),
             "revert" => {
                 let (token, encoding) = (view.token, view.encoding.encoding);
                 let Some(path) = view.path.clone() else {
@@ -397,7 +507,9 @@ impl TextEdit {
                 self.load_into(token, path, Some(encoding));
             }
             _ => {
-                if let Some(name) = command.strip_prefix("encoding:")
+                if let Some(style) = command.strip_prefix("style:") {
+                    return view.style(style);
+                } else if let Some(name) = command.strip_prefix("encoding:")
                     && let Some(encoding) = TextEncoding::named(name, false)
                 {
                     let bom = view.encoding.bom && encoding.encoding == encoding_rs::UTF_8;

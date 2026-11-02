@@ -26,6 +26,8 @@ pub struct Record {
     pub page: bool,
     pub size: f32,
     pub opened: u128,
+    pub format: String,
+    pub rich: bool,
 }
 
 #[derive(Debug, Clone)]
