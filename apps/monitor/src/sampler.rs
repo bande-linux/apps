@@ -10,7 +10,7 @@ use crate::inhibitors::SleepBlocker;
 use crate::power::BatteryReport;
 use crate::proc::{
     DrmUse, IoBytes, Stat, display_name, parse_cgroup_unit, parse_cmdline, parse_drm_fdinfo,
-    parse_io, parse_passwd, parse_stat, parse_switches, parse_uid,
+    parse_io, parse_kilobytes, parse_passwd, parse_stat, parse_switches, parse_uid,
 };
 use crate::system::{
     DiskCounters, InterfaceKind, Memory, Transferred, read_disks, read_interfaces, read_memory,
@@ -39,6 +39,7 @@ pub struct Process {
     pub cpu_seconds: f64,
     pub threads: u32,
     pub footprint: Option<u64>,
+    pub swapped: Option<u64>,
     pub resident: u64,
     pub disk: Option<Rates>,
     pub gpu: Option<GpuUse>,
@@ -344,13 +345,18 @@ impl Sampler {
         let io = (self.disk && reads_io)
             .then(|| self.read(&folder.join("io")).ok().and_then(parse_io))
             .flatten();
-        let footprint = (self.footprint && reads_rollup)
-            .then(|| {
-                self.read(&folder.join("smaps_rollup"))
-                    .ok()
-                    .and_then(bande_status::memory::footprint)
-            })
-            .flatten();
+        let (footprint, swapped) = match self.footprint && reads_rollup {
+            true => self
+                .read(&folder.join("smaps_rollup"))
+                .ok()
+                .map_or((None, None), |rollup| {
+                    (
+                        bande_status::memory::footprint(rollup),
+                        parse_kilobytes(rollup, "SwapPss"),
+                    )
+                }),
+            false => (None, None),
+        };
         let switches = (self.wakeups && !kernel_thread)
             .then(|| self.switches(&folder))
             .flatten();
@@ -391,6 +397,7 @@ impl Sampler {
             cpu_seconds: stat.cpu_ticks as f64 / ticks_per_second,
             threads: stat.threads,
             footprint,
+            swapped,
             resident,
             disk,
             gpu,

@@ -172,7 +172,14 @@ impl ActivityMonitor {
             }
         }
         self.sampling = watched;
-        self.next_sample = Instant::now() + INTERVAL;
+        self.next_sample = Instant::now() + self.interval(cx);
+    }
+
+    fn interval(&self, cx: &Cx<Self>) -> Duration {
+        self.main
+            .and_then(|main| cx.view(main))
+            .and_then(|pane| pane.0.interval())
+            .unwrap_or(INTERVAL)
     }
 
     fn inspect(&mut self, cx: &mut Cx<Self>, pid: u32) {
