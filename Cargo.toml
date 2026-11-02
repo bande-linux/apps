@@ -20,8 +20,10 @@ httparse = "=1.10.1"
 image = { version = "=0.25.10", default-features = false, features = ["gif", "jpeg", "png"] }
 jiff = "=0.2.38"
 jxl-oxide = { version = "=0.12.6", default-features = false }
+kamadak-exif = "=0.6.1"
 mailparse = "0.18"
 native-tls = "0.2.18"
+resvg = { version = "=0.49.0", default-features = false }
 roxmltree = "=0.21.2"
 rusqlite = "0.41"
 rustix = "=1.1.6"
@@ -50,6 +52,7 @@ bande-sound = { git = "https://github.com/bande-linux/desktop", rev = "003cd7005
 bande-search = { git = "https://github.com/bande-linux/desktop", rev = "003cd7005d8c243191f02988ec21e378fa9d8616" }
 bande-spring = { git = "https://github.com/bande-linux/desktop", rev = "003cd7005d8c243191f02988ec21e378fa9d8616" }
 bande-status = { git = "https://github.com/bande-linux/desktop", rev = "003cd7005d8c243191f02988ec21e378fa9d8616" }
+bande-thumbnails = { git = "https://github.com/bande-linux/desktop", rev = "003cd7005d8c243191f02988ec21e378fa9d8616" }
 bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "003cd7005d8c243191f02988ec21e378fa9d8616" }
 bande-watch = { git = "https://github.com/bande-linux/desktop", rev = "003cd7005d8c243191f02988ec21e378fa9d8616" }
 bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "003cd7005d8c243191f02988ec21e378fa9d8616" }
