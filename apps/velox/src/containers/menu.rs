@@ -104,7 +104,7 @@ pub fn items(facts: &Facts) -> Vec<Item> {
         with(item(L10N.tr(LOGS), LOGS), Some("Ctrl+L"), facts.logs),
         with(
             item(L10N.tr(TERMINAL), TERMINAL),
-            Some("Shift+Ctrl+T"),
+            None,
             single && facts.running,
         ),
         Item::Separator,
@@ -140,7 +140,7 @@ pub fn items(facts: &Facts) -> Vec<Item> {
         Item::Separator,
         with(
             item(counted(DELETE, facts.removable), DELETE),
-            Some("Ctrl+Backspace"),
+            Some("Delete"),
             facts.removable > 0,
         ),
     ]);
