@@ -108,6 +108,7 @@ struct CalendarApp {
     alarm: WallAlarm,
     changes: Inbox<Change>,
     chosen: Inbox<Chosen>,
+    online: Inbox<()>,
     settings: CalendarSettings,
     settings_watch: Option<SettingsWatch>,
     zone: TimeZone,
@@ -836,6 +837,8 @@ impl Program for CalendarApp {
         let worker = Worker::start()?;
         let changes = Inbox::new()?;
         listen(changes.outbox());
+        let online = Inbox::new()?;
+        bande_calendar::online::watch(online.outbox());
         let settings_watch = settings_folder()
             .as_deref()
             .and_then(|folder| SettingsWatch::start(folder, CalendarSettings::FILE));
@@ -847,6 +850,7 @@ impl Program for CalendarApp {
             alarm: WallAlarm::new()?,
             changes,
             chosen: Inbox::new()?,
+            online,
             settings,
             settings_watch,
             zone,
@@ -927,6 +931,7 @@ impl Program for CalendarApp {
             self.alarm.fd(),
             self.changes.fd(),
             self.chosen.fd(),
+            self.online.fd(),
         ]
         .into_iter()
         .chain(self.settings_watch.iter().map(SettingsWatch::fd))
@@ -960,6 +965,11 @@ impl Program for CalendarApp {
                         Chosen::Failed(error) => view.set_status(Some(error)),
                     });
                 }
+            }
+            4 => {
+                self.online.drain();
+                self.retry.clear();
+                self.push_soon(Duration::ZERO);
             }
             _ => self.follow_settings(cx),
         }
