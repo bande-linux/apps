@@ -80,8 +80,6 @@ pub enum Request {
         change: crate::worker::Change,
     },
     Changed,
-    Refresh,
-    Import,
     SetPassword {
         account: String,
         user: String,
@@ -756,9 +754,9 @@ impl CalendarView {
         self.ui.present_sheet(panel);
     }
 
-    pub fn offer_import(&mut self, objects: Vec<CalendarObject>, file: &str) {
+    pub fn offer_import(&mut self, objects: Vec<CalendarObject>, file: &str) -> bool {
         let Some(calendar) = self.default_calendar() else {
-            return;
+            return false;
         };
         let name = self.library.calendars[calendar].info.name.clone();
         let title = L10N.tr_args(
@@ -771,6 +769,7 @@ impl CalendarView {
             .cancel(&L10N.tr("cancel"), "cancel")
             .primary(&L10N.tr("import"), "accept");
         self.ui.present_dialog(alert);
+        true
     }
 
     pub fn offer_subscription(&mut self, url: &str) {
