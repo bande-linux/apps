@@ -512,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "bande-calculator"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "accesskit",
  "bande-app",

@@ -28,12 +28,6 @@ const RADIANS: &str = "angle-radians";
 const PAPER_TAPE: &str = "paper-tape";
 const CLEAR_TAPE: &str = "clear-tape";
 const SHOW_CALCULATOR: &str = "show-calculator";
-const BASE_SHORTCUTS: [&str; 4] = [
-    "Shift+Ctrl+H",
-    "Shift+Ctrl+D",
-    "Shift+Ctrl+O",
-    "Shift+Ctrl+B",
-];
 
 static INFO: Info = Info {
     id: APP_ID,
@@ -303,9 +297,7 @@ impl Calculator {
             mode(Mode::Scientific, "menu-scientific", "Ctrl+2"),
             mode(Mode::Programmer, "menu-programmer", "Ctrl+3"),
             Entry::separator(),
-            Entry::item(&L10N.tr("menu-rpn"), RPN)
-                .shortcut("Ctrl+R")
-                .radio(engine.rpn),
+            Entry::item(&L10N.tr("menu-rpn"), RPN).radio(engine.rpn),
             Entry::item(&L10N.tr("menu-grouping"), GROUPING).radio(engine.grouping),
             Entry::separator(),
             Entry::item(&L10N.tr("menu-degrees"), DEGREES)
@@ -316,20 +308,14 @@ impl Calculator {
                 .enabled(scientific),
             Entry::separator(),
         ];
-        entries.extend(
-            Base::ALL
-                .into_iter()
-                .zip(BASE_SHORTCUTS)
-                .map(|(base, shortcut)| {
-                    Entry::item(
-                        &L10N.tr(&format!("menu-{}", base_name(base))),
-                        &format!("{BASE_ACTION}{}", base_name(base)),
-                    )
-                    .shortcut(shortcut)
-                    .radio(engine.base == base)
-                    .enabled(programmer)
-                }),
-        );
+        entries.extend(Base::ALL.into_iter().map(|base| {
+            Entry::item(
+                &L10N.tr(&format!("menu-{}", base_name(base))),
+                &format!("{BASE_ACTION}{}", base_name(base)),
+            )
+            .radio(engine.base == base)
+            .enabled(programmer)
+        }));
         entries.push(
             Entry::submenu(
                 &L10N.tr("menu-word-size"),
@@ -389,9 +375,7 @@ impl Program for Calculator {
             ],
             window: vec![
                 Entry::item(&L10N.tr("app-name"), SHOW_CALCULATOR),
-                Entry::item(&L10N.tr("tape-title"), PAPER_TAPE)
-                    .shortcut("Ctrl+T")
-                    .radio(self.tape.is_some()),
+                Entry::item(&L10N.tr("tape-title"), PAPER_TAPE).radio(self.tape.is_some()),
             ],
         }
     }
