@@ -1,5 +1,6 @@
 use bande_app_menu::{Entry, edit_submenu};
 use bande_mail::L10N;
+use bande_mail::settings::SortBy;
 use bande_mail::ui::{MailView, SHORTCUTS};
 
 fn item(message: &str, action: &str) -> Entry {
@@ -28,12 +29,37 @@ pub fn app_menus(view: &MailView) -> Vec<Entry> {
             ],
         ),
         edit_submenu(Vec::new()),
+        Entry::submenu(&L10N.tr("menu-view"), {
+            let settings = view.settings();
+            let mut entries = SortBy::ALL
+                .into_iter()
+                .map(|sort| {
+                    Entry::item(
+                        &L10N.tr(&format!("menu-sort-{}", sort.name())),
+                        &format!("sort-{}", sort.name()),
+                    )
+                    .radio(settings.sort == sort)
+                })
+                .collect::<Vec<_>>();
+            entries.push(Entry::separator());
+            entries.push(
+                Entry::item(&L10N.tr("menu-sort-descending"), "sort-descending")
+                    .radio(!settings.ascending),
+            );
+            entries.push(
+                Entry::item(&L10N.tr("menu-sort-ascending"), "sort-ascending")
+                    .radio(settings.ascending),
+            );
+            entries
+        }),
         Entry::submenu(
             &L10N.tr("menu-mailbox"),
             vec![
                 item("action-get-mail", "get-mail"),
                 Entry::separator(),
                 item("menu-mark-all-read", "mark-all-read"),
+                Entry::separator(),
+                item("menu-new-mailbox", "new-mailbox"),
             ],
         ),
         Entry::submenu(

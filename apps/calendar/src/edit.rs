@@ -1,4 +1,4 @@
-use jiff::civil::{Date, DateTime, Weekday};
+use jiff::civil::{Date, DateTime, Time, Weekday};
 use jiff::tz::TimeZone;
 
 use crate::ical::{
@@ -45,9 +45,7 @@ impl Repeat {
             && rule.by_year_day.is_empty()
             && rule.by_week_no.is_empty()
             && rule.by_hour.is_empty()
-            && rule.by_minute.is_empty()
-            && rule.count.is_none()
-            && rule.until.is_none();
+            && rule.by_minute.is_empty();
         let workdays: Vec<DaySpec> = [
             Weekday::Monday,
             Weekday::Tuesday,
@@ -102,6 +100,46 @@ impl Repeat {
             Self::Biweekly => Some(weekly(2)),
             Self::Monthly => Some(Rule::new(Frequency::Monthly)),
             Self::Yearly => Some(Rule::new(Frequency::Yearly)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EndRepeat {
+    Never,
+    After(u32),
+    On(Date),
+}
+
+impl EndRepeat {
+    pub fn of(rule: Option<&Rule>, start: &Moment, local: &TimeZone) -> Self {
+        match rule.map(|rule| (rule.count, &rule.until)) {
+            Some((Some(count), _)) => Self::After(count),
+            Some((None, Some(Moment::Date(day)))) => Self::On(*day),
+            Some((None, Some(until))) => {
+                Self::On(until.timestamp(local).to_zoned(start.zone(local)).date())
+            }
+            _ => Self::Never,
+        }
+    }
+
+    fn apply(self, rule: &mut Rule, start: &Moment, local: &TimeZone) {
+        rule.count = None;
+        rule.until = None;
+        let last = |day: Date| day.to_datetime(Time::constant(23, 59, 59, 0));
+        match self {
+            Self::Never => {}
+            Self::After(count) => rule.count = Some(count.max(1)),
+            Self::On(day) => {
+                rule.until = match start {
+                    Moment::Date(_) => Some(Moment::Date(day)),
+                    Moment::Floating(_) => Some(Moment::Floating(last(day))),
+                    Moment::Zoned { .. } => last(day)
+                        .to_zoned(start.zone(local))
+                        .ok()
+                        .map(|at| Moment::utc(at.timestamp())),
+                }
+            }
         }
     }
 }
@@ -197,7 +235,9 @@ pub struct Details {
     pub start: DateTime,
     pub end: DateTime,
     pub repeat: Repeat,
+    pub end_repeat: EndRepeat,
     pub alert: Alert,
+    pub invitees: Vec<String>,
 }
 
 pub fn moment_of(key: InstanceKey, like: &Moment) -> Moment {
@@ -413,6 +453,10 @@ pub fn apply_details(
         event.alarms = details.alert.alarms(&event.alarms);
         if event.recurrence_id.is_none() {
             event.rule = details.repeat.rule(event.rule.as_ref());
+            let start = event.start.clone();
+            if let Some(rule) = event.rule.as_mut() {
+                details.end_repeat.apply(rule, &start, local);
+            }
         }
     }
     object

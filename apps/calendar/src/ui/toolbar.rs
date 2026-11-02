@@ -2,7 +2,7 @@ use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, FreeLayout, SEGMENTED_HEIGHT, SearchField, SegmentedControl,
     TEXT_FIELD_HEIGHT, WidgetId,
 };
-use bande_toolkit::{Image, Rect, WINDOW_HEADER_HEIGHT, window_controls_area};
+use bande_toolkit::{Image, Rect, WINDOW_HEADER_HEIGHT, window_controls_end};
 
 use super::{L10N, Mode, Signal, Signals, sender};
 
@@ -93,7 +93,7 @@ impl Toolbar {
     }
 
     fn leading(&self) -> f32 {
-        window_controls_area(TOOLBAR_HEIGHT).width + SIDE
+        window_controls_end(true) + SIDE
     }
 
     pub fn title_x(&self) -> f32 {

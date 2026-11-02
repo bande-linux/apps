@@ -22,6 +22,11 @@ pub enum Job {
     },
     Sync(Vec<(AccountKind, String, Calendar)>),
     Forget(String),
+    SetPassword {
+        account: String,
+        user: String,
+        password: String,
+    },
     Collection {
         account: String,
         user: String,
@@ -59,6 +64,9 @@ pub enum Reply {
     Failed {
         calendar: String,
         error: String,
+    },
+    SignInFailed {
+        account: String,
     },
     Finished,
     Made {
@@ -177,12 +185,30 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
                             }),
                         AccountKind::Local => continue,
                     };
+                if let Err(Error::Status { status: 401, .. }) = &result {
+                    reply(Reply::SignInFailed {
+                        account: account.clone(),
+                    });
+                }
                 reply(result.unwrap_or_else(|error: Error| Reply::Failed {
                     calendar: calendar.info.id.clone(),
                     error: error.to_string(),
                 }));
             }
             reply(Reply::Finished);
+        }
+        Job::SetPassword {
+            account,
+            user,
+            password,
+        } => {
+            let label = format!("Calendar: {user}");
+            if let Some(keyring) = passwords.keyring()
+                && let Err(error) = keyring.store(&account, &label, &password)
+            {
+                tracing::warn!("cannot keep the password: {error}");
+            }
+            passwords.known.insert(account, password);
         }
         Job::Collection {
             account,

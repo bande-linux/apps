@@ -19,7 +19,7 @@ use bande_xdg::{
 };
 
 const APP_ID: &str = "org.bande.ActivityMonitor";
-const WINDOW_SIZE: (u32, u32) = (860, 600);
+const WINDOW_SIZE: (u32, u32) = (960, 640);
 const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
 const ICON_PIXELS: u32 = 32;

@@ -15,13 +15,15 @@ apt install bande-mail
   servers are found, or they cannot be reached, the sheet shows the server fields, filled with
   whatever was found. When Gmail, iCloud, Yahoo, AOL or Fastmail refuse the password, the sheet
   says where to create an app password. Several accounts work side by side.
-- **Settings** (Ctrl+,) has four tabs. General: notifications for new mail and their sound.
-  Accounts: each account's full name, signature and server settings (user name, hosts, ports,
-  TLS or STARTTLS), Add Account… and Remove…; changed servers are checked with the saved
-  password before they are kept. Viewing: list preview lines and whether remote content loads
-  by itself (off by default). Composing: the account new messages are sent from and whether
-  replies quote the original. They are kept in `~/.config/bande/mail.conf`; signatures and
-  servers in the offline store.
+- **Settings** (Ctrl+,) has five tabs. General: notifications for new mail and their sound.
+  Accounts: whether each account is used, its full name, signature and server settings (user
+  name, hosts, ports, TLS or STARTTLS), Add Account… and Remove…; changed servers are checked
+  with the saved password before they are kept. Viewing: list preview lines, conversations,
+  plain text over HTML, a fixed-width font for plain text, and whether remote content loads by
+  itself (off by default). Composing: the account new messages are sent from and whether replies
+  quote the original. Rules: if From, To or Cc, or Subject contains a text, move new unread
+  Inbox mail to a mailbox, flag it or mark it read, while Mail is open. They are kept in
+  `~/.config/bande/mail.conf`; signatures, servers and rules in the offline store.
 - **Finding servers**, in this order: the provider's own autoconfig
   (`autoconfig.<domain>`, then `<domain>/.well-known/autoconfig`), Mozilla's ISPDB
   (`autoconfig.thunderbird.net`), DNS SRV records (RFC 6186), the ISPDB entry of the domain's
@@ -34,9 +36,13 @@ apt install bande-mail
 - **Window.** The sidebar lists Inbox, Flagged, Drafts, Sent, Archive, Junk and Trash across all
   accounts, then each account's folders with unread counts. The list shows sender, subject, a
   preview (two lines unless Settings says otherwise), the date, an unread dot, a flag and a
-  paperclip. The reader shows the headers, the plain text or sanitised HTML, and the
+  paperclip. Messages of one conversation (the first `References` entry, else the
+  `Message-ID`) share one row with a count; clicking the count, or Right and Left, shows and
+  hides the earlier ones, and acting on a closed conversation acts on all of it (Settings →
+  Viewing turns this off). The reader shows the headers, the plain text or sanitised HTML, and the
   attachments. Clicking an attachment opens a private copy in `~/.cache/bande-mail/attachments/`,
-  removed when Mail quits unless it was edited; its menu also saves it to the Downloads folder.
+  removed when Mail quits unless it was edited; its menu also saves it where you choose (the
+  desktop's file chooser) or to the Downloads folder.
 - **HTML** is never rendered as a web page: it is turned into paragraphs, headings, lists,
   quotes, links and pictures. Scripts, styles, forms and frames are dropped, and only `http`,
   `https` and `mailto` links survive. Pictures sent inside the message (`cid:`) show at once;
@@ -47,14 +53,18 @@ apt install bande-mail
   Delete (Delete or Backspace), Junk (Shift+Ctrl+J), Reply (Ctrl+R), Reply All (Shift+Ctrl+R),
   Forward (Shift+Ctrl+F), Flag (Shift+Ctrl+L), Mark as Read or Unread (Shift+Ctrl+U), Send
   (Shift+Ctrl+D), Close Window (Ctrl+W), Quit (Ctrl+Q) and Search (Ctrl+F), which searches
-  sender, recipients, subject and text. Mailbox → Mark All as Read marks the shown mailbox read, and Message → Move To files the
+  sender, recipients, subject and text. View sorts the list by date, sender or subject, either
+  way. Mailbox → Mark All as Read marks the shown mailbox read, and Message → Move To files the
   message in any mailbox of its account. Ctrl+click, Shift+click, Shift+Up/Down and Select All
   (Ctrl+A) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then
-  act on all of them. Undo (Ctrl+Z) puts the last moved or deleted messages back, and a mailbox
-  that messages were moved to is synced right after the move.
+  act on all of them, and dragging them onto a mailbox in the sidebar moves them. Undo (Ctrl+Z)
+  puts moved or deleted messages back, up to 20 steps, and a mailbox that messages were moved
+  to is synced right after the move. Mailbox → New Mailbox… and a mailbox's menu in the sidebar
+  create, rename and delete mailboxes on the server; the special mailboxes keep their names.
 - **Compose** opens its own window, with From when there are several accounts. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's
-  signature goes above the quoted text and changes with From. Files are
+  signature goes above the quoted text and replaces the previous account's signature when From
+  changes. Files are
   attached through the desktop's file chooser (the portal), up to 25 MB each, and a click on an
   attachment removes it. A sent message is kept in Sent and the original is marked answered. If
   sending fails, the message comes back in a window with the error.
@@ -121,8 +131,6 @@ the HTTPS autoconfig fetch are small, synchronous and bounded by timeouts.
 - Rich text, drag and drop of files into Compose. The ranked list
   of what users still need is in `../../NOTES/plans/mail-depth.md`.
 - Remote pictures over plain `http` (they show their alt text), SVG pictures, printing.
-- Conversations (threads), multiple selection, drag and drop to mailboxes, mailbox
-  management (create, rename, delete folders).
 - OAuth2 (Gmail and Outlook need app passwords for now), CONDSTORE/QRESYNC for faster flag
   sync on large mailboxes, full-text search on the server.
 - Recognising localised folder names on servers without `SPECIAL-USE`.

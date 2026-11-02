@@ -5,11 +5,13 @@ use bande_toolkit::ui::{
 };
 use jiff::ToSpan;
 use jiff::civil::{Date, DateTime, Time};
+use jiff::tz::TimeZone;
 
 use super::panel::{Arrow, Line, Panel, Width};
 use super::{L10N, Signal, Signals, sender};
-use crate::edit::{Alert, Details, Repeat};
+use crate::edit::{Alert, Details, EndRepeat, Repeat};
 use crate::ical::Event;
+use crate::invite::{Answer, Invitee, invitees, my_answer, parse_addresses};
 use crate::store::Found;
 
 const WIDTH: f32 = 320.0;
@@ -25,6 +27,9 @@ pub struct Inspector {
     pub original: Details,
     details: Details,
     texts: [String; 4],
+    end_kind: usize,
+    end_text: String,
+    invite_text: String,
     calendars: Vec<usize>,
     calendar_choice: usize,
     original_calendar: usize,
@@ -98,7 +103,7 @@ fn repeat_title(repeat: Repeat) -> String {
     })
 }
 
-fn alert_title(alert: Alert) -> String {
+pub(crate) fn alert_title(alert: Alert) -> String {
     match alert {
         Alert::None => L10N.tr("alert-none"),
         Alert::Custom => L10N.tr("alert-custom"),
@@ -121,7 +126,57 @@ fn alert_title(alert: Alert) -> String {
     }
 }
 
-fn details_of(found: &Found, event: &Event) -> Details {
+fn answer_title(answer: Answer) -> String {
+    L10N.tr(match answer {
+        Answer::Accepted => "answer-accept",
+        Answer::Tentative => "answer-maybe",
+        Answer::Declined => "answer-decline",
+        Answer::Pending => "answer-pending",
+    })
+}
+
+fn invitee_lines(panel: &mut Panel, invited: &[Invitee]) {
+    if invited.is_empty() {
+        return;
+    }
+    let text = invited
+        .iter()
+        .map(|invitee| {
+            let name = match invitee.name.is_empty() {
+                true => invitee.address.clone(),
+                false => invitee.name.clone(),
+            };
+            let status = match invitee.organizer {
+                true => L10N.tr("invitee-organizer"),
+                false => L10N.tr(match invitee.answer {
+                    Answer::Accepted => "invitee-accepted",
+                    Answer::Tentative => "invitee-tentative",
+                    Answer::Declined => "invitee-declined",
+                    Answer::Pending => "invitee-pending",
+                }),
+            };
+            format!("{name} · {status}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let shown = invited.len().min(8);
+    let label = panel.add(Label::new(&text));
+    panel.line(Line::new(
+        Some(&L10N.tr("invitees")),
+        vec![(label, Width::Fill)],
+        18.0 * shown as f32,
+    ));
+}
+
+fn end_of(end: EndRepeat) -> (usize, String) {
+    match end {
+        EndRepeat::Never => (0, String::new()),
+        EndRepeat::After(count) => (1, count.to_string()),
+        EndRepeat::On(day) => (2, date_text(day)),
+    }
+}
+
+fn details_of(found: &Found, event: &Event, local: &TimeZone) -> Details {
     let start = found.occurrence.start.datetime();
     let end = found.occurrence.end.datetime();
     let all_day = found.occurrence.all_day;
@@ -133,7 +188,9 @@ fn details_of(found: &Found, event: &Event) -> Details {
         start,
         end,
         repeat: Repeat::of(event.rule.as_ref()),
+        end_repeat: EndRepeat::of(event.rule.as_ref(), &event.start, local),
         alert: Alert::of(&event.alarms, all_day),
+        invitees: Vec::new(),
     }
 }
 
@@ -146,6 +203,7 @@ fn with_current<T: PartialEq + Copy>(choices: &[T], current: T) -> Vec<T> {
 }
 
 impl Inspector {
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         signals: &Signals,
         found: Found,
@@ -153,8 +211,17 @@ impl Inspector {
         read_only: bool,
         calendars: Vec<(usize, String)>,
         anchor: Option<Rect>,
+        local: &TimeZone,
+        me: Option<&str>,
     ) -> (Panel, Self) {
-        let details = details_of(&found, event);
+        let invited = invitees(event);
+        let answered = me.and_then(|me| my_answer(event, me));
+        let organizing = me.is_some()
+            && invited.first().is_none_or(|first| {
+                first.organizer && me.is_some_and(|me| first.address.eq_ignore_ascii_case(me))
+            });
+        let details = details_of(&found, event, local);
+        let (end_kind, end_text) = end_of(details.end_repeat);
         let last_day = match details.all_day {
             true => details
                 .end
@@ -198,6 +265,7 @@ impl Inspector {
                     18.0 * details.notes.lines().count().clamp(1, 6) as f32,
                 ));
             }
+            invitee_lines(&mut panel, &invited);
             let note = panel.add(Label::new(&L10N.tr("read-only")));
             panel.line(Line::new(None, vec![(note, Width::Fill)], 18.0).separated());
         } else {
@@ -272,6 +340,28 @@ impl Inspector {
                 ROW,
             ));
             let send = sender(signals);
+            let ends: Vec<String> = ["end-repeat-never", "end-repeat-after", "end-repeat-on"]
+                .iter()
+                .map(|message| L10N.tr(message))
+                .collect();
+            let end_choice = panel.add(PopUpButton::new(
+                &L10N.tr("end-repeat"),
+                &ends,
+                end_kind,
+                move |index| send(Signal::EndRepeatKind(index)),
+            ));
+            let send = sender(signals);
+            let end_field = panel.add(TextField::new(
+                &L10N.tr("end-repeat-placeholder"),
+                &end_text,
+                move |text| send(Signal::EndRepeatText(text.to_owned())),
+            ));
+            panel.line(Line::new(
+                Some(&L10N.tr("end-repeat")),
+                vec![(end_choice, Width::Fill), (end_field, Width::Fixed(96.0))],
+                ROW,
+            ));
+            let send = sender(signals);
             let titles: Vec<String> = alerts.iter().map(|alert| alert_title(*alert)).collect();
             let selected = alerts
                 .iter()
@@ -288,6 +378,35 @@ impl Inspector {
                 vec![(alert, Width::Fill)],
                 ROW,
             ));
+            invitee_lines(&mut panel, &invited);
+            if let Some(answered) = answered {
+                let buttons: Vec<_> = Answer::CHOICES
+                    .iter()
+                    .enumerate()
+                    .map(|(index, choice)| {
+                        let send = sender(signals);
+                        let button = Button::new(&answer_title(*choice), move || {
+                            send(Signal::Answer(index))
+                        });
+                        let button = match *choice == answered {
+                            true => button.primary(),
+                            false => button,
+                        };
+                        (panel.add(button), Width::Fill)
+                    })
+                    .collect();
+                panel.line(Line::new(Some(&L10N.tr("my-answer")), buttons, ROW));
+            } else if organizing {
+                let send = sender(signals);
+                let field = panel.add(TextField::new(&L10N.tr("add-invitees"), "", move |text| {
+                    send(Signal::Invitees(text.to_owned()))
+                }));
+                panel.line(Line::new(
+                    Some(&L10N.tr("invitees")),
+                    vec![(field, Width::Fill)],
+                    ROW,
+                ));
+            }
             let send = sender(signals);
             let names: Vec<&str> = calendars.iter().map(|(_, name)| name.as_str()).collect();
             let selected = calendars
@@ -336,6 +455,9 @@ impl Inspector {
             original_calendar: selected,
             details,
             texts,
+            end_kind,
+            end_text,
+            invite_text: String::new(),
             calendars: calendars.into_iter().map(|(index, _)| index).collect(),
             calendar_choice: selected,
             repeats,
@@ -401,6 +523,9 @@ impl Inspector {
                 self.details.alert = self.alerts.get(*index).copied().unwrap_or(Alert::None)
             }
             Signal::Calendar(index) => self.calendar_choice = *index,
+            Signal::EndRepeatKind(index) => self.end_kind = *index,
+            Signal::EndRepeatText(text) => self.end_text = text.clone(),
+            Signal::Invitees(text) => self.invite_text = text.clone(),
             _ => {}
         }
     }
@@ -442,9 +567,23 @@ impl Inspector {
             }
             _ => (start, end),
         };
+        let end_repeat = match self.end_kind {
+            1 => EndRepeat::After(
+                self.end_text
+                    .trim()
+                    .parse()
+                    .ok()
+                    .filter(|count| *count > 0)
+                    .unwrap_or(1),
+            ),
+            2 => EndRepeat::On(parse_date(&self.end_text).unwrap_or(start.date())),
+            _ => EndRepeat::Never,
+        };
         let details = Details {
             start,
             end,
+            end_repeat,
+            invitees: parse_addresses(&self.invite_text),
             ..self.details.clone()
         };
         (details != self.original || self.calendar_choice != self.original_calendar)

@@ -13,6 +13,8 @@ use crate::ui::symbols::Symbol;
 use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
 use crate::worker::Status;
 
+const CHILD_INDENT: f32 = 14.0;
+const DRAG_LABEL_WIDTH: f32 = 240.0;
 const SIDEBAR_INSET: f32 = 8.0;
 const SIDEBAR_ROW: f32 = 28.0;
 const SIDEBAR_HEADING: f32 = 30.0;
@@ -102,6 +104,7 @@ impl MailView {
             shape: Shape::rounded(sheet_frame, radius),
             items: content,
         });
+        self.paint_drag(&mut items);
         items.extend(controls);
         items.extend(sheet);
         Scene {
@@ -110,6 +113,38 @@ impl MailView {
             background: self.palette.sheet,
             items,
         }
+    }
+
+    fn paint_drag(&mut self, items: &mut Vec<Item>) {
+        let Some(drag) = self.drag.filter(|drag| drag.moving) else {
+            return;
+        };
+        let chosen = self.chosen();
+        let label = match chosen.as_slice() {
+            [one] if !one.subject.is_empty() => one.subject.clone(),
+            [_] => L10N.tr("no-subject"),
+            many => L10N.tr_args("messages-dragged", [("count", many.len().into())]),
+        };
+        let palette = self.palette;
+        let paragraph = self.text_line(
+            &label,
+            TextStyle::role(TextRole::Callout, palette.on_accent),
+            DRAG_LABEL_WIDTH,
+        );
+        let pill = Rect::new(
+            drag.at.x + 12.0,
+            drag.at.y + 8.0,
+            paragraph.width() + 20.0,
+            paragraph.height() + 8.0,
+        );
+        items.push(Item::Fill {
+            shape: Shape::rounded(pill, pill.height / 2.0),
+            paint: palette.accent.into(),
+        });
+        items.push(Item::Text {
+            origin: Point::new(pill.x + 10.0, pill.y + 4.0),
+            paragraph,
+        });
     }
 
     fn text_line(&mut self, text: &str, style: TextStyle, width: f32) -> Paragraph {
@@ -223,7 +258,18 @@ impl MailView {
                         row_height,
                     );
                     let selected = *place == self.place;
-                    if selected {
+                    let dropping = self.drag.is_some_and(|drag| drag.over == Some(index));
+                    if dropping {
+                        drawn.push(Item::Fill {
+                            shape: Shape::rounded(rect, Radius::S),
+                            paint: palette.accent.with_opacity(0.25).into(),
+                        });
+                        drawn.push(Item::Stroke {
+                            shape: Shape::rounded(rect.inset(1.0), Radius::S - 1.0),
+                            width: 2.0,
+                            paint: palette.accent.into(),
+                        });
+                    } else if selected {
                         drawn.push(Item::Fill {
                             shape: Shape::rounded(rect, Radius::S),
                             paint: palette
@@ -339,8 +385,8 @@ impl MailView {
         for (index, summary) in shown {
             let y = frame.y + index as f32 * row_height - offset;
             let rect = Rect::new(frame.x, y, frame.width, row_height);
-            self.paint_row(&mut drawn, &summary, rect, now);
             self.hits.push((rect, Hit::Message(summary.id)));
+            self.paint_row(&mut drawn, &summary, rect, now);
         }
         items.push(Item::Clip {
             shape: Shape::rect(frame),
@@ -396,7 +442,11 @@ impl MailView {
             });
         }
         let scale = self.scale();
-        let text_x = rect.x + LIST_TEXT_X;
+        let indent = match self.conversations.children.contains(&summary.id) {
+            true => CHILD_INDENT,
+            false => 0.0,
+        };
+        let text_x = rect.x + LIST_TEXT_X + indent;
         let right = rect.x + rect.width - LIST_TRAILING;
         let mut y = rect.y + LIST_PADDING;
         let date = self.ui.context().text.paragraph(
@@ -405,15 +455,44 @@ impl MailView {
             None,
             TextAlign::End,
         );
-        let date_x = right - date.width();
+        let mut date_x = right - date.width();
         let line = (18.0 * scale).round();
         items.push(Item::Text {
             origin: Point::new(date_x, y + ((line - date.height()) / 2.0).round()),
             paragraph: date,
         });
-        if !summary.flags.seen {
+        if let Some(count) = self.conversations.count(summary.id) {
+            let paragraph = self.ui.context().text.paragraph(
+                &count.to_string(),
+                TextStyle::role(TextRole::Callout, ink2).tabular(),
+                None,
+                TextAlign::Center,
+            );
+            let width = (paragraph.width() + 12.0).max(line + 4.0);
+            let capsule = Rect::new(date_x - width - 6.0, y, width, line);
+            items.push(Item::Stroke {
+                shape: Shape::rounded(capsule.inset(0.5), line / 2.0),
+                width: 1.0,
+                paint: ink3.into(),
+            });
+            items.push(Item::Text {
+                origin: Point::new(
+                    capsule.x + ((width - paragraph.width()) / 2.0).round(),
+                    y + ((line - paragraph.height()) / 2.0).round(),
+                ),
+                paragraph,
+            });
+            self.hits.push((capsule, Hit::Conversation(summary.id)));
+            date_x = capsule.x;
+        }
+        let unread = !summary.flags.seen
+            || self
+                .conversations
+                .collapsed(summary.id)
+                .is_some_and(|earlier| earlier.iter().any(|summary| !summary.flags.seen));
+        if unread {
             let dot = Rect::new(
-                rect.x + (LIST_TEXT_X - DOT) / 2.0,
+                rect.x + indent + (LIST_TEXT_X - DOT) / 2.0,
                 y + ((line - DOT) / 2.0).round(),
                 DOT,
                 DOT,

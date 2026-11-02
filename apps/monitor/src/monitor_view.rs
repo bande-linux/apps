@@ -10,6 +10,7 @@ use bande_toolkit::ui::{
 use bande_toolkit::{
     Appearance, Color, Header, Item, Palette, Path, Point, Radius, Rect, SHEET_INSET, Scene,
     Scheme, Shape, TextAlign, TextRole, TextSize, TextStyle, TextSystem, grown_line,
+    window_controls_end,
 };
 
 use bande_app_menu::Entry;
@@ -50,7 +51,7 @@ const GROUP_LABEL: f32 = 20.0;
 const EDGE_GRAB: f32 = 4.0;
 const EDGE_SNAP: f32 = 24.0;
 const SIDE: f32 = 12.0;
-const LEADING: f32 = 94.0;
+const LEADING: f32 = window_controls_end(true) + 16.0;
 const BUTTON_SIZE: f32 = 28.0;
 const ITEM_GAP: f32 = 16.0;
 const CLEAR_WIDTH: f32 = 120.0;

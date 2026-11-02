@@ -148,6 +148,7 @@ fn a_message_goes_out_once_without_injected_headers_after_the_imap_session_went_
         imap: local(dovecot.port),
         smtp: local(smtp_server(sent.clone())),
         signature: String::new(),
+        enabled: true,
     };
     account.id = store.add_account(&account).unwrap();
     let id = account.id;

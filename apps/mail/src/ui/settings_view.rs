@@ -19,12 +19,12 @@ use crate::net::{Network, Security, Server};
 use crate::secrets::Keyring;
 use crate::settings::{Change, MAX_PREVIEW_LINES, MailSettings, announce};
 use crate::setup::{Outcome, Request as SetupRequest, check};
-use crate::store::{Account, AccountId, Store};
+use crate::store::{Account, AccountId, Rule, RuleAction, RuleField, Store};
 use crate::ui::view::TOOLBAR_HEIGHT;
 use crate::worker::{Event as MailEvent, Mailroom};
 
-pub const SETTINGS_SIZE: (u32, u32) = (580, 620);
-const TAB_WIDTH: f32 = 96.0;
+pub const SETTINGS_SIZE: (u32, u32) = (620, 620);
+const TAB_WIDTH: f32 = 92.0;
 const SECURITIES: [Security; 3] = [Security::Tls, Security::StartTls, Security::Plain];
 const SIGNATURE_LINES: u16 = 4;
 
@@ -34,9 +34,16 @@ enum Tab {
     Accounts,
     Viewing,
     Composing,
+    Rules,
 }
 
-const TABS: [Tab; 4] = [Tab::General, Tab::Accounts, Tab::Viewing, Tab::Composing];
+const TABS: [Tab; 5] = [
+    Tab::General,
+    Tab::Accounts,
+    Tab::Viewing,
+    Tab::Composing,
+    Tab::Rules,
+];
 
 impl Tab {
     fn title(self) -> String {
@@ -45,6 +52,7 @@ impl Tab {
             Self::Accounts => "settings-accounts",
             Self::Viewing => "settings-viewing",
             Self::Composing => "settings-composing",
+            Self::Rules => "settings-rules",
         })
     }
 }
@@ -55,10 +63,13 @@ enum Signal {
     Account(usize),
     Settings,
     Identity,
+    Enabled(bool),
     SaveServers,
     AddAccount,
     RemoveAccount,
     Remove(AccountId),
+    AddRule,
+    RemoveRule(i64),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -114,6 +125,7 @@ struct State {
     settings: MailSettings,
     editing: Editing,
     signals: Vec<Signal>,
+    rule: (usize, String, usize),
 }
 
 type Shared = Rc<RefCell<State>>;
@@ -175,6 +187,14 @@ fn security(state: &Shared, chosen: usize, set: fn(&mut Editing, usize)) -> PopU
     )
 }
 
+fn rule_field(field: RuleField) -> &'static str {
+    match field {
+        RuleField::From => "rule-from",
+        RuleField::To => "rule-to",
+        RuleField::Subject => "rule-subject",
+    }
+}
+
 fn heading(message: &str) -> FormLine {
     FormLine::Heading(L10N.tr(message))
 }
@@ -214,7 +234,8 @@ pub struct SettingsView {
     accounts: Vec<Account>,
     account: usize,
     status: Option<(String, bool)>,
-    checking: Option<Account>,
+    checking: Option<AccountId>,
+    store_path: PathBuf,
     mailroom: Option<Mailroom>,
     network: Network,
     width: f32,
@@ -261,6 +282,7 @@ impl SettingsView {
             account: 0,
             status: None,
             checking: None,
+            store_path: store_path.clone(),
             mailroom: Mailroom::new()
                 .inspect_err(|error| tracing::warn!("cannot check servers: {error}"))
                 .ok(),
@@ -302,6 +324,7 @@ impl SettingsView {
             Tab::Accounts => self.accounts_form(),
             Tab::Viewing => self.viewing(),
             Tab::Composing => self.composing(),
+            Tab::Rules => self.rules(),
         };
         let content = self.content;
         let replaced = self
@@ -367,6 +390,34 @@ impl SettingsView {
             vec![
                 heading("settings-message-list"),
                 row("settings-preview", preview),
+                row(
+                    "settings-conversations",
+                    toggle(
+                        &self.state,
+                        &L10N.tr("settings-conversations"),
+                        settings.conversations,
+                        |settings, on| settings.conversations = on,
+                    ),
+                ),
+                heading("settings-message"),
+                row(
+                    "settings-plain-text",
+                    toggle(
+                        &self.state,
+                        &L10N.tr("settings-plain-text"),
+                        settings.plain_text,
+                        |settings, on| settings.plain_text = on,
+                    ),
+                ),
+                row(
+                    "settings-fixed-width",
+                    toggle(
+                        &self.state,
+                        &L10N.tr("settings-fixed-width"),
+                        settings.fixed_width,
+                        |settings, on| settings.fixed_width = on,
+                    ),
+                ),
                 heading("settings-privacy"),
                 row(
                     "settings-load-remote",
@@ -380,6 +431,124 @@ impl SettingsView {
                 note("settings-load-remote-note"),
             ],
         )
+    }
+
+    fn rule_actions(&self) -> Vec<(String, RuleAction)> {
+        let mut actions = vec![
+            (L10N.tr("rule-flag"), RuleAction::Flag),
+            (L10N.tr("rule-read"), RuleAction::Read),
+        ];
+        let Some(store) = &self.store else {
+            return actions;
+        };
+        for account in &self.accounts {
+            for mailbox in store.mailboxes(account.id).unwrap_or_default() {
+                if mailbox.selectable {
+                    actions.push((
+                        L10N.tr_args(
+                            "rule-move",
+                            [
+                                ("mailbox", mailbox.path.clone().into()),
+                                ("account", account.email.clone().into()),
+                            ],
+                        ),
+                        RuleAction::Move(mailbox.id),
+                    ));
+                }
+            }
+        }
+        actions
+    }
+
+    fn rules(&self) -> Form {
+        let fields = RuleField::ALL
+            .iter()
+            .map(|field| L10N.tr(rule_field(*field)))
+            .collect::<Vec<_>>();
+        let actions = self.rule_actions();
+        let mut lines = vec![heading("settings-rules-list")];
+        let rules = self
+            .store
+            .as_ref()
+            .and_then(|store| store.rules().ok())
+            .unwrap_or_default();
+        if rules.is_empty() {
+            lines.push(note("settings-no-rules"));
+        }
+        for rule in rules {
+            let action = actions
+                .iter()
+                .find(|(_, action)| *action == rule.action)
+                .map(|(title, _)| title.clone())
+                .unwrap_or_default();
+            let description = L10N.tr_args(
+                "rule-description",
+                [
+                    ("field", L10N.tr(rule_field(rule.field)).into()),
+                    ("pattern", rule.pattern.clone().into()),
+                    ("action", action.into()),
+                ],
+            );
+            lines.push(FormLine::Row(
+                description,
+                Box::new(Button::new(
+                    &L10N.tr("button-remove"),
+                    sender(&self.state, Signal::RemoveRule(rule.id)),
+                )),
+            ));
+        }
+        let (field, pattern, action) = self.state.borrow().rule.clone();
+        let state = Rc::clone(&self.state);
+        let field = PopUpButton::new(&L10N.tr("rule-if"), &fields, field, move |index| {
+            state.borrow_mut().rule.0 = index;
+        });
+        let state = Rc::clone(&self.state);
+        let pattern = TextField::new("", &pattern, move |text| {
+            state.borrow_mut().rule.1 = text.to_owned();
+        });
+        let titles = actions
+            .iter()
+            .map(|(title, _)| title.clone())
+            .collect::<Vec<_>>();
+        let state = Rc::clone(&self.state);
+        let action = PopUpButton::new(&L10N.tr("rule-then"), &titles, action, move |index| {
+            state.borrow_mut().rule.2 = index;
+        });
+        lines.extend([
+            heading("settings-new-rule"),
+            row("rule-if", field),
+            row("rule-contains", pattern),
+            row("rule-then", action),
+            buttons(vec![Button::new(
+                &L10N.tr("rule-add"),
+                sender(&self.state, Signal::AddRule),
+            )]),
+            note("settings-rules-note"),
+        ]);
+        Form::new(&Tab::Rules.title(), lines)
+    }
+
+    fn add_rule(&mut self) {
+        let (field, pattern, action) = self.state.borrow().rule.clone();
+        let actions = self.rule_actions();
+        let (Some(store), Some(field), Some((_, action))) =
+            (&self.store, RuleField::ALL.get(field), actions.get(action))
+        else {
+            return;
+        };
+        if pattern.trim().is_empty() {
+            return;
+        }
+        let rule = Rule {
+            id: 0,
+            field: *field,
+            pattern: pattern.trim().to_owned(),
+            action: *action,
+        };
+        match store.add_rule(&rule) {
+            Ok(()) => self.state.borrow_mut().rule.1.clear(),
+            Err(error) => tracing::warn!("cannot add the rule: {error}"),
+        }
     }
 
     fn composing(&self) -> Form {
@@ -482,6 +651,12 @@ impl SettingsView {
             row("settings-account", chooser),
             buttons(vec![add, remove]),
             heading("settings-account-information"),
+            row("settings-enabled", {
+                let state = Rc::clone(&self.state);
+                Toggle::new(&L10N.tr("settings-enabled"), account.enabled, move |on| {
+                    state.borrow_mut().signals.push(Signal::Enabled(on));
+                })
+            }),
             row("settings-email", Label::new(&account.email)),
             row("settings-name", name),
             heading("settings-signature"),
@@ -588,19 +763,15 @@ impl SettingsView {
             self.status = Some((L10N.tr("setup-missing-servers"), true));
             return;
         };
-        let changed = Account {
-            user: servers.user.clone(),
-            imap: servers.imap.clone(),
-            smtp: servers.smtp.clone(),
-            ..account.clone()
-        };
-        if changed == *account {
+        if (&servers.user, &servers.imap, &servers.smtp)
+            == (&account.user, &account.imap, &account.smtp)
+        {
             return;
         }
         self.status = Some((L10N.tr("checking-account"), false));
-        self.checking = Some(changed);
-        let (email, old_host) = (account.email.clone(), account.imap.host.clone());
-        let network = self.network.clone();
+        self.checking = Some(account.id);
+        let (id, email, old_host) = (account.id, account.email.clone(), account.imap.host.clone());
+        let (network, store_path) = (self.network.clone(), self.store_path.clone());
         let notifier = mailroom.notifier();
         let spawned = std::thread::Builder::new()
             .name("check-servers".to_owned())
@@ -615,16 +786,28 @@ impl SettingsView {
                             password,
                             servers: Some(servers.clone()),
                         };
-                        let outcome = check(&request, &network);
-                        if matches!(outcome, Outcome::Ready(_))
-                            && servers.imap.host != old_host
-                            && let Err(error) = keyring
-                                .save(&email, &servers.imap.host, &request.password)
-                                .and_then(|()| keyring.forget(&email, &old_host))
-                        {
-                            tracing::warn!("cannot move the password: {error}");
+                        match check(&request, &network) {
+                            Outcome::Ready(checked) => {
+                                let kept = Store::open(&store_path)
+                                    .and_then(|store| store.update_servers(id, &servers))
+                                    .and_then(|()| match servers.imap.host == old_host {
+                                        true => Ok(()),
+                                        false => keyring
+                                            .save(&email, &servers.imap.host, &request.password)
+                                            .and_then(|()| keyring.forget(&email, &old_host)),
+                                    });
+                                match kept {
+                                    Ok(()) => {
+                                        announce(Change::Accounts);
+                                        Outcome::Ready(checked)
+                                    }
+                                    Err(error) => {
+                                        Outcome::NeedsServers(Some(servers), error.to_string())
+                                    }
+                                }
+                            }
+                            outcome => outcome,
                         }
-                        outcome
                     }
                     Ok((None, _)) => {
                         Outcome::WrongPassword(servers, "no saved password".to_owned())
@@ -640,30 +823,17 @@ impl SettingsView {
     }
 
     fn checked(&mut self, outcome: Outcome) {
-        let Some(changed) = self.checking.take() else {
+        let Some(id) = self.checking.take() else {
             return;
         };
         self.status = Some(match outcome {
-            Outcome::Ready(_) => {
-                let saved = self
-                    .store
-                    .as_ref()
-                    .map(|store| store.update_account(&changed));
-                match saved {
-                    Some(Ok(())) => {
-                        if let Some(account) = self
-                            .accounts
-                            .iter_mut()
-                            .find(|account| account.id == changed.id)
-                        {
-                            *account = changed;
-                        }
-                        announce(Change::Accounts);
-                        (L10N.tr("settings-servers-saved"), false)
-                    }
-                    Some(Err(error)) => (error.to_string(), true),
-                    None => return,
+            Outcome::Ready(servers) => {
+                if let Some(account) = self.accounts.iter_mut().find(|account| account.id == id) {
+                    account.user = servers.user;
+                    account.imap = servers.imap;
+                    account.smtp = servers.smtp;
                 }
+                (L10N.tr("settings-servers-saved"), false)
             }
             Outcome::WrongPassword(..) => (L10N.tr("setup-wrong-password"), true),
             Outcome::NeedsServers(_, reason) => (
@@ -707,11 +877,29 @@ impl SettingsView {
                 }
                 Signal::Settings => self.save_settings(),
                 Signal::Identity => self.save_identity(),
+                Signal::Enabled(on) => {
+                    if let Some(account) = self.accounts.get_mut(self.account) {
+                        account.enabled = on;
+                    }
+                    self.save_identity();
+                }
                 Signal::SaveServers => {
                     self.save_servers();
                     rebuild = true;
                 }
                 Signal::AddAccount => announce(Change::AddAccount),
+                Signal::AddRule => {
+                    self.add_rule();
+                    rebuild = true;
+                }
+                Signal::RemoveRule(id) => {
+                    if let Some(store) = &self.store
+                        && let Err(error) = store.remove_rule(id)
+                    {
+                        tracing::warn!("cannot remove the rule: {error}");
+                    }
+                    rebuild = true;
+                }
                 Signal::RemoveAccount => self.confirm_removal(),
                 Signal::Remove(id) => {
                     announce(Change::Remove(id));
@@ -790,7 +978,19 @@ impl View for SettingsView {
 
     fn set_active(&mut self, active: bool) {
         self.ui.set_window_active(active);
-        if active && self.load_accounts() {
+        if !active {
+            return;
+        }
+        let stored = self
+            .folder
+            .as_deref()
+            .map(MailSettings::load)
+            .unwrap_or_default();
+        let changed = stored != self.state.borrow().settings;
+        if changed {
+            self.state.borrow_mut().settings = stored;
+        }
+        if self.load_accounts() || changed {
             self.rebuild();
         }
     }

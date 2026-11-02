@@ -10,14 +10,19 @@ views. Packaged as `bande-calendar`.
   address. It tries `_caldavs._tcp` DNS SRV records, `/.well-known/caldav`, then
   `current-user-principal` → `calendar-home-set` → the calendars in the home set. Passwords go to
   the Secret Service (gnome-keyring), never to disk, and are sent only over HTTPS (or to this
-  computer, for a local server). Several accounts, plus a local calendar.
+  computer, for a local server). Several accounts, plus a local calendar. The account sheet
+  has iCloud, Fastmail, Google and Nextcloud presets that fill in the server and say which
+  password to use (Google needs OAuth, so it offers a subscription to the calendar's secret
+  iCal address instead). When the server refuses the password, Calendar asks for it again
+  (also from Password… in Settings) and keeps every offline change meanwhile.
 - **Subscriptions.** `webcal:` / `webcals:` links and plain `https:` `.ics` URLs, read-only,
-  refreshed hourly; the name and colour come from `X-WR-CALNAME` and `X-APPLE-CALENDAR-COLOR`.
+  refreshed on a wall-clock deadline kept across restarts (every 5 minutes to every week, or
+  never); the name and colour come from `X-WR-CALNAME` and `X-APPLE-CALENDAR-COLOR`.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
   without a network and pushes changes later. Sync is incremental with `sync-token`
   (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
-  `If-None-Match: *`, edits and deletes `If-Match`; a 412 keeps the server's copy and says so
-  in the sidebar.
+  `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
+  version stays and the local edit is kept beside it as a new event, and the sidebar says so.
 - **iCalendar.** Its own parser and writer: line folding, escaping, unknown properties and
   components kept on round trip, `RRULE` (every frequency and `BY*` part, `COUNT`, `UNTIL`,
   `BYSETPOS`, week numbers), `EXDATE`, `RDATE`, `RECURRENCE-ID` overrides, all-day events,
@@ -33,13 +38,24 @@ views. Packaged as `bande-calendar`.
   more than fit readably, a "+N" chip opens that day in the Day view.
 - **Editing.** Drag on empty time to create, drag an event to move it (also between days in the
   month view and into the all-day row), drag its bottom edge to change its length, and an
-  inspector popover with title, location, all-day, start and end, repeat, alert, calendar and
-  notes. Changing a recurring event asks whether it is for this event only (an override) or
-  all events.
+  inspector popover with title, location, all-day, start and end, repeat and when it ends
+  (never, after a number of times, or on a date), alert, calendar and notes. Changing a
+  recurring event asks whether it is for this event only (an override) or all events.
+- **Invitations** through the server (RFC 6638 implicit scheduling, as iCloud, Fastmail,
+  Nextcloud and Google do it): the inspector lists the organizer and invitees with their
+  answers, Accept, Maybe and Decline update your own `PARTSTAT`, and on an event you organise
+  in a CalDAV calendar you can add invitees by address; the server sends the mail.
 - **Search** over title, location and notes, nearest occurrence first.
-- **Alerts** through `org.freedesktop.Notifications`.
-- **Files and links.** `bande-calendar file.ics` offers to add its events; `bande-calendar
-  webcal://…` offers to subscribe. The desktop file registers `text/calendar` and the `webcal`
+- **Alerts** through `org.freedesktop.Notifications`, also while the window is closed. Alerts,
+  the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
+  suspend or a clock change.
+- **Settings** (Calendar ▸ Settings…): default calendar, start of the week, the hours the day
+  starts and ends (the rest is shaded, and the week opens at the start), week numbers, default
+  alerts for new events and all-day events, how often accounts and subscriptions refresh, and
+  adding and removing accounts. Stored in `~/.config/bande/calendar.conf`.
+- **Files and links.** `bande-calendar file.ics` or File ▸ Import… offers to add its events;
+  File ▸ Export… (or Export… on a calendar's menu) saves a calendar as one `.ics` file, through
+  the desktop's file chooser portal; `bande-calendar webcal://…` offers to subscribe. The desktop file registers `text/calendar` and the `webcal`
   schemes.
 
 Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Left/Right previous/next, Ctrl+N new event,
@@ -56,9 +72,11 @@ selected event, Ctrl+W close and Ctrl+Q quit.
 | `src/sync.rs` | push pending changes, pull with sync-token or ctag/etag, apply the outcome |
 | `src/edit.rs` | the edits the UI makes: create, move a series or one occurrence, delete, details |
 | `src/alerts.rs` | which alarms fall due |
+| `src/settings.rs` | the settings and the messages the Settings window sends the app |
+| `src/wake.rs` | the wall-clock timer for alerts, the clock and refreshes |
 | `src/secrets.rs` | the Secret Service |
 | `src/worker.rs` | the network thread the window talks to |
-| `src/ui/` | the window: toolbar, sidebar, the four views, inspector, account sheet, input |
+| `src/ui/` | the window: toolbar, sidebar, the four views, inspector, account sheet, input, Settings |
 | `src/main.rs` | the app: window, menus, sync timers, alerts, files and links |
 
 It is a `bande-app` app on the desktop's toolkit, design tokens and theme, like Files and
@@ -72,7 +90,7 @@ whole test list and the reason for each is in `NOTES/tests.md`.
 
 ## Not done yet
 
-- Invitations (attendees, `METHOD:REQUEST`/`REPLY`), free/busy, tasks (`VTODO`).
+- Invitation e-mails (`METHOD:REQUEST`/`REPLY` over iMIP), free/busy, tasks (`VTODO`).
 - OAuth providers (Google, Microsoft); Basic authentication only, so iCloud and Fastmail work with
   an app password.
 - Editing the time zone of an event; custom repeat rules (they are kept and shown as Custom,
