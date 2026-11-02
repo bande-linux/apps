@@ -33,15 +33,12 @@ An item's dependencies that other items share are counted for each of them.
 | firefox-esr | bande-desktop R | 40, 365 MB | Firefox 273 MB, GTK3, libavcodec (it recommends) |
 | cups | bande-desktop R | 97, 239 MB | ghostscript, poppler, SANE, gphoto, colord, avahi, lynx, Perl |
 | papers | bande-desktop R | 59, 153 MB | GTK4, libadwaita, libnautilus-extension, poppler, djvu, spelling |
-| qt6-xdgdesktopportal-platformtheme | bande-desktop R | 60, 155 MB | the 66 kB plugin brings Qt 6 Gui, QML, Quick, Wayland compositor, `qt6-gtk-platformtheme` → GTK3, 15 X11 libs, ICU |
 | gnome-clocks | bande-desktop S | 51, 132 MB | GTK4, libadwaita, libgweather, geoclue, GStreamer (not installed by default) |
 | gnome-text-editor | bande-desktop R | 48, 115 MB | GTK4, libadwaita, GtkSourceView, ICU, enchant/hunspell/aspell |
 | gnome-keyring + libpam-gnome-keyring | bande-desktop R | 50, 111 MB | `gcr` → both GTK3 and GTK4 (through `gcr4`, `pinentry-gnome3`) |
 | loupe | bande-desktop R | 37, 93 MB | GTK4, libadwaita, libgweather (22 MB of locations, for the photo location) |
-| xdg-utils' recommends | bande-config R → xdg-utils R | 63, 68 MB | x11-utils, x11-xserver-utils → cpp-16 (40 MB); libfile-mimeinfo-perl → libfile-desktopentry-perl R `x-terminal-emulator` → **alacritty**; Perl LWP stack |
 | showtime | bande-desktop R | 46, 65 MB | GTK4 via PyGObject, Python, gst-gtk4 (GStreamer core is already in the base, below) |
 | needrestart | bande-desktop R | 14, 57 MB | Perl |
-| xdg-desktop-portal-gtk | xdg-desktop-portal-bande R, flatpak R | GTK3 | GTK3 is shared with the keyring and the Qt theme; dropping it alone saves little |
 | bande-screenshot's GStreamer recommends | bande-screenshot R | 9, 4 MB | the H.264 encoder for screen recording; cheap, keep |
 | all six `[debian]` recommended apps together | | 258, 943 MB | the first GTK4 and libadwaita app costs about 90 MB; the calculator's `yelp` is most of the rest |
 
@@ -81,10 +78,6 @@ bande-* app and service, bande-screenshot's GStreamer recommends, firefox-esr fo
 |---|---:|---|
 | gnome-calculator | 288 MB from today's install (601 MB on the lean base) | drop from `[debian]`; a Bande Calculator replaces it |
 | papers, loupe, gnome-text-editor, showtime | together with the calculator and Firefox, 943 MB on the lean base | drop from `[debian]` as each Bande app lands; showtime only when there is a media stack |
-| xdg-utils' recommends | 68 MB, all the X11 tools, alacritty | Bande's `xdg-open` callers (config, screenshot, captive portal, terminal) open through Bande's own handler (bande-xdg's mimeapps), then drop `Recommends: xdg-utils` from bande-config. Until then `bande-terminal` should `Provides: x-terminal-emulator`, which stops apt picking alacritty |
-| qt6-xdgdesktopportal-platformtheme | 107 MB with no Qt app installed | move to Suggests; a Qt app brings Qt, and Software (or a small `Enhances` package) adds the plugin with the first Qt app |
-| xdg-desktop-portal-gtk | GTK3 once the keyring is gone | xdg-desktop-portal-bande `Provides: xdg-desktop-portal-backend` (flatpak recommends `-gtk \| -backend`; without it apt pulls `-lomiri`, which brings Qt) and drops `Recommends: -gtk`; keep `-gtk` as the fallback for interfaces Bande lacks (Print, AppChooser, Inhibit…) only after a check of which ones Firefox and Flatpak apps call |
-| cups | 239 MB | decision for the owner: keep (printing works out of the box, as on macOS) or Suggests plus install on demand from Settings › Printers through PackageKit |
 
 **Replace with Bande code** (later, M each): gnome-keyring (111 MB, GTK3+GTK4 through gcr) with
 a Bande Secret Service (with PAM unlock from the greeter); needrestart (57 MB of Perl) with the
