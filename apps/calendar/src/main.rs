@@ -36,6 +36,7 @@ const WINDOW_SIZE: (u32, u32) = (1120, 740);
 const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
 const ALERT_HORIZON: SignedDuration = SignedDuration::from_hours(1);
+const FIRED_MEMORY: SignedDuration = SignedDuration::from_hours(24);
 const NOTIFICATION_TIMEOUT: i32 = -1;
 
 static INFO: Info = Info {
@@ -121,7 +122,7 @@ struct CalendarApp {
     next_clock: Option<Timestamp>,
     alert_at: Timestamp,
     alerts_checked: Timestamp,
-    fired: HashSet<String>,
+    fired: HashMap<String, Timestamp>,
     syncing: bool,
     sync_again: bool,
     title: String,
@@ -694,10 +695,12 @@ impl CalendarApp {
             until,
             &self.zone,
         ) {
-            if self.fired.insert(due.key.clone()) {
+            if self.fired.insert(due.key.clone(), due.at).is_none() {
                 notify(&due, &self.zone, &self.formats);
             }
         }
+        let forget = now.saturating_sub(FIRED_MEMORY).unwrap_or(now);
+        self.fired.retain(|_, at| *at >= forget);
         self.alerts_checked = until;
         let horizon = now.saturating_add(ALERT_HORIZON).unwrap_or(now);
         let next = due_between(view.library(), until, horizon, &self.zone)
@@ -911,7 +914,7 @@ impl Program for CalendarApp {
             next_clock: Some(next_minute()),
             alert_at: Timestamp::now(),
             alerts_checked: Timestamp::now(),
-            fired: HashSet::new(),
+            fired: HashMap::new(),
             syncing: false,
             sync_again: false,
             title,
