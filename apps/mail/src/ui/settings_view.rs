@@ -11,7 +11,9 @@ use bande_toolkit::ui::{
     Alert, Axis, Button, Context, Form, FormLine, FreeLayout, Label, PopUpButton, SEGMENTED_HEIGHT,
     ScrollView, SegmentedControl, Stack, TextField, TextView, Toggle, Ui, Widget, WidgetId,
 };
-use bande_toolkit::{Appearance, Header, Rect, Scene, TextSystem, Window, WindowEvent};
+use bande_toolkit::{
+    Appearance, FrameRegions, Rect, SHEET_INSET, Scene, TextSystem, Window, WindowEvent,
+};
 
 use crate::L10N;
 use crate::discover::Settings as Servers;
@@ -253,6 +255,7 @@ pub struct SettingsView {
     tabs: WidgetId,
     content: WidgetId,
     tab: Tab,
+    titled: Option<Tab>,
     state: Shared,
     folder: Option<PathBuf>,
     store: Option<Store>,
@@ -263,7 +266,6 @@ pub struct SettingsView {
     store_path: PathBuf,
     mailroom: Option<Mailroom>,
     network: Network,
-    width: f32,
 }
 
 impl SettingsView {
@@ -286,7 +288,7 @@ impl SettingsView {
             .fill_equally();
         let mut host = FreeLayout::new();
         let host_id = Widget::id(&host);
-        let tabs = host.insert_in_header(tabs, Rect::default());
+        let tabs = host.insert(tabs, Rect::default());
         let content = host.insert(Label::new(""), Rect::default());
         let mut ui = Ui::new(Box::new(host), Context::new(text, appearance.palette()));
         ui.set_appearance(appearance);
@@ -300,6 +302,7 @@ impl SettingsView {
             tabs,
             content,
             tab: Tab::General,
+            titled: None,
             state,
             folder,
             accounts: Vec::new(),
@@ -312,7 +315,6 @@ impl SettingsView {
                 .inspect_err(|error| tracing::warn!("cannot check servers: {error}"))
                 .ok(),
             network: Network::default(),
-            width: 0.0,
         };
         view.load_accounts();
         view.rebuild();
@@ -1121,7 +1123,6 @@ impl SettingsView {
     }
 
     fn layout(&mut self, width: f32, height: f32) {
-        self.width = width;
         let tabs_width = TAB_WIDTH * TABS.len() as f32;
         let tabs = Rect::new(
             ((width - tabs_width) / 2.0).round(),
@@ -1129,11 +1130,12 @@ impl SettingsView {
             tabs_width,
             SEGMENTED_HEIGHT,
         );
+        let inset = SHEET_INSET as f32;
         let content = Rect::new(
-            0.0,
+            inset,
             TOOLBAR_HEIGHT,
-            width,
-            (height - TOOLBAR_HEIGHT).max(0.0),
+            (width - 2.0 * inset).max(0.0),
+            (height - TOOLBAR_HEIGHT - inset).max(0.0),
         );
         let (tabs_id, content_id) = (self.tabs, self.content);
         if let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) {
@@ -1141,34 +1143,22 @@ impl SettingsView {
             host.set_frame(content_id, content);
         }
     }
-
-    fn header(&self) -> Header {
-        let tabs_width = TAB_WIDTH * TABS.len() as f32;
-        Header {
-            title_x: self.width,
-            items: vec![Rect::new(
-                ((self.width - tabs_width) / 2.0).round(),
-                0.0,
-                tabs_width,
-                TOOLBAR_HEIGHT,
-            )],
-            tabs: Vec::new(),
-        }
-    }
-
-    pub fn render(&mut self, width: u32, height: u32) -> Scene {
-        self.layout(width as f32, height as f32);
-        let mut scene = self.ui.scene(width, height);
-        scene.background = self.ui.context().palette.sheet;
-        scene
-    }
 }
 
 impl View for SettingsView {
     fn scene(&mut self, window: &mut Window) -> Scene {
+        window.set_frame_regions(FrameRegions {
+            sidebar: 0.0,
+            toolbar: TOOLBAR_HEIGHT,
+        });
+        if self.titled != Some(self.tab) {
+            window.set_title(&self.tab.title());
+            self.titled = Some(self.tab);
+        }
         let (width, height) = window.size();
-        let scene = self.render(width, height);
-        window.set_header(self.header());
+        self.layout(width as f32, height as f32);
+        let mut scene = self.ui.scene(width, height);
+        scene.background = self.ui.context().palette.sheet;
         scene
     }
 
