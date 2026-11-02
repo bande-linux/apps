@@ -3,7 +3,7 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use bande_inbox::Outbox;
 use bande_toolkit::Image;
@@ -17,6 +17,7 @@ pub const ICON_PIXELS: u32 = 128;
 const ICON_FILE_LIMIT: u64 = 4 << 20;
 const SHOT_LIMIT: u64 = 8 << 20;
 const TIMEOUT: Duration = Duration::from_secs(20);
+const DPKG_STATUS: &str = "/var/lib/dpkg/status";
 const USER_AGENT: &str = concat!("bande-software/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -234,13 +235,42 @@ fn icons(requested: Vec<(String, Vec<Icon>)>, data_dirs: &[PathBuf]) -> Loaded {
     )
 }
 
-fn load_icons(requests: &Receiver<Vec<(String, Vec<Icon>)>>, out: &Outbox<Message>) {
+fn fingerprint() -> Option<SystemTime> {
+    catalog::SYSTEM_ROOTS
+        .iter()
+        .flat_map(|root| [Path::new(root).join("xml"), Path::new(root).join("yaml")])
+        .chain([
+            PathBuf::from(DPKG_STATUS),
+            PathBuf::from(catalog::FLATPAK_ROOT),
+            PathBuf::from(catalog::METAINFO),
+        ])
+        .filter_map(|path| {
+            fs::metadata(path)
+                .and_then(|metadata| metadata.modified())
+                .ok()
+        })
+        .max()
+}
+
+fn load_icons(requests: &Receiver<Request>, out: &Outbox<Message>) {
+    let mut loaded = fingerprint();
     if !out.send(Message::Loaded(catalogue())) {
         return;
     }
     let data_dirs = bande_xdg::data_dirs();
-    for requested in requests {
-        if !out.send(Message::Loaded(icons(requested, &data_dirs))) {
+    for request in requests {
+        let reply = match request {
+            Request::Icons(requested) => icons(requested, &data_dirs),
+            Request::Catalogue => {
+                let now = fingerprint();
+                if now == loaded {
+                    continue;
+                }
+                loaded = now;
+                catalogue()
+            }
+        };
+        if !out.send(Message::Loaded(reply)) {
             return;
         }
     }
@@ -256,8 +286,13 @@ fn load_shots(requests: &Receiver<String>, out: &Outbox<Message>) {
     }
 }
 
+pub enum Request {
+    Catalogue,
+    Icons(Vec<(String, Vec<Icon>)>),
+}
+
 pub struct Media {
-    pub icons: Sender<Vec<(String, Vec<Icon>)>>,
+    pub icons: Sender<Request>,
     pub shots: Sender<String>,
 }
 

@@ -683,6 +683,7 @@ dependencies = [
  "bande-fs",
  "bande-inbox",
  "bande-l10n",
+ "bande-notify",
  "bande-packages",
  "bande-search",
  "bande-toolkit",

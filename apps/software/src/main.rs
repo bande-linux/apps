@@ -3,9 +3,14 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
-use bande_app_menu::edit_submenu;
+use bande_app_menu::{Entry, edit_submenu};
+use bande_notify::Urgency;
+use bande_notify::client::{Request as Notification, notify};
 use bande_packages::{Client, debian_arch};
-use bande_software::{L10N, Software, WINDOW_SIZE};
+use bande_software::{
+    COMMAND_BACK, COMMAND_DISCOVER, COMMAND_FIND, COMMAND_INSTALLED, COMMAND_UPDATES, Finished,
+    L10N, Software, WINDOW_SIZE,
+};
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 
 static INFO: Info = Info {
@@ -43,6 +48,7 @@ impl View for Pane {
 
     fn source_ready(&mut self, _window: &mut Window, _index: usize) -> bool {
         self.0.pump();
+        self.0.take_finished();
         true
     }
 
@@ -99,9 +105,10 @@ impl Program for Store {
     }
 
     fn reopen(&mut self, cx: &mut Cx<Self>) {
-        let Some(pane) = self.parked.take() else {
+        let Some(mut pane) = self.parked.take() else {
             return;
         };
+        pane.0.reload();
         match open_main(cx, pane) {
             Ok(main) => self.main = Some(main),
             Err(error) => tracing::warn!("cannot open Software: {error}"),
@@ -119,16 +126,67 @@ impl Program for Store {
         self.parked.iter().map(|pane| pane.0.fd()).collect()
     }
 
-    fn source_ready(&mut self, _cx: &mut Cx<Self>, _index: usize) {
-        if let Some(pane) = &mut self.parked {
-            pane.0.pump();
+    fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {
+        let Some(pane) = &mut self.parked else {
+            return;
+        };
+        pane.0.pump();
+        let finished = pane.0.take_finished();
+        let Some(session) = cx.session() else {
+            return;
+        };
+        for done in finished {
+            let summary = match &done {
+                Finished::Installed(name) => {
+                    L10N.tr_args("notify-installed", [("name", name.clone().into())])
+                }
+                Finished::Failed(name) => {
+                    L10N.tr_args("notify-failed", [("name", name.clone().into())])
+                }
+            };
+            let request = Notification {
+                app_name: &L10N.tr("title"),
+                replaces_id: 0,
+                app_icon: INFO.id,
+                summary: &summary,
+                body: "",
+                actions: &[],
+                urgency: Urgency::Normal,
+                sound: None,
+            };
+            if let Err(error) = notify(session, &request) {
+                tracing::warn!("cannot announce the installation: {error}");
+            }
         }
     }
 
     fn menus(&self, _cx: &Cx<Self>) -> Menus {
+        let item = |label: &str, action: &str, shortcut: &str| {
+            Entry::item(&L10N.tr(label), action).shortcut(shortcut)
+        };
         Menus {
-            menus: vec![edit_submenu(Vec::new())],
+            menus: vec![
+                edit_submenu(vec![item("menu-find", COMMAND_FIND, "Ctrl+F")]),
+                Entry::submenu(
+                    &L10N.tr("menu-view"),
+                    vec![
+                        item("menu-back", COMMAND_BACK, "Ctrl+["),
+                        Entry::separator(),
+                        item("discover", COMMAND_DISCOVER, "Ctrl+1"),
+                        item("installed", COMMAND_INSTALLED, "Ctrl+2"),
+                        item("updates", COMMAND_UPDATES, "Ctrl+3"),
+                    ],
+                ),
+            ],
             window: Vec::new(),
+        }
+    }
+
+    fn command(&mut self, cx: &mut Cx<Self>, _window: Option<WindowId>, command: &str) {
+        if let Some((window, pane)) = self.main.and_then(|main| cx.window(main))
+            && pane.0.command(command)
+        {
+            window.request_redraw();
         }
     }
 }

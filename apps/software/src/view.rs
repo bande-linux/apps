@@ -17,7 +17,7 @@ use bande_toolkit::{Image, Palette, Rect, TextSystem};
 
 use crate::L10N;
 use crate::catalog::{Block, Bundle, Category, Component, Icon, search};
-use crate::media::{self, Loaded, Media, ShotError};
+use crate::media::{self, Loaded, Media, Request, ShotError};
 use crate::online;
 use crate::widgets::{AppRow, Grid, Picture};
 use crate::worker::{self, Facts, Failure, Job, Message, Problem, Query};
@@ -32,6 +32,11 @@ const PAGE_ICON: f32 = 80.0;
 const SHOT_WIDTH: f32 = 640.0;
 const SHOT_HEIGHT: f32 = 400.0;
 const LISTED_UPDATES: usize = 30;
+pub const COMMAND_FIND: &str = "find";
+pub const COMMAND_BACK: &str = "back";
+pub const COMMAND_DISCOVER: &str = "discover";
+pub const COMMAND_INSTALLED: &str = "installed";
+pub const COMMAND_UPDATES: &str = "updates";
 const SETTINGS: &str = "bande-settings";
 const SETTINGS_ID: &str = "org.bande.Settings";
 const SOFTWARE_UPDATE_PANE: &str = "software-update";
@@ -257,6 +262,15 @@ pub struct Software {
     scroll: Rc<RefCell<ScrollState>>,
     ui: Ui,
     content: WidgetId,
+    search: WidgetId,
+    places: WidgetId,
+    finished: Vec<Finished>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Finished {
+    Installed(String),
+    Failed(String),
 }
 
 impl Software {
@@ -285,6 +299,8 @@ impl Software {
         });
         let content = Stack::new(Axis::Vertical, 0.0, 0.0, vec![boxed(Label::new(""))]);
         let id = content.id();
+        let search_id = search.id();
+        let places_id = places.id();
         let page = Stack::new(
             Axis::Vertical,
             SPACING,
@@ -321,6 +337,9 @@ impl Software {
             scroll,
             ui: Ui::new(Box::new(view), Context::new(text, palette)),
             content: id,
+            search: search_id,
+            places: places_id,
+            finished: Vec::new(),
         };
         software.ask(Query::Updates);
         software.rebuild();
@@ -372,6 +391,50 @@ impl Software {
         }
         self.rebuild();
         true
+    }
+
+    pub fn reload(&mut self) {
+        if self.media.icons.send(Request::Catalogue).is_err() {
+            tracing::warn!("the catalogue loader stopped");
+        }
+        self.ask(Query::Updates);
+    }
+
+    pub fn take_finished(&mut self) -> Vec<Finished> {
+        std::mem::take(&mut self.finished)
+    }
+
+    fn name_of(&self, key: &str) -> String {
+        self.apps
+            .iter()
+            .find(|app| app.key() == key)
+            .map(|app| app.name.clone())
+            .unwrap_or_else(|| key.to_owned())
+    }
+
+    pub fn command(&mut self, command: &str) -> bool {
+        let place = match command {
+            COMMAND_FIND => {
+                self.ui.set_focus(self.search);
+                return true;
+            }
+            COMMAND_BACK => {
+                self.intents.borrow_mut().push(Intent::Back);
+                return self.pump();
+            }
+            COMMAND_DISCOVER => Place::Discover,
+            COMMAND_INSTALLED => Place::Installed,
+            COMMAND_UPDATES => Place::Updates,
+            _ => return false,
+        };
+        if let Some(index) = Place::ALL.iter().position(|shown| *shown == place) {
+            self.ui
+                .update_widget(self.places, |control: &mut SegmentedControl, cx| {
+                    control.set_selected(cx, index);
+                });
+        }
+        self.intents.borrow_mut().push(Intent::Go(place));
+        self.pump()
     }
 
     fn ask(&self, query: Query) {
@@ -464,8 +527,28 @@ impl Software {
     fn receive(&mut self, message: Message) {
         match message {
             Message::Loaded(Loaded::Catalogue { apps, installed }) => {
-                self.apps = apps.into_iter().filter(|app| !app.needs_x11).collect();
+                let apps: Vec<Component> = apps.into_iter().filter(|app| !app.needs_x11).collect();
+                let shown: Vec<Option<usize>> = self
+                    .pages
+                    .iter()
+                    .map(|(page, _)| match page {
+                        Page::App(index) => {
+                            let key = self.apps.get(*index).map(Component::key);
+                            apps.iter().position(|app| Some(app.key()) == key)
+                        }
+                        _ => Some(0),
+                    })
+                    .collect();
+                let kept = shown.iter().take_while(|found| found.is_some()).count();
+                self.pages.truncate(kept.max(1));
+                for ((page, _), found) in self.pages.iter_mut().zip(shown) {
+                    if let (Page::App(index), Some(found)) = (page, found) {
+                        *index = found;
+                    }
+                }
+                self.apps = apps;
                 self.installed = installed;
+                self.facts.clear();
                 self.loading = false;
             }
             Message::Online(online) => {
@@ -491,6 +574,7 @@ impl Software {
                 }
             }
             Message::Installed(key) => {
+                self.finished.push(Finished::Installed(self.name_of(&key)));
                 self.busy.remove(&key);
                 self.facts.remove(&key);
                 self.installed.insert(key);
@@ -515,6 +599,9 @@ impl Software {
             Message::Updates(updates) => self.updates = updates,
             Message::Failed(key, failure) => {
                 if let Some((task, _)) = self.busy.remove(&key) {
+                    if task == Task::Install {
+                        self.finished.push(Finished::Failed(self.name_of(&key)));
+                    }
                     self.failed.insert(key, (task, failure));
                 }
             }
@@ -555,7 +642,7 @@ impl Software {
         }
         self.requested
             .extend(wanted.iter().map(|(key, _)| key.clone()));
-        if self.media.icons.send(wanted).is_err() {
+        if self.media.icons.send(Request::Icons(wanted)).is_err() {
             tracing::warn!("the icon loader stopped");
         }
     }
