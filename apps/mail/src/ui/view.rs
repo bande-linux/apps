@@ -1448,7 +1448,14 @@ impl MailView {
     fn tell_held(&mut self, accounts: &[AccountId]) {
         let stored = self.store.accounts().unwrap_or_default();
         for account in stored.iter().filter(|known| accounts.contains(&known.id)) {
-            let count = self.held.iter().filter(|(id, _)| *id == account.id).count();
+            let count = self
+                .held
+                .iter()
+                .filter(|(id, command)| *id == account.id && matches!(command, Command::Send(_)))
+                .count();
+            if count == 0 {
+                continue;
+            }
             self.ui.present_sheet(
                 Alert::new(
                     &L10N.tr_args("held-title", [("count", count.into())]),
@@ -1679,12 +1686,8 @@ impl MailView {
                     self.requests.push(Request::NotSent { error, outgoing });
                 }
                 MailEvent::Held(account, command) => {
-                    if self.worker(account).is_some() {
-                        self.send_command(account, *command);
-                    } else {
-                        self.held.push((account, *command));
-                        held.push(account);
-                    }
+                    self.held.push((account, *command));
+                    held.push(account);
                 }
                 MailEvent::Setup(outcome) => self.setup_checked(*outcome),
                 MailEvent::Pictures(id, pictures) => {
@@ -1705,6 +1708,7 @@ impl MailView {
         }
         if !held.is_empty() {
             held.dedup();
+            self.release_held();
             self.tell_held(&held);
         }
         if stale {
