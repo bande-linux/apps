@@ -24,7 +24,7 @@ pub use keys::{
 pub use menu::{CLOSE_WINDOW, MenuCommand, TerminalContext, app_menus, tab_menu, terminal_menu};
 pub use panes::{Axis, Divider, Layout, Side};
 pub use process::{Report, Reports};
-pub use render::{DEFAULT_FONT_SIZE, Painter, Pane, TabBar};
+pub use render::{DEFAULT_FONT_SIZE, Painter, Pane};
 pub use restore::{SavedWindow, claim, left_behind, window_file, windows_folder};
 pub use session::{Notice, Session};
 pub use settings::{
@@ -32,7 +32,7 @@ pub use settings::{
     Settings,
 };
 pub use settings_view::{SETTINGS_SIZE, settings_view};
-pub use tabs::{FULL_SCREEN_LEADING, HEADER_LEADING, STRIP_HEIGHT, TabBarLayout, TabTarget};
+pub use tabs::{FULL_SCREEN_LEADING, HEADER_LEADING, STRIP_HEIGHT};
 pub use terminal::{
     CellPoint, GridSize, Highlights, Link, SearchDirection, SelectionKind, Terminal, is_openable,
 };

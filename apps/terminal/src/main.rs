@@ -8,16 +8,17 @@ use std::process::ExitCode;
 use std::rc::Rc;
 
 use bande_app::{
-    Cx, Info, Keys, Kind, Menus, Program, Settings as SettingsWindowInfo, View, WindowId,
+    Cx, Detached, Info, Keys, Kind, Menus, Program, Settings as SettingsWindowInfo, TabCarry,
+    TabDrop, View, WindowId,
 };
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_terminal::{
     CLOSE_WINDOW, CloseAsk, Command, GridSize, L10N, MenuCommand, Painter, SETTINGS_SIZE, Session,
     Settings, Terminal, app_menus, claim, left_behind, settings_view, window_file, windows_folder,
 };
-use bande_toolkit::{Appearance, Point, WindowDrag};
+use bande_toolkit::Appearance;
 
-use crate::app::{Arguments, Ask, CarriedTab, Detached, Opened, TerminalWindow};
+use crate::app::{Arguments, Ask, CarriedTab, Opened, TerminalWindow};
 use crate::bus::Bus;
 
 const APP_ID: &str = "org.bande.Terminal";
@@ -49,24 +50,13 @@ fn running(pid: u32) -> bool {
         .is_ok_and(|name| name.trim_end() == PROGRAM)
 }
 
-struct Carried {
-    from: WindowId,
-    index: usize,
-    tab: u32,
-    holder: WindowId,
-    floating: bool,
-    drag: WindowDrag,
-    grab: Point,
-    size: (u32, u32),
-}
-
 struct Terminals {
     settings: Settings,
     settings_watch: Option<SettingsWatch>,
     home: Option<PathBuf>,
     bus: Rc<Bus>,
     carrying: Rc<Cell<bool>>,
-    carried: Option<Carried>,
+    carry: TabCarry,
     next_serial: u32,
 }
 
@@ -155,151 +145,36 @@ impl Terminals {
         self.show(cx, painter, size, opened, serial)
     }
 
-    fn detach(&mut self, cx: &mut Cx<Self>, from: WindowId, detached: Detached) {
-        let Detached {
-            tab,
-            index,
-            drag,
-            grab,
-            size,
-        } = detached;
-        let id = tab.id();
-        match self.float(cx, tab, &drag, grab, size) {
-            Ok(holder) => {
-                self.carried = Some(Carried {
-                    from,
-                    index,
-                    tab: id,
-                    holder,
-                    floating: true,
-                    drag,
-                    grab,
-                    size,
-                });
-            }
-            Err(tab) => {
-                self.carrying.set(false);
-                if let Some((shown, view)) = cx.window(from) {
-                    view.adopt_tab(shown, tab, index);
-                }
-            }
-        }
-    }
-
-    fn float(
+    fn float_window(
         &mut self,
         cx: &mut Cx<Self>,
-        tab: CarriedTab,
-        drag: &WindowDrag,
-        grab: Point,
         size: (u32, u32),
-    ) -> Result<WindowId, CarriedTab> {
+    ) -> Result<WindowId, bande_app::Error> {
         let (serial, saved_file) = self.next_window(true);
         let opened = Opened {
             sessions: Vec::new(),
             active: 0,
             saved_file,
         };
-        let window = match self.show(cx, self.painter(), size, opened, serial) {
-            Ok(window) => window,
-            Err(error) => {
-                tracing::warn!("cannot open a window for the tab: {error}");
-                return Err(tab);
-            }
-        };
-        if let Some((shown, view)) = cx.window(window) {
-            view.adopt_tab(shown, tab, 0);
-            if let Err(error) = shown.attach_to_drag(drag, view.grab_point(grab)) {
-                tracing::warn!("cannot carry the window with the tab: {error}");
-            }
-        }
-        Ok(window)
+        self.show(cx, self.painter(), size, opened, serial)
     }
 
-    fn hover(&mut self, cx: &mut Cx<Self>, over: WindowId, x: f32) {
-        let Some(carried) = &mut self.carried else {
-            return;
-        };
-        if carried.holder == over {
-            if let Some((shown, view)) = cx.window(over) {
-                view.slide_tab_to(shown, carried.tab, x);
-            }
-            return;
-        }
-        if !carried.floating {
-            return;
-        }
-        let Some(index) = cx.view(over).map(|view| view.insertion_index(x)) else {
-            return;
-        };
-        let Some(tab) = cx
-            .window(carried.holder)
-            .and_then(|(shown, view)| view.release_tab(shown, carried.tab))
-        else {
-            return;
-        };
-        cx.close(carried.holder);
-        if let Some((shown, view)) = cx.window(over) {
-            view.adopt_tab(shown, tab, index);
-        }
-        carried.holder = over;
-        carried.floating = false;
+    fn detach(&mut self, cx: &mut Cx<Self>, from: WindowId, detached: Detached<CarriedTab>) {
+        let mut carry = std::mem::take(&mut self.carry);
+        carry.detach(cx, from, detached, &mut |cx, size| {
+            self.float_window(cx, size)
+        });
+        self.carry = carry;
+        self.carrying.set(self.carry.is_carrying());
     }
 
-    fn unhover(&mut self, cx: &mut Cx<Self>, from: WindowId) {
-        let Some(carried) = self.carried.take() else {
-            return;
-        };
-        if carried.floating || carried.holder != from {
-            self.carried = Some(carried);
-            return;
-        }
-        let Some(tab) = cx
-            .window(from)
-            .and_then(|(shown, view)| view.release_tab(shown, carried.tab))
-        else {
-            self.carried = Some(carried);
-            return;
-        };
-        match self.float(cx, tab, &carried.drag, carried.grab, carried.size) {
-            Ok(holder) => {
-                self.carried = Some(Carried {
-                    holder,
-                    floating: true,
-                    ..carried
-                });
-            }
-            Err(tab) => {
-                if let Some((shown, view)) = cx.window(from) {
-                    view.adopt_tab(shown, tab, 0);
-                }
-                self.carried = Some(carried);
-            }
-        }
-    }
-
-    fn end_carry(&mut self, cx: &mut Cx<Self>, placed: bool) {
-        self.carrying.set(false);
-        let Some(carried) = self.carried.take() else {
-            return;
-        };
-        if placed {
-            cx.raise(carried.holder, None);
-            return;
-        }
-        if carried.holder != carried.from
-            && let Some(tab) = cx
-                .window(carried.holder)
-                .and_then(|(shown, view)| view.release_tab(shown, carried.tab))
-        {
-            if carried.floating {
-                cx.close(carried.holder);
-            }
-            if let Some((shown, view)) = cx.window(carried.from) {
-                view.adopt_tab(shown, tab, carried.index);
-            }
-        }
-        cx.raise(carried.from, None);
+    fn tab_drop(&mut self, cx: &mut Cx<Self>, window: WindowId, drop: TabDrop) {
+        let mut carry = std::mem::take(&mut self.carry);
+        carry.drop_event(cx, window, drop, &mut |cx, size| {
+            self.float_window(cx, size)
+        });
+        self.carry = carry;
+        self.carrying.set(self.carry.is_carrying());
     }
 
     fn open_arguments(
@@ -350,10 +225,7 @@ impl Terminals {
                 Ask::Settings => cx.open_settings(),
                 Ask::Quit => cx.quit(),
                 Ask::Detach(detached) => self.detach(cx, window, detached),
-                Ask::Hover(x) => self.hover(cx, window, x),
-                Ask::Unhover => self.unhover(cx, window),
-                Ask::Drop => self.end_carry(cx, true),
-                Ask::DragEnded { placed } => self.end_carry(cx, placed),
+                Ask::TabDrop(drop) => self.tab_drop(cx, window, drop),
             }
         }
         if cx.view(window).is_some_and(TerminalWindow::finished) {
@@ -375,7 +247,7 @@ impl Program for Terminals {
             home: std::env::var_os("HOME").map(PathBuf::from),
             bus: Rc::new(Bus::start(APP_ID)),
             carrying: Rc::new(Cell::new(false)),
-            carried: None,
+            carry: TabCarry::default(),
             next_serial: 0,
         };
         let plain = Arguments::parse(arguments.iter().cloned()).is_plain();

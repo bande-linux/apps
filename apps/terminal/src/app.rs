@@ -8,24 +8,25 @@ use std::time::{Duration, Instant};
 use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
-use bande_app::View;
+use bande_app::{Detached, TabDrop, TabDropTarget, TabHost, View};
 use bande_app_settings::{Stored, settings_folder};
-use bande_spring::{Animated, Decay, Spring, State as SpringState};
+use bande_spring::{Decay, State as SpringState};
 use bande_terminal::{
     Axis, Banner, BannerAction, CellPoint, CloseAsk, Command, Divider, FULL_SCREEN_LEADING,
     GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind,
     NewTabFolder, Notice, Painter, Pane, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind,
-    Session, Settings, TabBar, TabBarLayout, TabTarget, Terminal, TerminalContext, bracketed,
-    dropped_text, encode_key, is_openable, mouse_report, next_font_size, reports_mouse, shortcut,
-    tab_menu, terminal_menu, wants_scroll_as_arrows,
+    Session, Settings, Terminal, TerminalContext, bracketed, dropped_text, encode_key, is_openable,
+    mouse_report, next_font_size, reports_mouse, shortcut, tab_menu, terminal_menu,
+    wants_scroll_as_arrows,
 };
 use bande_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollExtent, ScrollPhase,
-    ScrollSource, Scrollbar, ScrollbarAction,
+    ScrollSource, Scrollbar, ScrollbarAction, TabAction, TabLabel, TabStrip, TabStripLayout,
+    TabsShown,
 };
 use bande_toolkit::{
     Appearance, DragAction, DragEvent, FrameRegions, Header, Item, MenuPlacement, Point, Radius,
-    Rect, SHEET_INSET, Scene, Shape, Transfer, Window, WindowDrag, WindowEvent,
+    Rect, SHEET_INSET, Scene, Shape, Transfer, Window, WindowEvent,
 };
 
 use crate::APP_ID;
@@ -46,7 +47,6 @@ const FLASH: Duration = Duration::from_millis(220);
 const FLASH_OPACITY: f32 = 0.14;
 const MIN_PANE: f32 = 64.0;
 const BLINK: Duration = Duration::from_millis(530);
-const TAB_DRAG_SLOP: f32 = 4.0;
 
 struct Momentum {
     velocity: f64,
@@ -59,8 +59,7 @@ enum Gesture {
     Idle,
     Selecting,
     Reporting(MouseButton),
-    Tab(TabTarget, Point),
-    Reorder { index: usize, grab: f32, left: f32 },
+    Strip,
     Banner,
     Divider(Divider),
 }
@@ -83,7 +82,6 @@ struct Tab {
     focused: u32,
     bell: bool,
     title: Option<String>,
-    slide: Animated<Instant>,
 }
 
 impl Tab {
@@ -96,7 +94,6 @@ impl Tab {
             focused: id,
             bell: false,
             title: None,
-            slide: Animated::points(0.0),
         }
     }
 
@@ -127,29 +124,12 @@ impl Tab {
 
 pub struct CarriedTab(Box<Tab>);
 
-impl CarriedTab {
-    pub fn id(&self) -> u32 {
-        self.0.id
-    }
-}
-
-pub struct Detached {
-    pub tab: CarriedTab,
-    pub index: usize,
-    pub drag: WindowDrag,
-    pub grab: Point,
-    pub size: (u32, u32),
-}
-
 pub enum Ask {
     NewWindow(Option<PathBuf>),
     Settings,
     Quit,
-    Detach(Detached),
-    Hover(f32),
-    Unhover,
-    Drop,
-    DragEnded { placed: bool },
+    Detach(Detached<CarriedTab>),
+    TabDrop(TabDrop),
 }
 
 pub struct TerminalWindow {
@@ -161,7 +141,7 @@ pub struct TerminalWindow {
     focused: bool,
     pointer: Point,
     gesture: Gesture,
-    hover: Option<TabTarget>,
+    strip: TabStrip,
     reported_cell: Option<(usize, usize)>,
     scroll_remainder: f32,
     title: String,
@@ -186,7 +166,7 @@ pub struct TerminalWindow {
     saved: Option<(PathBuf, SavedWindow)>,
     asks: Vec<Ask>,
     carrying: Rc<Cell<bool>>,
-    tab_over: bool,
+    drop_target: TabDropTarget,
     blink_from: Instant,
     blink_phase: u32,
     alt_click: Option<(usize, usize)>,
@@ -222,7 +202,7 @@ impl TerminalWindow {
             focused: false,
             pointer: Point::default(),
             gesture: Gesture::Idle,
-            hover: None,
+            strip: TabStrip::new(),
             reported_cell: None,
             scroll_remainder: 0.0,
             title: String::new(),
@@ -247,7 +227,7 @@ impl TerminalWindow {
             saved: saved_file.map(|file| (file, SavedWindow::default())),
             asks: Vec::new(),
             carrying,
-            tab_over: false,
+            drop_target: TabDropTarget::default(),
             blink_from: Instant::now(),
             blink_phase: 0,
             alt_click: None,
@@ -315,8 +295,53 @@ impl TerminalWindow {
         }
     }
 
-    fn tab_layout(&self) -> TabBarLayout {
-        TabBarLayout::new(self.tabs.len(), self.size.0 as f32, self.leading())
+    fn tab_layout(&self) -> TabStripLayout {
+        TabStripLayout::new(
+            self.tabs.len(),
+            self.size.0 as f32,
+            self.leading(),
+            STRIP_HEIGHT,
+        )
+    }
+
+    fn sync_strip(&mut self) -> TabStripLayout {
+        let ids: Vec<u64> = self.tabs.iter().map(|tab| u64::from(tab.id)).collect();
+        self.strip.sync(&ids);
+        self.tab_layout()
+    }
+
+    fn in_strip(&self, at: Point) -> bool {
+        self.has_strip() && at.y < STRIP_HEIGHT
+    }
+
+    fn strip_action(&mut self, window: &mut Window, action: TabAction) {
+        match action {
+            TabAction::Select(index) => self.select_tab(window, index),
+            TabAction::Close(index) => self.request_close_tab(window, index),
+            TabAction::NewTab => self.new_tab(window),
+            TabAction::Menu { tab, at } => {
+                let tab = tab.and_then(|index| self.tabs.get(index)).map(|tab| tab.id);
+                self.show_menu(window, tab_menu(tab, self.tabs.len()), at);
+            }
+            TabAction::Moved { from, to } => self.move_tab(from, to),
+            TabAction::Detach { index, grab } => self.detach_tab(window, index, grab),
+        }
+        window.request_redraw();
+    }
+
+    fn move_tab(&mut self, from: usize, to: usize) {
+        if from >= self.tabs.len() || to >= self.tabs.len() {
+            return;
+        }
+        let active = self.tabs[self.active].id;
+        let tab = self.tabs.remove(from);
+        self.tabs.insert(to, tab);
+        self.active = self
+            .tabs
+            .iter()
+            .position(|tab| tab.id == active)
+            .unwrap_or(to);
+        self.save_window();
     }
 
     fn frame_window(&self, window: &mut Window) {
@@ -432,13 +457,6 @@ impl TerminalWindow {
         self.painter
             .metrics
             .cell_at(Point::new(at.x - frame.x, at.y - frame.y))
-    }
-
-    fn tab_target(&self, at: Point) -> Option<TabTarget> {
-        if !self.has_strip() || at.y >= STRIP_HEIGHT {
-            return None;
-        }
-        self.tab_layout().hit(at)
     }
 
     fn tab_title(&self, tab: &Tab) -> String {
@@ -868,67 +886,20 @@ impl TerminalWindow {
             self.focus_terminal(self.focused && !self.banner_focused);
         }
         self.gesture = Gesture::Idle;
-        self.hover = None;
+        let layout = self.sync_strip();
+        self.strip.hover(&layout, None);
         self.after_tabs_changed(window);
         self.save_window();
         Some(closed)
     }
 
-    pub fn release_tab(&mut self, window: &mut Window, id: u32) -> Option<CarriedTab> {
-        let index = self.tabs.iter().position(|tab| tab.id == id)?;
-        self.take_tab(window, index)
-            .map(|tab| CarriedTab(Box::new(tab)))
-    }
-
-    pub fn insertion_index(&self, x: f32) -> usize {
-        let slots = self.tab_layout().tabs;
-        slots
-            .iter()
-            .position(|slot| x < slot.x + slot.width / 2.0)
-            .unwrap_or(slots.len())
-    }
-
-    pub fn slide_tab_to(&mut self, window: &mut Window, id: u32, x: f32) {
-        let Some(index) = self.tabs.iter().position(|tab| tab.id == id) else {
-            return;
-        };
-        let grab = self
-            .tab_layout()
+    fn detach_tab(&mut self, window: &mut Window, index: usize, grab: Point) {
+        self.gesture = Gesture::Idle;
+        let Some((title, id)) = self
             .tabs
             .get(index)
-            .map_or(0.0, |slot| slot.width / 2.0);
-        self.drag_tab(window, index, grab, x);
-        if let Gesture::Reorder { index, left, .. } = self.gesture {
-            self.settle_tab(window, index, left);
-        }
-        self.gesture = Gesture::Idle;
-    }
-
-    pub fn adopt_tab(&mut self, window: &mut Window, tab: CarriedTab, index: usize) {
-        let index = index.min(self.tabs.len());
-        let mut tab = *tab.0;
-        tab.slide = Animated::points(0.0);
-        tab.bell = false;
-        if !self.tabs.is_empty() {
-            self.focus_terminal(false);
-        }
-        self.tabs.insert(index, tab);
-        self.active = index;
-        self.gesture = Gesture::Idle;
-        self.hover = None;
-        self.after_tabs_changed(window);
-        self.run_find();
-        self.focus_terminal(self.focused && !self.banner_focused);
-        self.sync_title(window);
-    }
-
-    pub fn grab_point(&self, grab: Point) -> Point {
-        let x = self.tab_layout().tabs.first().map_or(0.0, |slot| slot.x);
-        Point::new(x + grab.x, grab.y)
-    }
-
-    fn detach_tab(&mut self, window: &mut Window, index: usize, grab: f32) {
-        let Some(title) = self.tabs.get(index).map(|tab| self.tab_title(tab)) else {
+            .map(|tab| (self.tab_title(tab), u64::from(tab.id)))
+        else {
             return;
         };
         let drag = match window.start_window_drag(Transfer::text(&title)) {
@@ -946,9 +917,10 @@ impl TerminalWindow {
         self.carrying.set(true);
         self.asks.push(Ask::Detach(Detached {
             tab: CarriedTab(Box::new(tab)),
+            id,
             index,
             drag,
-            grab: Point::new(grab, STRIP_HEIGHT / 2.0),
+            grab,
             size,
         }));
     }
@@ -1312,30 +1284,9 @@ impl TerminalWindow {
     }
 
     fn tab_drag(&mut self, window: &mut Window, drag: DragEvent) {
-        match drag {
-            DragEvent::Entered { position, .. } | DragEvent::Moved(position) => {
-                let over = self.has_strip() && (0.0..STRIP_HEIGHT).contains(&position.y);
-                window.accept_drag_only(over.then_some(DragAction::Move));
-                if over {
-                    self.asks.push(Ask::Hover(position.x));
-                } else if self.tab_over {
-                    self.asks.push(Ask::Unhover);
-                }
-                self.tab_over = over;
-            }
-            DragEvent::Left => {
-                if std::mem::take(&mut self.tab_over) {
-                    self.asks.push(Ask::Unhover);
-                }
-            }
-            DragEvent::Dropped { .. } => {
-                if std::mem::take(&mut self.tab_over) {
-                    self.asks.push(Ask::Drop);
-                }
-            }
-            DragEvent::Finished(action) => self.asks.push(Ask::DragEnded {
-                placed: action.is_some(),
-            }),
+        let strip = self.has_strip().then_some(STRIP_HEIGHT);
+        if let Some(drop) = self.drop_target.event(window, strip, drag) {
+            self.asks.push(Ask::TabDrop(drop));
         }
     }
 
@@ -1430,9 +1381,9 @@ impl TerminalWindow {
         if self.scrollbar_pointer(window, &Event::PointerMove(pointer)) {
             return self.update_cursor(window, modifiers);
         }
-        let hover = self.tab_target(at);
-        if hover != self.hover {
-            self.hover = hover;
+        let layout = self.sync_strip();
+        let over_strip = self.in_strip(at);
+        if self.strip.hover(&layout, over_strip.then_some(at)) {
             window.request_redraw();
         }
         self.hover_link(window, modifiers);
@@ -1459,25 +1410,18 @@ impl TerminalWindow {
                 self.layout();
                 window.request_redraw();
             }
-            Gesture::Tab(TabTarget::Select(index), from)
-                if (at.x - from.x).hypot(at.y - from.y) > TAB_DRAG_SLOP && self.has_strip() =>
-            {
-                let grab = from.x
-                    - self
-                        .tab_layout()
-                        .tabs
-                        .get(index)
-                        .map_or(from.x, |tab| tab.x);
-                self.drag_tab(window, index, grab, at.x);
+            Gesture::Strip => {
+                let now = window.frame_time().on_screen();
+                let reduce_motion = window.appearance().reduce_motion;
+                if let Some(action) = self.strip.moved(&layout, at, now, reduce_motion) {
+                    self.strip_action(window, action);
+                }
+                if self.strip.is_engaged() && matches!(self.gesture, Gesture::Idle) {
+                    self.gesture = Gesture::Strip;
+                }
+                window.request_redraw();
             }
-            Gesture::Reorder { index, grab, .. }
-                if self.tabs.len() > 1 && !(0.0..STRIP_HEIGHT).contains(&at.y) =>
-            {
-                self.detach_tab(window, index, grab);
-            }
-            Gesture::Reorder { index, grab, .. } => self.drag_tab(window, index, grab, at.x),
-            Gesture::Tab(..) => {}
-            Gesture::Idle if hover.is_none() && self.in_content(at) => {
+            Gesture::Idle if !over_strip && self.in_content(at) => {
                 if self.pane_at(at) == Some(self.tab().focused) {
                     self.report_mouse(MouseKind::Move, at, modifiers);
                 }
@@ -1575,66 +1519,17 @@ impl TerminalWindow {
                 self.offer_primary(window);
                 window.request_redraw();
             }
-            Gesture::Reorder { index, left, .. } => self.settle_tab(window, index, left),
-            Gesture::Banner | Gesture::Divider(_) | Gesture::Tab(..) | Gesture::Idle => {}
-        }
-    }
-
-    fn drag_tab(&mut self, window: &mut Window, from: usize, grab: f32, x: f32) {
-        let slots = self.tab_layout().tabs;
-        let (Some(first), Some(last)) = (slots.first(), slots.last()) else {
-            return;
-        };
-        let left = (x - grab).clamp(first.x, last.x);
-        let to = slots
-            .iter()
-            .enumerate()
-            .min_by(|(_, a), (_, b)| (a.x - left).abs().total_cmp(&(b.x - left).abs()))
-            .map_or(from, |(index, _)| index);
-        if to != from && from < self.tabs.len() {
-            let now = window.frame_time().on_screen();
-            let reduce_motion = window.appearance().reduce_motion;
-            let active = self.tabs[self.active].id;
-            let tab = self.tabs.remove(from);
-            self.tabs.insert(to, tab);
-            self.active = self
-                .tabs
-                .iter()
-                .position(|tab| tab.id == active)
-                .unwrap_or(to);
-            let (low, high) = (from.min(to), from.max(to));
-            for index in (low..=high).filter(|index| *index != to) {
-                let old = if from < to { index + 1 } else { index - 1 };
-                let shift = slots[old].x - slots[index].x;
-                let slide = &mut self.tabs[index].slide;
-                let (current, _) = slide.value_at(now);
-                slide.jump_to(current + shift);
-                slide.animate_at(now, reduce_motion, 0.0, Spring::STANDARD);
+            Gesture::Strip => {
+                let layout = self.tab_layout();
+                self.strip.cancel(
+                    &layout,
+                    window.frame_time().on_screen(),
+                    window.appearance().reduce_motion,
+                );
+                window.request_redraw();
             }
-            self.save_window();
+            Gesture::Banner | Gesture::Divider(_) | Gesture::Idle => {}
         }
-        self.gesture = Gesture::Reorder {
-            index: to,
-            grab,
-            left,
-        };
-        window.request_redraw();
-    }
-
-    fn settle_tab(&mut self, window: &mut Window, index: usize, left: f32) {
-        let Some(slot) = self.tab_layout().tabs.get(index).map(|tab| tab.x) else {
-            return;
-        };
-        if let Some(tab) = self.tabs.get_mut(index) {
-            tab.slide.jump_to(left - slot);
-            tab.slide.animate_at(
-                window.frame_time().on_screen(),
-                window.appearance().reduce_motion,
-                0.0,
-                Spring::STANDARD,
-            );
-        }
-        window.request_redraw();
     }
 
     fn release(&mut self, window: &mut Window, pointer: Pointer) {
@@ -1657,20 +1552,23 @@ impl TerminalWindow {
                 }
                 window.request_redraw();
             }
-            Gesture::Tab(target, _) if self.tab_target(at) == Some(target) => match target {
-                TabTarget::Close(index) => self.request_close_tab(window, index),
-                TabTarget::NewTab => self.new_tab(window),
-                TabTarget::Select(_) => {}
-            },
+            Gesture::Strip => {
+                let layout = self.sync_strip();
+                let now = window.frame_time().on_screen();
+                let reduce_motion = window.appearance().reduce_motion;
+                if let Some(action) = self.strip.released(&layout, at, now, reduce_motion) {
+                    self.strip_action(window, action);
+                }
+                window.request_redraw();
+            }
             Gesture::Banner => {
                 if let Some(banner) = &mut self.banner {
                     banner.handle(&Event::PointerUp(pointer));
                     window.request_redraw();
                 }
             }
-            Gesture::Reorder { index, left, .. } => self.settle_tab(window, index, left),
             gesture @ (Gesture::Reporting(_) | Gesture::Selecting) => self.gesture = gesture,
-            Gesture::Divider(_) | Gesture::Tab(..) | Gesture::Idle => {}
+            Gesture::Divider(_) | Gesture::Idle => {}
         }
         self.update_cursor(window, pointer.modifiers);
     }
@@ -1678,24 +1576,17 @@ impl TerminalWindow {
     fn press(&mut self, window: &mut Window, pointer: Pointer) {
         let at = pointer.position;
         self.momentum = None;
-        if let Some(target) = self.tab_target(at) {
-            if asks_for_menu(&pointer) {
-                let tab = match target {
-                    TabTarget::Select(index) | TabTarget::Close(index) => {
-                        self.tabs.get(index).map(|tab| tab.id)
-                    }
-                    TabTarget::NewTab => None,
-                };
-                return self.show_menu(window, tab_menu(tab, self.tabs.len()), at);
+        if self.in_strip(at) {
+            let layout = self.sync_strip();
+            if let Some(action) = self.strip.press(&layout, &pointer) {
+                self.strip_action(window, action);
             }
-            if !pointer.is_primary() {
+            if self.strip.is_engaged() {
+                self.gesture = Gesture::Strip;
+            }
+            if layout.hit(at).is_some() {
                 return;
             }
-            if let TabTarget::Select(index) = target {
-                self.select_tab(window, index);
-            }
-            self.gesture = Gesture::Tab(target, at);
-            return;
         }
         if self.in_banner(at) {
             if let Some(banner) = &mut self.banner {
@@ -2010,6 +1901,55 @@ impl TerminalWindow {
     }
 }
 
+impl TabHost for TerminalWindow {
+    type Tab = CarriedTab;
+
+    fn release_tab(&mut self, window: &mut Window, id: u64) -> Option<CarriedTab> {
+        let index = self.tabs.iter().position(|tab| u64::from(tab.id) == id)?;
+        self.take_tab(window, index)
+            .map(|tab| CarriedTab(Box::new(tab)))
+    }
+
+    fn adopt_tab(&mut self, window: &mut Window, tab: CarriedTab, index: usize) {
+        let index = index.min(self.tabs.len());
+        let mut tab = *tab.0;
+        tab.bell = false;
+        if !self.tabs.is_empty() {
+            self.focus_terminal(false);
+        }
+        self.tabs.insert(index, tab);
+        self.active = index;
+        self.gesture = Gesture::Idle;
+        let layout = self.sync_strip();
+        self.strip.hover(&layout, None);
+        self.after_tabs_changed(window);
+        self.run_find();
+        self.focus_terminal(self.focused && !self.banner_focused);
+        self.sync_title(window);
+    }
+
+    fn slide_tab_to(&mut self, window: &mut Window, id: u64, x: f32) {
+        let Some(index) = self.tabs.iter().position(|tab| u64::from(tab.id) == id) else {
+            return;
+        };
+        let layout = self.sync_strip();
+        let now = window.frame_time().on_screen();
+        let reduce_motion = window.appearance().reduce_motion;
+        if let Some(action) = self.strip.slide_to(&layout, index, x, now, reduce_motion) {
+            self.strip_action(window, action);
+        }
+        self.gesture = Gesture::Idle;
+    }
+
+    fn insertion_index(&self, x: f32) -> usize {
+        self.tab_layout().insertion_index(x)
+    }
+
+    fn grab_point(&self, grab: Point) -> Point {
+        self.tab_layout().grab_point(grab)
+    }
+}
+
 impl View for TerminalWindow {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let header = window.header_height() as f32;
@@ -2031,36 +1971,28 @@ impl View for TerminalWindow {
         let mut items = Vec::new();
         self.sliding = false;
         if self.has_strip() {
+            let layout = self.sync_strip();
             let titles = self.titles();
-            let bells: Vec<bool> = self.tabs.iter().map(|tab| tab.bell).collect();
-            let lifted = match self.gesture {
-                Gesture::Reorder { index, left, .. } => self
-                    .tab_layout()
-                    .tabs
-                    .get(index)
-                    .map(|slot| (index, left - slot.x)),
-                _ => None,
-            };
-            let mut offsets = Vec::with_capacity(self.tabs.len());
-            for (index, tab) in self.tabs.iter().enumerate() {
-                let (offset, sliding) = tab.slide.value_at(now);
-                self.sliding |= sliding;
-                offsets.push(match lifted {
-                    Some((lifted, dragged)) if lifted == index => dragged,
-                    _ => offset,
-                });
-            }
-            let bar = TabBar {
-                titles: &titles,
-                bells: &bells,
-                offsets: &offsets,
-                lifted: lifted.map(|(index, _)| index),
+            let labels: Vec<TabLabel<'_>> = titles
+                .iter()
+                .zip(&self.tabs)
+                .map(|(title, tab)| TabLabel {
+                    title,
+                    badge: tab.bell,
+                })
+                .collect();
+            let chrome = self.painter.theme.chrome;
+            let shown = TabsShown {
+                labels: &labels,
                 active: self.active,
-                hover: self.hover.filter(|_| lifted.is_none()),
                 focused: self.focused,
-                leading: self.leading(),
+                palette: &chrome,
             };
-            items.extend(self.painter.tab_bar(&bar, size.0 as f32));
+            items.extend(
+                self.strip
+                    .paint(&layout, &shown, self.painter.text_system(), now),
+            );
+            self.sliding = self.strip.animating(now);
         }
         let sheet = self.sheet();
         let mut inside = self.sheet_items();
@@ -2105,7 +2037,9 @@ impl View for TerminalWindow {
             WindowEvent::Input(Event::PointerLeave) => {
                 self.scrollbar_pointer(window, &Event::PointerLeave);
                 self.end_gesture(window);
-                if self.hover.take().is_some() || self.link.take().is_some() {
+                let layout = self.tab_layout();
+                let unhovered = self.strip.hover(&layout, None);
+                if self.link.take().is_some() || unhovered {
                     window.request_redraw();
                 }
                 if let Some(banner) = &mut self.banner {

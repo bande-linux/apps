@@ -5,12 +5,11 @@ use alacritty_terminal::index::{Column, Line, Point as GridPoint, Side};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::CursorShape;
 use bande_toolkit::{
-    Appearance, Color, Item, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextRole,
-    TextStyle, TextSystem,
+    Appearance, Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle,
+    TextSystem,
 };
 
 use crate::panes::Divider;
-use crate::tabs::{TabBarLayout, TabTarget};
 use crate::terminal::{CellPoint, GridSize, Highlights, Terminal};
 use crate::theme::{Profile, Theme, dimmed};
 
@@ -20,14 +19,7 @@ const PARAGRAPH_CACHE: usize = 8192;
 const BOLD: f32 = 700.0;
 const MEASURE_SAMPLE: &str = "MMMMMMMMMM";
 const LABEL_CACHE: usize = 256;
-const TAB_LABEL_INSET: f32 = 26.0;
 const ELLIPSIS: char = '\u{2026}';
-const HOVER_OPACITY: f32 = 0.5;
-const PRESSED_OPACITY: f32 = 0.12;
-const BELL_MARK: f32 = 6.0;
-const GLYPH_STROKE: f32 = 1.5;
-const CROSS_ARM: f32 = 3.5;
-const PLUS_ARM: f32 = 5.5;
 const RESTING_PANE_OPACITY: f32 = 0.3;
 
 fn snap(value: f32, scale: f64) -> f32 {
@@ -110,49 +102,6 @@ pub struct Pane<'a> {
     pub frame: Rect,
     pub terminal: &'a Terminal,
     pub focused: bool,
-}
-
-pub struct TabBar<'a> {
-    pub titles: &'a [String],
-    pub bells: &'a [bool],
-    pub offsets: &'a [f32],
-    pub lifted: Option<usize>,
-    pub active: usize,
-    pub hover: Option<TabTarget>,
-    pub focused: bool,
-    pub leading: f32,
-}
-
-fn stroke(path: Path, color: Color) -> Item {
-    Item::StrokePath {
-        path,
-        width: GLYPH_STROKE,
-        paint: color.into(),
-    }
-}
-
-fn centre(rect: Rect) -> Point {
-    Point::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0)
-}
-
-fn cross(rect: Rect, color: Color) -> [Item; 2] {
-    let middle = centre(rect);
-    let at = |x: f32, y: f32| Point::new(middle.x + x, middle.y + y);
-    let arm = CROSS_ARM;
-    [
-        stroke(Path::through(&[at(-arm, -arm), at(arm, arm)]), color),
-        stroke(Path::through(&[at(-arm, arm), at(arm, -arm)]), color),
-    ]
-}
-
-fn plus(rect: Rect, color: Color) -> [Item; 2] {
-    let middle = centre(rect);
-    let at = |x: f32, y: f32| Point::new(middle.x + x, middle.y + y);
-    let arm = PLUS_ARM;
-    [
-        stroke(Path::through(&[at(-arm, 0.0), at(arm, 0.0)]), color),
-        stroke(Path::through(&[at(0.0, -arm), at(0.0, arm)]), color),
-    ]
 }
 
 struct Run {
@@ -301,106 +250,6 @@ impl Painter {
         }
         self.labels.insert(key, paragraph.clone());
         paragraph
-    }
-
-    fn centred(&mut self, text: &str, weight: f32, color: Color, rect: Rect) -> Item {
-        let paragraph = self.label(text, weight, color, rect.width);
-        Item::Text {
-            origin: Point::new(
-                snap(
-                    rect.x + (rect.width - paragraph.width()) / 2.0,
-                    self.metrics.scale,
-                ),
-                snap(
-                    rect.y + (rect.height - paragraph.height()) / 2.0,
-                    self.metrics.scale,
-                ),
-            ),
-            paragraph,
-        }
-    }
-
-    pub fn tab_bar(&mut self, bar: &TabBar<'_>, width: f32) -> Vec<Item> {
-        let palette = self.theme.chrome;
-        let layout = TabBarLayout::new(bar.titles.len(), width, bar.leading);
-        let mut items = Vec::new();
-        let order = (0..layout.tabs.len())
-            .filter(|index| Some(*index) != bar.lifted)
-            .chain(bar.lifted);
-        for index in order {
-            let (Some(slot), Some(title)) = (layout.tabs.get(index), bar.titles.get(index)) else {
-                continue;
-            };
-            let offset = bar.offsets.get(index).copied().unwrap_or(0.0);
-            let tab = &Rect::new(slot.x + offset, slot.y, slot.width, slot.height);
-            let active = index == bar.active;
-            let hovered = matches!(
-                bar.hover,
-                Some(TabTarget::Select(hovered) | TabTarget::Close(hovered)) if hovered == index
-            );
-            let fill = match (active, hovered) {
-                (true, _) => Some(palette.well),
-                (false, true) => Some(palette.well.with_opacity(HOVER_OPACITY)),
-                (false, false) => None,
-            };
-            if let Some(fill) = fill {
-                items.push(Item::Fill {
-                    shape: Shape::rounded(*tab, Radius::S),
-                    paint: fill.into(),
-                });
-            }
-            let color = if active && bar.focused {
-                palette.ink
-            } else {
-                palette.ink2
-            };
-            let label_area = Rect::new(
-                tab.x + TAB_LABEL_INSET,
-                tab.y,
-                (tab.width - 2.0 * TAB_LABEL_INSET).max(0.0),
-                tab.height,
-            );
-            let weight = if active {
-                TextStyle::MEDIUM
-            } else {
-                TextStyle::REGULAR
-            };
-            items.push(self.centred(title, weight, color, label_area));
-            if bar.bells.get(index).copied().unwrap_or(false) && !active && !hovered {
-                let close = TabBarLayout::close_button(*tab);
-                let mark = Rect::new(
-                    close.x + ((close.width - BELL_MARK) / 2.0).round(),
-                    close.y + ((close.height - BELL_MARK) / 2.0).round(),
-                    BELL_MARK,
-                    BELL_MARK,
-                );
-                items.push(Item::Fill {
-                    shape: Shape::rounded(mark, 1.0),
-                    paint: palette.accent.into(),
-                });
-            }
-            if hovered {
-                let close = TabBarLayout::close_button(*tab);
-                if bar.hover == Some(TabTarget::Close(index)) {
-                    items.push(Item::Fill {
-                        shape: Shape::rounded(close, Radius::XS),
-                        paint: palette.ink.with_opacity(PRESSED_OPACITY).into(),
-                    });
-                }
-                items.extend(cross(close, palette.ink2));
-            }
-        }
-        let new_tab = layout.new_tab;
-        let hovered = bar.hover == Some(TabTarget::NewTab);
-        if hovered {
-            items.push(Item::Fill {
-                shape: Shape::rounded(new_tab, Radius::S),
-                paint: palette.well.into(),
-            });
-        }
-        let glyph = if hovered { palette.ink } else { palette.ink2 };
-        items.extend(plus(new_tab, glyph));
-        items
     }
 
     pub fn panes(
