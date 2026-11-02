@@ -62,7 +62,7 @@ const ACTIONS: [(MenuCommand, &str); 30] = [
     (MenuCommand::Signal(Stop::User2), "signal-usr2"),
 ];
 
-fn signal_title(how: Stop) -> String {
+pub(crate) fn signal_title(how: Stop) -> String {
     L10N.tr(&format!("signal-{}", how.id()))
 }
 

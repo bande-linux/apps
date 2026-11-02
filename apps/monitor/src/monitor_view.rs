@@ -26,8 +26,9 @@ use crate::sampler::Snapshot;
 use crate::signal::Stop;
 use crate::system::PressureLevel;
 use crate::view::{
-    ALERT_ICON, FORCE_QUIT, INSPECT_SYMBOL, Icons, Painter, QUIT, Request, Screen, answer_stop,
-    is_secondary, opens_menu, send_signal, stop_alert, stop_button, symbol_button,
+    ALERT_ICON, FORCE_QUIT, INSPECT_SYMBOL, Icons, Painter, QUIT, Request, SEND, Screen,
+    answer_stop, is_secondary, opens_menu, send_signal, signal_alert, stop_alert, stop_button,
+    symbol_button,
 };
 
 pub const TOOLBAR_HEIGHT: f32 = bande_toolkit::WINDOW_HEADER_HEIGHT as f32;
@@ -167,6 +168,7 @@ pub struct MonitorView {
     full_screen: bool,
     focused: bool,
     stopping: Option<StopTarget>,
+    signalling: Option<(StopTarget, Stop)>,
     requests: Vec<Request>,
     footer: WidgetId,
     readout_widths: Vec<f32>,
@@ -233,6 +235,7 @@ impl MonitorView {
             full_screen: false,
             focused: true,
             stopping: None,
+            signalling: None,
             requests: Vec::new(),
             footer: WidgetId::next(),
             readout_widths: Vec::new(),
@@ -364,6 +367,13 @@ impl MonitorView {
     }
 
     fn chosen(&mut self, choice: &str) {
+        if let Some((target, how)) = self.signalling.take() {
+            if choice == SEND {
+                self.signal_now(&target, how);
+            }
+            self.list.focus();
+            return;
+        }
         let Some(target) = self.stopping.take() else {
             return;
         };
@@ -692,25 +702,47 @@ impl MonitorView {
         let alert = stop_alert(&target, force, icon, move |choice| {
             send(Signal::Choice(choice.to_owned()))
         });
+        self.signalling = None;
         self.stopping = Some(target);
         self.list.present_dialog(alert);
         true
     }
 
     fn send_signal(&mut self, how: Stop) -> bool {
-        let Some(target) = self.monitor.stop_target() else {
+        let Some(mut target) = self.monitor.stop_target() else {
             return false;
         };
+        if how == Stop::Pause {
+            let own = std::process::id();
+            target.processes.retain(|(pid, _)| *pid != own);
+            if target.processes.is_empty() {
+                return false;
+            }
+        }
+        if how == Stop::Resume {
+            self.signal_now(&target, how);
+            return true;
+        }
+        let send = sender(self.list.signals());
+        let alert = signal_alert(&target, how, self.icons.get(ALERT_ICON), move |choice| {
+            send(Signal::Choice(choice.to_owned()))
+        });
+        self.stopping = None;
+        self.signalling = Some((target, how));
+        self.list.present_dialog(alert);
+        true
+    }
+
+    fn signal_now(&mut self, target: &StopTarget, how: Stop) {
         let icon = self.icons.get(ALERT_ICON);
         let send = sender(self.list.signals());
-        let denied = send_signal(&target, how, icon, move |choice| {
+        let denied = send_signal(target, how, icon, move |choice| {
             send(Signal::Choice(choice.to_owned()))
         });
         self.requests.push(Request::Resample);
         if let Some(alert) = denied {
             self.list.present_dialog(alert);
         }
-        true
     }
 
     fn show_in_files(&mut self) -> bool {

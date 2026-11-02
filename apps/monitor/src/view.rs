@@ -20,6 +20,7 @@ use crate::signal::{SignalError, Stop};
 
 pub(crate) const QUIT: &str = "quit";
 pub(crate) const FORCE_QUIT: &str = "force-quit";
+pub(crate) const SEND: &str = "send";
 const CANCEL: &str = "cancel";
 pub(crate) const ALERT_ICON: &str = "org.bande.ActivityMonitor";
 pub(crate) const INSPECT_SYMBOL: &str = "dialog-information-symbolic";
@@ -155,6 +156,31 @@ pub(crate) fn stop_alert(
         .primary(&L10N.tr("button-quit"), QUIT),
     };
     with_icon(alert.cancel(&L10N.tr("button-cancel"), CANCEL), icon)
+}
+
+pub(crate) fn signal_alert(
+    target: &StopTarget,
+    how: Stop,
+    icon: Option<Image>,
+    choose: impl FnMut(&str) + 'static,
+) -> Alert {
+    let signal = crate::menu::signal_title(how);
+    let title = L10N.tr_args(
+        "signal-confirm",
+        [
+            ("signal", signal.into()),
+            ("name", target.name.clone().into()),
+            ("count", target.count.into()),
+        ],
+    );
+    let message = match how {
+        Stop::Pause => L10N.tr("signal-pause-message"),
+        _ => L10N.tr("signal-message"),
+    };
+    let alert = Alert::new(&title, &message, choose)
+        .primary(&L10N.tr("button-send"), SEND)
+        .cancel(&L10N.tr("button-cancel"), CANCEL);
+    with_icon(alert, icon)
 }
 
 pub(crate) fn answer_stop(

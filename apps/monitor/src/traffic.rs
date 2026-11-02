@@ -12,6 +12,7 @@ const NLM_F_DUMP: u16 = 0x300;
 const NLMSG_DONE: u16 = 3;
 const NLMSG_ERROR: u16 = 2;
 const HEADER: usize = 16;
+const DIAG_REQUEST: usize = 56;
 const DIAG_MESSAGE: usize = 72;
 const INET_DIAG_INFO: u16 = 2;
 const IPPROTO_TCP: u8 = 6;
@@ -29,7 +30,7 @@ pub(crate) struct Counted {
 }
 
 fn request(family: AddressFamily) -> Vec<u8> {
-    let length = (HEADER + DIAG_MESSAGE) as u32;
+    let length = (HEADER + DIAG_REQUEST) as u32;
     let mut message = Vec::with_capacity(length as usize);
     message.extend(length.to_ne_bytes());
     message.extend(SOCK_DIAG_BY_FAMILY.to_ne_bytes());

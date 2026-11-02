@@ -33,7 +33,7 @@ ranked list at the end is what is left. Delete this plan when the list is done.
 | All Processes, Hierarchically | Have (process tree by parent, kernel threads folded) |
 | Update Frequency: 1 s / 2 s / 5 s | Have, remembered; the graph span follows (1, 2 or 5 min) |
 | Columns, Dock Icon (CPU usage/history, memory, network, disk) | Columns have; dock icon is missing |
-| Send Signal to Process | Have: View menu and the process context menu (HUP, INT, STOP, CONT, USR1, USR2); TERM and KILL are Quit and Force Quit |
+| Send Signal to Process | Have: View menu and the process context menu (HUP, INT, STOP, CONT, USR1, USR2), each but Continue after a confirmation, never pausing itself; TERM and KILL are Quit and Force Quit |
 | Show/hide CPU, GPU history windows | Per-core strips in the footer instead |
 
 ## Process actions

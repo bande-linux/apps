@@ -142,6 +142,13 @@ signal-stop = Pause (SIGSTOP)
 signal-cont = Continue (SIGCONT)
 signal-usr1 = User 1 (SIGUSR1)
 signal-usr2 = User 2 (SIGUSR2)
+signal-confirm = { $count ->
+    [one] Do you want to send { $signal } to “{ $name }”?
+   *[other] Do you want to send { $signal } to the { $count } selected items?
+}
+signal-message = A process that doesn’t handle this signal ends at once, and any unsaved changes are lost.
+signal-pause-message = A paused process does nothing until it gets Continue. Pausing a part of the desktop can freeze the screen.
+button-send = Send
 menu-frequency = Update Frequency
 frequency-very-often = Very Often ({ $seconds } sec)
 frequency-often = Often ({ $seconds } sec)
