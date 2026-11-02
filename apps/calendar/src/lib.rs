@@ -6,7 +6,6 @@ pub mod invite;
 pub mod notice;
 pub mod online;
 pub mod portal;
-pub mod secrets;
 pub mod settings;
 pub mod store;
 pub mod sync;

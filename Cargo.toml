@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/*", "template"]
+members = ["apps/*", "libs/*", "template"]
 
 [workspace.package]
 edition = "2024"
@@ -32,6 +32,7 @@ tracing = "=0.1.44"
 ureq = { version = "=3.5.0", features = ["platform-verifier"] }
 zbus = "=5.19.0"
 zeroize = "=1.8.1"
+bande-keyring = { path = "libs/keyring" }
 bande-app = { git = "https://github.com/bande-linux/desktop", rev = "e844571ae204aa65a1d93990a920f3c59f731bfa" }
 bande-app-menu = { git = "https://github.com/bande-linux/desktop", rev = "e844571ae204aa65a1d93990a920f3c59f731bfa" }
 bande-app-settings = { git = "https://github.com/bande-linux/desktop", rev = "e844571ae204aa65a1d93990a920f3c59f731bfa" }

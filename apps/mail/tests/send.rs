@@ -47,16 +47,11 @@ impl Dovecot {
             .prefix("dc")
             .tempdir_in("/tmp")
             .unwrap();
-        let port = TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port();
+        let port = TcpListener::bind("127.0.0.1:0").and_then(|probe| probe.local_addr());
+        let port = port.unwrap().port();
         let user = std::env::var("USER").unwrap_or_else(|_| "root".to_owned());
-        let (uid, gid) = (
-            rustix::process::getuid().as_raw(),
-            rustix::process::getgid().as_raw(),
-        );
+        let uid = rustix::process::getuid().as_raw();
+        let gid = rustix::process::getgid().as_raw();
         let dir = folder.path().display();
         let config = format!(
             "dovecot_config_version = 2.4.1\ndovecot_storage_version = 2.4.1\n\
@@ -165,11 +160,8 @@ fn a_message_goes_out_once_without_injected_headers_after_the_imap_session_went_
         assert!(Instant::now() < deadline, "the first sync never finished");
     }
 
-    let kicked = dovecot
-        .command("doveadm", &["kick", USER])
-        .status()
-        .unwrap();
-    assert!(kicked.success());
+    let kicked = dovecot.command("doveadm", &["kick", USER]).status();
+    assert!(kicked.unwrap().success());
     let mut eve = person("eve@example.com");
     eve.name = "Eve\r\nBcc: spy@example.net".to_owned();
     worker.send(Order::Send(Box::new(Outgoing {
@@ -194,14 +186,12 @@ fn a_message_goes_out_once_without_injected_headers_after_the_imap_session_went_
     let sent = sent.lock().unwrap();
     assert_eq!(sent.len(), 1, "the message went out more than once");
     let (recipients, data) = &sent[0];
-    assert_eq!(
-        recipients,
-        &[
-            "<bob@example.com>",
-            "<eve@example.com>",
-            "<boss@example.com>"
-        ]
-    );
+    let everyone = [
+        "<bob@example.com>",
+        "<eve@example.com>",
+        "<boss@example.com>",
+    ];
+    assert_eq!(recipients, &everyone);
     assert!(!data.contains("boss@example.com"));
     assert!(!data.contains("\r\nBcc:"));
     assert!(!data.contains("\r\nInjected:"));

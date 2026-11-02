@@ -29,6 +29,7 @@ roxmltree.workspace = true
 rusqlite.workspace = true
 tracing.workspace = true
 zbus.workspace = true
+bande-keyring.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]

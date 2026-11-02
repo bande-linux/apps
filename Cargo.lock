@@ -439,6 +439,7 @@ dependencies = [
  "bande-datetime",
  "bande-design",
  "bande-inbox",
+ "bande-keyring",
  "bande-l10n",
  "bande-toolkit",
  "bande-xdg",
@@ -537,6 +538,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-keyring"
+version = "0.1.0"
+dependencies = [
+ "zbus",
+]
+
+[[package]]
 name = "bande-l10n"
 version = "0.1.0"
 source = "git+https://github.com/bande-linux/desktop?rev=e844571ae204aa65a1d93990a920f3c59f731bfa#e844571ae204aa65a1d93990a920f3c59f731bfa"
@@ -567,6 +575,7 @@ dependencies = [
  "bande-app-settings",
  "bande-fs",
  "bande-inbox",
+ "bande-keyring",
  "bande-l10n",
  "bande-notify",
  "bande-toolkit",

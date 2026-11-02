@@ -28,14 +28,15 @@ and the Window menu names the main window (Message Viewer, Calendar, Activity Mo
 
 | Path | What it is |
 |---|---|
-| `Cargo.toml`, `Cargo.lock` | one Cargo workspace: every app, the template, one lock, one desktop pin, shared lints and the release profile (the desktop's `dist`: fat LTO, one codegen unit, `panic = "abort"`) |
+| `Cargo.toml`, `Cargo.lock` | one Cargo workspace: every app, the shared libs, the template, one lock, one desktop pin, shared lints and the release profile (the desktop's `dist`: fat LTO, one codegen unit, `panic = "abort"`) |
 | `apps/<name>/` | one app on `bande-app`, packaged as `bande-<name>` |
 | `apps/<name>/build-depends` | optional: Debian packages the build needs beyond what every app needs, one per line |
 | `apps/<name>/smoke.sh` | optional: extra checks after `ci/smoke.sh`, once the package is installed; must exit 0 |
+| `libs/<name>/` | code shared by apps, the crate `bande-<name>` (`bande-keyring`: passwords in the Secret Service) |
 | `template/` | the starting point for a new app: a real, gated `bande-app` app, never published |
 | `rust-toolchain.toml` | the Rust toolchain for every app, the same as the desktop's |
 | `ci/` | the build, the same in CI and locally |
-| `ci/gate.sh [app...]` | the local merge gate: `ci/check-app.sh`, fmt, clippy `-D warnings` and tests, `--locked`, one `target/` (default: every app and the template) |
+| `ci/gate.sh [app...]` | the local merge gate: `ci/check-app.sh`, fmt, clippy `-D warnings` and tests, `--locked`, one `target/` (default: every app, the libs and the template) |
 | `ci/check-app.sh <dir>...` | static checks that an app is a `bande-app` app packaged like the others (ids, `.desktop`, metainfo, fonts); fails on any problem |
 | `ci/smoke.sh <package>` | checks an installed package: `--version`, its files, `desktop-file-validate`, `appstreamcli validate` |
 | `ci/new-app.sh <dir> <Id> "<Name>"` | a new app in `apps/<dir>` from the template |
