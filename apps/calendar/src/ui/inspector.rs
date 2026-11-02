@@ -9,7 +9,7 @@ use jiff::tz::TimeZone;
 
 use super::panel::{Arrow, Line, Panel, Width};
 use super::{L10N, Signal, Signals, sender};
-use crate::edit::{Alert, Details, EndRepeat, Repeat};
+use crate::edit::{Alert, Details, EndRepeat, Repeat, zone_name};
 use crate::ical::Event;
 use crate::invite::{Answer, Invitee, invitees, my_answer, parse_addresses};
 use crate::store::Found;
@@ -30,6 +30,7 @@ pub struct Inspector {
     end_kind: usize,
     end_text: String,
     invite_text: String,
+    zone_text: Option<String>,
     calendars: Vec<usize>,
     calendar_choice: usize,
     original_calendar: usize,
@@ -176,10 +177,26 @@ fn end_of(end: EndRepeat) -> (usize, String) {
     }
 }
 
-fn details_of(found: &Found, event: &Event, local: &TimeZone) -> Details {
-    let start = found.occurrence.start.datetime();
-    let end = found.occurrence.end.datetime();
+pub struct Context<'a> {
+    pub local: &'a TimeZone,
+    pub me: Option<&'a str>,
+    pub time_zones: bool,
+}
+
+fn details_of(found: &Found, event: &Event, context: &Context) -> Details {
+    let local = context.local;
     let all_day = found.occurrence.all_day;
+    let time_zone = zone_name(&event.start).filter(|_| context.time_zones && !all_day);
+    let shown = match time_zone {
+        Some(_) => event.start.zone(local),
+        None => local.clone(),
+    };
+    let start = found
+        .occurrence
+        .start
+        .with_time_zone(shown.clone())
+        .datetime();
+    let end = found.occurrence.end.with_time_zone(shown).datetime();
     Details {
         summary: event.summary.clone(),
         location: event.location.clone(),
@@ -191,6 +208,7 @@ fn details_of(found: &Found, event: &Event, local: &TimeZone) -> Details {
         end_repeat: EndRepeat::of(event.rule.as_ref(), &event.start, local),
         alert: Alert::of(&event.alarms, all_day),
         invitees: Vec::new(),
+        time_zone,
     }
 }
 
@@ -203,7 +221,6 @@ fn with_current<T: PartialEq + Copy>(choices: &[T], current: T) -> Vec<T> {
 }
 
 impl Inspector {
-    #[allow(clippy::too_many_arguments)]
     pub fn build(
         signals: &Signals,
         found: Found,
@@ -211,16 +228,18 @@ impl Inspector {
         read_only: bool,
         calendars: Vec<(usize, String)>,
         anchor: Option<Rect>,
-        local: &TimeZone,
-        me: Option<&str>,
+        context: &Context,
     ) -> (Panel, Self) {
+        let me = context.me;
         let invited = invitees(event);
         let answered = me.and_then(|me| my_answer(event, me));
         let organizing = me.is_some()
             && invited.first().is_none_or(|first| {
                 first.organizer && me.is_some_and(|me| first.address.eq_ignore_ascii_case(me))
             });
-        let details = details_of(&found, event, local);
+        let details = details_of(&found, event, context);
+        let zone_text = (context.time_zones && !details.all_day)
+            .then(|| details.time_zone.clone().unwrap_or_default());
         let (end_kind, end_text) = end_of(details.end_repeat);
         let last_day = match details.all_day {
             true => details
@@ -322,6 +341,19 @@ impl Inspector {
                 vec![(end_date, Width::Fill), (end_time, Width::Fixed(64.0))],
                 ROW,
             ));
+            if let Some(zone) = &zone_text {
+                let send = sender(signals);
+                let field = panel.add(TextField::new(
+                    &L10N.tr("time-zone-floating"),
+                    zone,
+                    move |text| send(Signal::TimeZone(text.to_owned())),
+                ));
+                panel.line(Line::new(
+                    Some(&L10N.tr("time-zone")),
+                    vec![(field, Width::Fill)],
+                    ROW,
+                ));
+            }
             let send = sender(signals);
             let titles: Vec<String> = repeats.iter().map(|repeat| repeat_title(*repeat)).collect();
             let selected = repeats
@@ -458,6 +490,7 @@ impl Inspector {
             end_kind,
             end_text,
             invite_text: String::new(),
+            zone_text,
             calendars: calendars.into_iter().map(|(index, _)| index).collect(),
             calendar_choice: selected,
             repeats,
@@ -526,6 +559,7 @@ impl Inspector {
             Signal::EndRepeatKind(index) => self.end_kind = *index,
             Signal::EndRepeatText(text) => self.end_text = text.clone(),
             Signal::Invitees(text) => self.invite_text = text.clone(),
+            Signal::TimeZone(text) => self.zone_text = Some(text.trim().to_owned()),
             _ => {}
         }
     }
@@ -584,6 +618,10 @@ impl Inspector {
             end,
             end_repeat,
             invitees: parse_addresses(&self.invite_text),
+            time_zone: match self.zone_text.as_deref() {
+                Some("") | None => self.original.time_zone.clone(),
+                Some(name) => Some(name.to_owned()),
+            },
             ..self.details.clone()
         };
         (details != self.original || self.calendar_choice != self.original_calendar)

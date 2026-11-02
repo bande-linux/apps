@@ -52,11 +52,14 @@ views. Packaged as `bande-calendar`.
 - **Settings** (Calendar ▸ Settings…): default calendar, start of the week, the hours the day
   starts and ends (the rest is shaded, and the week opens at the start), week numbers, default
   alerts for new events and all-day events, how often accounts and subscriptions refresh, and
-  adding and removing accounts. Stored in `~/.config/bande/calendar.conf`.
+  adding, re-signing and removing accounts, and time zone support, which shows each timed
+  event's zone in the inspector: its times are shown and typed in that zone, and a new zone
+  keeps the wall times of the whole series (exceptions and the end date move with it). Stored
+  in `~/.config/bande/calendar.conf`.
 - **Files and links.** `bande-calendar file.ics` or File ▸ Import… offers to add its events;
   File ▸ Export… (or Export… on a calendar's menu) saves a calendar as one `.ics` file, through
-  the desktop's file chooser portal; `bande-calendar webcal://…` offers to subscribe. The desktop file registers `text/calendar` and the `webcal`
-  schemes.
+  the desktop's file chooser portal; `bande-calendar webcal://…` offers to subscribe. The
+  desktop file registers `text/calendar` and the `webcal` schemes.
 
 Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Left/Right previous/next, Ctrl+N new event,
 Alt+Ctrl+N new calendar, Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the
@@ -93,5 +96,5 @@ whole test list and the reason for each is in `NOTES/tests.md`.
 - Invitation e-mails (`METHOD:REQUEST`/`REPLY` over iMIP), free/busy, tasks (`VTODO`).
 - OAuth providers (Google, Microsoft); Basic authentication only, so iCloud and Fastmail work with
   an app password.
-- Editing the time zone of an event; custom repeat rules (they are kept and shown as Custom,
-  but not edited).
+- Custom repeat rules (they are kept and shown as Custom, but not edited); viewing the whole
+  calendar in another time zone. The ranked list is in `NOTES/plans/calendar-depth.md`.

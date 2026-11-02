@@ -110,6 +110,7 @@ pub(crate) enum Signal {
     Repeat(usize),
     EndRepeatKind(usize),
     Invitees(String),
+    TimeZone(String),
     Answer(usize),
     EndRepeatText(String),
     Alert(usize),
@@ -1079,8 +1080,11 @@ impl CalendarView {
             read_only,
             calendars,
             anchor,
-            &self.zone,
-            me.as_deref(),
+            &inspector::Context {
+                local: &self.zone,
+                me: me.as_deref(),
+                time_zones: self.settings.time_zones,
+            },
         );
         if let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) {
             host.insert(panel, Rect::default());
