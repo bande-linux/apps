@@ -62,9 +62,9 @@ bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "4004d91
 bande-watch = { git = "https://github.com/bande-linux/desktop", rev = "4004d918390eb23d276ec49fbe84c4f0c99a8fdd" }
 bande-volumes = { git = "https://github.com/bande-linux/desktop", rev = "4004d918390eb23d276ec49fbe84c4f0c99a8fdd" }
 bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "4004d918390eb23d276ec49fbe84c4f0c99a8fdd" }
-web-content = { git = "https://github.com/bande-linux/web", rev = "dd2cad638f1695896c0d87e27c4d982b06daffbf" }
-web-net = { git = "https://github.com/bande-linux/web", rev = "dd2cad638f1695896c0d87e27c4d982b06daffbf" }
-web-paint = { git = "https://github.com/bande-linux/web", rev = "dd2cad638f1695896c0d87e27c4d982b06daffbf" }
+web-content = { git = "https://github.com/bande-linux/web", rev = "be24d08ae88fa523dd40d915c509f2fff356a44d" }
+web-net = { git = "https://github.com/bande-linux/web", rev = "be24d08ae88fa523dd40d915c509f2fff356a44d" }
+web-paint = { git = "https://github.com/bande-linux/web", rev = "be24d08ae88fa523dd40d915c509f2fff356a44d" }
 
 
 [workspace.lints.clippy]

@@ -18,6 +18,7 @@ enum Node {
         rect: Rect,
         clip: Rect,
         image: usize,
+        repeat: bool,
     },
     Group {
         top: f32,
@@ -200,6 +201,17 @@ fn leaf(list: &DisplayList, item: &web_paint::Item) -> Option<Node> {
                 rect: rect(area),
                 clip: rect(clip),
                 image: *image as usize,
+                repeat: false,
+            })
+        }
+        web_paint::Item::Tiles { tile, clip, image } => {
+            (clip.height > 0.0 && tile.width > 0.0 && tile.height > 0.0).then(|| Node::Image {
+                top: clip.y,
+                bottom: clip.y + clip.height,
+                rect: rect(tile),
+                clip: rect(clip),
+                image: *image as usize,
+                repeat: true,
             })
         }
         web_paint::Item::PushClip { .. }
@@ -281,14 +293,27 @@ fn emit(
         match node {
             Node::Leaf { item, .. } => out.push(item.clone()),
             Node::Image {
-                rect, clip, image, ..
+                rect,
+                clip,
+                image,
+                repeat,
+                ..
             } => {
-                if let Some(image) = list.images.get(*image).and_then(|image| images.get(image)) {
-                    out.push(Item::Clip {
+                let Some(image) = list.images.get(*image).and_then(|image| images.get(image))
+                else {
+                    continue;
+                };
+                out.push(match repeat {
+                    true => Item::Tiles {
+                        rect: *clip,
+                        tile: *rect,
+                        image,
+                    },
+                    false => Item::Clip {
                         shape: Shape::rect(*clip),
                         items: vec![Item::Image { rect: *rect, image }],
-                    });
-                }
+                    },
+                });
             }
             Node::Group {
                 group, children, ..
