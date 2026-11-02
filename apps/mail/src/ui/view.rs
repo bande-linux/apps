@@ -61,6 +61,7 @@ const NOTIFIED_AT_ONCE: usize = 3;
 const UNDO_TRIES: u8 = 3;
 const MOVED_IN_KEPT: Duration = Duration::from_secs(10 * 60);
 const UNDO_LEVELS: usize = 20;
+const OPENED_UNREAD: usize = 10;
 const DRAG_THRESHOLD: f32 = 6.0;
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 
@@ -797,10 +798,18 @@ impl MailView {
 
     fn open_thread(&mut self, summary: &Summary) -> Vec<MessageId> {
         let messages = self.conversation_of(summary);
+        let focus = messages
+            .iter()
+            .position(|message| message.id == summary.id)
+            .unwrap_or_default();
         let shown = messages
             .iter()
-            .filter(|message| message.id == summary.id || !message.flags.seen)
-            .map(|message| (message.id, message.flags.seen))
+            .enumerate()
+            .filter(|(index, message)| {
+                message.id == summary.id
+                    || (!message.flags.seen && index + OPENED_UNREAD >= focus && *index <= focus)
+            })
+            .map(|(_, message)| (message.id, message.flags.seen))
             .collect::<Vec<_>>();
         self.thread = Some(Thread {
             entries: messages
