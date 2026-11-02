@@ -181,7 +181,7 @@ pub fn flatpak_arch() -> &'static str {
     std::env::consts::ARCH
 }
 
-fn owners(paths: &[PathBuf]) -> HashMap<PathBuf, String> {
+pub fn owners(paths: &[PathBuf]) -> HashMap<PathBuf, String> {
     if paths.is_empty() {
         return HashMap::new();
     }
