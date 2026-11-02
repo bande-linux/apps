@@ -111,6 +111,8 @@ compose-too-large = { $name } is larger than { $limit } and was not attached.
 load-remote-content = Load Remote Content
 attachment-open = Open Attachment
 attachment-save = Save to Downloads Folder
+attachment-save-as = Save Attachment…
+attachment-save-title = Save Attachment
 remote-content-loading = Loading remote content…
 
 settings-title = Settings

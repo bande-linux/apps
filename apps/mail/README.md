@@ -36,7 +36,8 @@ apt install bande-mail
   preview (two lines unless Settings says otherwise), the date, an unread dot, a flag and a
   paperclip. The reader shows the headers, the plain text or sanitised HTML, and the
   attachments. Clicking an attachment opens a private copy in `~/.cache/bande-mail/attachments/`,
-  removed when Mail quits unless it was edited; its menu also saves it to the Downloads folder.
+  removed when Mail quits unless it was edited; its menu also saves it where you choose (the
+  desktop's file chooser) or to the Downloads folder.
 - **HTML** is never rendered as a web page: it is turned into paragraphs, headings, lists,
   quotes, links and pictures. Scripts, styles, forms and frames are dropped, and only `http`,
   `https` and `mailto` links survive. Pictures sent inside the message (`cid:`) show at once;

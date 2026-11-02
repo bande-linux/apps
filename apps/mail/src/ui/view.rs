@@ -63,6 +63,7 @@ pub enum Request {
     Compose(Box<Outgoing>),
     OpenLink(String),
     OpenAttachment(PathBuf),
+    SaveAttachment(String, Vec<u8>),
     Notify {
         summary: String,
         body: String,
@@ -1708,6 +1709,10 @@ impl MailView {
                         &format!("attachment-open:{index}"),
                     ),
                     MenuItem::new(
+                        &L10N.tr("attachment-save-as"),
+                        &format!("attachment-save-as:{index}"),
+                    ),
+                    MenuItem::new(
                         &L10N.tr("attachment-save"),
                         &format!("attachment-save:{index}"),
                     ),
@@ -1802,6 +1807,17 @@ impl MailView {
                 match parsed {
                     Some(("attachment-open", index)) => self.open_attachment(index),
                     Some(("attachment-save", index)) => self.save_attachment(index),
+                    Some(("attachment-save-as", index)) => {
+                        if let (Some(name), Some(data)) = (
+                            self.attachment_name(index),
+                            self.reading
+                                .as_ref()
+                                .and_then(|reading| reading.content.attachments.get(index))
+                                .map(|attachment| attachment.data.clone()),
+                        ) {
+                            self.requests.push(Request::SaveAttachment(name, data));
+                        }
+                    }
                     _ => {}
                 }
             }
