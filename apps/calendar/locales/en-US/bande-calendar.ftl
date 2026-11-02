@@ -189,3 +189,6 @@ refresh-default = As in Settings
 settings-subscription-alerts = Alerts
 zone-menu = Time Zone
 zone-system = System Time Zone
+snooze = Snooze
+settings-hours-shown = Show:
+settings-hours = { $hours } hours at a time

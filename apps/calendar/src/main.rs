@@ -10,6 +10,7 @@ use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_calendar::alerts::{Due, due_between};
 use bande_calendar::caldav::Discovered;
 use bande_calendar::ical::{CalendarObject, read_file};
+use bande_calendar::notice::{Notice, Notices, OPEN, SNOOZE as SNOOZE_ACTION};
 use bande_calendar::online::System;
 use bande_calendar::portal::{Choose, choose_file};
 use bande_calendar::settings::{CalendarSettings, Change, listen};
@@ -29,7 +30,6 @@ use bande_toolkit::{
 };
 use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp, Zoned};
-use zbus::zvariant::Value;
 
 const APP_ID: &str = "org.bande.Calendar";
 const WINDOW_SIZE: (u32, u32) = (1120, 740);
@@ -37,7 +37,7 @@ const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
 const ALERT_HORIZON: SignedDuration = SignedDuration::from_hours(24);
 const FIRED_MEMORY: SignedDuration = SignedDuration::from_hours(24);
-const NOTIFICATION_TIMEOUT: i32 = -1;
+const SNOOZE: SignedDuration = SignedDuration::from_mins(5);
 
 static INFO: Info = Info {
     id: APP_ID,
@@ -123,6 +123,9 @@ struct CalendarApp {
     alert_at: Timestamp,
     alerts_checked: Timestamp,
     fired: HashMap<String, Timestamp>,
+    notices: Notices,
+    shown_alerts: HashMap<u32, Due>,
+    snoozed: Vec<(Timestamp, Due)>,
     syncing: bool,
     sync_again: bool,
     title: String,
@@ -214,51 +217,6 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
 fn clock(formats: &DateFormats, at: &Zoned) -> String {
     let (time, period) = formats.time(at);
     period.map_or(time.clone(), |period| format!("{time} {period}"))
-}
-
-fn notify(due: &Due, zone: &TimeZone, formats: &DateFormats) {
-    let starts = due.starts.to_zoned(zone.clone());
-    let when = match due.all_day {
-        true => formats.date(&starts, false),
-        false => formats.clock(&starts),
-    };
-    let body = match due.location.is_empty() {
-        true => when,
-        false => format!("{when}\n{}", due.location),
-    };
-    let title = due.title.clone();
-    let spawned = std::thread::Builder::new()
-        .name("alert".to_owned())
-        .spawn(move || {
-            let sent = zbus::blocking::Connection::session().and_then(|bus| {
-                let hints: HashMap<&str, Value> = HashMap::from([
-                    ("desktop-entry", Value::from(APP_ID)),
-                    ("category", Value::from("x-calendar.alert")),
-                ]);
-                bus.call_method(
-                    Some("org.freedesktop.Notifications"),
-                    "/org/freedesktop/Notifications",
-                    Some("org.freedesktop.Notifications"),
-                    "Notify",
-                    &(
-                        L10N.tr("app-name"),
-                        0u32,
-                        APP_ID,
-                        title,
-                        body,
-                        Vec::<&str>::new(),
-                        hints,
-                        NOTIFICATION_TIMEOUT,
-                    ),
-                )
-            });
-            if let Err(error) = sent {
-                tracing::warn!("cannot show an alert: {error}");
-            }
-        });
-    if let Err(error) = spawned {
-        tracing::warn!("cannot show an alert: {error}");
-    }
 }
 
 fn host_of(url: &str) -> &str {
@@ -706,8 +664,15 @@ impl CalendarApp {
             &self.zone,
         ) {
             if self.fired.insert(due.key.clone(), due.at).is_none() {
-                notify(&due, &self.zone, &self.formats);
+                self.notices.notify(due, &self.zone, &self.formats);
             }
+        }
+        let (woken, waiting) = std::mem::take(&mut self.snoozed)
+            .into_iter()
+            .partition(|(at, _)| *at <= now);
+        self.snoozed = waiting;
+        for (_, due) in woken {
+            self.notices.notify(due, &self.zone, &self.formats);
         }
         let forget = now.saturating_sub(FIRED_MEMORY).unwrap_or(now);
         self.fired.retain(|_, at| *at >= forget);
@@ -716,7 +681,11 @@ impl CalendarApp {
         let next = due_between(view.library(), until, horizon, &self.zone)
             .first()
             .map_or(horizon, |due| due.at);
-        self.alert_at = next;
+        self.alert_at = self
+            .snoozed
+            .iter()
+            .map(|(at, _)| *at)
+            .fold(next, Timestamp::min);
     }
 }
 
@@ -841,6 +810,36 @@ impl CalendarApp {
         });
     }
 
+    fn notice(&mut self, cx: &mut Cx<Self>, notice: Notice) {
+        match notice {
+            Notice::Shown(id, due) => {
+                self.shown_alerts.insert(id, due);
+            }
+            Notice::Closed(id) => {
+                self.shown_alerts.remove(&id);
+            }
+            Notice::Invoked(id, action) => {
+                let Some(due) = self.shown_alerts.remove(&id) else {
+                    return;
+                };
+                match action.as_str() {
+                    SNOOZE_ACTION => {
+                        let now = Timestamp::now();
+                        self.snoozed
+                            .push((now.saturating_add(SNOOZE).unwrap_or(now), due));
+                        self.with_view(cx, |app, view| app.check_alerts(view));
+                    }
+                    OPEN => {
+                        self.raise(cx);
+                        let day = due.starts.to_zoned(self.zone.clone()).date();
+                        self.with_view(cx, |_, view| view.go_to(day));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     fn follow_settings(&mut self, cx: &mut Cx<Self>) {
         if let Some(watch) = &mut self.settings_watch {
             watch.drain();
@@ -925,6 +924,9 @@ impl Program for CalendarApp {
             alert_at: Timestamp::now(),
             alerts_checked: Timestamp::now(),
             fired: HashMap::new(),
+            notices: Notices::start()?,
+            shown_alerts: HashMap::new(),
+            snoozed: Vec::new(),
             syncing: false,
             sync_again: false,
             title,
@@ -994,6 +996,7 @@ impl Program for CalendarApp {
             self.changes.fd(),
             self.chosen.fd(),
             self.online.fd(),
+            self.notices.fd(),
         ]
         .into_iter()
         .chain(self.settings_watch.iter().map(SettingsWatch::fd))
@@ -1044,6 +1047,11 @@ impl Program for CalendarApp {
                             });
                         }
                     }
+                }
+            }
+            5 => {
+                for notice in self.notices.take() {
+                    self.notice(cx, notice);
                 }
             }
             _ => self.follow_settings(cx),

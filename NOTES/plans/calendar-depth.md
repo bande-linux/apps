@@ -8,7 +8,7 @@ work and family calendars on it without a second app? Reviewed 2026-11-02.
 | macOS | Bande Calendar |
 |---|---|
 | Default calendar | done: Settings ▸ General, used for new events |
-| Start week on, day starts/ends, show N hours | done: start of week, day start/end (shaded, week opens there); hours-at-a-time zoom missing |
+| Start week on, day starts/ends, show N hours | done: start of week, day start/end (shaded, week opens there), 6–24 hours at a time |
 | Show week numbers | done: month rows and week header |
 | Time zone support | done: Advanced toggle, zone per event in the inspector, View ▸ Time Zone for the whole view (zones the events use; no free search yet) |
 | Default alerts for events / all-day events / birthdays | done for events and all-day; birthdays need Contacts |
@@ -27,7 +27,7 @@ work and family calendars on it without a second app? Reviewed 2026-11-02.
 | Search | done (title, location, notes) |
 | Subscriptions (webcal) with a real refresh deadline | done: wall-clock deadline from the last refresh, persisted, 15 min retry on failure |
 | .ics import and export | done: File ▸ Import…, File ▸ Export…, Export… on a calendar's menu |
-| Alerts while windowless | done while the app runs (window closed); not after login until Calendar is opened |
+| Alerts while windowless | done while the app runs (window closed), with Snooze and click-to-open; not after login until Calendar is opened |
 | Time zones and DST | done: tz database, VTIMEZONE in and out, zone per event, DST-safe wall-clock timers, follows a system time zone change (timedate1) at once |
 | Offline edits, conflicts | done: pending changes on disk, pushed as soon as NetworkManager reports the network back; a 412 keeps the server copy and the local edit as a new event |
 | Invitations | done via implicit scheduling: invitees and answers shown, Accept/Maybe/Decline (an invitation's title and times stay read-only), add invitees, SEQUENCE raised by the organizer; your addresses come from `calendar-user-address-set` (accounts added before 2026-11-02 fall back to the login name) |
@@ -52,5 +52,4 @@ occurrence cache per shown range; slim sync jobs; unchanged sync-token skip.
 3. **Invitee autocomplete and free/busy** (needs Contacts and CalDAV scheduling outbox POST).
 4. **OAuth** for Google and Microsoft 365 (Basic only today; Google offered as a subscription).
 5. **Birthdays calendar** from Contacts.
-6. **Hours shown at a time** (day/week zoom) and event density in the year view.
-7. **Shared file chooser helper**: `portal.rs` repeats Mail's; move it to a desktop crate.
+6. **Shared file chooser helper**: `portal.rs` repeats Mail's; move it to a desktop crate.
