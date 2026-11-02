@@ -109,6 +109,18 @@ fn toggle(
     Toggle::new(label, on, move |on| set(&mut settings.borrow_mut(), on))
 }
 
+fn grouped(number: usize) -> String {
+    let digits = number.to_string();
+    let mut grouped = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(digit);
+    }
+    grouped
+}
+
 fn pop_up<T: Copy + PartialEq + 'static>(
     settings: &SharedSettings,
     label: &str,
@@ -227,7 +239,7 @@ fn form(settings: &SharedSettings, profile: Rc<Cell<Profile>>) -> Form {
         settings,
         &L10N.tr("settings-scrollback"),
         &SCROLLBACK_CHOICES,
-        |lines| L10N.tr_args("settings-lines", [("count", lines.into())]),
+        |lines| L10N.tr_args("settings-lines", [("count", grouped(lines).into())]),
         current.scrollback,
         |settings, lines| settings.scrollback = lines,
     );

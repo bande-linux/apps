@@ -552,7 +552,7 @@ impl Painter {
                 push_span(&mut strikeouts, line, column, cells, foreground);
             }
             let character = cell.c;
-            if character == ' ' || character == '\0' {
+            if matches!(character, ' ' | '\t' | '\0') {
                 continue;
             }
             let joins = character.is_ascii()

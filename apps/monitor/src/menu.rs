@@ -3,6 +3,7 @@ use bande_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
 use crate::model::{Column, Filter, Frequency, Tab};
+use crate::signal::Stop;
 
 pub const COLUMN_ACTION: &str = "column:";
 
@@ -19,9 +20,10 @@ pub enum MenuCommand {
     ShowCores,
     Filter(Filter),
     Frequency(Frequency),
+    Signal(Stop),
 }
 
-const ACTIONS: [(MenuCommand, &str); 21] = [
+const ACTIONS: [(MenuCommand, &str); 27] = [
     (MenuCommand::Quit, "quit"),
     (MenuCommand::ForceQuit, "force-quit"),
     (MenuCommand::ShowInFiles, "show-in-files"),
@@ -49,7 +51,17 @@ const ACTIONS: [(MenuCommand, &str); 21] = [
         MenuCommand::Frequency(Frequency::Normally),
         "frequency-normally",
     ),
+    (MenuCommand::Signal(Stop::Hangup), "signal-hup"),
+    (MenuCommand::Signal(Stop::Interrupt), "signal-int"),
+    (MenuCommand::Signal(Stop::Pause), "signal-stop"),
+    (MenuCommand::Signal(Stop::Resume), "signal-cont"),
+    (MenuCommand::Signal(Stop::User1), "signal-usr1"),
+    (MenuCommand::Signal(Stop::User2), "signal-usr2"),
 ];
+
+fn signal_title(how: Stop) -> String {
+    L10N.tr(&format!("signal-{}", how.id()))
+}
 
 impl MenuCommand {
     pub fn action(self) -> &'static str {
@@ -94,22 +106,31 @@ pub fn process_menu(selected: Selected) -> Menu {
             .shortcut("Shift+Ctrl+R")
             .enabled(selected.located),
         MenuItem::separator(),
+        MenuItem::submenu(
+            &L10N.tr("menu-send-signal"),
+            Menu::new(
+                Stop::SENDABLE
+                    .map(|how| {
+                        MenuItem::new(&signal_title(how), MenuCommand::Signal(how).action())
+                            .enabled(selected.stoppable)
+                    })
+                    .to_vec(),
+            ),
+        ),
+        MenuItem::separator(),
         item("menu-copy-name", MenuCommand::CopyName),
         item("menu-copy-pid", MenuCommand::CopyPid).enabled(selected.has_pid),
     ])
 }
 
-pub fn columns_menu(tab: Tab, shown: &[Column]) -> Menu {
+pub fn columns_menu(shown: &[Column]) -> Menu {
     Menu::new(
         std::iter::once(Column::Name)
             .chain(Column::CHOOSABLE)
             .map(|column| {
-                MenuItem::new(
-                    &column.title(tab),
-                    &format!("{COLUMN_ACTION}{}", column.id()),
-                )
-                .checked(shown.contains(&column))
-                .enabled(column != Column::Name)
+                MenuItem::new(&column.title(), &format!("{COLUMN_ACTION}{}", column.id()))
+                    .checked(shown.contains(&column))
+                    .enabled(column != Column::Name)
             })
             .collect(),
     )
@@ -147,6 +168,12 @@ pub fn app_menus(tabs: &[Tab], shown: Filter, frequency: Frequency) -> Vec<Entry
         Entry::separator(),
         entry("menu-quit-process", MenuCommand::Quit).shortcut("Ctrl+E"),
         entry("menu-force-quit-process", MenuCommand::ForceQuit),
+        Entry::submenu(
+            &L10N.tr("menu-send-signal"),
+            Stop::SENDABLE
+                .map(|how| Entry::item(&signal_title(how), MenuCommand::Signal(how).action()))
+                .to_vec(),
+        ),
         entry("menu-inspect", MenuCommand::Inspect).shortcut("Ctrl+I"),
         Entry::separator(),
         entry("menu-show-in-files", MenuCommand::ShowInFiles).shortcut("Shift+Ctrl+R"),

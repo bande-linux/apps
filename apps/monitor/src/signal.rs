@@ -10,6 +10,36 @@ use crate::proc::parse_stat;
 pub enum Stop {
     Quit,
     ForceQuit,
+    Hangup,
+    Interrupt,
+    Pause,
+    Resume,
+    User1,
+    User2,
+}
+
+impl Stop {
+    pub const SENDABLE: [Stop; 6] = [
+        Stop::Hangup,
+        Stop::Interrupt,
+        Stop::Pause,
+        Stop::Resume,
+        Stop::User1,
+        Stop::User2,
+    ];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Stop::Quit => "term",
+            Stop::ForceQuit => "kill",
+            Stop::Hangup => "hup",
+            Stop::Interrupt => "int",
+            Stop::Pause => "stop",
+            Stop::Resume => "cont",
+            Stop::User1 => "usr1",
+            Stop::User2 => "usr2",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -40,6 +70,12 @@ pub fn stop(pid: u32, start_ticks: u64, stop: Stop) -> Result<(), SignalError> {
     let signal = match stop {
         Stop::Quit => Signal::TERM,
         Stop::ForceQuit => Signal::KILL,
+        Stop::Hangup => Signal::HUP,
+        Stop::Interrupt => Signal::INT,
+        Stop::Pause => Signal::STOP,
+        Stop::Resume => Signal::CONT,
+        Stop::User1 => Signal::USR1,
+        Stop::User2 => Signal::USR2,
     };
     pidfd_send_signal(&pidfd, signal)?;
     Ok(())

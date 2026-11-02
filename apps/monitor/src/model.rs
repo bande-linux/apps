@@ -60,7 +60,6 @@ pub enum Column {
 pub enum RowKey {
     Group(GroupKey),
     Process { pid: u32, start_ticks: u64 },
-    Interface(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -273,6 +272,8 @@ impl Tab {
                 Column::Sent,
                 Column::ReceivedTotal,
                 Column::SentTotal,
+                Column::Pid,
+                Column::User,
             ],
             Tab::Gpu => &[
                 Column::Name,
@@ -391,9 +392,8 @@ impl Column {
             .find(|column| column.id() == id)
     }
 
-    pub fn title(self, tab: Tab) -> String {
+    pub fn title(self) -> String {
         match self {
-            Column::Name if tab == Tab::Network => L10N.tr("column-interface"),
             Column::Name => L10N.tr("column-name"),
             Column::Cpu => L10N.tr("column-cpu"),
             Column::CpuTime => L10N.tr("column-cpu-time"),
@@ -462,6 +462,17 @@ impl Column {
                 Measure::Number(known.into_iter().map(value).sum())
             }
         };
+        let traffic = |value: fn(&crate::sampler::Traffic) -> f64| {
+            let known = processes
+                .iter()
+                .filter_map(|process| process.network.as_ref())
+                .collect::<Vec<_>>();
+            if known.is_empty() {
+                Measure::Missing
+            } else {
+                Measure::Number(known.into_iter().map(value).sum())
+            }
+        };
         let gpu = |value: fn(&crate::sampler::GpuUse) -> f64| {
             let known = processes
                 .iter()
@@ -519,9 +530,10 @@ impl Column {
             Column::Written => disk(|rates| rates.written_per_second),
             Column::ReadTotal => disk(|rates| rates.read_total as f64),
             Column::WrittenTotal => disk(|rates| rates.written_total as f64),
-            Column::Received | Column::Sent | Column::ReceivedTotal | Column::SentTotal => {
-                Measure::Missing
-            }
+            Column::Received => traffic(|traffic| traffic.received_per_second),
+            Column::Sent => traffic(|traffic| traffic.sent_per_second),
+            Column::ReceivedTotal => traffic(|traffic| traffic.received_total as f64),
+            Column::SentTotal => traffic(|traffic| traffic.sent_total as f64),
         }
     }
 }
@@ -580,7 +592,7 @@ fn group_target(group: &Group, processes: &[Process], name: String) -> StopTarge
 pub fn stop_target(target: &StopTarget, how: Stop) -> Result<(), SignalError> {
     match how {
         Stop::Quit => stop_all(&target.roots, how),
-        Stop::ForceQuit => stop_all(&target.processes, how),
+        _ => stop_all(&target.processes, how),
     }
 }
 
@@ -995,6 +1007,10 @@ impl Monitor {
         self.tab == Tab::Energy
     }
 
+    pub fn measures_network(&self) -> bool {
+        self.tab == Tab::Network
+    }
+
     pub fn measures_disk(&self) -> bool {
         self.columns().iter().any(|column| column.uses_disk())
     }
@@ -1042,7 +1058,6 @@ impl Monitor {
                     processes: vec![id],
                 })
             }
-            RowKey::Interface(_) => None,
         }
     }
 
@@ -1056,7 +1071,6 @@ impl Monitor {
                 .group(key)
                 .map(|group| &self.snapshot.processes[group.leader]),
             RowKey::Process { pid, start_ticks } => self.process(*pid, *start_ticks),
-            RowKey::Interface(_) => None,
         }
     }
 
@@ -1111,9 +1125,7 @@ impl Monitor {
         let descending = self.descending;
         let query = self.search.trim().to_lowercase();
         let processes = &self.snapshot.processes;
-        self.rows = if self.tab == Tab::Network {
-            self.interface_rows(&query)
-        } else if self.filter == Filter::Hierarchy {
+        self.rows = if self.filter == Filter::Hierarchy {
             self.tree_rows(columns, &query)
         } else {
             let mut groups = Vec::new();
@@ -1230,49 +1242,6 @@ impl Monitor {
                     .map(|below| self.level_rows(below, children, columns))
                     .unwrap_or_default();
                 self.process_candidate(process, columns, below)
-            })
-            .collect::<Vec<_>>();
-        candidates.sort_by(|a, b| order(a, b, self.descending));
-        candidates
-            .into_iter()
-            .map(|candidate| candidate.row)
-            .collect()
-    }
-
-    fn interface_rows(&self, query: &str) -> Vec<Row> {
-        let mut candidates = self
-            .snapshot
-            .interfaces
-            .iter()
-            .map(|interface| (interface, interface.title()))
-            .filter(|(_, title)| title.to_lowercase().contains(query))
-            .map(|(interface, title)| {
-                let measure = |column: Column| match column {
-                    Column::Name => Measure::Text(title.clone()),
-                    Column::Received => Measure::Number(interface.received_per_second),
-                    Column::Sent => Measure::Number(interface.sent_per_second),
-                    Column::ReceivedTotal => Measure::Number(interface.received_total as f64),
-                    Column::SentTotal => Measure::Number(interface.sent_total as f64),
-                    _ => Measure::Missing,
-                };
-                Candidate {
-                    row: Row {
-                        key: RowKey::Interface(interface.name.clone()),
-                        name: title.clone(),
-                        icon: None,
-                        cells: Tab::Network
-                            .columns()
-                            .iter()
-                            .map(|column| column.text(&measure(*column)))
-                            .collect(),
-                        responding: true,
-                        revealed: false,
-                        children: Vec::new(),
-                    },
-                    measure: measure(self.sort),
-                    name: title.clone(),
-                    pid: 0,
-                }
             })
             .collect::<Vec<_>>();
         candidates.sort_by(|a, b| order(a, b, self.descending));

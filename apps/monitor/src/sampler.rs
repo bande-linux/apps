@@ -4,7 +4,6 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::L10N;
 use crate::cpu::{CpuShare, CpuTicks, read_cpu_ticks};
 use crate::inhibitors::SleepBlocker;
 use crate::power::BatteryReport;
@@ -12,9 +11,8 @@ use crate::proc::{
     DrmUse, IoBytes, Stat, display_name, parse_cgroup_unit, parse_cmdline, parse_drm_fdinfo,
     parse_io, parse_kilobytes, parse_passwd, parse_stat, parse_switches, parse_uid,
 };
-use crate::system::{
-    DiskCounters, InterfaceKind, Memory, Transferred, read_disks, read_interfaces, read_memory,
-};
+use crate::system::{DiskCounters, Memory, Transferred, read_disks, read_interfaces, read_memory};
+use crate::traffic::{Counted, socket_inodes, tcp_counts};
 
 const KERNEL_THREAD_DAEMON: u32 = 2;
 
@@ -42,6 +40,7 @@ pub struct Process {
     pub swapped: Option<u64>,
     pub resident: u64,
     pub disk: Option<Rates>,
+    pub network: Option<Traffic>,
     pub gpu: Option<GpuUse>,
     pub wakeups: Option<f64>,
     pub energy: Option<f64>,
@@ -64,6 +63,14 @@ pub struct Rates {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Traffic {
+    pub received_per_second: f64,
+    pub sent_per_second: f64,
+    pub received_total: u64,
+    pub sent_total: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Operations {
     pub reads_per_second: f64,
     pub writes_per_second: f64,
@@ -72,7 +79,6 @@ pub struct Operations {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Interface {
     pub name: String,
-    pub kind: InterfaceKind,
     pub received_per_second: f64,
     pub sent_per_second: f64,
     pub received_total: u64,
@@ -93,24 +99,6 @@ pub struct Snapshot {
     pub gpu: bool,
     pub battery: bool,
     pub power: Option<BatteryReport>,
-}
-
-impl Interface {
-    pub fn title(&self) -> String {
-        let kind = match self.kind {
-            InterfaceKind::WiFi => "interface-wifi",
-            InterfaceKind::Ethernet => "interface-ethernet",
-            InterfaceKind::Vpn => "interface-vpn",
-            InterfaceKind::Other => return self.name.clone(),
-        };
-        L10N.tr_args(
-            "interface-named",
-            [
-                ("kind", L10N.tr(kind).into()),
-                ("name", self.name.clone().into()),
-            ],
-        )
-    }
 }
 
 impl Snapshot {
@@ -154,6 +142,9 @@ pub struct Sampler {
     previous: Option<Previous>,
     footprint: bool,
     disk: bool,
+    network: bool,
+    sockets: HashMap<u64, Counted>,
+    sockets_before: Option<HashMap<u64, Counted>>,
     gpu: bool,
     gpu_seen: bool,
     wakeups: bool,
@@ -217,6 +208,9 @@ impl Sampler {
             previous: None,
             footprint: false,
             disk: false,
+            network: false,
+            sockets: HashMap::new(),
+            sockets_before: None,
             gpu: false,
             gpu_seen: false,
             wakeups: false,
@@ -242,6 +236,38 @@ impl Sampler {
 
     pub fn measure_disk(&mut self, measure: bool) {
         self.disk = measure;
+    }
+
+    pub fn measure_network(&mut self, measure: bool) {
+        self.network = measure;
+    }
+
+    fn traffic(&self, folder: &Path, seconds: f64) -> Option<Traffic> {
+        let inodes = socket_inodes(folder);
+        let counted = inodes
+            .iter()
+            .filter_map(|inode| Some((*inode, *self.sockets.get(inode)?)))
+            .collect::<Vec<_>>();
+        if counted.is_empty() {
+            return None;
+        }
+        let earlier = |inode: u64, now: Counted| match &self.sockets_before {
+            Some(before) => before.get(&inode).copied().unwrap_or_default(),
+            None => now,
+        };
+        let total = |value: fn(Counted) -> u64| counted.iter().map(|(_, now)| value(*now)).sum();
+        let moved = |value: fn(Counted) -> u64| {
+            counted
+                .iter()
+                .map(|(inode, now)| rate(value(*now), value(earlier(*inode, *now)), seconds))
+                .sum()
+        };
+        Some(Traffic {
+            received_per_second: moved(|count| count.received),
+            sent_per_second: moved(|count| count.sent),
+            received_total: total(|count| count.received),
+            sent_total: total(|count| count.sent),
+        })
     }
 
     pub fn measure_gpu(&mut self, measure: bool) {
@@ -357,6 +383,9 @@ impl Sampler {
                 }),
             false => (None, None),
         };
+        let network = (self.network && !kernel_thread)
+            .then(|| self.traffic(&folder, seconds))
+            .flatten();
         let switches = (self.wakeups && !kernel_thread)
             .then(|| self.switches(&folder))
             .flatten();
@@ -400,6 +429,7 @@ impl Sampler {
             swapped,
             resident,
             disk,
+            network,
             gpu,
             wakeups,
             energy: None,
@@ -434,6 +464,20 @@ impl Sampler {
                 / cores.len().max(1) as f64
                 / self.ticks_per_second
         });
+        let counting = self.network && self.processes;
+        match counting {
+            true => {
+                let counts = tcp_counts()
+                    .inspect_err(|error| tracing::debug!("cannot count TCP traffic: {error}"))
+                    .unwrap_or_default();
+                let before = std::mem::replace(&mut self.sockets, counts);
+                self.sockets_before = (!first && !before.is_empty()).then_some(before);
+            }
+            false => {
+                self.sockets.clear();
+                self.sockets_before = None;
+            }
+        }
         let processes = if self.processes {
             let baseline = first || std::mem::take(&mut self.processes_stale);
             let mut pids = fs::read_dir(self.root.join("proc"))?
@@ -458,7 +502,7 @@ impl Sampler {
             disk,
             interfaces: interfaces
                 .iter()
-                .map(|(name, _, now)| (name.clone(), *now))
+                .map(|(name, now)| (name.clone(), *now))
                 .collect(),
         });
         let snapshot = Snapshot {
@@ -492,11 +536,10 @@ impl Sampler {
             },
             interfaces: interfaces
                 .iter()
-                .map(|(name, kind, now)| {
+                .map(|(name, now)| {
                     let then = previous.interfaces.get(name).copied().unwrap_or(*now);
                     Interface {
                         name: name.clone(),
-                        kind: *kind,
                         received_per_second: rate(now.received, then.received, seconds),
                         sent_per_second: rate(now.sent, then.sent, seconds),
                         received_total: now.received,
@@ -514,7 +557,7 @@ impl Sampler {
             disk,
             interfaces: interfaces
                 .into_iter()
-                .map(|(name, _, now)| (name, now))
+                .map(|(name, now)| (name, now))
                 .collect(),
         });
         Ok(snapshot)
