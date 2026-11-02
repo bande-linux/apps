@@ -1,0 +1,10 @@
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/wayland_client-6d86595592f75d3f.d: /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/lib.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/conn.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/event_queue.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/globals.rs
+
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/libwayland_client-6d86595592f75d3f.rlib: /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/lib.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/conn.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/event_queue.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/globals.rs
+
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/libwayland_client-6d86595592f75d3f.rmeta: /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/lib.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/conn.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/event_queue.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/globals.rs
+
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/lib.rs:
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/conn.rs:
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/event_queue.rs:
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.15/src/globals.rs:

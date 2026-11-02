@@ -1218,6 +1218,9 @@ impl TerminalWindow {
             return;
         }
         self.painter.set_profile(settings.profile);
+        if self.settings.font != settings.font {
+            self.painter.set_font(&settings.font);
+        }
         if self.settings.font_size != settings.font_size {
             self.painter.set_metrics(settings.font_size, window.scale());
         }

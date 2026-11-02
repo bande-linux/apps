@@ -8,7 +8,7 @@ is what is left. Delete this plan when the list is done.
 | macOS | User need | Bande Terminal |
 |---|---|---|
 | Profiles: text, colours, background | Readable, familiar colours | Twelve built-in profiles with a live preview: Datum (follows light/dark), Paper, Ink, Midnight, High Contrast and the classic Solarized Light/Dark, Dracula, Nord, Gruvbox, Tokyo Night and Catppuccin Mocha. Profiles cannot be edited, duplicated or imported |
-| Font and size | Comfortable text | Size 9–32 pt (Ctrl+= / Ctrl+-); the font is fixed (JetBrains Mono) |
+| Font and size | Comfortable text | Font (JetBrains Mono by default, or any installed common monospace family: DejaVu, Noto, Fira, Hack, Source Code Pro, Cascadia, Iosevka, …) and size 9–32 pt (Ctrl+= / Ctrl+-) |
 | Cursor: block / underline / bar, blink | See the cursor | Have shape and Blink the cursor (blinks only while focused, so idle windows stay asleep) |
 | Scrollback: limit lines | Keep enough history | Have: 1 000, 10 000, 100 000 or 1 000 000 lines |
 | Bell: audible / visual, badge | Notice a bell | Have Play the alert sound (the desktop's alert through bande-sound, at most four a second, off by default), Flash the window, and a badge in the bar |
@@ -41,7 +41,8 @@ is what is left. Delete this plan when the list is done.
 
 1. Editable profiles: duplicate a built-in profile, change colours, font size and cursor per
    profile, choose a profile per window or tab, import iTerm/Terminal colour schemes.
-2. Font family choice (any installed monospace font).
+2. Font choice from every installed monospace family (today a list of common ones; needs a
+   monospace query on the font collection).
 3. Drag tabs to reorder and out into a new window. Needs the toolkit first: a drag on a header tab
    always moves the window today (`decorations.rs` `tab_press`); a horizontal drag inside the strip
    should reach the app, a vertical one should tear the tab off.

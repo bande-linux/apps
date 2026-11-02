@@ -230,6 +230,13 @@ impl Painter {
         self.font_size
     }
 
+    pub fn set_font(&mut self, family: &str) {
+        let family = (!family.is_empty()).then_some(family);
+        self.text.set_monospace_family(family);
+        self.metrics = Metrics::measure(&mut self.text, self.font_size, self.metrics.scale);
+        self.paragraphs.clear();
+    }
+
     pub fn set_metrics(&mut self, font_size: f32, scale: f64) -> bool {
         if font_size == self.font_size && scale == self.metrics.scale {
             return false;

@@ -1,0 +1,5 @@
+cargo::rerun-if-changed=build.rs
+cargo:rerun-if-changed=src/wgsl.lalrpop
+processing file `src/wgsl.lalrpop`
+cargo:rerun-if-changed=src/wgsl_recognize.lalrpop
+processing file `src/wgsl_recognize.lalrpop`
