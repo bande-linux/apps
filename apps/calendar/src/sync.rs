@@ -43,6 +43,11 @@ fn kept_copy(info: &CalendarInfo, data: &str) -> Option<Upsert> {
     let uid = new_uid();
     for event in &mut object.events {
         event.uid = uid.clone();
+        event.component.properties.retain(|property| {
+            !["ORGANIZER", "ATTENDEE"]
+                .iter()
+                .any(|name| property.name.eq_ignore_ascii_case(name))
+        });
     }
     Some(Upsert {
         href: href_for(info, &uid),

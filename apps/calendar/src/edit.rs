@@ -287,6 +287,15 @@ fn rezone(
     zone: &TimeZone,
     local: &TimeZone,
 ) {
+    if let Some(event) = object
+        .events
+        .get_mut(target)
+        .filter(|event| event.recurrence_id.is_some())
+    {
+        event.start = keep_instant(&event.start, zone, name);
+        event.end = keep_instant(&event.end, zone, name);
+        return;
+    }
     for (index, event) in object.events.iter_mut().enumerate() {
         let old = event.start.zone(local);
         let edge = match index == target {
@@ -304,9 +313,12 @@ fn rezone(
             *moment = keep_wall(moment, zone, name);
         }
         if let Some(rule) = event.rule.as_mut()
-            && let Some(Moment::Zoned { at, .. }) = &rule.until
+            && let Some(wall) = match &rule.until {
+                Some(Moment::Zoned { at, .. }) => Some(at.with_time_zone(old.clone()).datetime()),
+                Some(Moment::Floating(wall)) => Some(*wall),
+                _ => None,
+            }
         {
-            let wall = at.with_time_zone(old.clone()).datetime();
             rule.until = zone
                 .to_ambiguous_zoned(wall)
                 .compatible()

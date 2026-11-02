@@ -242,6 +242,7 @@ impl CalendarApp {
         let refreshed = info
             .refreshed
             .and_then(|second| Timestamp::from_second(second).ok())
+            .map(|at| at.min(Timestamp::now()))
             .map_or(Timestamp::UNIX_EPOCH, |at| later(at, every));
         Some(
             refreshed.max(
@@ -357,6 +358,8 @@ impl CalendarApp {
 
     fn wake(&mut self, view: &mut CalendarView) {
         let now = Timestamp::now();
+        self.next_clock = self.next_clock.map(|at| at.min(next_minute()));
+        self.synced = self.synced.map(|at| at.min(now));
         if self.next_clock.is_some_and(|at| now >= at) {
             view.set_now(Zoned::now().with_time_zone(self.zone.clone()));
             self.next_clock = Some(next_minute());

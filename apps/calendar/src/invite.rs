@@ -156,32 +156,3 @@ pub fn invite(event: &mut Event, me: &[String], addresses: &[String]) {
         );
     }
 }
-
-fn significant(event: &Event) -> impl PartialEq + '_ {
-    (
-        (&event.start, &event.end, &event.rule, &event.exdates),
-        (
-            &event.rdates,
-            &event.summary,
-            &event.location,
-            &event.description,
-        ),
-    )
-}
-
-pub fn revise(before: &CalendarObject, object: &mut CalendarObject, me: &[String]) {
-    for event in &mut object.events {
-        let organizing = event
-            .component
-            .property("ORGANIZER")
-            .is_some_and(|organizer| same(organizer, me));
-        let changed = before
-            .events
-            .iter()
-            .find(|old| old.recurrence_id == event.recurrence_id)
-            .is_none_or(|old| significant(old) != significant(event));
-        if organizing && changed && event.component.property("ATTENDEE").is_some() {
-            event.sequence += 1;
-        }
-    }
-}
