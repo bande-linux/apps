@@ -66,6 +66,13 @@ pub(crate) fn signal_title(how: Stop) -> String {
     L10N.tr(&format!("signal-{}", how.id()))
 }
 
+fn signal_item_title(how: Stop) -> String {
+    match how {
+        Stop::Resume => signal_title(how),
+        _ => L10N.tr_args("menu-signal-asks", [("signal", signal_title(how).into())]),
+    }
+}
+
 impl MenuCommand {
     pub fn action(self) -> &'static str {
         ACTIONS
@@ -114,7 +121,7 @@ pub fn process_menu(selected: Selected) -> Menu {
             Menu::new(
                 Stop::SENDABLE
                     .map(|how| {
-                        MenuItem::new(&signal_title(how), MenuCommand::Signal(how).action())
+                        MenuItem::new(&signal_item_title(how), MenuCommand::Signal(how).action())
                             .enabled(selected.stoppable)
                     })
                     .to_vec(),
@@ -174,7 +181,7 @@ pub fn app_menus(tabs: &[Tab], shown: Filter, frequency: Frequency) -> Vec<Entry
         Entry::submenu(
             &L10N.tr("menu-send-signal"),
             Stop::SENDABLE
-                .map(|how| Entry::item(&signal_title(how), MenuCommand::Signal(how).action()))
+                .map(|how| Entry::item(&signal_item_title(how), MenuCommand::Signal(how).action()))
                 .to_vec(),
         ),
         entry("menu-inspect", MenuCommand::Inspect).shortcut("Ctrl+I"),
