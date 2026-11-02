@@ -13,6 +13,8 @@ pub(crate) struct Stat {
     pub(crate) threads: u32,
     pub(crate) start_ticks: u64,
     pub(crate) resident_pages: u64,
+    pub(crate) minor_faults: u64,
+    pub(crate) major_faults: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -84,6 +86,8 @@ pub(crate) fn parse_stat(text: &str) -> Option<Stat> {
         threads: u32::try_from(number(17)?).ok()?,
         start_ticks: number(19)?,
         resident_pages: number(21)?,
+        minor_faults: number(7)?,
+        major_faults: number(9)?,
     })
 }
 
@@ -103,6 +107,10 @@ pub(crate) fn parse_uid(status: &str) -> Option<u32> {
 
 pub(crate) fn parse_switches(status: &str) -> Option<u64> {
     field(status, "voluntary_ctxt_switches")?.parse().ok()
+}
+
+pub(crate) fn parse_number(text: &str, key: &str) -> Option<u64> {
+    field(text, key)?.parse().ok()
 }
 
 pub(crate) fn parse_io(text: &str) -> Option<IoBytes> {

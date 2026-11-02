@@ -34,6 +34,7 @@ const CHILD: &str = "child:";
 const FILE: &str = "file:";
 const SECTION: &str = "section:";
 const EXECUTABLE: &str = "executable";
+const MISSING: &str = "\u{2013}";
 
 fn find_row<'a>(rows: &'a [Row], key: &str) -> Option<&'a Row> {
     rows.iter().find_map(|row| match row.key == key {
@@ -67,6 +68,13 @@ impl Section {
         })
     }
 
+    fn table(self) -> Table {
+        match self {
+            Section::Info => Table::new(self.columns()).without_header(),
+            _ => Table::new(self.columns()),
+        }
+    }
+
     fn columns(self) -> Vec<Column> {
         let column = |message: &str, width: f32| Column::new(&L10N.tr(message), width);
         match self {
@@ -78,6 +86,7 @@ impl Section {
                 column("inspector-tid", 72.0).numeric(),
                 column("column-name", 200.0).flexible(),
                 column("inspector-state", 140.0),
+                column("inspector-waiting-in", 180.0),
                 column("column-cpu-time", 96.0).numeric(),
             ],
             Section::Files => vec![
@@ -138,7 +147,7 @@ impl InspectorView {
         text: TextSystem,
         icons: Icons,
     ) -> Self {
-        let table = Table::new(Section::Info.columns()).without_header();
+        let table = Section::Info.table();
         let mut list = List::new(table, palette, text);
         let send = sender(list.signals());
         let stop = list.insert_in_header(stop_button(move || send(Signal::Stop)));
@@ -339,6 +348,41 @@ impl InspectorView {
             "inspector-section-resources",
             resources,
         ));
+        let statistics = self.details.statistics;
+        let count =
+            |value: Option<u64>| value.map_or(MISSING.to_owned(), |value| value.to_string());
+        sections.push(section(
+            "statistics",
+            "inspector-section-statistics",
+            vec![
+                row(
+                    "faults",
+                    "inspector-faults",
+                    statistics.minor_faults.to_string(),
+                ),
+                row(
+                    "major-faults",
+                    "inspector-major-faults",
+                    statistics.major_faults.to_string(),
+                ),
+                row("switches", "inspector-switches", count(statistics.switches)),
+                row(
+                    "involuntary-switches",
+                    "inspector-involuntary-switches",
+                    count(statistics.involuntary_switches),
+                ),
+                row(
+                    "read-calls",
+                    "inspector-read-calls",
+                    count(statistics.read_calls),
+                ),
+                row(
+                    "write-calls",
+                    "inspector-write-calls",
+                    count(statistics.write_calls),
+                ),
+            ],
+        ));
         sections
     }
 
@@ -398,6 +442,7 @@ impl InspectorView {
                             Cell::new(thread.tid.to_string()),
                             Cell::new(thread.name.as_str()),
                             Cell::new(state_name(thread.state)),
+                            Cell::new(thread.waiting_in.as_deref().unwrap_or(MISSING)),
                             Cell::new(format_cpu_time(thread.cpu_seconds)),
                         ],
                     )
@@ -451,8 +496,8 @@ impl InspectorView {
         }
         self.section = section;
         let rows = self.rows();
+        self.list.replace_table(section.table());
         if let Some(table) = self.list.table() {
-            table.set_columns(section.columns());
             table.set_rows(rows.clone());
         }
         self.expanded.clear();
