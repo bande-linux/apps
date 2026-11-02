@@ -5,15 +5,14 @@ use accesskit::{Node, Role};
 use bande_toolkit::ui::{
     Context, Cursor, Event, Key, PointerButton, ScrollState, Size, Widget, WidgetId,
 };
-use bande_toolkit::{
-    Color, GlyphRun, Item, Picture, Point, PositionedGlyph, Rect, Shape, TextAlign, TextStyle,
-};
+use bande_toolkit::{Color, Item, Point, Rect, Shape, TextAlign, TextStyle};
 use web_content::Viewport;
 use web_net::Url;
 use web_paint::DisplayList;
 
 use crate::L10N;
 use crate::renderer::Links;
+use crate::tiles::{Images, Tiles};
 
 const MARGIN: f32 = 32.0;
 const LINE_STEP: f32 = 40.0;
@@ -21,8 +20,6 @@ const PAGE_OVERLAP: f32 = 40.0;
 const TITLE_SIZE: f32 = 22.0;
 const BODY_SIZE: f32 = 15.0;
 const MESSAGE_WIDTH: f32 = 560.0;
-const TILE_HEIGHT: f32 = 1024.0;
-const GLYPH_REACH: f32 = 0.5;
 const CANVAS: Color = Color::WHITE;
 const TEXT: Color = Color::hex(0x202122);
 const SECONDARY: Color = Color::hex(0x54595d);
@@ -51,7 +48,8 @@ pub(crate) struct PageView {
     content: Content,
     laid_out_width: Option<f32>,
     message: Vec<Item>,
-    tiles: Vec<Picture>,
+    tiles: Option<Tiles>,
+    images: Images,
     height: f32,
     scroll: ScrollState,
     jump: Option<f32>,
@@ -70,7 +68,8 @@ impl PageView {
             content: Content::Blank,
             laid_out_width: None,
             message: Vec::new(),
-            tiles: Vec::new(),
+            tiles: None,
+            images: Images::default(),
             height: 0.0,
             scroll: ScrollState::default(),
             jump: None,
@@ -153,10 +152,11 @@ impl PageView {
     fn lay_out(&mut self, cx: &mut Context, width: f32) {
         self.laid_out_width = Some(width);
         self.message.clear();
-        self.tiles.clear();
+        self.tiles = None;
         if let Content::Document { list, .. } = &self.content {
-            self.tiles = tiles(list);
-            self.height = list.height;
+            let tiles = Tiles::new(Arc::clone(list), &mut self.images);
+            self.height = tiles.height();
+            self.tiles = Some(tiles);
             return;
         }
         let column = (width - 2.0 * MARGIN).clamp(0.0, MESSAGE_WIDTH);
@@ -239,79 +239,6 @@ impl PageView {
     }
 }
 
-fn color(color: web_paint::Color) -> Color {
-    Color {
-        r: color.r,
-        g: color.g,
-        b: color.b,
-        a: color.a,
-    }
-}
-
-fn converted(list: &DisplayList, item: &web_paint::Item) -> Option<(f32, f32, Item)> {
-    match item {
-        web_paint::Item::Rect { rect, color: fill } => Some((
-            rect.y,
-            rect.y + rect.height,
-            Item::Fill {
-                shape: Shape::rect(Rect::new(rect.x, rect.y, rect.width, rect.height)),
-                paint: color(*fill).into(),
-            },
-        )),
-        web_paint::Item::Glyphs {
-            rect,
-            baseline,
-            font,
-            size,
-            color: ink,
-            glyphs,
-            ..
-        } => {
-            let font = list.fonts.get(*font as usize)?.clone();
-            let glyphs = list
-                .glyphs(glyphs)
-                .iter()
-                .map(|glyph| {
-                    let (id, x, y) = glyph.translated(0.0, *baseline);
-                    PositionedGlyph { id, x, y }
-                })
-                .collect();
-            let reach = size * GLYPH_REACH;
-            Some((
-                rect.y - reach,
-                rect.y + rect.height + reach,
-                Item::Glyphs(GlyphRun::new(font, *size, color(*ink), glyphs)),
-            ))
-        }
-    }
-}
-
-fn band(y: f32, count: usize) -> usize {
-    ((y / TILE_HEIGHT).floor().max(0.0) as usize).min(count.saturating_sub(1))
-}
-
-fn tiles(list: &DisplayList) -> Vec<Picture> {
-    let count = ((list.height / TILE_HEIGHT).ceil() as usize).max(1);
-    let mut bands: Vec<Vec<Item>> = vec![Vec::new(); count];
-    for (top, bottom, item) in list.items.iter().filter_map(|item| converted(list, item)) {
-        let (first, last) = (band(top, count), band(bottom, count));
-        for items in &mut bands[first..=last] {
-            items.push(item.clone());
-        }
-    }
-    bands
-        .into_iter()
-        .enumerate()
-        .map(|(index, items)| {
-            let top = index as f32 * TILE_HEIGHT;
-            Picture::new(vec![Item::Clip {
-                shape: Shape::rect(Rect::new(0.0, top, list.width, TILE_HEIGHT)),
-                items,
-            }])
-        })
-        .collect()
-}
-
 impl Widget for PageView {
     fn id(&self) -> WidgetId {
         self.id
@@ -330,6 +257,14 @@ impl Widget for PageView {
         if let Some(y) = self.jump.take() {
             self.scroll.follow(cx, y, y + frame.height);
         }
+        let offset = self.scroll.offset(cx);
+        if let Some(tiles) = &mut self.tiles {
+            tiles.prepare(
+                offset - frame.height,
+                offset + 2.0 * frame.height,
+                &mut self.images,
+            );
+        }
     }
 
     fn frame(&self) -> Rect {
@@ -339,18 +274,17 @@ impl Widget for PageView {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let offset = self.scroll.offset(cx);
         self.shown_offset.set(offset);
-        let visible = match self.tiles.len() {
-            0 => self.message.clone(),
-            count => self.tiles[band(offset, count)..=band(offset + self.frame.height, count)]
-                .iter()
-                .cloned()
-                .map(Item::Picture)
-                .collect(),
+        let (visible, canvas) = match &self.tiles {
+            Some(tiles) => (
+                tiles.visible(offset, offset + self.frame.height),
+                tiles.background(),
+            ),
+            None => (self.message.clone(), CANVAS),
         };
         let content = vec![
             Item::Fill {
                 shape: Shape::rect(self.frame),
-                paint: CANVAS.into(),
+                paint: canvas.into(),
             },
             Item::Translate {
                 offset: Point::new(self.frame.x, self.frame.y - offset),
