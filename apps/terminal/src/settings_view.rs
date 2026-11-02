@@ -15,7 +15,7 @@ use crate::settings::{
     COLUMN_RANGE, CloseAsk, CursorStyle, FONT_SIZES, NewTabFolder, ROW_RANGE, SCROLLBACK_CHOICES,
     Settings,
 };
-use crate::theme::{Profile, Theme, ansi_colors};
+use crate::theme::{Profile, Theme};
 
 pub const SETTINGS_SIZE: (u32, u32) = (520, 600);
 const PREVIEW: f32 = 76.0;
@@ -64,19 +64,15 @@ impl Widget for Preview {
                 paint: cx.palette.hairline.into(),
             },
         ];
-        self.items.extend(
-            ansi_colors(&theme.palette)
-                .iter()
-                .enumerate()
-                .map(|(index, color)| {
-                    let x = rect.x + PREVIEW_PADDING + index as f32 * (SWATCH + SWATCH_GAP);
-                    let y = rect.y + rect.height - PREVIEW_PADDING - SWATCH;
-                    Item::Fill {
-                        shape: Shape::rounded(Rect::new(x, y, SWATCH, SWATCH), 2.0),
-                        paint: (*color).into(),
-                    }
-                }),
-        );
+        self.items
+            .extend(theme.ansi().iter().enumerate().map(|(index, color)| {
+                let x = rect.x + PREVIEW_PADDING + index as f32 * (SWATCH + SWATCH_GAP);
+                let y = rect.y + rect.height - PREVIEW_PADDING - SWATCH;
+                Item::Fill {
+                    shape: Shape::rounded(Rect::new(x, y, SWATCH, SWATCH), 2.0),
+                    paint: (*color).into(),
+                }
+            }));
         self.items.push(Item::Text {
             origin: Point::new(rect.x + PREVIEW_PADDING, rect.y + PREVIEW_PADDING),
             paragraph: sample,
@@ -114,7 +110,7 @@ fn grouped(number: usize) -> String {
     let digits = number.to_string();
     let mut grouped = String::new();
     for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index) % 3 == 0 {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
             grouped.push(',');
         }
         grouped.push(digit);

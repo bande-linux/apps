@@ -73,7 +73,8 @@ fn column_width(column: Column) -> f32 {
         Column::Name => NAME_WIDTH,
         Column::Cpu | Column::Gpu => 72.0,
         Column::Pid | Column::Threads => 80.0,
-        Column::CpuTime | Column::User => 96.0,
+        Column::CpuTime => 96.0,
+        Column::User => 112.0,
         _ => 112.0,
     }
 }
@@ -1041,7 +1042,7 @@ fn paint_well(painter: &mut Painter, frame: Rect, palette: Palette) -> Shape {
         Scheme::Light => palette.well.mix(palette.sheet, 0.55),
         Scheme::Dark => palette.well.mix(palette.chassis, 0.5),
     };
-    painter.fill(well.clone(), background);
+    painter.fill(well, background);
     for quarter in 1..4 {
         let y = (frame.y + frame.height * quarter as f32 / 4.0).round();
         painter.fill(

@@ -7,7 +7,7 @@ is what is left. Delete this plan when the list is done.
 
 | macOS | User need | Bande Terminal |
 |---|---|---|
-| Profiles: text, colours, background | Readable, familiar colours | Five built-in profiles (Datum follows light/dark, Paper, Ink, Midnight, High Contrast) with a live preview. Profiles cannot be edited, duplicated or imported |
+| Profiles: text, colours, background | Readable, familiar colours | Twelve built-in profiles with a live preview: Datum (follows light/dark), Paper, Ink, Midnight, High Contrast and the classic Solarized Light/Dark, Dracula, Nord, Gruvbox, Tokyo Night and Catppuccin Mocha. Profiles cannot be edited, duplicated or imported |
 | Font and size | Comfortable text | Size 9–32 pt (Ctrl+= / Ctrl+-); the font is fixed (JetBrains Mono) |
 | Cursor: block / underline / bar, blink | See the cursor | Have shape and Blink the cursor (blinks only while focused, so idle windows stay asleep) |
 | Scrollback: limit lines | Keep enough history | Have: 1 000, 10 000, 100 000 or 1 000 000 lines |
@@ -32,7 +32,7 @@ is what is left. Delete this plan when the list is done.
 | Drag and drop files | Have: shell-quoted paths |
 | Title from OSC 0/2, current folder from OSC 7 | Have |
 | Edit Title (Shell menu) | Have Shell → Edit Title (Shift+Ctrl+I); an empty title goes back to the program's |
-| Marks and jump between commands | Have Jump to Previous/Next Command (Shift+Ctrl+Up/Down) |
+| Marks, jump between commands, select a command's output | Have Jump to Previous/Next Command (Shift+Ctrl+Up/Down) and Edit → Select Command Output (Shift+Ctrl+O) |
 | Option-click moves the cursor | Have Alt+click on the prompt line (arrow keys sent to the shell); Alt+drag still selects a block |
 | Window restore | Have: windows and tab folders come back after a restart |
 | Big output | Fast: `seq 1 2000000` finishes in 1.2 s (release build, headless); tabs (`\t`) used to draw as missing-glyph boxes, fixed |
@@ -45,6 +45,5 @@ is what is left. Delete this plan when the list is done.
 3. Drag tabs to reorder and out into a new window. Needs the toolkit first: a drag on a header tab
    always moves the window today (`decorations.rs` `tab_press`); a horizontal drag inside the strip
    should reach the app, a vertical one should tear the tab off.
-4. Select a whole command's output (macOS: triple-click on output with marks).
-5. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
+4. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
    password).

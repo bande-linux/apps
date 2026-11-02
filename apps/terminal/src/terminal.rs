@@ -347,6 +347,32 @@ impl Terminal {
         true
     }
 
+    pub fn select_command_output(&mut self) -> bool {
+        let cursor = self.term.grid().cursor.point.line;
+        let anchor = match self.display_offset() {
+            0 => cursor,
+            _ => self.viewport_end().line,
+        };
+        let marks = self.prompt_marks();
+        let Some(start) = marks.iter().rev().find(|line| **line < anchor).copied() else {
+            return false;
+        };
+        let end = marks
+            .iter()
+            .find(|line| **line > start)
+            .copied()
+            .unwrap_or(cursor);
+        if end.0 - start.0 < 2 {
+            return false;
+        }
+        let first = GridPoint::new(start + 1, Column(0));
+        let last = GridPoint::new(end - 1, self.term.grid().last_column());
+        let mut selection = Selection::new(SelectionType::Lines, first, Side::Left);
+        selection.update(last, Side::Right);
+        self.term.selection = Some(selection);
+        true
+    }
+
     pub fn clear_scrollback(&mut self) {
         self.shift = 0.0;
         self.term.clear_screen(ClearMode::Saved);
