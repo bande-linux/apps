@@ -24,7 +24,7 @@ apt install bande-mail
   Remote Content in one of their messages. Composing: the account new messages are sent from and whether replies
   quote the original. Rules: if any or all of several conditions hold (From, To or Cc, or
   Subject contains a text), move new unread Inbox mail to a mailbox, flag it or mark it read,
-  while Mail is open. They are kept in
+  while Mail is open; Message → Apply Rules (Alt+Ctrl+L) runs them on the chosen messages. They are kept in
   `~/.config/bande/mail.conf`; signatures, servers and rules in the offline store.
 - **Finding servers**, in this order: the provider's own autoconfig
   (`autoconfig.<domain>`, then `<domain>/.well-known/autoconfig`), Mozilla's ISPDB

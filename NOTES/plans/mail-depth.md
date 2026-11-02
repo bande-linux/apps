@@ -25,7 +25,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Composing | Quote original, default send account | Have: quote toggle, "Send new messages from" |
 | Composing | Check spelling | Missing (no desktop spell service) |
 | Signatures | Per-account signature | Have: in Accounts, added to new messages, replies and forwards above the quote, swapped when From changes |
-| Rules | Filters | Have: any or all of several From/To/Subject contains conditions → move, flag or mark read, on new unread Inbox mail while Mail runs; no editing in place |
+| Rules | Filters | Have: any or all of several From/To/Subject contains conditions → move, flag or mark read, on new unread Inbox mail while Mail runs, or on chosen messages with Apply Rules; no editing in place |
 
 ## Core features
 
@@ -49,7 +49,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 2. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses
    passwords.
 3. The known gaps below.
-4. Editing a rule, running rules on a mailbox by hand.
+4. Editing a rule in place.
 5. Rich text compose and spelling (both need desktop services first).
 6. Server-side search and search tokens; CONDSTORE/QRESYNC (release review).
 7. A privacy proxy for remote pictures.

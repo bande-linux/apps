@@ -39,7 +39,7 @@ use crate::ui::toolbar::{Signal, Signals, Toolbar};
 use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status, Worker};
 use bande_app_settings::{Stored, settings_folder};
 
-pub const SHORTCUTS: [(&str, &str); 12] = [
+pub const SHORTCUTS: [(&str, &str); 13] = [
     ("compose", "Ctrl+N"),
     ("get-mail", "Shift+Ctrl+N"),
     ("find", "Ctrl+F"),
@@ -52,6 +52,7 @@ pub const SHORTCUTS: [(&str, &str); 12] = [
     ("junk", "Shift+Ctrl+J"),
     ("delete", "Delete"),
     ("send", "Shift+Ctrl+D"),
+    ("apply-rules", "Alt+Ctrl+L"),
 ];
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 pub const LIST_WIDTH: f32 = 340.0;
@@ -1712,6 +1713,23 @@ impl MailView {
         changed
     }
 
+    fn apply_rules_to_chosen(&mut self) {
+        let mut accounts: Vec<(AccountId, Vec<MessageId>)> = Vec::new();
+        for summary in self.chosen() {
+            match accounts
+                .iter_mut()
+                .find(|(account, _)| *account == summary.account)
+            {
+                Some((_, ids)) => ids.push(summary.id),
+                None => accounts.push((summary.account, vec![summary.id])),
+            }
+        }
+        for (account, ids) in accounts {
+            self.apply_rules(account, ids);
+        }
+        self.reload();
+    }
+
     fn apply_rules(&mut self, account: AccountId, mut ids: Vec<MessageId>) -> Vec<MessageId> {
         for rule in self.store.rules().unwrap_or_default() {
             if ids.is_empty() {
@@ -2657,6 +2675,7 @@ impl MailView {
             "toggle-read" => self.toggle_read(),
             "toggle-flag" => self.toggle_flag(),
             "mark-all-read" => self.mark_all_read(),
+            "apply-rules" => self.apply_rules_to_chosen(),
             "bcc-field" => {
                 self.settings.bcc_field = !self.settings.bcc_field;
                 self.keep_settings();
