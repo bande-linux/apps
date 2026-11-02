@@ -67,18 +67,19 @@ jobs:
           fetch-depth: 0
       - name: Trust the checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.app }}-${{ matrix.arch }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install the toolchain and packages
         run: |
           test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
           ci/setup.sh install "${{ matrix.app }}"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.app }}-${{ matrix.arch }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build and check
-        run: PATH="$HOME/.cargo/bin:$PATH" ci/build-app.sh "${{ matrix.app }}" out
+        run: ci/build-app.sh "${{ matrix.app }}" out
       - name: Install and smoke-test
-        run: PATH="$HOME/.cargo/bin:$PATH" ci/smoke.sh --install out/*.deb
+        run: ci/smoke.sh --install out/*.deb
       - uses: actions/upload-artifact@v7
         with:
           name: app-${{ matrix.app }}-${{ matrix.arch }}
