@@ -115,6 +115,8 @@ pub struct Pane<'a> {
 pub struct TabBar<'a> {
     pub titles: &'a [String],
     pub bells: &'a [bool],
+    pub offsets: &'a [f32],
+    pub lifted: Option<usize>,
     pub active: usize,
     pub hover: Option<TabTarget>,
     pub focused: bool,
@@ -318,7 +320,15 @@ impl Painter {
         let palette = self.theme.chrome;
         let layout = TabBarLayout::new(bar.titles.len(), width, bar.leading);
         let mut items = Vec::new();
-        for (index, (tab, title)) in layout.tabs.iter().zip(bar.titles).enumerate() {
+        let order = (0..layout.tabs.len())
+            .filter(|index| Some(*index) != bar.lifted)
+            .chain(bar.lifted);
+        for index in order {
+            let (Some(slot), Some(title)) = (layout.tabs.get(index), bar.titles.get(index)) else {
+                continue;
+            };
+            let offset = bar.offsets.get(index).copied().unwrap_or(0.0);
+            let tab = &Rect::new(slot.x + offset, slot.y, slot.width, slot.height);
             let active = index == bar.active;
             let hovered = matches!(
                 bar.hover,
