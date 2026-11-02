@@ -29,7 +29,7 @@ use crate::net::Network;
 use crate::secrets::Keyring;
 use crate::settings::MailSettings;
 use crate::setup::{Outcome, Request as SetupRequest, check};
-use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, Store, Summary};
+use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary};
 use crate::ui::format::full_date;
 use crate::ui::reader::{Layout, Reading, Remote};
 use crate::ui::setup_sheet::{AccountSheet, Action, Field, Mode, Shared, SheetState};
@@ -1321,9 +1321,10 @@ impl MailView {
                         self.put_back(moves);
                     }
                 }
-                MailEvent::Arrived(_, ids) => {
+                MailEvent::Arrived(account, ids) => {
                     stale = true;
-                    self.notify(&ids);
+                    let left = self.apply_rules(account, ids);
+                    self.notify(&left);
                 }
                 MailEvent::Body(id) => {
                     if self.selected == Some(id)
@@ -1372,6 +1373,39 @@ impl MailView {
             self.reload();
         }
         changed
+    }
+
+    fn apply_rules(&mut self, account: AccountId, mut ids: Vec<MessageId>) -> Vec<MessageId> {
+        for rule in self.store.rules().unwrap_or_default() {
+            if ids.is_empty() {
+                break;
+            }
+            let matched = self.store.matching(&ids, &rule).unwrap_or_default();
+            if matched.is_empty() {
+                continue;
+            }
+            match rule.action {
+                RuleAction::Move(target) => {
+                    let Some(target) = self
+                        .mailbox(target)
+                        .filter(|target| target.account == account)
+                    else {
+                        continue;
+                    };
+                    match self.store.move_messages(&matched, &target) {
+                        Ok(accounts) => self.flush(&accounts),
+                        Err(error) => tracing::warn!("cannot apply a rule: {error}"),
+                    }
+                    ids.retain(|id| !matched.contains(id));
+                }
+                RuleAction::Flag => self.set_flag_on(&matched, Flag::Flagged, true),
+                RuleAction::Read => {
+                    self.set_flag_on(&matched, Flag::Seen, true);
+                    ids.retain(|id| !matched.contains(id));
+                }
+            }
+        }
+        ids
     }
 
     fn notify(&mut self, ids: &[MessageId]) {

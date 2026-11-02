@@ -25,7 +25,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 | Composing | Quote original, default send account | Have: quote toggle, "Send new messages from" |
 | Composing | Check spelling | Missing (no desktop spell service) |
 | Signatures | Per-account signature | Have: in Accounts, added to new messages, replies and forwards above the quote, swapped when From changes |
-| Rules | Filters | Missing |
+| Rules | Filters | Have: From/To/Subject contains → move, flag or mark read, on new unread Inbox mail while Mail runs; no all-of/any-of conditions or editing in place |
 
 ## Core features
 
@@ -49,7 +49,7 @@ today; the ranked list at the end is what is left. Delete this plan when the lis
 2. Conversations: show the whole conversation in the reader and include replies from Sent; group by subject when References are missing.
 3. OAuth2 for Gmail and Microsoft (owner decision: registered client IDs); Outlook.com refuses passwords.
 4. Sort order, flag colours (Mark All as Read is in the Mailbox menu).
-5. Rules (move/flag/mark by sender, subject, account).
+5. Rules with several conditions, editing a rule, running rules on a mailbox by hand.
 6. Rich text compose and spelling (both need desktop services first).
 7. A Password field in Settings → Accounts.
 8. Per-sender "always load remote content"; a privacy proxy for remote pictures.
