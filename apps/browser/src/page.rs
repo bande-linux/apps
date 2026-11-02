@@ -8,6 +8,7 @@ use bande_toolkit::ui::{
 use bande_toolkit::{
     Color, GlyphRun, Item, Picture, Point, PositionedGlyph, Rect, Shape, TextAlign, TextStyle,
 };
+use web_content::Viewport;
 use web_net::Url;
 use web_paint::DisplayList;
 
@@ -56,6 +57,7 @@ pub(crate) struct PageView {
     jump: Option<f32>,
     pressed: Option<Point>,
     followed: Option<Url>,
+    hovered: Option<(f32, f32)>,
     shown_offset: Cell<f32>,
 }
 
@@ -74,6 +76,7 @@ impl PageView {
             jump: None,
             pressed: None,
             followed: None,
+            hovered: None,
             shown_offset: Cell::new(0.0),
         }
     }
@@ -105,8 +108,28 @@ impl PageView {
         self.shown_offset.get()
     }
 
-    pub(crate) fn width(&self) -> f32 {
-        self.frame.width
+    pub(crate) fn viewport(&self) -> Option<Viewport> {
+        (self.frame.width > 0.0 && self.frame.height > 0.0).then_some(Viewport {
+            width: self.frame.width,
+            height: self.frame.height,
+        })
+    }
+
+    pub(crate) fn take_hovered(&mut self) -> Option<(f32, f32)> {
+        self.hovered.take()
+    }
+
+    fn hover(&mut self, point: Option<Point>) {
+        if !self.has_document() {
+            return;
+        }
+        self.hovered = Some(match point {
+            Some(point) => (
+                point.x - self.frame.x,
+                point.y - self.frame.y + self.shown_offset.get(),
+            ),
+            None => (-1.0, -1.0),
+        });
     }
 
     pub(crate) fn take_followed(&mut self) -> Option<Url> {
@@ -187,6 +210,14 @@ impl PageView {
 
     fn click(&mut self, event: &Event) -> bool {
         match event {
+            Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
+                self.hover(Some(pointer.position));
+                false
+            }
+            Event::PointerLeave => {
+                self.hover(None);
+                false
+            }
             Event::PointerDown(pointer) if pointer.button == PointerButton::Primary => {
                 self.pressed = Some(pointer.position);
                 false

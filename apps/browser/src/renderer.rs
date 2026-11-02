@@ -6,7 +6,7 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
 
 use rustix::event::{EventfdFlags, PollFd, PollFlags, eventfd, poll};
-use web_content::{Fonts, Page};
+use web_content::{Fonts, Page, Viewport};
 use web_net::{FetchError, FetchId, Fetcher, Response, Url};
 use web_paint::{DisplayList, Rect};
 
@@ -21,11 +21,17 @@ pub(crate) enum Command {
         view: ViewId,
         load: LoadId,
         url: Url,
-        width: f32,
+        viewport: Viewport,
     },
     Resize {
         view: ViewId,
-        width: f32,
+        viewport: Viewport,
+    },
+    Hover {
+        view: ViewId,
+        load: LoadId,
+        x: f32,
+        y: f32,
     },
     Fragment {
         view: ViewId,
@@ -164,12 +170,48 @@ fn clear(fd: &OwnedFd) {
     let _ = rustix::io::read(fd, &mut count);
 }
 
+const MAX_STYLESHEETS: usize = 64;
+
+struct Shown {
+    load: LoadId,
+    url: Url,
+    page: Page,
+}
+
+struct Styling {
+    load: LoadId,
+    url: Url,
+    page: Page,
+    fetches: Vec<(FetchId, String)>,
+    attempted: Vec<String>,
+}
+
 #[derive(Default)]
 struct Tab {
-    shown: Option<(LoadId, Url, Page)>,
+    shown: Option<Shown>,
     pending: Option<(LoadId, FetchId, Url)>,
-    width: f32,
+    styling: Option<Styling>,
+    viewport: Option<Viewport>,
     resized: bool,
+    hover: Option<(LoadId, f32, f32)>,
+}
+
+impl Tab {
+    fn fetches(&self) -> impl Iterator<Item = FetchId> + '_ {
+        let document = self.pending.as_ref().map(|(_, fetch, _)| *fetch);
+        let sheets = self
+            .styling
+            .iter()
+            .flat_map(|styling| styling.fetches.iter().map(|(fetch, _)| *fetch));
+        document.into_iter().chain(sheets)
+    }
+
+    fn set_viewport(&mut self, viewport: Viewport) {
+        self.resized |= self
+            .viewport
+            .is_none_or(|current| current.width != viewport.width);
+        self.viewport = Some(viewport);
+    }
 }
 
 struct Thread {
@@ -216,63 +258,86 @@ impl Thread {
         }
     }
 
+    fn cancel(&mut self, view: ViewId) {
+        let Some(tab) = self.tabs.get_mut(&view) else {
+            return;
+        };
+        let fetches: Vec<FetchId> = tab.fetches().collect();
+        tab.pending = None;
+        tab.styling = None;
+        for fetch in fetches {
+            self.fetcher.cancel(fetch);
+        }
+    }
+
     fn command(&mut self, command: Command) {
         match command {
             Command::Load {
                 view,
                 load,
                 url,
-                width,
+                viewport,
             } => {
+                self.cancel(view);
                 let fetch = self.fetcher.fetch(url.clone());
                 let tab = self.tabs.entry(view).or_default();
-                if let Some((_, previous, _)) = tab.pending.replace((load, fetch, url)) {
-                    self.fetcher.cancel(previous);
-                }
-                tab.resized |= tab.width != width;
-                tab.width = width;
+                tab.pending = Some((load, fetch, url));
+                tab.set_viewport(viewport);
             }
-            Command::Resize { view, width } => {
-                let tab = self.tabs.entry(view).or_default();
-                tab.resized |= tab.width != width;
-                tab.width = width;
+            Command::Resize { view, viewport } => {
+                self.tabs.entry(view).or_default().set_viewport(viewport);
+            }
+            Command::Hover { view, load, x, y } => {
+                if let Some(tab) = self.tabs.get_mut(&view) {
+                    tab.hover = Some((load, x, y));
+                }
             }
             Command::Fragment { view, load, name } => {
                 let y = self
                     .tabs
                     .get(&view)
                     .and_then(|tab| tab.shown.as_ref())
-                    .filter(|(shown, _, _)| *shown == load)
-                    .map(|(_, _, page)| page.fragment_y(&name).unwrap_or(0.0));
+                    .filter(|shown| shown.load == load)
+                    .map(|shown| shown.page.fragment_y(&name).unwrap_or(0.0));
                 if let Some(y) = y {
                     self.send(view, load, Outcome::Scroll(y));
                 }
             }
-            Command::Stop { view } => {
-                if let Some((_, fetch, _)) =
-                    self.tabs.get_mut(&view).and_then(|tab| tab.pending.take())
-                {
-                    self.fetcher.cancel(fetch);
-                }
-            }
+            Command::Stop { view } => self.cancel(view),
             Command::Close { view } => {
-                if let Some((_, fetch, _)) = self.tabs.remove(&view).and_then(|tab| tab.pending) {
-                    self.fetcher.cancel(fetch);
-                }
+                self.cancel(view);
+                self.tabs.remove(&view);
             }
             Command::Quit => {}
         }
     }
 
     fn fetched(&mut self, fetch: FetchId, result: Result<Response, FetchError>, fonts: &mut Fonts) {
-        let Some((view, tab)) = self.tabs.iter_mut().find(|(_, tab)| {
-            tab.pending
-                .as_ref()
-                .is_some_and(|(_, pending, _)| *pending == fetch)
-        }) else {
+        let Some(view) = self
+            .tabs
+            .iter()
+            .find(|(_, tab)| tab.fetches().any(|pending| pending == fetch))
+            .map(|(view, _)| *view)
+        else {
             return;
         };
-        let view = *view;
+        let Some(tab) = self.tabs.get_mut(&view) else {
+            return;
+        };
+        if let Some(styling) = &mut tab.styling
+            && let Some(index) = styling
+                .fetches
+                .iter()
+                .position(|(pending, _)| *pending == fetch)
+        {
+            let (_, href) = styling.fetches.swap_remove(index);
+            let bytes = match &result {
+                Ok(response) if (200..300).contains(&response.status) => response.body.as_slice(),
+                _ => &[],
+            };
+            styling.page.add_stylesheet(&href, bytes, fonts);
+            return self.style(view);
+        }
         let Some((load, _, requested)) = tab.pending.take() else {
             return;
         };
@@ -302,31 +367,90 @@ impl Thread {
             }
         };
         let document = web_content::parse_with_charset(&response.body, charset);
-        let mut page = Page::new(document, tab.width.max(1.0), fonts);
+        let viewport = tab.viewport.unwrap_or(Viewport {
+            width: 1.0,
+            height: 1.0,
+        });
         tab.resized = false;
-        let url = response.url;
-        let links = Arc::new(links(&page, &url));
+        tab.styling = Some(Styling {
+            load,
+            url: response.url,
+            page: Page::with_viewport(document, viewport, fonts),
+            fetches: Vec::new(),
+            attempted: Vec::new(),
+        });
+        self.style(view);
+    }
+
+    fn style(&mut self, view: ViewId) {
+        let Some(styling) = self
+            .tabs
+            .get_mut(&view)
+            .and_then(|tab| tab.styling.as_mut())
+        else {
+            return;
+        };
+        for href in styling.page.stylesheet_links() {
+            if styling.attempted.contains(&href) || styling.attempted.len() >= MAX_STYLESHEETS {
+                continue;
+            }
+            let Some(url) = styling
+                .url
+                .join(href.trim())
+                .ok()
+                .filter(|url| matches!(url.scheme(), "http" | "https"))
+            else {
+                continue;
+            };
+            styling.attempted.push(href.clone());
+            styling.fetches.push((self.fetcher.fetch(url), href));
+        }
+        if !styling.fetches.is_empty() {
+            return;
+        }
+        let Some(tab) = self.tabs.get_mut(&view) else {
+            return;
+        };
+        let Some(Styling {
+            load, url, page, ..
+        }) = tab.styling.take()
+        else {
+            return;
+        };
         let frame = Frame {
             title: page.title().filter(|title| !title.is_empty()),
-            list: Arc::new(take_list(&mut page)),
-            links,
+            list: Arc::new(page.display_list.clone()),
+            links: Arc::new(links(&page, &url)),
             fragment: url.fragment().and_then(|name| page.fragment_y(name)),
             url: url.clone(),
         };
-        tab.shown = Some((load, url, page));
+        tab.shown = Some(Shown { load, url, page });
         self.send(view, load, Outcome::Frame(frame));
     }
 
     fn relayout(&mut self, fonts: &mut Fonts) {
         let mut relaid = Vec::new();
         for (view, tab) in &mut self.tabs {
-            if !std::mem::take(&mut tab.resized) {
+            let resized = std::mem::take(&mut tab.resized);
+            let hover = tab.hover.take();
+            let width = tab.viewport.map(|viewport| viewport.width.max(1.0));
+            let Some(shown) = &mut tab.shown else {
                 continue;
+            };
+            let mut changed = false;
+            if resized && let Some(width) = width {
+                shown.page.resize(width, fonts);
+                changed = true;
             }
-            if let Some((load, url, page)) = &mut tab.shown {
-                page.resize(tab.width.max(1.0), fonts);
-                let links = Arc::new(links(page, url));
-                relaid.push((*view, *load, Arc::new(take_list(page)), links));
+            if let Some((load, x, y)) = hover
+                && load == shown.load
+            {
+                changed |= shown.page.hover_at(x, y, fonts);
+            }
+            if changed {
+                let list = Arc::new(shown.page.display_list.clone());
+                let links = Arc::new(links(&shown.page, &shown.url));
+                relaid.push((*view, shown.load, list, links));
             }
         }
         for (view, load, list, links) in relaid {
@@ -347,19 +471,6 @@ impl Thread {
             signal(&self.ready);
         }
     }
-}
-
-fn take_list(page: &mut Page) -> DisplayList {
-    let list = &page.display_list;
-    let emptied = DisplayList {
-        width: list.width,
-        height: list.height,
-        background: list.background,
-        items: Vec::new(),
-        glyphs: Vec::new(),
-        fonts: Vec::new(),
-    };
-    std::mem::replace(&mut page.display_list, emptied)
 }
 
 fn links(page: &Page, base: &Url) -> Links {

@@ -16,6 +16,7 @@ use web_net::Url;
 use crate::page::{Content, PageView};
 use crate::renderer::{Command, Link, LoadId, Outcome, Update, ViewId};
 use crate::{L10N, address};
+use web_content::Viewport;
 
 const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const SIDE: f32 = 12.0;
@@ -24,7 +25,10 @@ const SYMBOL_BUTTON: f32 = 28.0;
 const SYMBOL_PIXELS: u32 = 16;
 const ADDRESS_MIN: f32 = 240.0;
 const ADDRESS_MAX: f32 = 680.0;
-const FIRST_WIDTH: f32 = 1088.0;
+const FIRST_VIEWPORT: Viewport = Viewport {
+    width: 1088.0,
+    height: 706.0,
+};
 
 const BACK: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
 const FORWARD: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="m6 3.5 4.5 4.5L6 12.5" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
@@ -94,7 +98,7 @@ pub(crate) struct BrowserView {
     pending: Option<Pending>,
     entries: Vec<Entry>,
     current: Option<usize>,
-    sent_width: f32,
+    sent_viewport: Option<Viewport>,
     title: Option<String>,
     full_screen: bool,
 }
@@ -148,7 +152,7 @@ impl BrowserView {
             pending: None,
             entries: Vec::new(),
             current: None,
-            sent_width: 0.0,
+            sent_viewport: None,
             title: None,
             full_screen: false,
         };
@@ -202,16 +206,16 @@ impl BrowserView {
         self.save_scroll();
         self.next_load += 1;
         let load = LoadId(self.next_load);
-        let width = self
-            .with_page(|page| page.width())
-            .filter(|width| *width > 0.0)
-            .unwrap_or(FIRST_WIDTH);
-        self.sent_width = width;
+        let viewport = self
+            .with_page(|page| page.viewport())
+            .flatten()
+            .unwrap_or(FIRST_VIEWPORT);
+        self.sent_viewport = Some(viewport);
         self.renderer.send(Command::Load {
             view: self.id,
             load,
             url: url.clone(),
-            width,
+            viewport,
         });
         self.set_address(url.as_str());
         if !self.with_page(|page| page.has_document()).unwrap_or(false) {
@@ -450,6 +454,15 @@ impl BrowserView {
         if let Some(url) = self.with_page(PageView::take_followed).flatten() {
             self.follow(url);
         }
+        let hovered = self.with_page(PageView::take_hovered).flatten();
+        if let (Some((x, y)), Some(load)) = (hovered, self.shown) {
+            self.renderer.send(Command::Hover {
+                view: self.id,
+                load,
+                x,
+                y,
+            });
+        }
     }
 
     fn drain(&mut self) {
@@ -541,7 +554,7 @@ impl BrowserView {
         self.with_page(|page| page.set_radius(radius));
         let palette = self.ui.context().palette;
         let (controls, dialog) = self.ui.paint_layers(width, height);
-        self.follow_width();
+        self.follow_viewport();
         let mut items = vec![Item::Fill {
             shape: Shape::rounded(sheet, radius),
             paint: palette.sheet.into(),
@@ -556,14 +569,16 @@ impl BrowserView {
         }
     }
 
-    fn follow_width(&mut self) {
-        let width = self.with_page(|page| page.width()).unwrap_or(0.0);
-        if width > 0.0 && width != self.sent_width {
-            self.sent_width = width;
-            self.renderer.send(Command::Resize {
-                view: self.id,
-                width,
-            });
+    fn follow_viewport(&mut self) {
+        let viewport = self.with_page(|page| page.viewport()).flatten();
+        if viewport.is_some() && viewport != self.sent_viewport {
+            self.sent_viewport = viewport;
+            if let Some(viewport) = viewport {
+                self.renderer.send(Command::Resize {
+                    view: self.id,
+                    viewport,
+                });
+            }
         }
     }
 
