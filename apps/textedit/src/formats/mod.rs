@@ -1,7 +1,10 @@
+pub mod docx;
 pub mod html;
 pub mod markdown;
+pub mod odt;
 pub mod rtf;
 
+use std::io::{Read, Seek};
 use std::sync::Arc;
 
 use bande_toolkit::Color;
@@ -11,6 +14,51 @@ pub const MONOSPACE: &str = "JetBrains Mono";
 pub const HEADINGS: [f32; 6] = [26.0, 22.0, 18.0, 16.0, 15.0, 14.0];
 pub const LINK: Color = Color::hex(0x0066D9);
 pub const MAX_NESTING: usize = 64;
+const MAX_PART_BYTES: u64 = 64 << 20;
+const MAX_XML_NODES: u32 = 4_000_000;
+
+pub struct Opened {
+    pub rich: RichText,
+    pub lossy: bool,
+}
+
+pub fn options<'input>() -> roxmltree::ParsingOptions<'input> {
+    roxmltree::ParsingOptions {
+        allow_dtd: false,
+        nodes_limit: MAX_XML_NODES,
+        ..roxmltree::ParsingOptions::default()
+    }
+}
+
+pub fn part(archive: &mut zip::ZipArchive<impl Read + Seek>, name: &str) -> Result<String, String> {
+    let file = archive.by_name(name).map_err(|error| error.to_string())?;
+    if file.size() > MAX_PART_BYTES {
+        return Err(format!("{name} is too large"));
+    }
+    let mut text = String::new();
+    file.take(MAX_PART_BYTES + 1)
+        .read_to_string(&mut text)
+        .map_err(|error| error.to_string())?;
+    match text.len() as u64 > MAX_PART_BYTES {
+        true => Err(format!("{name} is too large")),
+        false => Ok(text),
+    }
+}
+
+pub fn xml(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for character in text.chars() {
+        match character {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            character if (character as u32) < 0x20 && character != '\t' => {}
+            character => escaped.push(character),
+        }
+    }
+    escaped
+}
 
 pub fn heading(level: usize) -> TextAttributes {
     TextAttributes {
@@ -252,5 +300,12 @@ mod tests {
         );
         assert_eq!(html.paragraphs[3].list, Some(ListMarker::Number));
         assert_eq!(html::read(&html::write(&html, "T")), html);
+        for office in [docx::write(&html), odt::write(&html)] {
+            let bytes = office.unwrap_or_default();
+            let read = docx::read(&bytes)
+                .or_else(|_| odt::read(&bytes))
+                .map(|opened| opened.rich);
+            assert_eq!(read.ok(), Some(html.clone()));
+        }
     }
 }

@@ -78,6 +78,7 @@ enum Asking {
     GoToLine,
     Failed,
     MakePlain,
+    Lossy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,6 +154,7 @@ pub struct DocumentView {
     pub settings: Settings,
     pub format: Format,
     pub rich: bool,
+    lossy: bool,
     pub loading: bool,
     saved: Option<u64>,
     format_changed: bool,
@@ -224,6 +226,7 @@ impl DocumentView {
             settings,
             format,
             rich: format.is_rich(),
+            lossy: false,
             loading: false,
             saved: None,
             format_changed: false,
@@ -404,10 +407,12 @@ impl DocumentView {
             encoding,
             line_ending,
             damaged,
+            lossy,
             from_disk,
             words,
             characters,
         } = loaded;
+        self.lossy = lossy && from_disk;
         self.loading = false;
         if from_disk {
             self.encoding = encoding;
@@ -534,6 +539,14 @@ impl DocumentView {
 
     pub fn save(&mut self, close: bool) {
         self.close_after_save = close;
+        if self.lossy && self.path.is_some() {
+            return self.ask(
+                Asking::Lossy,
+                &L10N.tr_args("lossy-title", [("name", self.name().into())]),
+                &L10N.tr("lossy-message"),
+                &[("save-copy", true), ("cancel", false)],
+            );
+        }
         match self.path.clone() {
             Some(path) => self.save_to(path),
             None => self.requests.push(Request::SaveAs),
@@ -583,6 +596,7 @@ impl DocumentView {
         self.saving = false;
         match outcome {
             Ok(()) => {
+                self.lossy &= self.path.as_ref() == Some(&path);
                 self.path = Some(path.clone());
                 self.saved = Some(revision);
                 self.format_changed = false;
@@ -691,6 +705,12 @@ impl DocumentView {
             }
             (Some(Asking::Failed), _) if self.unloaded => self.requests.push(Request::Close),
             (Some(Asking::MakePlain), "make-plain-confirm") => self.make_plain(true),
+            (Some(Asking::Lossy), "save-copy") => {
+                self.lossy = false;
+                self.retarget(Format::Rtf);
+                self.changed_format();
+                self.requests.push(Request::SaveAs);
+            }
             _ => self.close_after_save = false,
         }
     }

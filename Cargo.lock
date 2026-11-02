@@ -892,12 +892,14 @@ dependencies = [
  "encoding_rs",
  "html5ever",
  "regex",
+ "roxmltree 0.21.2",
  "rustix",
  "serde",
  "serde_json",
  "tempfile",
  "tracing",
  "zbus",
+ "zip",
 ]
 
 [[package]]

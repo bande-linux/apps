@@ -5,7 +5,7 @@ use encoding_rs::Encoding;
 
 use crate::encoding::{Decoded, LineEnding, TextEncoding, decode};
 use crate::find::words;
-use crate::formats::{html, markdown, rtf};
+use crate::formats::{docx, html, markdown, odt, rtf};
 use crate::worker::WriteError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,10 +14,19 @@ pub enum Format {
     Rtf,
     Markdown,
     Html,
+    Docx,
+    Odt,
 }
 
 impl Format {
-    const ALL: [Self; 4] = [Self::Plain, Self::Rtf, Self::Markdown, Self::Html];
+    const ALL: [Self; 6] = [
+        Self::Plain,
+        Self::Rtf,
+        Self::Markdown,
+        Self::Html,
+        Self::Docx,
+        Self::Odt,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -25,6 +34,8 @@ impl Format {
             Self::Rtf => "rtf",
             Self::Markdown => "markdown",
             Self::Html => "html",
+            Self::Docx => "docx",
+            Self::Odt => "odt",
         }
     }
 
@@ -38,6 +49,8 @@ impl Format {
             Self::Rtf => "rtf",
             Self::Markdown => "md",
             Self::Html => "html",
+            Self::Docx => "docx",
+            Self::Odt => "odt",
         }
     }
 
@@ -45,6 +58,8 @@ impl Format {
         let extension = path.extension()?.to_str()?.to_ascii_lowercase();
         Some(match extension.as_str() {
             "rtf" => Self::Rtf,
+            "docx" | "docm" | "dotx" => Self::Docx,
+            "odt" | "ott" => Self::Odt,
             "md" | "markdown" | "mdown" | "mkd" => Self::Markdown,
             "html" | "htm" | "xhtml" => Self::Html,
             _ => return None,
@@ -54,6 +69,7 @@ impl Format {
     pub fn of(path: &Path, bytes: &[u8]) -> Self {
         match Self::by_extension(path) {
             _ if bytes.starts_with(b"{\\rtf") => Self::Rtf,
+            Some(Self::Docx | Self::Odt) if !bytes.starts_with(b"PK") => Self::Plain,
             Some(format) => format,
             None => Self::Plain,
         }
@@ -75,6 +91,7 @@ pub struct Loaded {
     pub encoding: TextEncoding,
     pub line_ending: LineEnding,
     pub damaged: bool,
+    pub lossy: bool,
     pub from_disk: bool,
     pub words: usize,
     pub characters: usize,
@@ -92,6 +109,7 @@ impl Loaded {
             encoding: decoded.encoding,
             line_ending: decoded.line_ending,
             damaged: decoded.damaged,
+            lossy: false,
             from_disk: true,
         }
     }
@@ -106,14 +124,17 @@ pub fn open(
     read(bytes, format, chosen)
 }
 
-fn binary(rich: RichText, format: Format) -> Loaded {
+fn binary(rich: RichText, format: Format, lossy: bool) -> Loaded {
     let decoded = Decoded {
         text: String::new(),
         encoding: TextEncoding::UTF8,
         line_ending: LineEnding::Lf,
         damaged: false,
     };
-    Loaded::new(decoded, Some(rich), format)
+    Loaded {
+        lossy,
+        ..Loaded::new(decoded, Some(rich), format)
+    }
 }
 
 pub fn read(
@@ -122,7 +143,15 @@ pub fn read(
     chosen: Option<&'static Encoding>,
 ) -> Result<Loaded, String> {
     Ok(match format {
-        Format::Rtf => binary(rtf::read(&bytes), format),
+        Format::Rtf => binary(rtf::read(&bytes), format, false),
+        Format::Docx => {
+            let opened = docx::read(&bytes)?;
+            binary(opened.rich, format, opened.lossy)
+        }
+        Format::Odt => {
+            let opened = odt::read(&bytes)?;
+            binary(opened.rich, format, opened.lossy)
+        }
         Format::Markdown => {
             let decoded = decode(bytes, chosen);
             let rich = markdown::read(&decoded.text);
@@ -152,6 +181,8 @@ pub fn encode(
     let text = match (content, format) {
         (Content::Plain(text), _) => text.to_string(),
         (Content::Rich(rich), Format::Rtf) => return Ok(rtf::write(rich).into_bytes()),
+        (Content::Rich(rich), Format::Docx) => return docx::write(rich).map_err(WriteError::Io),
+        (Content::Rich(rich), Format::Odt) => return odt::write(rich).map_err(WriteError::Io),
         (Content::Rich(rich), Format::Html) => {
             return TextEncoding::UTF8
                 .encode(&html::write(rich, title), line_ending)

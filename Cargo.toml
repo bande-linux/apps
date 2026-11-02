@@ -38,6 +38,7 @@ tempfile = "=3.27.0"
 tracing = "=0.1.44"
 ureq = { version = "=3.5.0", features = ["platform-verifier"] }
 zbus = "=5.19.0"
+zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
 zeroize = "=1.8.1"
 bande-keyring = { path = "libs/keyring" }
 bande-vm = { path = "libs/vm" }
