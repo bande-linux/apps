@@ -939,10 +939,13 @@ impl Program for CalendarApp {
         let settings_watch = settings_folder()
             .as_deref()
             .and_then(|folder| SettingsWatch::start(folder, CalendarSettings::FILE));
-        let main = show(cx, &title, Pane(view))?;
+        let (main, parked) = match cx.launched_in_background() {
+            true => (None, Some(Pane(view))),
+            false => (Some(show(cx, &title, Pane(view))?), None),
+        };
         let mut app = Self {
-            main: Some(main),
-            parked: None,
+            main,
+            parked,
             worker,
             alarm: WallAlarm::new()?,
             changes,
@@ -956,7 +959,7 @@ impl Program for CalendarApp {
             synced: None,
             retry: HashMap::new(),
             asked: HashSet::new(),
-            next_clock: Some(next_minute()),
+            next_clock: main.map(|_| next_minute()),
             alert_at: Timestamp::now(),
             alerts_checked: Timestamp::now(),
             fired: HashMap::new(),
@@ -969,7 +972,7 @@ impl Program for CalendarApp {
             errors: Vec::new(),
         };
         if new_event {
-            app.command(cx, Some(main), NEW_EVENT);
+            app.command(cx, main, NEW_EVENT);
         }
         Ok(app)
     }
@@ -1133,6 +1136,9 @@ impl Program for CalendarApp {
         self.with_view(cx, |app, view| app.wake(view));
         self.follow_clock(cx);
         self.settle(cx);
+    }
+    fn runs_in_background() -> bool {
+        load_settings().alerts_when_closed
     }
 }
 

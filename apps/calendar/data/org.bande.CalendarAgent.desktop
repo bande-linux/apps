@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Calendar Alerts
+Comment=Shows Calendar's event alerts when Calendar is closed
+Exec=bande-calendar --background
+TryExec=bande-calendar
+Icon=org.bande.Calendar
+NoDisplay=true
+OnlyShowIn=Bande;

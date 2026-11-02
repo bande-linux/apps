@@ -125,6 +125,7 @@ settings-week-numbers = Show week numbers
 settings-alerts = Default Alerts
 settings-event-alert = Events:
 settings-all-day-alert = All-day events:
+settings-alerts-when-closed = Show alerts when Calendar is closed
 settings-accounts = Accounts
 settings-refresh = Refresh calendars:
 settings-subscription-refresh = Refresh subscriptions:

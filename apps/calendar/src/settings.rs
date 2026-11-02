@@ -36,6 +36,7 @@ pub struct CalendarSettings {
     pub all_day_alert: Alert,
     pub refresh_minutes: u32,
     pub subscription_minutes: u32,
+    pub alerts_when_closed: bool,
 }
 
 impl Default for CalendarSettings {
@@ -52,6 +53,7 @@ impl Default for CalendarSettings {
             all_day_alert: Alert::None,
             refresh_minutes: 5,
             subscription_minutes: 60,
+            alerts_when_closed: true,
         }
     }
 }
@@ -163,6 +165,10 @@ impl Stored for CalendarSettings {
                     settings.subscription_minutes = parse_choice(value, &SUBSCRIPTION_MINUTES)
                         .unwrap_or(settings.subscription_minutes);
                 }
+                "alerts-when-closed" => {
+                    settings.alerts_when_closed =
+                        flag(value).unwrap_or(settings.alerts_when_closed);
+                }
                 _ => {}
             }
         }
@@ -176,7 +182,7 @@ impl Stored for CalendarSettings {
         format!(
             "default-calendar = {}\nstart-week-on = {}\nday-starts = {}\nday-ends = {}\nhours-shown = {}\n\
              week-numbers = {}\ntime-zone-support = {}\nevent-alert = {}\nall-day-alert = {}\nrefresh-minutes = {}\n\
-             subscription-minutes = {}\n",
+             subscription-minutes = {}\nalerts-when-closed = {}\n",
             self.default_calendar,
             self.first_weekday.map_or("default", weekday_name),
             self.day_start,
@@ -188,6 +194,7 @@ impl Stored for CalendarSettings {
             alert_text(self.all_day_alert),
             self.refresh_minutes,
             self.subscription_minutes,
+            self.alerts_when_closed,
         )
     }
 }
