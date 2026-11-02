@@ -34,4 +34,4 @@ this list.
 | `apps/disks/tests/safety.rs` `the_startup_disk_and_macos_stay_untouchable_while_a_usb_stick_is_erased_and_ejected` | Security boundary: on an Apple Silicon disk, the startup disk, the partition holding `/` and the macOS containers offer no Erase, Restore or Eject and their commands do nothing; a spare partition there asks with its device, size and a startup-disk warning; erasing a USB stick names it with its device and size and queues exactly one erase, nothing else while it runs. |
 
 `ci/gate.sh` runs all of them on a private session bus. `ci/check-app.sh` and `ci/smoke.sh` check
-packaging statically and on the installed package.
+packaging statically and on the unpacked package (installed too, in CI).

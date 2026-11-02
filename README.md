@@ -44,9 +44,13 @@ and the Window menu names the main window (Message Viewer, Calendar, Activity Mo
 | `template/` | the starting point for a new app: a real, gated `bande-app` app, never published |
 | `rust-toolchain.toml` | the Rust toolchain for every app, the same as the desktop's |
 | `ci/` | the build, the same in CI and locally |
-| `ci/gate.sh [app...]` | the local merge gate: `ci/check-app.sh`, fmt, clippy `-D warnings` and tests, `--locked`, one `target/` (default: every app, the libs and the template) |
+| `ci/gate.sh [app...]` | the local merge gate: CI's own `ci/build-app.sh` on each app in the `gate` profile, `ci/check.sh` on the libs and the template, one `target/` (default: every app, the libs and the template) |
+| `ci/setup.sh install\|check <app>...` | the toolchain, `cargo-deb` and Debian packages a build needs: CI installs them, the gate fails if one is missing |
+| `ci/build-app.sh <app> <out> [profile]` | one app's build, the same in CI and the gate: `ci/check-app.sh`, `ci/version.sh`, `ci/check.sh`, the binaries, the `.deb` and `ci/smoke.sh` on it |
+| `ci/check.sh <package>` | fmt, clippy `--all-targets -D warnings` and the tests of one package, `--locked`, on a private session bus with software Vulkan |
 | `ci/check-app.sh <dir>...` | static checks that an app is a `bande-app` app packaged like the others (ids, `.desktop`, metainfo, fonts); fails on any problem |
-| `ci/smoke.sh <package>` | checks an installed package: `--version`, its files, `desktop-file-validate`, `appstreamcli validate` |
+| `ci/smoke.sh [--install] <deb>` | checks a package unpacked: `desktop-file-validate`, `appstreamcli validate`, `--version`, apt resolves its dependencies; `--install` (CI) then installs it and checks its files and the app's own `smoke.sh` |
+| `ci/dry-run.sh <app>` | dispatches the release build of `<app>` on `main` without publishing it and waits for it |
 | `ci/new-app.sh <dir> <Id> "<Name>"` | a new app in `apps/<dir>` from the template |
 | `ci/release-all.sh` | raises every app's patch version and prints the tags that release them, for a bump that changes `bande-app` behaviour |
 | `ci/bump-desktop.sh [REV]` | pins every app to one `bande-linux/desktop` commit (default: main) and runs the gate |
@@ -67,22 +71,40 @@ table above, and `default-apps` for a default app. Check that it compiles
 
 ## How it's built and published
 
-CI runs only for releases. To release an app, set its `version` in `apps/<name>/Cargo.toml`,
-merge to `main`, and tag that commit `<name>-vX.Y.Z` with the same version:
+CI runs only for releases. To release an app:
+
+1. Set its `version` in `apps/<name>/Cargo.toml`, run `ci/gate.sh <name>` and merge to `main`.
+2. Dry-run the release: `ci/dry-run.sh <name>` dispatches `build.yml` on `main` with
+   `tag=<name>-vX.Y.Z`, which builds and checks that commit exactly as the tag will (same version,
+   same checks, both architectures), and waits for it. Dispatch runs are never published.
+3. When it passes, tag the commit it printed and push the tag:
 
 ```
-git tag mail-v0.1.0 && git push origin mail-v0.1.0
+git tag mail-v0.1.0 <commit> && git push origin mail-v0.1.0
 ```
 
 The tag builds that one app for arm64 and amd64 on GitHub's runners in `debian:testing`:
-`cargo fmt --check`, clippy with `-D warnings`, the tests, then the `.deb`, installed with apt into
-the container and checked with `ci/smoke.sh` and the app's own `smoke.sh`, if any. A tag whose commit isn't on `main`, or whose
-version doesn't match `Cargo.toml`, fails. A green run uploads `bande-debs-arm64` and
-`bande-debs-amd64`; the archive's scheduled publish picks them up within 30 minutes, taking only
-the package named after the tagged app and never a name the desktop publishes.
+`ci/setup.sh install`, `ci/build-app.sh` (release profile) and `ci/smoke.sh --install`. A tag whose
+commit isn't on `main`, or whose version doesn't match `Cargo.toml`, fails. A green run uploads
+`bande-debs-arm64` and `bande-debs-amd64`; the archive's scheduled publish picks them up within 30
+minutes, taking only the package named after the tagged app and never a name the desktop publishes.
+The tag run rebuilds rather than promoting the dry run's packages: the archive takes a package only
+from the green push run of the tag that points at the commit it built, and a promotion path could
+only be tested by pushing a real tag.
 
-A manual dispatch (`gh workflow run build.yml -f apps=<name>`) test-builds any app on any branch
-with a `+git` version; it is never published.
+A manual dispatch without a tag (`gh workflow run build.yml -f apps=<name>`) test-builds any app on
+any branch with a `+git` version; it is never published either.
+
+`ci/gate.sh` runs the same scripts as CI, so a release fails on nothing the gate skipped, except:
+
+- The release profile (fat LTO, one codegen unit): the gate packages the `gate` profile, the same
+  without its slow optimisations, so a gate stays within minutes; the dry run builds the release one.
+- amd64: the mini is arm64; cross-checking needs every C library for amd64. The dry run covers it.
+- Installing into a clean root system (`ci/smoke.sh --install`): apt resolving the package's
+  dependencies from Debian alone, the installed files and the app's own `smoke.sh` need root in a
+  fresh `debian:testing`; locally `apt-get -s` resolves them against this system only.
+- The release tag itself (`<app>-vX.Y.Z` on a commit of `main`, matching `Cargo.toml`): checked by
+  the dry run.
 
 ## Licence
 

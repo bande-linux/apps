@@ -1,15 +1,15 @@
 #!/bin/bash
-# version.sh <app>: the package version of apps/<app>. Built from its release tag <app>-vX.Y.Z
-# (GITHUB_REF_TYPE=tag) it is X.Y.Z, which must equal the app's Cargo version; a test build is
+# version.sh <app>: the package version of apps/<app>. For a release, or its dry run, RELEASE_TAG is
+# <app>-vX.Y.Z and the version is X.Y.Z, which must equal the app's Cargo version; a test build is
 # <Cargo version>+git<date>.<count>.<sha>, never published.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 app=${1:?usage: version.sh <app>}
 declared=$(cargo metadata --no-deps --format-version 1 | jq -r --arg name "bande-$app" '.packages[] | select(.name == $name) | .version')
 [ -n "$declared" ] || { echo "version: no package bande-$app" >&2; exit 1; }
-if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
-    tagged=${GITHUB_REF_NAME#"$app"-v}
-    [ "$tagged" = "$declared" ] || { echo "version: tag $GITHUB_REF_NAME but apps/$app/Cargo.toml says $declared" >&2; exit 1; }
+if [ -n "${RELEASE_TAG:-}" ]; then
+    tagged=${RELEASE_TAG#"$app"-v}
+    [ "$tagged" = "$declared" ] || { echo "version: tag $RELEASE_TAG but apps/$app/Cargo.toml says $declared" >&2; exit 1; }
     echo "$declared"
     exit 0
 fi
