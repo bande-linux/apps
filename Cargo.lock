@@ -493,7 +493,7 @@ dependencies = [
 
 [[package]]
 name = "bande-calendar"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -688,7 +688,7 @@ dependencies = [
 
 [[package]]
 name = "bande-mail"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "accesskit",
  "bande-app",
