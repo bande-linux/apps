@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use bande_app_menu::Entry;
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{
     Alert, Button, Cell, Form, Menu, MenuItem, Row, ScrollView, SearchField, Table, Ui, Widget,
@@ -15,15 +16,16 @@ use super::sheet::{BACK, CANCEL, CONTINUE, Draft, Step};
 use super::widgets::{Slot, Split};
 use super::{Intent, Intents, MACHINES_SYMBOL, Request, push};
 use crate::L10N;
-use crate::ui::widgets::symbol;
+use crate::ui::symbol;
 
 const START_SYMBOL: &str = include_str!("../../data/symbols/start.svg");
 const STOP_SYMBOL: &str = include_str!("../../data/symbols/stop.svg");
-const NEW_SYMBOL: &str = include_str!("symbols/plus.svg");
-const DELETE_SYMBOL: &str = include_str!("symbols/trash.svg");
-const INSPECTOR_SYMBOL: &str = include_str!("symbols/inspector.svg");
+const NEW_SYMBOL: &str = include_str!("../../data/symbols/add.svg");
+const DELETE_SYMBOL: &str = include_str!("../../data/symbols/delete.svg");
+const INSPECTOR_SYMBOL: &str = include_str!("../../data/symbols/inspector.svg");
 const INSPECTOR_WIDTH: f32 = 280.0;
 pub const MACHINES_KEY: &str = "machines";
+pub const INSPECTOR_COMMAND: &str = "machine-inspector";
 const MENU_START: &str = "machine-start";
 const MENU_SHUT_DOWN: &str = "machine-shut-down";
 const MENU_FORCE_STOP: &str = "machine-force-stop";
@@ -168,10 +170,10 @@ impl MachinesPane {
             }
         };
         let new = button(NEW_SYMBOL, "machine-new", Intent::New);
-        let start = button(START_SYMBOL, "action-start", Intent::Act(Act::Start));
+        let start = button(START_SYMBOL, "machine-start", Intent::Act(Act::Start));
         let stop = button(STOP_SYMBOL, "machine-shut-down", Intent::Act(Act::ShutDown));
         let delete = button(DELETE_SYMBOL, "machine-delete", Intent::Act(Act::Delete));
-        let inspector = button(INSPECTOR_SYMBOL, "machine-inspector", Intent::Inspector);
+        let inspector = button(INSPECTOR_SYMBOL, "show-inspector", Intent::Inspector);
         let intents = Rc::clone(&self.intents);
         let search = SearchField::new(&L10N.tr("machine-filter"), &self.filter, move |text| {
             push(&intents, Intent::Filter(text.to_owned()));
@@ -299,6 +301,14 @@ impl MachinesPane {
         self.refresh(ui);
     }
 
+    pub fn inspector_entry(&self) -> Entry {
+        let label = match self.inspector {
+            true => "hide-inspector",
+            false => "show-inspector",
+        };
+        Entry::item(&L10N.tr(label), INSPECTOR_COMMAND).shortcut("Ctrl+I")
+    }
+
     pub fn focus_filter(&self, ui: &mut Ui) {
         if let Some(tools) = self.tools {
             ui.set_focus(tools.search);
@@ -343,7 +353,7 @@ impl MachinesPane {
         let single = entries.len() == 1;
         let ssh = single && first.running() && first.ssh_port().is_some();
         Some(Menu::new(vec![
-            menu_item("action-start", MENU_START, any(Act::Start)),
+            menu_item("machine-start", MENU_START, any(Act::Start)),
             menu_item("machine-shut-down", MENU_SHUT_DOWN, any(Act::ShutDown)),
             menu_item("machine-force-stop", MENU_FORCE_STOP, any(Act::ForceStop)),
             menu_item("machine-restart", MENU_RESTART, any(Act::Restart)),

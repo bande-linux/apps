@@ -7,7 +7,7 @@ use bande_vm::Accel;
 use super::backend::{Act, Phase};
 use super::fleet::{Entry, Fleet, Job, Power};
 use crate::L10N;
-use crate::ui::widgets::dot;
+use crate::ui::dot;
 
 pub const JOB_PREFIX: &str = "job:";
 const NAME_WIDTH: f32 = 200.0;

@@ -10,28 +10,28 @@ use bande_toolkit::{
     Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use bande_velox::{
-    Act, Action, Effect, Hub, Informer, L10N, MACHINE_WINDOW_SIZE, MachineRequest, MachineWindow,
-    Pane as Shown, Request, SIDEBAR_WIDTH, VeloxView,
+    Act, Effect, Hub, Informer, L10N, LogsTarget, LogsView, MACHINE_WINDOW_SIZE, MachineRequest,
+    MachineWindow, Request, SIDEBAR_WIDTH, Section, Update, VeloxView, Work,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
 const APP_ID: &str = "org.bande.Velox";
-const TERMINAL_APP_ID: &str = "org.bande.Terminal";
-const TERMINAL: &str = "bande-terminal";
 const WINDOW_SIZE: (u32, u32) = (920, 560);
-const START: &str = "start";
-const STOP: &str = "stop";
+const LOGS_SIZE: (u32, u32) = (760, 480);
 const FIND: &str = "find";
 const SHOW_MAIN: &str = "show-main";
+const SHOW_LOGS: &str = "show-logs:";
+const SHOW_MACHINE: &str = "show-machine:";
+const VIEW_KEYS: [&str; 6] = ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6"];
+const TERMINAL_APP_ID: &str = "org.bande.Terminal";
+const TERMINAL: &str = "bande-terminal";
 const NEW_MACHINE: &str = "new-machine";
-const SHOW_MACHINES: &str = "show-machines";
 const MACHINE_START: &str = "machine-start";
 const MACHINE_SHUT_DOWN: &str = "machine-shut-down";
 const MACHINE_FORCE_STOP: &str = "machine-force-stop";
 const MACHINE_RESTART: &str = "machine-restart";
 const MACHINE_CONNECT: &str = "machine-connect";
 const MACHINE_DELETE: &str = "machine-delete";
-const MACHINE_INSPECTOR: &str = "machine-inspector";
 const MACHINE_WINDOW_TAG: &str = "machine";
 
 static INFO: Info = Info {
@@ -46,6 +46,8 @@ static INFO: Info = Info {
 struct Pane {
     view: VeloxView,
     informer: Rc<Informer>,
+    work: Work,
+    logs: Vec<LogsTarget>,
     apps: Option<Apps>,
 }
 
@@ -60,7 +62,13 @@ impl Pane {
             match request {
                 Request::Act(engine, action, ids) => self.informer.act(engine, action, ids),
                 Request::Relist(engine) => self.informer.relist(engine),
-                Request::OpenLink(link) => self.open_link(window, link),
+                Request::OpenLink(link) => self.open_link(window, &link),
+                Request::Task(engine, api, task) => self.informer.run(engine, api, task),
+                Request::Watch(engine, ids) => self.informer.watch("overview", &engine, ids),
+                Request::Containers(request) => {
+                    let token = || window.activation_token(APP_ID).ok();
+                    self.logs.extend(self.work.serve(request, token));
+                }
             }
         }
     }
@@ -86,27 +94,25 @@ impl Pane {
 
     fn command(&mut self, window: &mut Window, command: &str) -> bool {
         match command {
-            START => self.view.act(Action::Start),
-            STOP => self.view.act(Action::Stop),
             FIND => self.view.focus_filter(),
             NEW_MACHINE => {
-                self.view.navigate(Shown::Machines);
+                self.view.show(Section::Machines);
                 let (machines, ui) = self.view.machines();
                 machines.new_machine(ui);
             }
-            SHOW_MACHINES => self.view.navigate(Shown::Machines),
             MACHINE_CONNECT => self.view.machines().0.connect(),
-            MACHINE_INSPECTOR => {
+            bande_velox::MACHINE_INSPECTOR => {
                 let (machines, ui) = self.view.machines();
                 machines.toggle_inspector(ui);
             }
-            _ => match machine_act(command) {
-                Some(act) => {
+            _ if machine_act(command).is_some() => {
+                if let Some(act) = machine_act(command) {
                     let (machines, ui) = self.view.machines();
                     machines.act(ui, act);
                 }
-                None => return false,
-            },
+            }
+            _ if self.view.command(command) => {}
+            _ => return false,
         }
         self.view.machines_changed();
         self.serve(window);
@@ -136,13 +142,19 @@ impl View for Pane {
             },
         });
         self.view.set_full_screen(full_screen);
-        window.set_title(&self.view.title());
         let scene = View::scene(self.view.ui(), window);
+        window.set_title(&self.view.title());
         window.set_header(self.view.header());
+        self.view.sync_streams();
+        self.serve(window);
         scene
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        if let WindowEvent::ToplevelChanged(state) = &event {
+            self.view.set_hidden(state.suspended);
+            self.view.sync_streams();
+        }
         let handled = View::event(self.view.ui(), window, event);
         let pumped = self.view.pump();
         self.serve(window);
@@ -189,6 +201,7 @@ impl View for Pane {
 
 enum Screen {
     Main(Box<Pane>),
+    Logs(Box<LogsView>),
     Machine(Box<MachineWindow>),
 }
 
@@ -196,6 +209,7 @@ impl Screen {
     fn view(&mut self) -> &mut dyn View {
         match self {
             Self::Main(pane) => pane.as_mut(),
+            Self::Logs(logs) => logs.as_mut(),
             Self::Machine(machine) => machine.as_mut(),
         }
     }
@@ -203,35 +217,41 @@ impl Screen {
     fn view_ref(&self) -> &dyn View {
         match self {
             Self::Main(pane) => pane.as_ref(),
+            Self::Logs(logs) => logs.as_ref(),
             Self::Machine(machine) => machine.as_ref(),
         }
     }
 
-    fn requests(&mut self) -> Vec<MachineRequest> {
+    fn machine_requests(&mut self) -> Vec<MachineRequest> {
         match self {
             Self::Main(pane) => pane.view.machines().0.take_requests(),
             Self::Machine(machine) => machine.take_requests(),
+            Self::Logs(_) => Vec::new(),
         }
     }
 
-    fn machines_changed(&mut self) {
+    fn machines_changed(&mut self) -> bool {
         match self {
             Self::Main(pane) => pane.view.machines_changed(),
             Self::Machine(machine) => machine.refresh(),
+            Self::Logs(_) => return false,
         }
+        true
     }
 
     fn present_notice(&mut self, title: &str, message: &str) {
         match self {
             Self::Main(pane) => pane.view.present_notice(title, message),
             Self::Machine(machine) => machine.present_notice(title, message),
+            Self::Logs(_) => {}
         }
     }
 
     fn wants_stats(&self) -> bool {
         match self {
-            Self::Main(pane) => pane.view.pane() == Shown::Machines,
+            Self::Main(pane) => pane.view.section() == Section::Machines,
             Self::Machine(machine) => machine.wants_stats(),
+            Self::Logs(_) => false,
         }
     }
 }
@@ -251,6 +271,14 @@ impl View for Screen {
 
     fn set_active(&mut self, active: bool) {
         self.view().set_active(active);
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        self.view_ref().sources()
+    }
+
+    fn source_ready(&mut self, window: &mut Window, index: usize) -> bool {
+        self.view().source_ready(window, index)
     }
 
     fn deadline(&self) -> Option<Instant> {
@@ -281,49 +309,14 @@ struct Velox {
 }
 
 impl Velox {
-    fn hub(&mut self) -> Option<&mut Hub> {
+    fn hub(&mut self) -> Option<&Hub> {
         if self.hub.is_none() {
             match Hub::start() {
                 Ok(hub) => self.hub = Some(hub),
                 Err(error) => tracing::warn!("cannot follow the virtual machines: {error}"),
             }
         }
-        self.hub.as_mut()
-    }
-
-    fn show_main(&mut self, cx: &mut Cx<Self>) {
-        if let Some(main) = self.main {
-            return cx.raise(main, None);
-        }
-        let informer = match Informer::start() {
-            Ok(informer) => Rc::new(informer),
-            Err(error) => return tracing::warn!("cannot follow the engine: {error}"),
-        };
-        let shared = Rc::clone(&informer);
-        let hub = self.hub().map(|hub| hub as &Hub);
-        let opened = cx.open(
-            Kind::Main,
-            &L10N.tr("pane-containers"),
-            WINDOW_SIZE,
-            |appearance| {
-                let mut view = VeloxView::new(appearance);
-                if let Some(hub) = hub {
-                    view.set_hub(hub);
-                }
-                Screen::Main(Box::new(Pane {
-                    view,
-                    informer: shared,
-                    apps: None,
-                }))
-            },
-        );
-        match opened {
-            Ok(window) => {
-                self.main = Some(window);
-                self.informer = Some(informer);
-            }
-            Err(error) => tracing::warn!("cannot open a window: {error}"),
-        }
+        self.hub.as_ref()
     }
 
     fn machine_window(&self, cx: &Cx<Self>, id: &str) -> Option<WindowId> {
@@ -348,7 +341,6 @@ impl Velox {
         if let Err(error) = opened {
             tracing::warn!("cannot open the machine's window: {error}");
         }
-        self.update_sampling(cx);
     }
 
     fn connect(cx: &mut Cx<Self>, window: WindowId, command: Vec<String>) {
@@ -365,7 +357,7 @@ impl Velox {
     fn serve_machines(&mut self, cx: &mut Cx<Self>, window: WindowId) {
         let requests = cx
             .window(window)
-            .map(|(_, screen)| screen.requests())
+            .map(|(_, screen)| screen.machine_requests())
             .unwrap_or_default();
         if requests.is_empty() {
             return;
@@ -384,11 +376,7 @@ impl Velox {
     }
 
     fn machines_changed(&mut self, cx: &mut Cx<Self>) {
-        let notices = self
-            .hub
-            .as_ref()
-            .map(|hub| hub.take_notices())
-            .unwrap_or_default();
+        let notices = self.hub.as_ref().map(Hub::take_notices).unwrap_or_default();
         for notice in notices {
             let target = notice
                 .id
@@ -401,13 +389,13 @@ impl Velox {
         }
         let windows: Vec<WindowId> = cx.windows().collect();
         for id in windows {
-            let gone = matches!(cx.view(id), Some(Screen::Machine(machine)) if machine.gone());
-            if gone {
+            if matches!(cx.view(id), Some(Screen::Machine(machine)) if machine.gone()) {
                 cx.close(id);
                 continue;
             }
-            if let Some((window, screen)) = cx.window(id) {
-                screen.machines_changed();
+            if let Some((window, screen)) = cx.window(id)
+                && screen.machines_changed()
+            {
                 window.request_redraw();
             }
         }
@@ -425,19 +413,21 @@ impl Velox {
         }
     }
 
-    fn machine_menu(&self, cx: &Cx<Self>, focused: Option<WindowId>) -> Entry {
-        let screen = focused
+    fn machine_menu(&self, cx: &Cx<Self>) -> Entry {
+        let screen = cx
+            .focused()
             .and_then(|window| cx.view(window))
+            .filter(|screen| matches!(screen, Screen::Machine(_)))
             .or_else(|| self.main.and_then(|main| cx.view(main)));
         let can = |act: Act| match screen {
             Some(Screen::Main(pane)) => pane.view.machines_ref().can(act),
             Some(Screen::Machine(machine)) => machine.can(act),
-            None => false,
+            _ => false,
         };
         let connect = match screen {
             Some(Screen::Main(pane)) => pane.view.machines_ref().can_connect(),
             Some(Screen::Machine(machine)) => machine.can_connect(),
-            None => false,
+            _ => false,
         };
         let item = |key: &str, command: &str, act: Act| {
             Entry::item(&L10N.tr(key), command).enabled(can(act))
@@ -445,15 +435,82 @@ impl Velox {
         Entry::submenu(
             &L10N.tr("machine-menu"),
             vec![
-                item("action-start", MACHINE_START, Act::Start),
+                item("machine-start", MACHINE_START, Act::Start),
                 item("machine-shut-down", MACHINE_SHUT_DOWN, Act::ShutDown),
                 item("machine-force-stop", MACHINE_FORCE_STOP, Act::ForceStop),
                 item("machine-restart", MACHINE_RESTART, Act::Restart),
+                Entry::separator(),
                 Entry::item(&L10N.tr("machine-connect"), MACHINE_CONNECT).enabled(connect),
-                item("machine-delete-ellipsis", MACHINE_DELETE, Act::Delete)
-                    .shortcut("Ctrl+Backspace"),
+                Entry::separator(),
+                item("machine-delete-ellipsis", MACHINE_DELETE, Act::Delete),
             ],
         )
+    }
+
+    fn pane<'a>(&self, cx: &'a mut Cx<Self>) -> Option<(&'a mut Window, &'a mut Pane)> {
+        match cx.window(self.main?)? {
+            (window, Screen::Main(pane)) => Some((window, pane)),
+            _ => None,
+        }
+    }
+
+    fn show_main(&mut self, cx: &mut Cx<Self>) {
+        if let Some(main) = self.main {
+            return cx.raise(main, None);
+        }
+        let informer = match Informer::start() {
+            Ok(informer) => Rc::new(informer),
+            Err(error) => return tracing::warn!("cannot follow the engine: {error}"),
+        };
+        let shared = Rc::clone(&informer);
+        let hub = self.hub();
+        let opened = cx.open(
+            Kind::Main,
+            &L10N.tr("pane-containers"),
+            WINDOW_SIZE,
+            |appearance| {
+                let mut view = VeloxView::new(appearance);
+                if let Some(hub) = hub {
+                    view.set_hub(hub);
+                }
+                Screen::Main(Box::new(Pane {
+                    view,
+                    work: Work::new(Rc::clone(&shared)),
+                    informer: shared,
+                    logs: Vec::new(),
+                    apps: None,
+                }))
+            },
+        );
+        match opened {
+            Ok(window) => {
+                self.main = Some(window);
+                self.informer = Some(informer);
+            }
+            Err(error) => tracing::warn!("cannot open a window: {error}"),
+        }
+    }
+
+    fn open_logs(&mut self, cx: &mut Cx<Self>) {
+        let wanted = self
+            .pane(cx)
+            .map(|(_, pane)| std::mem::take(&mut pane.logs))
+            .unwrap_or_default();
+        for target in wanted {
+            let shown = cx.windows().find(|window| {
+                matches!(cx.view(*window), Some(Screen::Logs(logs)) if logs.target().key() == target.key())
+            });
+            if let Some(window) = shown {
+                cx.raise(window, None);
+                continue;
+            }
+            let title = target.title();
+            if let Err(error) = cx.open(Kind::Secondary("logs"), &title, LOGS_SIZE, |appearance| {
+                Screen::Logs(Box::new(LogsView::new(appearance, target)))
+            }) {
+                tracing::warn!("cannot open the logs: {error}");
+            }
+        }
     }
 }
 
@@ -471,73 +528,100 @@ impl Program for Velox {
     }
 
     fn menus(&self, cx: &Cx<Self>) -> Menus {
-        let view = self
-            .main
-            .and_then(|main| cx.view(main))
-            .and_then(|screen| match screen {
-                Screen::Main(pane) => Some(&pane.view),
-                Screen::Machine(_) => None,
-            });
-        let can = |action| view.is_some_and(|view| view.can(action));
+        let view = match self.main.and_then(|main| cx.view(main)) {
+            Some(Screen::Main(pane)) => Some(&pane.view),
+            _ => None,
+        };
+        let ready = view.is_some_and(VeloxView::ready);
+        let mut sections: Vec<Entry> = Section::ALL
+            .into_iter()
+            .zip(VIEW_KEYS)
+            .map(|(section, key)| {
+                Entry::item(&section.title(), section.command())
+                    .shortcut(key)
+                    .radio(view.is_some_and(|view| view.section() == section))
+            })
+            .collect();
+        sections.push(Entry::separator());
+        sections.push(Entry::item(&L10N.tr("find"), FIND).shortcut("Ctrl+F"));
+        sections.extend(view.map(VeloxView::view_entries).unwrap_or_default());
+        let pane = view.and_then(VeloxView::resource_menu).unwrap_or_else(|| {
+            Entry::submenu(
+                &L10N.tr("menu-container"),
+                view.map(VeloxView::container_menu).unwrap_or_default(),
+            )
+        });
+        let mut window = vec![Entry::item(&L10N.tr("app-name"), SHOW_MAIN)];
+        window.extend(cx.windows().filter_map(|id| match cx.view(id) {
+            Some(Screen::Logs(logs)) => Some(Entry::item(
+                &logs.target().title(),
+                &format!("{SHOW_LOGS}{}", logs.target().key()),
+            )),
+            _ => None,
+        }));
         let can_create = view.is_some_and(|view| view.machines_ref().can_create());
+        let mut file = vec![
+            Entry::item(&L10N.tr("machine-new-ellipsis"), NEW_MACHINE)
+                .shortcut("Ctrl+N")
+                .enabled(can_create),
+            Entry::separator(),
+        ];
+        file.extend(bande_velox::file_menu(ready));
+        window.extend(cx.windows().filter_map(|id| match cx.view(id) {
+            Some(Screen::Machine(machine)) => Some(Entry::item(
+                &machine.title(),
+                &format!("{SHOW_MACHINE}{}", machine.machine()),
+            )),
+            _ => None,
+        }));
         Menus {
             menus: vec![
-                Entry::submenu(
-                    &L10N.tr("menu-file"),
-                    vec![
-                        Entry::item(&L10N.tr("machine-new-ellipsis"), NEW_MACHINE)
-                            .shortcut("Ctrl+N")
-                            .enabled(can_create),
-                    ],
-                ),
-                Entry::submenu(
-                    &L10N.tr("menu-view"),
-                    vec![
-                        Entry::item(&L10N.tr("machine-pane"), SHOW_MACHINES).shortcut("Ctrl+6"),
-                        Entry::item(&L10N.tr("machine-inspector"), MACHINE_INSPECTOR)
-                            .shortcut("Ctrl+I"),
-                        Entry::item(&L10N.tr("find"), FIND).shortcut("Ctrl+F"),
-                    ],
-                ),
-                Entry::submenu(
-                    &L10N.tr("menu-container"),
-                    vec![
-                        Entry::item(&L10N.tr("action-start"), START).enabled(can(Action::Start)),
-                        Entry::item(&L10N.tr("action-stop"), STOP).enabled(can(Action::Stop)),
-                    ],
-                ),
-                self.machine_menu(cx, cx.focused()),
+                Entry::submenu(&L10N.tr("menu-file"), file),
+                Entry::submenu(&L10N.tr("menu-view"), sections),
+                pane,
+                self.machine_menu(cx),
             ],
-            window: vec![Entry::item(&L10N.tr("app-name"), SHOW_MAIN)],
+            window,
         }
     }
 
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
+        if let Some(id) = command.strip_prefix(SHOW_MACHINE) {
+            if let Some(window) = self.machine_window(cx, id) {
+                cx.raise(window, None);
+            }
+            return;
+        }
         if let Some(window) = window
-            && Some(window) != self.main
             && let Some((shown, Screen::Machine(machine))) = cx.window(window)
+            && (machine_act(command).is_some() || command == MACHINE_CONNECT)
         {
-            match (command, machine_act(command)) {
-                (MACHINE_CONNECT, _) => machine.connect(),
-                (_, Some(act)) => machine.act(act),
-                _ => {}
+            match machine_act(command) {
+                Some(act) => machine.act(act),
+                None => machine.connect(),
             }
             shown.request_redraw();
-            self.serve_machines(cx, window);
-            if machine_act(command).is_some() || command == MACHINE_CONNECT {
-                return;
+            return self.serve_machines(cx, window);
+        }
+        if let Some(key) = command.strip_prefix(SHOW_LOGS) {
+            let shown = cx.windows().find(|window| {
+                matches!(cx.view(*window), Some(Screen::Logs(logs)) if logs.target().key() == key)
+            });
+            if let Some(window) = shown {
+                cx.raise(window, None);
             }
+            return;
         }
         self.show_main(cx);
-        let Some(main) = self.main else {
-            return;
-        };
-        if let Some((window, Screen::Main(pane))) = cx.window(main)
+        if let Some((window, pane)) = self.pane(cx)
             && pane.command(window, command)
         {
             window.request_redraw();
         }
-        self.serve_machines(cx, main);
+        self.open_logs(cx);
+        if let Some(main) = self.main {
+            self.serve_machines(cx, main);
+        }
         self.update_sampling(cx);
     }
 
@@ -548,9 +632,9 @@ impl Program for Velox {
     fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, _view: Screen) {
         if self.main == Some(window) {
             self.main = None;
-            self.informer = None;
         }
         if cx.windows().next().is_none() {
+            self.informer = None;
             self.hub = None;
         } else {
             self.update_sampling(cx);
@@ -558,6 +642,7 @@ impl Program for Velox {
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
+        self.open_logs(cx);
         self.serve_machines(cx, window);
         self.update_sampling(cx);
         cx.refresh_menus();
@@ -583,13 +668,27 @@ impl Program for Velox {
             return;
         };
         let updates = informer.drain();
-        if let Some((window, Screen::Main(pane))) = self.main.and_then(|main| cx.window(main)) {
+        let windows: Vec<WindowId> = cx.windows().collect();
+        for update in &updates {
+            let Update::Changed(container) = update else {
+                continue;
+            };
+            for id in &windows {
+                if let Some((window, Screen::Logs(logs))) = cx.window(*id)
+                    && logs.container_changed(container)
+                {
+                    window.request_redraw();
+                }
+            }
+        }
+        if let Some((window, pane)) = self.pane(cx) {
             for update in updates {
                 pane.view.apply(update);
             }
             pane.serve(window);
             window.request_redraw();
         }
+        self.open_logs(cx);
         cx.refresh_menus();
     }
 

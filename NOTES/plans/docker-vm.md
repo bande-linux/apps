@@ -48,7 +48,7 @@ App `apps/velox`, package `bande-velox`, id `org.bande.Velox`, name "Velox".
 |---|---|---|
 | §4 Containers, Compose grouping, actions, logs, inspect, stats, port links | yes | |
 | §4 Exec terminal | Open in Terminal (`docker exec -it`, the brief allows it) | embedded via A6 |
-| §4 Images, volumes, networks, `/system/df`, engine info | yes | volume tar export/import |
+| §4 Images, volumes, networks, `/system/df`, engine info, volume tar export/import | yes | |
 | §4 Compose up/down/restart (spawn `docker compose`) | yes | |
 | §4 Remote hosts, `.velox.local` DNS | | decision 8 |
 | §5.1 Cloud images + cloud-init, UEFI | yes: Debian, Ubuntu, Fedora arm64 | |
@@ -222,7 +222,8 @@ the VM units' cgroups, only while Overview is shown.
   - Pull progress shows inline in the toolbar and as a job row.
   - Run… is a sheet as in Velox.
 - **Volumes:**
-  - As in Velox, minus tar import/export (later).
+  - As in Velox. Tar export/import goes through the archive API on a never-started helper
+    container (an empty imported image, removed after), so no image is pulled.
   - The inspector adds **Used By** (containers), as the brief asks.
 - **Networks:** a `Table` with disclosure rows (Name, Driver, Subnet, Containers). Expanded
   rows show the container and its IP. Create… (name, driver bridge, subnet) and Remove for
@@ -491,8 +492,18 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 | V5 | apps | ISO path in the sheet with presets, virtiofs shares and USB in Settings, swtpm + Secure Boot, signed SUMS | a Windows 11 ARM ISO installs with no manual flags |
 | A7 | apps | Velox extras: Ctrl+K palette, crash notifications (`bande-notify`), optional status item via the tray with the background mode (as Calendar's) | each off by default and measured at 0 wake-ups while idle |
 
-Done: **A1** (2026-11-02), with A2's pending badges and the filter field. Docker's Status text
-("Up 3 hours") refreshes on every event and when the window becomes active, never on a timer.
+Done: **A1** (2026-11-02), with A2's pending badges and the filter field. **A3** (2026-11-02):
+Overview cards stream stats only while shown (`Informer::watch(owner, ids)`, reusable by A2), and
+Machines cards are left for V1. **A2 + A4** (2026-11-02): with the inspector open the table drops
+its Image and Ports columns (both are in the inspector); Logs reattach with `since` after the
+window is hidden or the container restarts; Docker's apt steps use `trixie` on Debian testing.
+Docker's Status text ("Up 3 hours") refreshes on every event and when the window becomes active,
+never on a timer.
+**V1** (2026-11-02): Machines pane, New Virtual Machine sheet, Machine window (Info, Settings;
+Console and Snapshots shown disabled), actions and Connect via SSH, the not-ready view. Without
+KVM the pane offers "Use Emulation" (TCG). Restart is a guest shutdown then a start. Left: the
+guest-agent IP, the Overview's Machines cards, Clone/Pause from the menus, and the ≤ 8 s boot (see
+V0 findings).
 
 D3 (desktop): the theme icon, with A1; the app ships the same SVG for hicolor. **Kernel: none.** If V0 hits a guest timer, PMU or vGIC
 fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.

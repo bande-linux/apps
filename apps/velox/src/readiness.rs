@@ -1,6 +1,7 @@
 use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use crate::L10N;
 use crate::engine::{Engine, EngineInfo, Error, Flavor};
@@ -21,6 +22,12 @@ sudo apt update
 sudo apt install docker-ce docker-ce-cli containerd.io \\
   docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker $USER";
+const CODENAME: &str = "$(. /etc/os-release && echo \"$VERSION_CODENAME\")";
+const STABLE_SUITE: &str = "trixie";
+const DOCKER_SUITES: [&str; 4] = ["buster", "bullseye", "bookworm", "trixie"];
+const OS_RELEASE: &str = "/etc/os-release";
+static DOCKER_INSTALL_TESTING: LazyLock<String> =
+    LazyLock::new(|| DOCKER_INSTALL.replace(CODENAME, STABLE_SUITE));
 const PODMAN_INSTALL: &str = "\
 sudo apt install podman
 systemctl --user enable --now podman.socket";
@@ -65,6 +72,20 @@ fn podman_alternative() -> Steps {
     }
 }
 
+fn debian_testing() -> bool {
+    let release = std::fs::read_to_string(OS_RELEASE).unwrap_or_default();
+    let field = |name: &str| {
+        release.lines().find_map(|line| {
+            line.strip_prefix(name)?
+                .strip_prefix('=')
+                .map(|value| value.trim_matches('"'))
+        })
+    };
+    field("ID") == Some("debian")
+        && field("VERSION_CODENAME")
+            .is_none_or(|codename| codename == "testing" || !DOCKER_SUITES.contains(&codename))
+}
+
 impl Readiness {
     pub fn advice(&self) -> Advice {
         let advice = |headline: &str| Advice {
@@ -81,6 +102,13 @@ impl Readiness {
             })
         };
         match self {
+            Self::NotInstalled if debian_testing() => Advice {
+                steps: steps("steps-docker", DOCKER_INSTALL_TESTING.as_str()),
+                note: Some(L10N.tr("steps-testing-note")),
+                link: Some(INSTALL_LINK),
+                alternative: Some(podman_alternative()),
+                ..advice("not-installed")
+            },
             Self::NotInstalled => Advice {
                 steps: steps("steps-docker", DOCKER_INSTALL),
                 link: Some(INSTALL_LINK),

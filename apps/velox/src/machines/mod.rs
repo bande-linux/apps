@@ -16,12 +16,12 @@ use std::time::{Duration, Instant};
 pub use self::backend::Act;
 use self::backend::{Backend, Change, Plan};
 pub use self::fleet::{Fleet, Notice};
-pub use self::pane::{MACHINES_KEY, MachinesPane};
+pub use self::pane::{INSPECTOR_COMMAND, MACHINES_KEY, MachinesPane};
 use self::sheet::Field;
 pub use self::window::{MACHINE_WINDOW_SIZE, MachineWindow};
 
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(2);
-const MACHINES_SYMBOL: &str = include_str!("symbols/machines.svg");
+pub(crate) const MACHINES_SYMBOL: &str = include_str!("symbols/machines.svg");
 
 #[derive(Debug, Clone, PartialEq)]
 enum Intent {

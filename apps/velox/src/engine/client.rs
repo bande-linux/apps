@@ -7,13 +7,14 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
-use super::http::{self, Body};
+use super::http::{self, Body, Upload};
+use super::informer::Action;
 
 const COMPOSE_PROJECT: &str = "com.docker.compose.project";
 const MIN_API: (u32, u32) = (1, 41);
 const PODMAN_COMPONENT: &str = "Podman Engine";
 const ROOTLESS_OPTION: &str = "name=rootless";
-const CONTAINER_EVENTS: &str = "/events?filters=%7B%22type%22%3A%5B%22container%22%5D%7D";
+const EVENTS: &str = "/events?filters=%7B%22type%22%3A%5B%22container%22%2C%22image%22%2C%22volume%22%2C%22network%22%5D%7D";
 
 #[derive(Debug)]
 pub enum Error {
@@ -49,14 +50,53 @@ impl From<serde_json::Error> for Error {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Port {
+    #[serde(default, rename = "IP")]
+    pub ip: Option<String>,
+    #[serde(default)]
+    pub private_port: u16,
     #[serde(default)]
     pub public_port: Option<u16>,
+    #[serde(default, rename = "Type")]
+    pub protocol: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Mount {
+    #[serde(rename = "Type", default)]
+    pub kind: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub destination: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Endpoint {
+    #[serde(rename = "NetworkID", default)]
+    pub network_id: String,
+    #[serde(rename = "IPAddress", default)]
+    pub ip_address: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct NetworkSettings {
+    #[serde(default)]
+    pub networks: Option<HashMap<String, Endpoint>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Container {
     pub id: String,
+    #[serde(rename = "ImageID", default)]
+    pub image_id: String,
+    #[serde(default)]
+    pub mounts: Option<Vec<Mount>>,
+    #[serde(default)]
+    pub network_settings: Option<NetworkSettings>,
     #[serde(default)]
     pub names: Vec<String>,
     #[serde(default)]
@@ -92,6 +132,24 @@ impl Container {
         matches!(self.state.as_str(), "running" | "restarting")
     }
 
+    pub fn paused(&self) -> bool {
+        self.state == "paused"
+    }
+
+    pub fn label(&self, name: &str) -> Option<&str> {
+        self.labels.as_ref()?.get(name).map(String::as_str)
+    }
+
+    pub fn ip(&self) -> Option<&str> {
+        self.network_settings
+            .as_ref()?
+            .networks
+            .as_ref()?
+            .values()
+            .map(|network| network.ip_address.as_str())
+            .find(|ip| !ip.is_empty())
+    }
+
     pub fn published_ports(&self) -> Vec<u16> {
         let mut ports: Vec<u16> = self
             .ports
@@ -115,6 +173,7 @@ pub enum Flavor {
 pub struct EngineInfo {
     pub flavor: Flavor,
     pub version: String,
+    pub api: String,
     pub rootless: bool,
     pub supported: bool,
     pub socket: PathBuf,
@@ -150,6 +209,8 @@ struct ErrorBody {
 
 #[derive(Debug, Deserialize)]
 pub struct Event {
+    #[serde(rename = "Type", default)]
+    pub kind: String,
     #[serde(rename = "Action", default)]
     pub action: String,
     #[serde(rename = "Actor")]
@@ -160,17 +221,19 @@ pub struct Event {
 pub struct Actor {
     #[serde(rename = "ID")]
     pub id: String,
+    #[serde(rename = "Attributes", default)]
+    pub attributes: HashMap<String, String>,
 }
 
-fn api_supported(version: &str) -> bool {
+pub(super) fn api_at_least(version: &str, wanted: (u32, u32)) -> bool {
     let mut parts = version.split('.').map(|part| part.parse::<u32>().ok());
     match (parts.next().flatten(), parts.next().flatten()) {
-        (Some(major), Some(minor)) => (major, minor) >= MIN_API,
+        (Some(major), Some(minor)) => (major, minor) >= wanted,
         _ => false,
     }
 }
 
-fn is_container_id(id: &str) -> bool {
+pub(crate) fn is_container_id(id: &str) -> bool {
     !id.is_empty() && id.chars().all(|char| char.is_ascii_alphanumeric())
 }
 
@@ -186,8 +249,21 @@ impl Engine {
         }
     }
 
+    pub fn socket(&self) -> &Path {
+        &self.socket
+    }
+
     fn call(&self, method: &str, path: &str) -> Result<Body<UnixStream>, Error> {
-        let response = http::exchange(UnixStream::connect(&self.socket)?, method, path)?;
+        self.request(method, path, None)
+    }
+
+    pub(super) fn request(
+        &self,
+        method: &str,
+        path: &str,
+        upload: Option<Upload<'_>>,
+    ) -> Result<Body<UnixStream>, Error> {
+        let response = http::send(UnixStream::connect(&self.socket)?, method, path, upload)?;
         let mut body = response.body;
         if (200..300).contains(&response.status) || response.status == 304 {
             return Ok(body);
@@ -200,7 +276,7 @@ impl Engine {
         Err(Error::Status(response.status, message))
     }
 
-    fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, Error> {
+    pub(crate) fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, Error> {
         let mut bytes = Vec::new();
         self.call("GET", path)?.read_to_end(&mut bytes)?;
         Ok(serde_json::from_slice(&bytes)?)
@@ -220,12 +296,13 @@ impl Engine {
                 None => Flavor::Docker,
             },
             version: podman.map_or(version.version, |podman| podman.version.clone()),
+            api: version.api_version.clone(),
             rootless: info
                 .security_options
                 .iter()
                 .flatten()
                 .any(|option| option == ROOTLESS_OPTION),
-            supported: api_supported(&version.api_version),
+            supported: api_at_least(&version.api_version, MIN_API),
             socket: self.socket.clone(),
         })
     }
@@ -244,34 +321,36 @@ impl Engine {
         Ok(found.into_iter().find(|container| container.id == id))
     }
 
-    fn act(&self, id: &str, action: &str) -> Result<(), Error> {
+    pub fn act(&self, id: &str, action: Action) -> Result<(), Error> {
         if !is_container_id(id) {
             return Ok(());
         }
-        let mut drained = Vec::new();
-        self.call("POST", &format!("/containers/{id}/{action}"))?
-            .read_to_end(&mut drained)?;
-        Ok(())
+        let verb = match action {
+            Action::Start => "start",
+            Action::Stop => "stop",
+            Action::Restart => "restart",
+            Action::Pause => "pause",
+            Action::Resume => "unpause",
+            Action::Kill => "kill",
+            Action::Remove => {
+                self.post(&format!("/containers/{id}/stop"))?;
+                return self.delete(&format!("/containers/{id}?force=1"));
+            }
+        };
+        self.post(&format!("/containers/{id}/{verb}")).map(drop)
     }
 
-    pub fn start(&self, id: &str) -> Result<(), Error> {
-        self.act(id, "start")
-    }
-
-    pub fn stop(&self, id: &str) -> Result<(), Error> {
-        self.act(id, "stop")
+    pub(crate) fn stream(&self, path: &str) -> Result<(UnixStream, Body<UnixStream>), Error> {
+        let stream = UnixStream::connect(&self.socket)?;
+        let handle = stream.try_clone()?;
+        let response = http::exchange(stream, "GET", path)?;
+        match response.status {
+            200 => Ok((handle, response.body)),
+            status => Err(Error::Status(status, format!("the engine refused {path}"))),
+        }
     }
 
     pub fn events(&self) -> Result<(UnixStream, Body<UnixStream>), Error> {
-        let stream = UnixStream::connect(&self.socket)?;
-        let handle = stream.try_clone()?;
-        let response = http::exchange(stream, "GET", CONTAINER_EVENTS)?;
-        match response.status {
-            200 => Ok((handle, response.body)),
-            status => Err(Error::Status(
-                status,
-                "the engine refused /events".to_owned(),
-            )),
-        }
+        self.stream(EVENTS)
     }
 }

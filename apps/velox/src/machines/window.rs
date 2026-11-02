@@ -20,7 +20,7 @@ use super::sheet::port_free;
 use super::widgets::{Bar, Slot};
 use super::{Intent, Intents, Request, push};
 use crate::L10N;
-use crate::ui::widgets::{Centered, symbol};
+use crate::ui::{Centered, symbol};
 
 pub const MACHINE_WINDOW_SIZE: (u32, u32) = (720, 520);
 const TOOLBAR: f32 = WINDOW_HEADER_HEIGHT as f32;
@@ -132,7 +132,7 @@ impl MachineWindow {
                 None => Button::new(&label, click),
             }
         };
-        let start = button(START_SYMBOL, "action-start", Act::Start);
+        let start = button(START_SYMBOL, "machine-start", Act::Start);
         let stop = button(STOP_SYMBOL, "machine-shut-down", Act::ShutDown);
         self.start = start.id();
         self.stop = stop.id();
@@ -333,7 +333,7 @@ impl MachineWindow {
                 ])
             }
             false => {
-                let mut start = Button::new(&L10N.tr("action-start"), move || {
+                let mut start = Button::new(&L10N.tr("machine-start"), move || {
                     push(&intents, Intent::Act(Act::Start))
                 });
                 start.set_enabled(self.can(Act::Start));

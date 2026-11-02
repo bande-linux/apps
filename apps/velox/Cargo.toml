@@ -12,6 +12,7 @@ publish = false
 accesskit.workspace = true
 httparse.workspace = true
 rustix = { workspace = true, features = ["fs", "process"] }
+jiff.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -24,6 +25,7 @@ bande-toolkit.workspace = true
 bande-vm.workspace = true
 bande-watch.workspace = true
 bande-xdg.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

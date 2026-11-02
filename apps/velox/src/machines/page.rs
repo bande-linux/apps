@@ -5,7 +5,7 @@ use bande_toolkit::ui::{Axis, Button, Label, ScrollView, Stack, Widget};
 use super::readiness::{Blocker, INSTALL, KVM_GROUP};
 use super::{Intent, Intents, push};
 use crate::L10N;
-use crate::ui::widgets::{Centered, Code, Ends};
+use crate::ui::{Centered, Code, Ends};
 
 const PAGE_WIDTH: f32 = 560.0;
 const SPACING: f32 = 12.0;
