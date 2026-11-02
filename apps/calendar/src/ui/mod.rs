@@ -28,7 +28,7 @@ use jiff::{ToSpan, Zoned};
 use crate::edit::{Details, Scope};
 use crate::ical::{CalendarObject, InstanceKey};
 use crate::settings::CalendarSettings;
-use crate::store::{AccountKind, CalendarInfo, Found, LOCAL_ACCOUNT, Library, new_uid};
+use crate::store::{AccountKind, CalendarInfo, Found, LOCAL_ACCOUNT, Library, Pending, new_uid};
 use bande_design::{Accent, Scheme};
 
 pub use settings_view::{SETTINGS_SIZE, SettingsView};
@@ -79,6 +79,11 @@ pub enum Request {
     },
     Changed,
     Refresh,
+    Import,
+    Export {
+        name: String,
+        data: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -592,6 +597,27 @@ impl CalendarView {
         self.selected = None;
         self.shown.clear();
         self.results.clear();
+    }
+
+    pub(crate) fn export_calendar(&mut self, index: Option<usize>) {
+        let index = index
+            .or_else(|| self.selected_found().map(|found| found.calendar))
+            .or_else(|| self.default_calendar());
+        let Some(calendar) = index.and_then(|index| self.library.calendars.get(index)) else {
+            return;
+        };
+        let data = crate::ical::export(
+            &calendar.info.name,
+            calendar
+                .objects
+                .iter()
+                .filter(|stored| stored.pending != Some(Pending::Delete))
+                .map(|stored| stored.data.as_str()),
+        );
+        self.requests.push(Request::Export {
+            name: format!("{}.ics", calendar.info.name),
+            data,
+        });
     }
 
     pub fn open_account_setup(&mut self) {

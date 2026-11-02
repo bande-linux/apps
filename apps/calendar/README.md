@@ -45,8 +45,9 @@ views. Packaged as `bande-calendar`.
   starts and ends (the rest is shaded, and the week opens at the start), week numbers, default
   alerts for new events and all-day events, how often accounts and subscriptions refresh, and
   adding and removing accounts. Stored in `~/.config/bande/calendar.conf`.
-- **Files and links.** `bande-calendar file.ics` offers to add its events; `bande-calendar
-  webcal://…` offers to subscribe. The desktop file registers `text/calendar` and the `webcal`
+- **Files and links.** `bande-calendar file.ics` or File ▸ Import… offers to add its events;
+  File ▸ Export… (or Export… on a calendar's menu) saves a calendar as one `.ics` file, through
+  the desktop's file chooser portal; `bande-calendar webcal://…` offers to subscribe. The desktop file registers `text/calendar` and the `webcal`
   schemes.
 
 Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Left/Right previous/next, Ctrl+N new event,
