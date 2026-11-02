@@ -43,8 +43,9 @@ is what is left. Delete this plan when the list is done.
    profile, choose a profile per window or tab, import iTerm/Terminal colour schemes.
 2. Font choice from every installed monospace family (today a list of common ones; needs a
    monospace query on the font collection).
-3. Drag tabs to reorder and out into a new window. Needs the toolkit first: a drag on a header tab
-   always moves the window today (`decorations.rs` `tab_press`); a horizontal drag inside the strip
-   should reach the app, a vertical one should tear the tab off.
-4. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
-   password).
+3. Drag tabs to reorder and out into a new window. Owner decision first: desktop
+   `docs/architecture/behaviour.md` makes a drag that starts on a header tab move the window;
+   reordering needs a horizontal drag inside the strip to reach the app instead (a vertical drag
+   would still move the window).
+
+Not needed: Secure Keyboard Entry (Wayland already keeps other clients from reading keystrokes).
