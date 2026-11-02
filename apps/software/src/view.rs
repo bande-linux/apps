@@ -5,6 +5,7 @@ use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
+use bande_datetime::DateFormats;
 use bande_fs::format_size;
 use bande_inbox::Inbox;
 use bande_packages::{Canceller, Client, Package, Progress, Status};
@@ -203,6 +204,17 @@ fn problem_text(problem: Problem, task: Task, name: &str) -> String {
     L10N.tr_args(id, [("name", name.to_owned().into())])
 }
 
+fn block_text(block: &Block) -> String {
+    match block {
+        Block::Paragraph(text) => text.clone(),
+        Block::List(items) => items
+            .iter()
+            .map(|item| format!("• {item}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    }
+}
+
 fn latest_release(app: &Component) -> i64 {
     app.releases
         .iter()
@@ -221,6 +233,7 @@ pub struct Software {
     apps: Vec<Component>,
     loading: bool,
     online: bool,
+    dates: DateFormats,
     installed: HashSet<String>,
     icons: HashMap<String, Option<Image>>,
     requested: HashSet<String>,
@@ -284,6 +297,7 @@ impl Software {
             apps: Vec::new(),
             loading: true,
             online: true,
+            dates: DateFormats::from_env(),
             installed: HashSet::new(),
             icons: HashMap::new(),
             requested: HashSet::new(),
@@ -954,6 +968,44 @@ impl Software {
         widgets
     }
 
+    fn whats_new(&self, app: &Component) -> Widgets {
+        let Some(release) = app
+            .releases
+            .first()
+            .filter(|release| !release.notes.is_empty())
+        else {
+            return Vec::new();
+        };
+        let date = release
+            .timestamp
+            .and_then(|seconds| jiff::Timestamp::from_second(seconds).ok())
+            .map(|at| {
+                self.dates
+                    .date(&at.to_zoned(jiff::tz::TimeZone::system()), true)
+            });
+        let version = match date {
+            Some(date) => L10N.tr_args(
+                "release-dated",
+                [
+                    ("version", release.version.clone().into()),
+                    ("date", date.into()),
+                ],
+            ),
+            None => L10N.tr_args("release", [("version", release.version.clone().into())]),
+        };
+        let mut widgets = vec![
+            boxed(Label::heading(&L10N.tr("whats-new"))),
+            boxed(Label::new(&version).secondary()),
+        ];
+        widgets.extend(
+            release
+                .notes
+                .iter()
+                .map(|block| boxed(Label::new(&block_text(block)))),
+        );
+        widgets
+    }
+
     fn information(&self, app: &Component) -> Widgets {
         let facts = self.facts.get(app.key());
         let fact = |title: &str, value: Box<dyn Widget>| {
@@ -1046,17 +1098,12 @@ impl Software {
         ];
         widgets.extend(self.actions(index, app));
         widgets.extend(self.screenshots(app));
-        for block in &app.description {
-            let text = match block {
-                Block::Paragraph(text) => text.clone(),
-                Block::List(items) => items
-                    .iter()
-                    .map(|item| format!("• {item}"))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            };
-            widgets.push(boxed(Label::new(&text)));
-        }
+        widgets.extend(
+            app.description
+                .iter()
+                .map(|block| boxed(Label::new(&block_text(block)))),
+        );
+        widgets.extend(self.whats_new(app));
         widgets.extend(self.information(app));
         widgets
     }
