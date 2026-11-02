@@ -36,7 +36,7 @@ pub use tabs::{FULL_SCREEN_LEADING, HEADER_LEADING, STRIP_HEIGHT, TabBarLayout, 
 pub use terminal::{
     CellPoint, GridSize, Highlights, Link, SearchDirection, SelectionKind, Terminal, is_openable,
 };
-pub use theme::{Profile, Theme, ansi_colors};
+pub use theme::{Profile, Theme};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-terminal.ftl");
 

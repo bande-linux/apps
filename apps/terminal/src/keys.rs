@@ -257,6 +257,8 @@ pub enum Command {
     PreviousPrompt,
     NextPrompt,
     Settings,
+    EditTitle,
+    SelectOutput,
 }
 
 pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
@@ -308,6 +310,8 @@ pub fn shortcut(key: Key, modifiers: Modifiers) -> Option<Command> {
         (']' | '}', true) => Command::NextPane,
         ('[' | '{', true) => Command::PreviousPane,
         (',' | '<', true) => Command::Settings,
+        ('i', true) => Command::EditTitle,
+        ('o', true) => Command::SelectOutput,
         _ => return None,
     };
     Some(command)

@@ -17,7 +17,7 @@ use bande_toolkit::{Image, Palette, Rect, TextSystem};
 
 use crate::L10N;
 use crate::catalog::{Block, Bundle, Category, Component, Icon, search};
-use crate::media::{self, Loaded, Media, ShotError};
+use crate::media::{self, Loaded, Media, Request, ShotError};
 use crate::online;
 use crate::widgets::{AppRow, Grid, Picture};
 use crate::worker::{self, Facts, Failure, Job, Message, Problem, Query};
@@ -28,10 +28,15 @@ const PADDING: f32 = 24.0;
 const PAGE_ROWS: usize = 40;
 const NEW_ROWS: usize = 12;
 const ROW_ICON: f32 = 40.0;
-const PAGE_ICON: f32 = 80.0;
+const PAGE_ICON: f32 = 96.0;
 const SHOT_WIDTH: f32 = 640.0;
 const SHOT_HEIGHT: f32 = 400.0;
 const LISTED_UPDATES: usize = 30;
+pub const COMMAND_FIND: &str = "find";
+pub const COMMAND_BACK: &str = "back";
+pub const COMMAND_DISCOVER: &str = "discover";
+pub const COMMAND_INSTALLED: &str = "installed";
+pub const COMMAND_UPDATES: &str = "updates";
 const SETTINGS: &str = "bande-settings";
 const SETTINGS_ID: &str = "org.bande.Settings";
 const SOFTWARE_UPDATE_PANE: &str = "software-update";
@@ -140,6 +145,27 @@ fn origin_name(origin: &str) -> String {
     }
 }
 
+fn place_control(
+    intents: &Rc<RefCell<Vec<Intent>>>,
+    place: Place,
+    updates: usize,
+) -> SegmentedControl {
+    let chosen = Rc::clone(intents);
+    let names: Vec<String> = Place::ALL
+        .into_iter()
+        .map(|shown| match (shown, updates) {
+            (Place::Updates, 1..) => L10N.tr_args("updates-counted", [("count", updates.into())]),
+            _ => place_name(shown),
+        })
+        .collect();
+    let selected = Place::ALL.iter().position(|shown| *shown == place);
+    SegmentedControl::new(&L10N.tr("section"), &names, selected, move |index| {
+        if let Some(place) = Place::ALL.get(index) {
+            chosen.borrow_mut().push(Intent::Go(*place));
+        }
+    })
+}
+
 fn open_software_update() {
     let command = [SETTINGS.to_owned(), SOFTWARE_UPDATE_PANE.to_owned()];
     if let Err(error) = bande_xdg::spawn_detached(SETTINGS_ID, &command, None, None) {
@@ -223,6 +249,17 @@ fn latest_release(app: &Component) -> i64 {
         .unwrap_or(0)
 }
 
+fn remote_icon(app: &Component) -> Option<&str> {
+    app.icons
+        .iter()
+        .filter_map(|icon| match icon {
+            Icon::Remote { url, size } if *size as f32 > PAGE_ICON => Some((size, url.as_str())),
+            _ => None,
+        })
+        .max_by_key(|(size, _)| **size)
+        .map(|(_, url)| url)
+}
+
 fn has_local_icon(app: &Component) -> bool {
     app.icons
         .iter()
@@ -257,6 +294,17 @@ pub struct Software {
     scroll: Rc<RefCell<ScrollState>>,
     ui: Ui,
     content: WidgetId,
+    search: WidgetId,
+    places: WidgetId,
+    header: WidgetId,
+    counted: usize,
+    finished: Vec<Finished>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Finished {
+    Installed(String),
+    Failed(String),
 }
 
 impl Software {
@@ -276,20 +324,18 @@ impl Software {
         let search = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
             typed.borrow_mut().push(Intent::Search(query.to_owned()));
         });
-        let chosen = Rc::clone(&intents);
-        let names: Vec<String> = Place::ALL.into_iter().map(place_name).collect();
-        let places = SegmentedControl::new(&L10N.tr("section"), &names, Some(0), move |index| {
-            if let Some(place) = Place::ALL.get(index) {
-                chosen.borrow_mut().push(Intent::Go(*place));
-            }
-        });
+        let places = place_control(&intents, Place::Discover, 0);
         let content = Stack::new(Axis::Vertical, 0.0, 0.0, vec![boxed(Label::new(""))]);
         let id = content.id();
+        let search_id = search.id();
+        let places_id = places.id();
+        let header = Stack::new(Axis::Horizontal, SPACING, 0.0, vec![boxed(places)]);
+        let header_id = header.id();
         let page = Stack::new(
             Axis::Vertical,
             SPACING,
             PADDING,
-            vec![row(vec![boxed(places)]), boxed(search), boxed(content)],
+            vec![boxed(header), boxed(search), boxed(content)],
         );
         let scroll: Rc<RefCell<ScrollState>> = Rc::default();
         let view = ScrollView::shared(boxed(page), Rc::clone(&scroll));
@@ -321,6 +367,11 @@ impl Software {
             scroll,
             ui: Ui::new(Box::new(view), Context::new(text, palette)),
             content: id,
+            search: search_id,
+            places: places_id,
+            header: header_id,
+            counted: 0,
+            finished: Vec::new(),
         };
         software.ask(Query::Updates);
         software.rebuild();
@@ -372,6 +423,50 @@ impl Software {
         }
         self.rebuild();
         true
+    }
+
+    pub fn reload(&mut self) {
+        if self.media.icons.send(Request::Catalogue).is_err() {
+            tracing::warn!("the catalogue loader stopped");
+        }
+        self.ask(Query::Updates);
+    }
+
+    pub fn take_finished(&mut self) -> Vec<Finished> {
+        std::mem::take(&mut self.finished)
+    }
+
+    fn name_of(&self, key: &str) -> String {
+        self.apps
+            .iter()
+            .find(|app| app.key() == key)
+            .map(|app| app.name.clone())
+            .unwrap_or_else(|| key.to_owned())
+    }
+
+    pub fn command(&mut self, command: &str) -> bool {
+        let place = match command {
+            COMMAND_FIND => {
+                self.ui.set_focus(self.search);
+                return true;
+            }
+            COMMAND_BACK => {
+                self.intents.borrow_mut().push(Intent::Back);
+                return self.pump();
+            }
+            COMMAND_DISCOVER => Place::Discover,
+            COMMAND_INSTALLED => Place::Installed,
+            COMMAND_UPDATES => Place::Updates,
+            _ => return false,
+        };
+        if let Some(index) = Place::ALL.iter().position(|shown| *shown == place) {
+            self.ui
+                .update_widget(self.places, |control: &mut SegmentedControl, cx| {
+                    control.set_selected(cx, index);
+                });
+        }
+        self.intents.borrow_mut().push(Intent::Go(place));
+        self.pump()
     }
 
     fn ask(&self, query: Query) {
@@ -435,6 +530,11 @@ impl Software {
             self.shot = 0;
             self.shots.clear();
             self.request_shot();
+            if let Some(url) = self.apps.get(index).and_then(remote_icon)
+                && self.media.shots.send(url.to_owned()).is_err()
+            {
+                tracing::warn!("the screenshot loader stopped");
+            }
             if let Some(app) = self.apps.get(index)
                 && let Some(package) = deb(app)
                 && !self.facts.contains_key(app.key())
@@ -464,8 +564,28 @@ impl Software {
     fn receive(&mut self, message: Message) {
         match message {
             Message::Loaded(Loaded::Catalogue { apps, installed }) => {
-                self.apps = apps.into_iter().filter(|app| !app.needs_x11).collect();
+                let apps: Vec<Component> = apps.into_iter().filter(|app| !app.needs_x11).collect();
+                let shown: Vec<Option<usize>> = self
+                    .pages
+                    .iter()
+                    .map(|(page, _)| match page {
+                        Page::App(index) => {
+                            let key = self.apps.get(*index).map(Component::key);
+                            apps.iter().position(|app| Some(app.key()) == key)
+                        }
+                        _ => Some(0),
+                    })
+                    .collect();
+                let kept = shown.iter().take_while(|found| found.is_some()).count();
+                self.pages.truncate(kept.max(1));
+                for ((page, _), found) in self.pages.iter_mut().zip(shown) {
+                    if let (Page::App(index), Some(found)) = (page, found) {
+                        *index = found;
+                    }
+                }
+                self.apps = apps;
                 self.installed = installed;
+                self.facts.clear();
                 self.loading = false;
             }
             Message::Online(online) => {
@@ -491,6 +611,7 @@ impl Software {
                 }
             }
             Message::Installed(key) => {
+                self.finished.push(Finished::Installed(self.name_of(&key)));
                 self.busy.remove(&key);
                 self.facts.remove(&key);
                 self.installed.insert(key);
@@ -515,6 +636,9 @@ impl Software {
             Message::Updates(updates) => self.updates = updates,
             Message::Failed(key, failure) => {
                 if let Some((task, _)) = self.busy.remove(&key) {
+                    if task == Task::Install {
+                        self.finished.push(Finished::Failed(self.name_of(&key)));
+                    }
                     self.failed.insert(key, (task, failure));
                 }
             }
@@ -555,7 +679,7 @@ impl Software {
         }
         self.requested
             .extend(wanted.iter().map(|(key, _)| key.clone()));
-        if self.media.icons.send(wanted).is_err() {
+        if self.media.icons.send(Request::Icons(wanted)).is_err() {
             tracing::warn!("the icon loader stopped");
         }
     }
@@ -1099,7 +1223,9 @@ impl Software {
             row(vec![boxed(self.button(&L10N.tr("back"), Intent::Back))]),
             row(vec![
                 boxed(Picture::new(
-                    self.icon(app),
+                    remote_icon(app)
+                        .and_then(|url| self.shots.get(url)?.clone().ok())
+                        .or_else(|| self.icon(app)),
                     PAGE_ICON,
                     PAGE_ICON,
                     &app.name,
@@ -1119,7 +1245,23 @@ impl Software {
         widgets
     }
 
+    fn recount(&mut self) {
+        if self.counted == self.updates.len() {
+            return;
+        }
+        self.counted = self.updates.len();
+        let places = place_control(&self.intents, self.place, self.counted);
+        let id = places.id();
+        if let Some(holder) = self.ui.widget(self.header)
+            && let Some(slot) = holder.children_mut().first_mut()
+        {
+            *slot = boxed(places);
+            self.places = id;
+        }
+    }
+
     fn rebuild(&mut self) {
+        self.recount();
         let mut widgets = if self.loading {
             vec![boxed(Spinner::new(&L10N.tr("loading")))]
         } else if self.apps.is_empty() {

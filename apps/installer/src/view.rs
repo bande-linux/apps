@@ -27,6 +27,7 @@ const PADDING: f32 = 24.0;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Intent {
     Install,
+    InstallSigned,
     Cancel,
     AskRemove,
     Remove,
@@ -48,6 +49,20 @@ fn arch_name(arch: &str) -> String {
         "armhf" => L10N.tr("arch-armhf"),
         "i386" => L10N.tr("arch-i386"),
         other => other.to_owned(),
+    }
+}
+
+fn origin_name(origin: &str) -> String {
+    let mut parts = origin.splitn(3, '-');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some("debian"), Some(suite), Some(component)) => L10N.tr_args(
+            "origin-debian",
+            [
+                ("suite", suite.to_owned().into()),
+                ("component", component.to_owned().into()),
+            ],
+        ),
+        _ => origin.to_owned(),
     }
 }
 
@@ -179,7 +194,19 @@ impl Installer {
         match intent {
             Intent::Install => {
                 self.state = State::Installing(Progress::default());
-                self.ask(Job::Install);
+                self.ask(Job::Install(None));
+            }
+            Intent::InstallSigned => {
+                let Some(State::Ready(Preview {
+                    signed: Some(signed),
+                    ..
+                })) = &self.ready
+                else {
+                    return;
+                };
+                let id = signed.id.clone();
+                self.state = State::Installing(Progress::default());
+                self.ask(Job::Install(Some(id)));
             }
             Intent::Cancel => {
                 if let Err(error) = self.canceller.cancel() {
@@ -328,7 +355,13 @@ impl Installer {
                 ],
             ))));
         }
-        widgets.push(boxed(Label::new(&L10N.tr("trust"))));
+        match &preview.signed {
+            Some(signed) => widgets.push(boxed(Label::new(&L10N.tr_args(
+                "signed-available",
+                [("source", origin_name(&signed.origin).into())],
+            )))),
+            None => widgets.push(boxed(Label::new(&L10N.tr("trust")))),
+        }
         if !deb.maintainer.is_empty() {
             widgets.push(boxed(Label::new(&L10N.tr_args(
                 "from-maintainer",
@@ -348,10 +381,18 @@ impl Installer {
                 .destructive(),
         };
         widgets.push(boxed(Label::new(&L10N.tr("password-hint")).secondary()));
-        widgets.push(row(vec![
-            boxed(self.button(&L10N.tr("cancel"), Intent::Close)),
-            boxed(install),
-        ]));
+        let mut buttons = vec![boxed(self.button(&L10N.tr("cancel"), Intent::Close))];
+        match preview.signed.is_some() && preview.removes.is_empty() {
+            true => buttons.extend([
+                boxed(self.button(&L10N.tr("install-file"), Intent::Install)),
+                boxed(
+                    self.button(&L10N.tr("install-signed"), Intent::InstallSigned)
+                        .primary(),
+                ),
+            ]),
+            false => buttons.push(boxed(install)),
+        }
+        widgets.push(row(buttons));
         widgets
     }
 

@@ -1,0 +1,12 @@
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/bande_datetime-95461369f6f3a417.d: /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/lib.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/daylight.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/minute.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/month.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/timedate.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/zone.rs
+
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/libbande_datetime-95461369f6f3a417.rlib: /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/lib.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/daylight.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/minute.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/month.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/timedate.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/zone.rs
+
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/libbande_datetime-95461369f6f3a417.rmeta: /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/lib.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/daylight.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/minute.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/month.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/timedate.rs /home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/zone.rs
+
+/home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/lib.rs:
+/home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/daylight.rs:
+/home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/minute.rs:
+/home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/month.rs:
+/home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/timedate.rs:
+/home/mikael/bande-linux/wt/desktop-text-monospace/crates/libs/datetime/src/zone.rs:

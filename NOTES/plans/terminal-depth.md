@@ -7,8 +7,8 @@ is what is left. Delete this plan when the list is done.
 
 | macOS | User need | Bande Terminal |
 |---|---|---|
-| Profiles: text, colours, background | Readable, familiar colours | Five built-in profiles (Datum follows light/dark, Paper, Ink, Midnight, High Contrast) with a live preview. Profiles cannot be edited, duplicated or imported |
-| Font and size | Comfortable text | Size 9–32 pt (Ctrl+= / Ctrl+-); the font is fixed (JetBrains Mono) |
+| Profiles: text, colours, background | Readable, familiar colours | Twelve built-in profiles with a live preview: Datum (follows light/dark), Paper, Ink, Midnight, High Contrast and the classic Solarized Light/Dark, Dracula, Nord, Gruvbox, Tokyo Night and Catppuccin Mocha. Profiles cannot be edited, duplicated or imported |
+| Font and size | Comfortable text | Font (JetBrains Mono by default, or any installed common monospace family: DejaVu, Noto, Fira, Hack, Source Code Pro, Cascadia, Iosevka, …) and size 9–32 pt (Ctrl+= / Ctrl+-) |
 | Cursor: block / underline / bar, blink | See the cursor | Have shape and Blink the cursor (blinks only while focused, so idle windows stay asleep) |
 | Scrollback: limit lines | Keep enough history | Have: 1 000, 10 000, 100 000 or 1 000 000 lines |
 | Bell: audible / visual, badge | Notice a bell | Have Play the alert sound (the desktop's alert through bande-sound, at most four a second, off by default), Flash the window, and a badge in the bar |
@@ -31,7 +31,9 @@ is what is left. Delete this plan when the list is done.
 | URLs and paths clickable | Have Ctrl+click and the context menu (Open Link, Copy Link, Show in Files) |
 | Drag and drop files | Have: shell-quoted paths |
 | Title from OSC 0/2, current folder from OSC 7 | Have |
-| Marks and jump between commands | Have Jump to Previous/Next Command (Shift+Ctrl+Up/Down) |
+| Edit Title (Shell menu) | Have Shell → Edit Title (Shift+Ctrl+I); an empty title goes back to the program's |
+| Marks, jump between commands, select a command's output | Have Jump to Previous/Next Command (Shift+Ctrl+Up/Down) and Edit → Select Command Output (Shift+Ctrl+O) |
+| Option-click moves the cursor | Have Alt+click on the prompt line (arrow keys sent to the shell); Alt+drag still selects a block |
 | Window restore | Have: windows and tab folders come back after a restart |
 | Big output | Fast: `seq 1 2000000` finishes in 1.2 s (release build, headless); tabs (`\t`) used to draw as missing-glyph boxes, fixed |
 
@@ -39,9 +41,10 @@ is what is left. Delete this plan when the list is done.
 
 1. Editable profiles: duplicate a built-in profile, change colours, font size and cursor per
    profile, choose a profile per window or tab, import iTerm/Terminal colour schemes.
-2. Font family choice (any installed monospace font).
-3. Drag tabs to reorder and out into a new window.
-4. Edit Title for a tab, and a per-tab profile badge.
-5. Alt+click to move the shell cursor; triple-click selects a command's output.
-6. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
+2. Font choice from every installed monospace family (today a list of common ones; needs a
+   monospace query on the font collection).
+3. Drag tabs to reorder and out into a new window. Needs the toolkit first: a drag on a header tab
+   always moves the window today (`decorations.rs` `tab_press`); a horizontal drag inside the strip
+   should reach the app, a vertical one should tear the tab off.
+4. Secure Keyboard Entry equivalent (ask the compositor to keep shortcuts out while typing a
    password).

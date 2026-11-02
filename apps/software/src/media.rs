@@ -3,20 +3,23 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use bande_inbox::Outbox;
 use bande_toolkit::Image;
+use bande_xdg::DesktopEntry;
 use jxl_oxide::JxlImage;
 use ureq::tls::{RootCerts, TlsConfig};
 
-use crate::catalog::{self, Component, Icon};
+use crate::catalog::{self, Bundle, Component, Icon};
 use crate::worker::Message;
 
 pub const ICON_PIXELS: u32 = 128;
 const ICON_FILE_LIMIT: u64 = 4 << 20;
 const SHOT_LIMIT: u64 = 8 << 20;
 const TIMEOUT: Duration = Duration::from_secs(20);
+const SYSTEM_APPLICATIONS: &str = "/usr/share/applications";
+const DPKG_STATUS: &str = "/var/lib/dpkg/status";
 const USER_AGENT: &str = concat!("bande-software/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -188,36 +191,69 @@ fn desktop_id(app: &Component) -> String {
         .unwrap_or_else(|| format!("{}.desktop", app.key()))
 }
 
+fn entry_icon(icon: &str) -> Icon {
+    match icon.starts_with('/') {
+        true => Icon::Local(PathBuf::from(icon)),
+        false => Icon::Stock(icon.to_owned()),
+    }
+}
+
+fn entry_app(entry: &DesktopEntry, package: Option<&String>) -> Component {
+    Component {
+        id: entry.id.clone(),
+        name: entry.name.clone(),
+        summary: entry
+            .comment
+            .clone()
+            .or_else(|| entry.generic_name.clone())
+            .unwrap_or_default(),
+        keywords: entry.keywords.clone(),
+        icons: entry.icon.as_deref().map(entry_icon).into_iter().collect(),
+        launchable: Some(entry.id.clone()),
+        bundles: package.cloned().map(Bundle::Deb).into_iter().collect(),
+        ..Component::default()
+    }
+}
+
 fn catalogue() -> Loaded {
     let mut apps = catalog::system_catalog();
-    let icons: HashMap<String, Option<String>> = bande_xdg::applications(
+    let entries = bande_xdg::applications(
         &bande_xdg::data_dirs(),
         None,
         &bande_xdg::current_desktops(),
-    )
-    .into_iter()
-    .filter_map(|entry| {
-        let id = entry.path.file_name()?.to_str()?.to_owned();
-        Some((id, entry.icon))
-    })
-    .collect();
+    );
+    let by_id: HashMap<&str, &DesktopEntry> = entries
+        .iter()
+        .filter_map(|entry| Some((entry.path.file_name()?.to_str()?, entry)))
+        .collect();
     let mut installed = HashSet::new();
+    let mut listed = HashSet::new();
     for app in &mut apps {
-        let Some(icon) = desktop_id(app)
+        let Some(entry) = desktop_id(app)
             .split_whitespace()
-            .find_map(|id| icons.get(id))
+            .find_map(|id| by_id.get(id))
         else {
             continue;
         };
+        listed.insert(entry.path.clone());
         installed.insert(app.key().to_owned());
-        if app.icons.is_empty()
-            && let Some(icon) = icon
-        {
-            app.icons.push(match icon.starts_with('/') {
-                true => Icon::Local(PathBuf::from(icon)),
-                false => Icon::Stock(icon.clone()),
-            });
+        if app.icons.is_empty() {
+            app.icons.extend(entry.icon.as_deref().map(entry_icon));
         }
+    }
+    let unlisted: Vec<&DesktopEntry> = by_id
+        .values()
+        .copied()
+        .filter(|entry| {
+            entry.path.starts_with(SYSTEM_APPLICATIONS) && !listed.contains(&entry.path)
+        })
+        .collect();
+    let paths: Vec<PathBuf> = unlisted.iter().map(|entry| entry.path.clone()).collect();
+    let owners = catalog::owners(&paths);
+    for entry in unlisted {
+        let app = entry_app(entry, owners.get(&entry.path));
+        installed.insert(app.key().to_owned());
+        apps.push(app);
     }
     Loaded::Catalogue { apps, installed }
 }
@@ -234,13 +270,43 @@ fn icons(requested: Vec<(String, Vec<Icon>)>, data_dirs: &[PathBuf]) -> Loaded {
     )
 }
 
-fn load_icons(requests: &Receiver<Vec<(String, Vec<Icon>)>>, out: &Outbox<Message>) {
+fn fingerprint() -> Option<SystemTime> {
+    catalog::SYSTEM_ROOTS
+        .iter()
+        .flat_map(|root| [Path::new(root).join("xml"), Path::new(root).join("yaml")])
+        .chain([
+            PathBuf::from(DPKG_STATUS),
+            PathBuf::from(catalog::FLATPAK_ROOT),
+            PathBuf::from(catalog::METAINFO),
+            PathBuf::from(SYSTEM_APPLICATIONS),
+        ])
+        .filter_map(|path| {
+            fs::metadata(path)
+                .and_then(|metadata| metadata.modified())
+                .ok()
+        })
+        .max()
+}
+
+fn load_icons(requests: &Receiver<Request>, out: &Outbox<Message>) {
+    let mut loaded = fingerprint();
     if !out.send(Message::Loaded(catalogue())) {
         return;
     }
     let data_dirs = bande_xdg::data_dirs();
-    for requested in requests {
-        if !out.send(Message::Loaded(icons(requested, &data_dirs))) {
+    for request in requests {
+        let reply = match request {
+            Request::Icons(requested) => icons(requested, &data_dirs),
+            Request::Catalogue => {
+                let now = fingerprint();
+                if now == loaded {
+                    continue;
+                }
+                loaded = now;
+                catalogue()
+            }
+        };
+        if !out.send(Message::Loaded(reply)) {
             return;
         }
     }
@@ -256,8 +322,13 @@ fn load_shots(requests: &Receiver<String>, out: &Outbox<Message>) {
     }
 }
 
+pub enum Request {
+    Catalogue,
+    Icons(Vec<(String, Vec<Icon>)>),
+}
+
 pub struct Media {
-    pub icons: Sender<Vec<(String, Vec<Icon>)>>,
+    pub icons: Sender<Request>,
     pub shots: Sender<String>,
 }
 

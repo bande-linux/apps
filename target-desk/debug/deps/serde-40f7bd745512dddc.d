@@ -1,0 +1,14 @@
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/serde-40f7bd745512dddc.d: /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/build/serde-4351cb090eef6d9a/out/private.rs
+
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/libserde-40f7bd745512dddc.rlib: /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/build/serde-4351cb090eef6d9a/out/private.rs
+
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/libserde-40f7bd745512dddc.rmeta: /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/build/serde-4351cb090eef6d9a/out/private.rs
+
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs:
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs:
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs:
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs:
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs:
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/build/serde-4351cb090eef6d9a/out/private.rs:
+
+# env-dep:OUT_DIR=/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/build/serde-4351cb090eef6d9a/out

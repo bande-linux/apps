@@ -8,7 +8,7 @@ use bande_xdg::path_from_file_uri;
 use crate::L10N;
 use crate::keys::Command;
 
-const COMMANDS: [(Command, &str, &str, &str); 20] = [
+const COMMANDS: [(Command, &str, &str, &str); 22] = [
     (Command::Copy, "copy", "menu-copy", "Shift+Ctrl+C"),
     (Command::Paste, "paste", "menu-paste", "Shift+Ctrl+V"),
     (
@@ -32,6 +32,18 @@ const COMMANDS: [(Command, &str, &str, &str); 20] = [
         "Ctrl+0",
     ),
     (Command::NewTab, "new-tab", "menu-new-tab", "Shift+Ctrl+T"),
+    (
+        Command::SelectOutput,
+        "select-output",
+        "menu-select-output",
+        "Shift+Ctrl+O",
+    ),
+    (
+        Command::EditTitle,
+        "edit-title",
+        "menu-edit-title",
+        "Shift+Ctrl+I",
+    ),
     (
         Command::NewWindow,
         "new-window",
@@ -249,7 +261,13 @@ fn command_entries(commands: &[Option<Command>]) -> Vec<Entry> {
 }
 
 pub fn app_menus(windowed: bool) -> Menus {
-    let mut shell = command_entries(&[Some(Command::NewWindow), Some(Command::NewTab), None]);
+    let mut shell = command_entries(&[
+        Some(Command::NewWindow),
+        Some(Command::NewTab),
+        None,
+        Some(Command::EditTitle),
+        None,
+    ]);
     shell.extend([
         Entry::item(
             &L10N.tr("menu-show-in-files"),
@@ -276,6 +294,7 @@ pub fn app_menus(windowed: bool) -> Menus {
                     None,
                     Some(Command::PreviousPrompt),
                     Some(Command::NextPrompt),
+                    Some(Command::SelectOutput),
                 ]),
             ),
             Entry::submenu(

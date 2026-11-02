@@ -101,6 +101,27 @@ impl NewTabFolder {
     }
 }
 
+pub const FONTS: [&str; 18] = [
+    "JetBrains Mono",
+    "DejaVu Sans Mono",
+    "Noto Sans Mono",
+    "Liberation Mono",
+    "Ubuntu Mono",
+    "Fira Code",
+    "Fira Mono",
+    "Hack",
+    "Source Code Pro",
+    "Cascadia Code",
+    "Cascadia Mono",
+    "Iosevka",
+    "IBM Plex Mono",
+    "Inconsolata",
+    "Roboto Mono",
+    "Victor Mono",
+    "Go Mono",
+    "Terminus",
+];
+
 pub const COLUMN_RANGE: (usize, usize) = (20, 400);
 pub const ROW_RANGE: (usize, usize) = (5, 200);
 
@@ -109,6 +130,7 @@ pub const SCROLLBACK_CHOICES: [usize; 4] = [1_000, 10_000, 100_000, 1_000_000];
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub profile: Profile,
+    pub font: String,
     pub font_size: f32,
     pub cursor: CursorStyle,
     pub blink: bool,
@@ -130,6 +152,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             profile: Profile::default(),
+            font: String::new(),
             font_size: DEFAULT_FONT_SIZE,
             cursor: CursorStyle::default(),
             blink: false,
@@ -182,6 +205,7 @@ impl Stored for Settings {
                 "profile" => {
                     settings.profile = Profile::parse(value).unwrap_or(settings.profile);
                 }
+                "font" => settings.font = value.to_owned(),
                 "font-size" => {
                     settings.font_size = value
                         .parse::<f32>()
@@ -236,6 +260,7 @@ impl Stored for Settings {
     fn to_text(&self) -> String {
         [
             format!("profile = {}", self.profile.name()),
+            format!("font = {}", self.font),
             format!("font-size = {}", self.font_size),
             format!("cursor = {}", self.cursor.name()),
             format!("blink = {}", self.blink),

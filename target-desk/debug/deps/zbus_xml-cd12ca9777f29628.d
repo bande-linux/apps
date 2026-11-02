@@ -1,0 +1,11 @@
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/zbus_xml-cd12ca9777f29628.d: /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/lib.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/error.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/xml.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/telepathy.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/../README.md
+
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/libzbus_xml-cd12ca9777f29628.rlib: /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/lib.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/error.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/xml.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/telepathy.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/../README.md
+
+/home/mikael/bande-linux/wt/apps-monitor-terminal-depth/target-desk/debug/deps/libzbus_xml-cd12ca9777f29628.rmeta: /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/lib.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/error.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/xml.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/telepathy.rs /home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/../README.md
+
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/lib.rs:
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/error.rs:
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/xml.rs:
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/telepathy.rs:
+/home/mikael/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zbus_xml-5.2.1/src/../README.md:

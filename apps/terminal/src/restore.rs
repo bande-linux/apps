@@ -45,7 +45,7 @@ impl SavedWindow {
     }
 
     pub fn save(&self, file: &Path) -> io::Result<()> {
-        bande_xdg::replace_file(file, &self.to_text())
+        bande_xdg::replace_file(file, self.to_text())
     }
 }
 
