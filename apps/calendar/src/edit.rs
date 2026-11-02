@@ -235,6 +235,7 @@ pub struct Details {
     pub start: DateTime,
     pub end: DateTime,
     pub repeat: Repeat,
+    pub custom: Option<Rule>,
     pub end_repeat: EndRepeat,
     pub alert: Alert,
     pub invitees: Vec<String>,
@@ -539,7 +540,10 @@ pub fn apply_details(
         event.description = details.notes.clone();
         event.alarms = details.alert.alarms(&event.alarms);
         if event.recurrence_id.is_none() {
-            event.rule = details.repeat.rule(event.rule.as_ref());
+            event.rule = match (details.repeat, &details.custom) {
+                (Repeat::Custom, Some(rule)) => Some(rule.clone()),
+                (repeat, _) => repeat.rule(event.rule.as_ref()),
+            };
             let start = event.start.clone();
             if let Some(rule) = event.rule.as_mut() {
                 details.end_repeat.apply(rule, &start, local);

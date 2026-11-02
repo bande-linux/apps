@@ -763,6 +763,16 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
     if let Some(setup) = &mut view.setup {
         setup.apply(&signal);
     }
+    if let Some(custom) = &mut view.custom {
+        custom.apply(&signal, &mut view.ui);
+    }
+    if view
+        .inspector
+        .as_ref()
+        .is_some_and(|inspector| inspector.wants_custom(&signal))
+    {
+        view.open_custom();
+    }
     if let Some(naming) = &mut view.naming {
         naming.apply(&signal);
     }
@@ -806,6 +816,8 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
         }
         Signal::Choice(action) => choose(view, &action),
         Signal::SetupSubmit => submit_setup(view),
+        Signal::CustomDone => view.finish_custom(true),
+        Signal::CustomCancel => view.finish_custom(false),
         Signal::SetupKind(_) => {
             if let Some(setup) = &mut view.setup {
                 let hint = setup.preset.hint();
