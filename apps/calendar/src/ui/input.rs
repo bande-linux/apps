@@ -29,6 +29,7 @@ pub const ACTION_MODE: &str = "mode-";
 pub const ACTION_IMPORT: &str = "import";
 pub const ACTION_EXPORT: &str = "export";
 const ACTION_EXPORT_CALENDAR: &str = "calendar-export:";
+const ACTION_ZONE: &str = "zone:";
 const ACTION_COLOR: &str = "calendar-color:";
 const ACTION_REMOVE_ACCOUNT: &str = "remove-account:";
 const ACTION_RENAME: &str = "calendar-rename:";
@@ -132,6 +133,10 @@ pub fn menu_command(view: &mut CalendarView, action: &str) -> bool {
         ACTION_REFRESH => view.requests.push(Request::Refresh),
         ACTION_IMPORT => view.requests.push(Request::Import),
         ACTION_EXPORT => view.export_calendar(None),
+        other if other.starts_with(ACTION_ZONE) => {
+            let name = &other[ACTION_ZONE.len()..];
+            view.view_in((!name.is_empty()).then(|| name.to_owned()));
+        }
         other if other.starts_with(ACTION_EXPORT_CALENDAR) => {
             match other[ACTION_EXPORT_CALENDAR.len()..].parse() {
                 Ok(index) => view.export_calendar(Some(index)),

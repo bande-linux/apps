@@ -187,3 +187,5 @@ nth-fourth = fourth
 nth-last = last
 refresh-default = As in Settings
 settings-subscription-alerts = Alerts
+zone-menu = Time Zone
+zone-system = System Time Zone

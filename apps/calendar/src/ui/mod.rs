@@ -40,6 +40,7 @@ const ENGLISH: &str = include_str!("../../locales/en-US/bande-calendar.ftl");
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
 pub const SIDEBAR_WIDTH: f32 = 220.0;
+const MAX_ZONES: usize = 12;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -222,6 +223,8 @@ pub struct CalendarView {
     formats: DateFormats,
     settings: CalendarSettings,
     zone: TimeZone,
+    system_zone: TimeZone,
+    shown_zone: Option<String>,
     now: Zoned,
     mode: Mode,
     focus: Date,
@@ -274,6 +277,8 @@ impl CalendarView {
             toolbar,
             palette,
             formats,
+            system_zone: zone.clone(),
+            shown_zone: None,
             zone,
             now,
             mode: Mode::Week,
@@ -336,6 +341,9 @@ impl CalendarView {
     }
 
     pub fn set_settings(&mut self, settings: CalendarSettings) {
+        if !settings.time_zones && self.shown_zone.is_some() {
+            self.view_in(None);
+        }
         if settings.day_start != self.settings.day_start {
             self.scroll = f32::from(settings.day_start) * geometry::HOUR_HEIGHT;
         }
@@ -348,10 +356,46 @@ impl CalendarView {
             .unwrap_or(self.formats.first_weekday())
     }
 
-    pub fn set_zone(&mut self, zone: TimeZone) {
-        self.now = self.now.with_time_zone(zone.clone());
-        self.zone = zone;
+    pub fn set_system_zone(&mut self, zone: TimeZone) {
+        self.system_zone = zone;
+        let shown = self.shown_zone.take();
+        self.view_in(shown);
+    }
+
+    pub fn shown_zone(&self) -> Option<&str> {
+        self.shown_zone.as_deref()
+    }
+
+    pub(crate) fn view_in(&mut self, name: Option<String>) {
+        let zone = name.as_deref().and_then(|name| TimeZone::get(name).ok());
+        self.shown_zone = name.filter(|_| zone.is_some());
+        self.zone = zone.unwrap_or_else(|| self.system_zone.clone());
+        self.now = self.now.with_time_zone(self.zone.clone());
+        self.close_inspector(true);
         self.refresh_search();
+    }
+
+    pub fn zones(&self) -> Vec<String> {
+        let zones: std::collections::BTreeSet<&str> = self
+            .library
+            .calendars
+            .iter()
+            .filter(|calendar| calendar.info.visible)
+            .flat_map(|calendar| &calendar.objects)
+            .filter_map(|stored| match &stored.parsed.as_ref()?.master()?.start {
+                crate::ical::Moment::Zoned {
+                    tzid: Some(tzid), ..
+                } => Some(tzid.as_str()),
+                crate::ical::Moment::Zoned { tzid: None, .. } => Some("UTC"),
+                _ => None,
+            })
+            .chain(self.shown_zone.as_deref())
+            .collect();
+        zones
+            .into_iter()
+            .take(MAX_ZONES)
+            .map(str::to_owned)
+            .collect()
     }
 
     pub fn set_now(&mut self, now: Zoned) {
