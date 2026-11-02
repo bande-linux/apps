@@ -3,7 +3,7 @@
 Benchmarked against macOS Terminal. "Have" is what Terminal does today; the ranked list at the end
 is what is left. Delete this plan when the list is done.
 
-## Settings (Terminal → Settings…, Ctrl+,)
+## Settings (Terminal → Settings…, Shift+Ctrl+,)
 
 | macOS | User need | Bande Terminal |
 |---|---|---|
