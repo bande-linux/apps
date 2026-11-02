@@ -1,0 +1,48 @@
+[package]
+name = "bande-archive"
+description = "Bande Archive Utility: expands and creates zip, tar and 7-Zip archives"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+accesskit.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+bande-app.workspace = true
+bande-app-menu.workspace = true
+bande-app-settings.workspace = true
+bande-fs.workspace = true
+bande-inbox.workspace = true
+bande-l10n.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+
+[dev-dependencies]
+tar.workspace = true
+tempfile.workspace = true
+zip.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+copyright = "2026 Mikael Hug"
+section = "utils"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+extended-description = """\
+The archive utility of the Bande desktop: expands zip, tar (gzip, bzip2, xz, \
+zstd), single gzip, bzip2, xz and zstd files and 7-Zip archives next to \
+themselves, asks for the password of encrypted ones, and makes Files' \
+Compress in the format chosen in its settings. It refuses items that would \
+land outside the folder, decompression bombs and setuid permissions."""
+assets = [
+    ["target/release/bande-archive", "usr/bin/", "755"],
+    ["data/org.bande.ArchiveUtility.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.ArchiveUtility.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["data/org.bande.ArchiveUtility.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+]
