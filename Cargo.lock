@@ -463,6 +463,7 @@ dependencies = [
  "bande-app-menu",
  "bande-l10n",
  "bande-toolkit",
+ "bande-xdg",
  "rustix",
  "tracing",
  "web-content",

@@ -16,12 +16,19 @@ pub(crate) struct ViewId(pub(crate) u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LoadId(pub(crate) u64);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum Session {
+    Default,
+    Private(u32),
+}
+
 pub(crate) enum Command {
     Load {
         view: ViewId,
         load: LoadId,
         url: Url,
         viewport: Viewport,
+        session: Session,
     },
     Resize {
         view: ViewId,
@@ -112,7 +119,6 @@ impl Renderer {
         let flags = EventfdFlags::CLOEXEC | EventfdFlags::NONBLOCK;
         let signal = Arc::new(eventfd(0, flags)?);
         let ready = Arc::new(eventfd(0, flags)?);
-        let fetcher = Fetcher::new()?;
         let (commands, received) = mpsc::channel();
         let (sent, updates) = mpsc::channel();
         let mut thread = Thread {
@@ -120,7 +126,7 @@ impl Renderer {
             signal: Arc::clone(&signal),
             updates: sent,
             ready: Arc::clone(&ready),
-            fetcher,
+            fetchers: Fetchers::default(),
             tabs: HashMap::new(),
         };
         let thread = std::thread::Builder::new()
@@ -187,7 +193,58 @@ struct Styling {
 }
 
 #[derive(Default)]
+struct Fetchers {
+    sessions: Vec<(Session, Fetcher)>,
+}
+
+impl Fetchers {
+    fn fetch(&mut self, session: Session, url: Url) -> Option<FetchId> {
+        if let Some((_, fetcher)) = self
+            .sessions
+            .iter_mut()
+            .find(|(known, _)| *known == session)
+        {
+            return Some(fetcher.fetch(url));
+        }
+        let mut fetcher = Fetcher::new()
+            .inspect_err(|error| tracing::warn!("cannot start the network: {error}"))
+            .ok()?;
+        let fetch = fetcher.fetch(url);
+        self.sessions.push((session, fetcher));
+        Some(fetch)
+    }
+
+    fn cancel(&mut self, session: Session, fetch: FetchId) {
+        if let Some((_, fetcher)) = self
+            .sessions
+            .iter_mut()
+            .find(|(known, _)| *known == session)
+        {
+            fetcher.cancel(fetch);
+        }
+    }
+
+    fn completed(&mut self) -> Vec<(Session, FetchId, Result<Response, FetchError>)> {
+        self.sessions
+            .iter_mut()
+            .flat_map(|(session, fetcher)| {
+                let session = *session;
+                fetcher
+                    .completed()
+                    .into_iter()
+                    .map(move |(fetch, result)| (session, fetch, result))
+            })
+            .collect()
+    }
+
+    fn keep(&mut self, used: &[Session]) {
+        self.sessions
+            .retain(|(session, _)| *session == Session::Default || used.contains(session));
+    }
+}
+
 struct Tab {
+    session: Session,
     shown: Option<Shown>,
     pending: Option<(LoadId, FetchId, Url)>,
     styling: Option<Styling>,
@@ -200,6 +257,21 @@ struct Tab {
 }
 
 impl Tab {
+    fn new(session: Session) -> Self {
+        Self {
+            session,
+            shown: None,
+            pending: None,
+            styling: None,
+            images: Vec::new(),
+            images_arrived: Vec::new(),
+            images_attempted: 0,
+            viewport: None,
+            resized: false,
+            hover: None,
+        }
+    }
+
     fn fetches(&self) -> impl Iterator<Item = FetchId> + '_ {
         let document = self.pending.as_ref().map(|(_, fetch, _)| *fetch);
         let sheets = self
@@ -243,7 +315,7 @@ struct Thread {
     signal: Arc<OwnedFd>,
     updates: Sender<Update>,
     ready: Arc<OwnedFd>,
-    fetcher: Fetcher,
+    fetchers: Fetchers,
     tabs: HashMap<ViewId, Tab>,
 }
 
@@ -251,11 +323,16 @@ impl Thread {
     fn run(&mut self) -> io::Result<()> {
         let mut fonts = Fonts::new();
         loop {
-            let fetched = self.fetcher.fd();
-            let mut sources = [
-                PollFd::new(&*self.signal, PollFlags::IN),
-                PollFd::new(&fetched, PollFlags::IN),
-            ];
+            let fetchers: Vec<BorrowedFd<'_>> = self
+                .fetchers
+                .sessions
+                .iter()
+                .map(|(_, fetcher)| fetcher.fd())
+                .collect();
+            let mut sources: Vec<PollFd<'_>> = std::iter::once(&*self.signal)
+                .map(|signal| PollFd::new(signal, PollFlags::IN))
+                .chain(fetchers.iter().map(|fd| PollFd::new(fd, PollFlags::IN)))
+                .collect();
             match poll(&mut sources, None) {
                 Ok(_) | Err(rustix::io::Errno::INTR) => {}
                 Err(error) => return Err(error.into()),
@@ -264,8 +341,8 @@ impl Thread {
             if !self.take_commands() {
                 return Ok(());
             }
-            for (fetch, result) in self.fetcher.completed() {
-                self.fetched(fetch, result, &mut fonts);
+            for (session, fetch, result) in self.fetchers.completed() {
+                self.fetched(session, fetch, result, &mut fonts);
             }
             let views: Vec<ViewId> = self.tabs.keys().copied().collect();
             for view in views {
@@ -292,12 +369,13 @@ impl Thread {
             return;
         };
         let fetches: Vec<FetchId> = tab.fetches().collect();
+        let session = tab.session;
         tab.pending = None;
         tab.styling = None;
         tab.images.clear();
         tab.images_arrived.clear();
         for fetch in fetches {
-            self.fetcher.cancel(fetch);
+            self.fetchers.cancel(session, fetch);
         }
     }
 
@@ -308,15 +386,24 @@ impl Thread {
                 load,
                 url,
                 viewport,
+                session,
             } => {
                 self.cancel(view);
-                let fetch = self.fetcher.fetch(url.clone());
-                let tab = self.tabs.entry(view).or_default();
-                tab.pending = Some((load, fetch, url));
+                let tab = self.tabs.entry(view).or_insert_with(|| Tab::new(session));
+                tab.session = session;
                 tab.set_viewport(viewport);
+                match self.fetchers.fetch(session, url.clone()) {
+                    Some(fetch) => tab.pending = Some((load, fetch, url)),
+                    None => {
+                        let message = crate::L10N.tr("network-unavailable");
+                        self.send(view, load, Outcome::Failed { url, message });
+                    }
+                }
             }
             Command::Resize { view, viewport } => {
-                self.tabs.entry(view).or_default().set_viewport(viewport);
+                if let Some(tab) = self.tabs.get_mut(&view) {
+                    tab.set_viewport(viewport);
+                }
             }
             Command::Hover { view, load, x, y } => {
                 if let Some(tab) = self.tabs.get_mut(&view) {
@@ -338,16 +425,26 @@ impl Thread {
             Command::Close { view } => {
                 self.cancel(view);
                 self.tabs.remove(&view);
+                let used: Vec<Session> = self.tabs.values().map(|tab| tab.session).collect();
+                self.fetchers.keep(&used);
             }
             Command::Quit => {}
         }
     }
 
-    fn fetched(&mut self, fetch: FetchId, result: Result<Response, FetchError>, fonts: &mut Fonts) {
+    fn fetched(
+        &mut self,
+        session: Session,
+        fetch: FetchId,
+        result: Result<Response, FetchError>,
+        fonts: &mut Fonts,
+    ) {
         let Some(view) = self
             .tabs
             .iter()
-            .find(|(_, tab)| tab.fetches().any(|pending| pending == fetch))
+            .find(|(_, tab)| {
+                tab.session == session && tab.fetches().any(|pending| pending == fetch)
+            })
             .map(|(view, _)| *view)
         else {
             return;
@@ -418,11 +515,11 @@ impl Thread {
     }
 
     fn style(&mut self, view: ViewId, fonts: &mut Fonts) {
-        let Some(styling) = self
-            .tabs
-            .get_mut(&view)
-            .and_then(|tab| tab.styling.as_mut())
-        else {
+        let Some(tab) = self.tabs.get_mut(&view) else {
+            return;
+        };
+        let session = tab.session;
+        let Some(styling) = tab.styling.as_mut() else {
             return;
         };
         if !styling.fetches.is_empty() {
@@ -440,8 +537,10 @@ impl Thread {
                 continue;
             }
             styling.attempted.push(href.clone());
-            match resolved(&styling.shown.url, &href) {
-                Some(url) => styling.fetches.push((self.fetcher.fetch(url), href)),
+            match resolved(&styling.shown.url, &href)
+                .and_then(|url| self.fetchers.fetch(session, url))
+            {
+                Some(fetch) => styling.fetches.push((fetch, href)),
                 None => styling.arrived.push((href, Vec::new())),
             }
         }
@@ -487,8 +586,10 @@ impl Thread {
                 continue;
             }
             tab.images_attempted += 1;
-            match resolved(&shown.url, &source) {
-                Some(url) => tab.images.push((self.fetcher.fetch(url), source)),
+            match resolved(&shown.url, &source)
+                .and_then(|url| self.fetchers.fetch(tab.session, url))
+            {
+                Some(fetch) => tab.images.push((fetch, source)),
                 None => tab.images_arrived.push((source, Vec::new())),
             }
         }
