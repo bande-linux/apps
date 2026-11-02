@@ -6,6 +6,8 @@ use bande_xdg::DesktopEntry;
 
 use crate::deb::{self, Deb, Machine};
 
+const INSTALLING: [Info; 3] = [Info::Installing, Info::Updating, Info::Downgrading];
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     Install,
@@ -17,6 +19,7 @@ pub enum Action {
 pub struct Preview {
     pub action: Action,
     pub also: Vec<String>,
+    pub download: u64,
     pub removes: Vec<String>,
 }
 
@@ -25,6 +28,9 @@ pub enum Problem {
     Locked,
     SystemPackage,
     Unavailable,
+    NoNetwork,
+    NoSpace,
+    Dependencies,
     Other,
 }
 
@@ -56,16 +62,40 @@ pub enum State {
     },
 }
 
-fn others(applied: &Applied, own: &str, wanted: &[Info]) -> Vec<String> {
-    let mut names: Vec<String> = applied
+fn other_packages<'a>(
+    applied: &'a Applied,
+    own: &'a str,
+    wanted: &'a [Info],
+) -> impl Iterator<Item = &'a Package> {
+    applied
         .packages
         .iter()
-        .filter(|package| package.name != own && wanted.contains(&package.info))
+        .filter(move |package| package.name != own && wanted.contains(&package.info))
+}
+
+fn others(applied: &Applied, own: &str, wanted: &[Info]) -> Vec<String> {
+    let mut names: Vec<String> = other_packages(applied, own, wanted)
         .map(|package| package.name.clone())
         .collect();
     names.sort();
     names.dedup();
     names
+}
+
+fn download_size(client: &Client, applied: &Applied, own: &str) -> u64 {
+    let ids: Vec<String> = other_packages(applied, own, &INSTALLING)
+        .map(|package| package.id.clone())
+        .collect();
+    if ids.is_empty() {
+        return 0;
+    }
+    client
+        .details(&ids)
+        .map(|details| details.iter().map(|details| details.size).sum())
+        .unwrap_or_else(|error| {
+            tracing::warn!("cannot read the download size: {error}");
+            0
+        })
 }
 
 fn failed(error: &Error) -> State {
@@ -77,6 +107,9 @@ fn failed(error: &Error) -> State {
             let problem = match failure.code {
                 ErrorCode::Locked => Problem::Locked,
                 ErrorCode::SystemPackage => Problem::SystemPackage,
+                ErrorCode::NoNetwork => Problem::NoNetwork,
+                ErrorCode::NoSpace => Problem::NoSpace,
+                ErrorCode::Dependencies => Problem::Dependencies,
                 _ => Problem::Other,
             };
             (problem, failure.details.clone())
@@ -124,11 +157,8 @@ pub fn preview(client: &Client, path: &Path, deb: &Deb) -> State {
     match client.install_files(path, Mode::Simulate, &|_| {}) {
         Ok(applied) => State::Ready(Preview {
             action,
-            also: others(
-                &applied,
-                &deb.name,
-                &[Info::Installing, Info::Updating, Info::Downgrading],
-            ),
+            also: others(&applied, &deb.name, &INSTALLING),
+            download: download_size(client, &applied, &deb.name),
             removes: others(&applied, &deb.name, &[Info::Removing, Info::Obsoleting]),
         }),
         Err(Error::Failed(failure)) if failure.code == ErrorCode::Dependencies => State::Blocked {
