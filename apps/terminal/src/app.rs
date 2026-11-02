@@ -1893,7 +1893,8 @@ impl View for TerminalWindow {
             .then(|| self.blink_from + BLINK * self.blink_phase.saturating_add(1))
     }
 
-    fn tick(&mut self, window: &mut Window, _now: Instant) -> bool {
+    fn tick(&mut self, window: &mut Window, now: Instant) -> bool {
+        self.blink_phase = self.blink_phase(now);
         window.request_redraw();
         true
     }
