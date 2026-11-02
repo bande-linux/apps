@@ -879,6 +879,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-textedit"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-app-menu",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-toolkit",
+ "bande-xdg",
+ "encoding_rs",
+ "regex",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
 name = "bande-thumbnails"
 version = "0.1.2"
 source = "git+https://github.com/bande-linux/desktop?rev=4c52920e8a98d06ac74cc69d890b14fda7da938e#4c52920e8a98d06ac74cc69d890b14fda7da938e"

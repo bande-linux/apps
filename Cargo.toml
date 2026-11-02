@@ -13,6 +13,7 @@ accesskit = "=0.25.2"
 alacritty_terminal = { version = "=0.26.0", default-features = false }
 base64 = "=0.22.1"
 data-encoding = "2.11"
+encoding_rs = "=0.8.44"
 fatfs = { version = "=0.3.6", default-features = false, features = ["std", "alloc"] }
 flate2 = "=1.1.10"
 hayro = "=0.8.0"
@@ -25,6 +26,7 @@ kamadak-exif = "=0.6.1"
 mailparse = "0.18"
 native-tls = "0.2.18"
 resvg = { version = "=0.49.0", default-features = false }
+regex = "=1.13.1"
 roxmltree = "=0.21.2"
 rusqlite = "0.41"
 rustix = "=1.1.6"
