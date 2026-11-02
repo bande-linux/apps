@@ -35,6 +35,7 @@ menu-find-next = Find Next
 menu-find-previous = Find Previous
 menu-previous-prompt = Jump to Previous Command
 menu-next-prompt = Jump to Next Command
+menu-select-output = Select Command Output
 menu-open-link = Open Link
 menu-copy-link = Copy Link
 menu-open = Open

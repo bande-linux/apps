@@ -903,6 +903,11 @@ impl TerminalWindow {
                 self.offer_primary(window);
             }
             Command::ClearScrollback => self.session().terminal.clear_scrollback(),
+            Command::SelectOutput => {
+                if self.session().terminal.select_command_output() {
+                    self.offer_primary(window);
+                }
+            }
             Command::BiggerText => {
                 self.set_font_size(window, next_font_size(self.painter.font_size(), true))
             }
