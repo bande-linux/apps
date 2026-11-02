@@ -1,15 +1,19 @@
 use std::env;
-use std::fs;
+use std::fs::{self, DirBuilder};
 use std::io::ErrorKind;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rustix::process::getuid;
 use rustix::rand::{GetRandomFlags, getrandom};
 
 use crate::manifest::{Forward, MANIFEST_VERSION, Manifest};
 use crate::qemu::{Host, utf8};
 use crate::seed::CloudInit;
 use crate::{Error, Result};
+
+const NETWORK_ROOT: &str = "/tmp";
 
 pub struct Library {
     data: PathBuf,
@@ -29,6 +33,7 @@ pub struct Machine {
     pub manifest: Manifest,
     dir: PathBuf,
     runtime: PathBuf,
+    network: PathBuf,
 }
 
 impl Library {
@@ -101,16 +106,15 @@ impl Library {
 
     pub fn delete(&self, machine: Machine) -> Result<()> {
         fs::remove_dir_all(&machine.dir)?;
-        match fs::remove_dir_all(&machine.runtime) {
-            Err(error) if error.kind() != ErrorKind::NotFound => Err(error.into()),
-            _ => Ok(()),
-        }
+        remove_folder(&machine.runtime)?;
+        remove_folder(&machine.network)
     }
 
     fn machine(&self, manifest: Manifest) -> Machine {
         Machine {
             dir: self.data.join(&manifest.id),
             runtime: self.runtime.join(&manifest.id),
+            network: network_base().join(&manifest.id),
             manifest,
         }
     }
@@ -170,11 +174,11 @@ impl Machine {
     }
 
     pub(crate) fn passt_socket(&self) -> PathBuf {
-        self.runtime.join("passt.sock")
+        self.network.join("passt.sock")
     }
 
     pub(crate) fn passt_pid_file(&self) -> PathBuf {
-        self.runtime.join("passt.pid")
+        self.network.join("passt.pid")
     }
 
     pub(crate) fn network_unit(&self) -> String {
@@ -182,13 +186,39 @@ impl Machine {
     }
 
     pub(crate) fn reset_runtime(&self) -> Result<()> {
-        match fs::remove_dir_all(&self.runtime) {
-            Err(error) if error.kind() != ErrorKind::NotFound => return Err(error.into()),
-            _ => {}
-        }
+        remove_folder(&self.runtime)?;
         fs::create_dir_all(&self.runtime)?;
+        private_folder(&network_base())?;
+        remove_folder(&self.network)?;
+        fs::create_dir(&self.network)?;
         Ok(())
     }
+}
+
+fn remove_folder(folder: &Path) -> Result<()> {
+    match fs::remove_dir_all(folder) {
+        Err(error) if error.kind() != ErrorKind::NotFound => Err(error.into()),
+        _ => Ok(()),
+    }
+}
+
+fn network_base() -> PathBuf {
+    PathBuf::from(NETWORK_ROOT).join(format!("velox-{}", getuid().as_raw()))
+}
+
+fn private_folder(folder: &Path) -> Result<()> {
+    match DirBuilder::new().mode(0o700).create(folder) {
+        Err(error) if error.kind() != ErrorKind::AlreadyExists => return Err(error.into()),
+        _ => {}
+    }
+    let metadata = fs::symlink_metadata(folder)?;
+    if !metadata.is_dir() || metadata.uid() != getuid().as_raw() || metadata.mode() & 0o077 != 0 {
+        return Err(Error::Io(std::io::Error::other(format!(
+            "{} is not a private folder",
+            folder.display()
+        ))));
+    }
+    Ok(())
 }
 
 fn random_bytes<const N: usize>() -> Result<[u8; N]> {
