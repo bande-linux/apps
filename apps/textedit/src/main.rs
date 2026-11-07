@@ -323,12 +323,8 @@ impl TextEdit {
                 item("save-as", "save-as")
                     .shortcut("Shift+Ctrl+S")
                     .enabled(windowed),
-<<<<<<< HEAD
-                item("revert", "revert").enabled(on_disk && edited),
-                print_item(windowed),
-=======
                 Self::revert_menu(view, on_disk, edited),
->>>>>>> origin/main
+                print_item(windowed),
                 Entry::submenu(&L10N.tr("reopen-with-encoding"), reopen)
                     .enabled(on_disk && !edited && text_format),
             ],
