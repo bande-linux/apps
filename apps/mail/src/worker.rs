@@ -507,7 +507,13 @@ impl Runner {
     fn flush(&mut self) -> Result<Option<Vec<String>>> {
         let account = self.account.id;
         let (session, store) = self.connected()?;
-        flush(session, store, account)
+        let Some(flushed) = flush(session, store, account)? else {
+            return Ok(None);
+        };
+        if let Some(reason) = flushed.refused.into_iter().next() {
+            self.emit(Event::MailboxRefused(reason));
+        }
+        Ok(Some(flushed.targets))
     }
 
     fn sync_one(&mut self, mailbox: &Mailbox) -> Result<()> {

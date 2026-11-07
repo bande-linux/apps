@@ -85,7 +85,7 @@ fn choose(outbox: bande_inbox::Outbox<Chosen>, export: Option<(String, String)>)
             };
             let done = match export {
                 None => Chosen::Open(chosen),
-                Some((_, data)) => match std::fs::write(&chosen, data) {
+                Some((_, data)) => match bande_xdg::replace_file(&chosen, data) {
                     Ok(()) => return,
                     Err(error) => Chosen::Failed(L10N.tr_args(
                         "export-failed",

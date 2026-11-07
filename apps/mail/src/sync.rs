@@ -13,30 +13,25 @@ pub struct Report {
     pub changed: bool,
 }
 
-fn refused_is_done(result: Result<()>) -> Result<()> {
-    match result {
-        Err(Error::Refused(text)) => {
-            tracing::info!("the server refused a queued change, dropping it: {text}");
-            Ok(())
-        }
-        other => other,
-    }
+#[derive(Debug, Default)]
+pub struct Flushed {
+    pub targets: Vec<String>,
+    pub refused: Vec<String>,
 }
 
-pub fn flush(
-    session: &mut Session,
-    store: &Store,
-    account: AccountId,
-) -> Result<Option<Vec<String>>> {
+pub fn flush(session: &mut Session, store: &Store, account: AccountId) -> Result<Option<Flushed>> {
     let pending = store.pending(account)?;
     if pending.is_empty() {
         return Ok(None);
     }
-    let mut targets = Vec::new();
+    let mut flushed = Flushed::default();
     for change in pending {
         let selected = match session.select(&change.mailbox) {
             Ok(selected) => Some(selected),
-            Err(Error::Refused(_)) => None,
+            Err(Error::Refused(text)) => {
+                flushed.refused.push(text);
+                None
+            }
             Err(error) => return Err(error),
         };
         if selected.is_some_and(|selected| selected.uid_validity == change.uid_validity) {
@@ -45,16 +40,19 @@ pub fn flush(
                 Action::Move(target) => session.move_to(&change.uids, target),
                 Action::Expunge => session.expunge(&change.uids),
             };
-            refused_is_done(applied)?;
+            match applied {
+                Err(Error::Refused(text)) => flushed.refused.push(text),
+                other => other?,
+            }
         }
         if let Action::Move(target) = change.action
-            && !targets.contains(&target)
+            && !flushed.targets.contains(&target)
         {
-            targets.push(target);
+            flushed.targets.push(target);
         }
         store.finish_pending(change.id)?;
     }
-    Ok(Some(targets))
+    Ok(Some(flushed))
 }
 
 pub fn sync_folders(session: &mut Session, store: &mut Store, account: AccountId) -> Result<()> {

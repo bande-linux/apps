@@ -25,7 +25,7 @@ use bande_toolkit::{
     Appearance, FrameRegions, MenuPlacement, Rect, Scene, TextSystem, Window, WindowError,
     WindowEvent,
 };
-use bande_xdg::{Apps, config_dirs, data_dirs, data_home};
+use bande_xdg::{Apps, config_dirs, data_dirs, data_home, replace_file};
 
 use crate::picker::{MAX_ATTACHMENT, Picked, Picker};
 
@@ -220,8 +220,10 @@ fn save_attachment(name: String, data: Vec<u8>) {
         .spawn(
             move || match choose_save_path(&L10N.tr("attachment-save-title"), &name) {
                 Ok(Some(path)) => {
-                    if let Err(error) = std::fs::write(&path, &data) {
+                    if let Err(error) = replace_file(&path, &data) {
                         tracing::warn!("cannot save {}: {error}", path.display());
+                        let args = [("error", error.to_string().into())];
+                        announce(L10N.tr_args("attachment-save-failed", args), name, false);
                     }
                 }
                 Ok(None) => {}
