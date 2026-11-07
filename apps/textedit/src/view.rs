@@ -17,11 +17,12 @@ use bande_toolkit::{
 };
 
 use crate::L10N;
-use crate::document::{Content, Format, Loaded, encode};
+use crate::document::{Content, Format, Loaded, encode, read};
 use crate::encoding::{LineEnding, TextEncoding};
-use crate::file::write_atomically;
+use crate::file::{MAX_FILE_BYTES, read_bounded, write_atomically};
 use crate::find::{self, Query};
 use crate::formats::{heading, markdown, rtf};
+use crate::session::seconds_now;
 use crate::session::{Record, Session};
 use crate::worker::{Message, WriteError, spawn};
 
@@ -577,9 +578,17 @@ impl DocumentView {
         let (encoding, line_ending, format) = (self.encoding, self.line_ending, self.format);
         let title = self.name();
         let (outbox, token) = (self.outbox.clone(), self.token);
+        let session = self.session.clone();
         spawn("save", move || {
             let outcome =
                 encode(&content, format, encoding, line_ending, &title).and_then(|bytes| {
+                    if let Some(session) = &session
+                        && let Ok(before) = read_bounded(&path, MAX_FILE_BYTES)
+                        && before != bytes
+                        && let Err(error) = session.keep_version(&path, &before, seconds_now())
+                    {
+                        tracing::warn!("cannot keep the old version: {error}");
+                    }
                     write_atomically(&path, &bytes)
                         .map_err(|error| WriteError::Io(error.to_string()))
                 });
@@ -589,6 +598,48 @@ impl DocumentView {
                 path,
                 outcome,
             });
+        });
+    }
+
+    pub fn versions(&self) -> Vec<u64> {
+        match (&self.session, &self.path) {
+            (Some(session), Some(path)) => session.versions(path),
+            _ => Vec::new(),
+        }
+    }
+
+    pub fn revert_to(&mut self, version: u64) {
+        let (Some(session), Some(path)) = (self.session.clone(), self.path.clone()) else {
+            return;
+        };
+        let edited = self.is_edited().then(|| {
+            (
+                self.content(),
+                self.format,
+                self.encoding,
+                self.line_ending,
+                self.name(),
+            )
+        });
+        self.start_loading(Some(path.clone()));
+        let kept = self.format;
+        let (outbox, token) = (self.outbox.clone(), self.token);
+        spawn("revert-to", move || {
+            if let Some((content, format, encoding, line_ending, title)) = edited
+                && let Ok(bytes) = encode(&content, format, encoding, line_ending, &title)
+                && let Err(error) = session.keep_version(&path, &bytes, seconds_now())
+            {
+                tracing::warn!("cannot keep the edited version: {error}");
+            }
+            let loaded = session
+                .version(&path, version)
+                .map_err(|error| error.to_string())
+                .and_then(|bytes| read(bytes, kept, None))
+                .map(|loaded| Loaded {
+                    from_disk: false,
+                    ..loaded
+                });
+            outbox.send(Message::Loaded { token, loaded });
         });
     }
 

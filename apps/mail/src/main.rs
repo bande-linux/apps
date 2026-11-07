@@ -605,10 +605,13 @@ impl Program for Mail {
         let changes = Inbox::new()?;
         listen(changes.outbox());
         view.start();
-        let main = show_main(cx, Box::new(view))?;
+        let (main, parked) = match arguments.is_empty() {
+            true => (None, Some(Box::new(view))),
+            false => (Some(show_main(cx, Box::new(view))?), None),
+        };
         let mut mail = Self {
-            main: Some(main),
-            parked: None,
+            main,
+            parked,
             apps: None,
             picker: Picker::new()?,
             changes,
@@ -616,7 +619,9 @@ impl Program for Mail {
         for argument in arguments {
             mail.open_argument(cx, &argument);
         }
-        mail.serve(cx, main);
+        if let Some(main) = main {
+            mail.serve(cx, main);
+        }
         for outgoing in left_unsent() {
             let outgoing = match main_view(cx, mail.main, &mut mail.parked) {
                 Some(view) => view.recover(outgoing),

@@ -4,7 +4,6 @@ mod menu;
 mod panes;
 mod process;
 mod render;
-mod restore;
 mod session;
 mod settings;
 mod settings_view;
@@ -25,7 +24,6 @@ pub use menu::{CLOSE_WINDOW, MenuCommand, TerminalContext, app_menus, tab_menu, 
 pub use panes::{Axis, Divider, Layout, Side};
 pub use process::{Report, Reports};
 pub use render::{DEFAULT_FONT_SIZE, Painter, Pane};
-pub use restore::{SavedWindow, claim, left_behind, window_file, windows_folder};
 pub use session::{Notice, Session};
 pub use settings::{
     COLUMN_RANGE, CloseAsk, CursorStyle, FONT_SIZES, NewTabFolder, ROW_RANGE, SCROLLBACK_CHOICES,

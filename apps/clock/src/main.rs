@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, WindowId};
 use bande_app_menu::Entry;
 use bande_clock::bus::{Bus, Summary, Waker};
 use bande_clock::deadline::{Deadline, Timeline};
@@ -374,7 +374,7 @@ impl Program for ClockApp {
             app.boot.wakes_system()
         );
         app.check();
-        if !cx.launched_in_background() {
+        if !cx.launched_in_background() && !arguments.is_empty() {
             app.reopen(cx);
         }
         app.settle(cx);
@@ -475,6 +475,17 @@ impl Program for ClockApp {
         match show(cx, view) {
             Ok(main) => self.main = Some(main),
             Err(error) => tracing::warn!("cannot open Clock: {error}"),
+        }
+    }
+
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        Saved::of(&cx.view(window)?.page().command())
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, saved: Saved) {
+        self.reopen(cx);
+        if let Some(command) = saved.read::<String>() {
+            self.command(cx, self.main, &command);
         }
     }
 

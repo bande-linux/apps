@@ -180,18 +180,16 @@ impl Disks {
 impl Program for Disks {
     type View = Pane;
 
-    fn start(cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+    fn start(_cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let live = Live::start()
             .inspect_err(|error| tracing::warn!("cannot follow UDisks2: {error}"))
             .ok();
-        let mut disks = Self {
+        Ok(Self {
             main: None,
             live,
             model: Model::default(),
             abilities: None,
-        };
-        disks.show_main(cx);
-        Ok(disks)
+        })
     }
 
     fn menus(&self, cx: &Cx<Self>) -> Menus {

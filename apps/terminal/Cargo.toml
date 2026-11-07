@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+serde.workspace = true
 accesskit.workspace = true
 bande-app.workspace = true
 alacritty_terminal.workspace = true
