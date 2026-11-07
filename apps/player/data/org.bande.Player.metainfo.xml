@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Player</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Player</name>
+  <summary>Play audio and video files</summary>
+  <description>
+    <p>Plays common music and film files with simple controls over the picture, full screen, speed, audio and subtitle tracks, and media keys.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Player.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+</component>

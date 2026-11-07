@@ -1,0 +1,58 @@
+[package]
+name = "bande-player"
+description = "Bande Player: plays audio and video files"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+gstreamer.workspace = true
+gstreamer-app.workspace = true
+gstreamer-video.workspace = true
+rustix = { workspace = true, features = ["fs", "net"] }
+accesskit.workspace = true
+libc.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+bande-inbox.workspace = true
+bande-media.workspace = true
+bande-media-view.workspace = true
+bande-app.workspace = true
+bande-app-menu.workspace = true
+bande-l10n.workspace = true
+bande-toolkit.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+rustix = { workspace = true, features = ["event", "fs", "net"] }
+
+[[bin]]
+name = "bande-player"
+path = "src/main.rs"
+
+[[bin]]
+name = "bande-media-engine"
+path = "src/bin/bande-media-engine/main.rs"
+
+[lints]
+workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+copyright = "2026 Mikael Hug"
+section = "video"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-pulseaudio, gstreamer1.0-libav, gstreamer1.0-dav1d"
+extended-description = """\
+The audio and video player of the Bande desktop: opens common music and film \
+files from Files, with simple controls over the picture, full screen, speed, \
+audio and subtitle tracks, media keys, and Quick Look playback in Files."""
+assets = [
+    ["target/release/bande-player", "usr/bin/", "755"],
+    ["target/release/bande-media-engine", "usr/bin/", "755"],
+    ["data/org.bande.Player.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.Player.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["data/org.bande.Player.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+]

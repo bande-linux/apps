@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Player
+Comment=Play audio and video files
+Icon=org.bande.Player
+Exec=bande-player %U
+StartupNotify=true
+Categories=AudioVideo;Audio;Video;Player;
+MimeType=audio/aac;audio/flac;audio/mp4;audio/mpeg;audio/ogg;audio/opus;audio/vorbis;audio/wav;audio/webm;audio/x-flac;audio/x-m4a;audio/x-matroska;audio/x-mp3;audio/x-opus+ogg;audio/x-vorbis+ogg;audio/x-wav;video/mp4;video/mpeg;video/ogg;video/quicktime;video/webm;video/x-m4v;video/x-matroska;video/x-msvideo;video/mp2t;

@@ -1,0 +1,17 @@
+app-name = Player
+open-title = Open Media
+open-filter = Audio and video
+menu-file = File
+menu-open = Open…
+menu-playback = Playback
+menu-play = Play
+menu-pause = Pause
+menu-next = Next
+menu-previous = Previous
+menu-speed = Speed
+menu-audio-track = Audio Track
+menu-subtitles = Subtitles
+menu-subtitles-off = Off
+menu-loop = Loop
+menu-view = View
+menu-full-screen = Full Screen

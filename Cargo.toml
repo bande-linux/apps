@@ -28,6 +28,10 @@ rusqlite = "0.41"
 rustls = { version = "=0.23.46", default-features = false, features = ["aws-lc-rs", "logging", "prefer-post-quantum", "std", "tls12"] }
 rustls-platform-verifier = "=0.7.1"
 rustix = "=1.1.6"
+libc = "=0.2.191"
+gstreamer = "=0.25.4"
+gstreamer-app = "=0.25.2"
+gstreamer-video = "=0.25.4"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 serde_yaml_ng = "=0.10.0"
@@ -50,6 +54,8 @@ bande-design = { git = "https://github.com/bande-linux/desktop", rev = "a60fbdc2
 bande-fs = { git = "https://github.com/bande-linux/desktop", rev = "a60fbdc247771da5c51cdc4b286ad1bca550c109" }
 bande-inbox = { git = "https://github.com/bande-linux/desktop", rev = "a60fbdc247771da5c51cdc4b286ad1bca550c109" }
 bande-l10n = { git = "https://github.com/bande-linux/desktop", rev = "a60fbdc247771da5c51cdc4b286ad1bca550c109" }
+bande-media-view = { git = "https://github.com/bande-linux/desktop", rev = "a60fbdc247771da5c51cdc4b286ad1bca550c109" }
+bande-media = { git = "https://github.com/bande-linux/desktop", rev = "a60fbdc247771da5c51cdc4b286ad1bca550c109" }
 bande-notify = { git = "https://github.com/bande-linux/desktop", rev = "a60fbdc247771da5c51cdc4b286ad1bca550c109" }
 bande-packages = { git = "https://github.com/bande-linux/desktop", rev = "a60fbdc247771da5c51cdc4b286ad1bca550c109" }
 bande-sound = { git = "https://github.com/bande-linux/desktop", rev = "a60fbdc247771da5c51cdc4b286ad1bca550c109", default-features = false }
