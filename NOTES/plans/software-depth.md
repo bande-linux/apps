@@ -38,8 +38,8 @@ done.
 | Dependencies | What else it installs or removes, how much | Have: "Also installs N packages · X to download" with the list, and what it removes (the button becomes Install and Remove) |
 | Trust | Warn for packages outside the sources | Have: warns that the package is not from the software sources and its scripts run as root; when the sources have the same version, offers Install from Software Sources (signed) beside Install This File |
 | Version | Upgrade, downgrade, already installed | Have: upgrade and downgrade notices, a downgrade caution, "Version X is installed" with Remove… |
-| Install | Password, progress, cancel | Have: password hint, "Waiting for your password…", progress, Cancel |
-| Done | Success with Open, failure with a reason | Have: Open per app the package installs, restart notice; failures for locked, system package, no PackageKit, no network, disk space, dependencies, with the details |
+| Install | Password, progress, cancel | Have: password hint, "Waiting for your password…", progress, Cancel; a refused or dismissed password says nothing was changed and what to do |
+| Done | Success with Open, failure with a reason | Have: Open per app the package installs, restart notice; failures for locked, system package, no PackageKit, no network, disk space, dependencies, with the details and Try Again |
 | Architecture | Refuse a foreign package clearly | Have |
 
 ## Remaining, ranked
