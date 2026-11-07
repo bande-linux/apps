@@ -120,7 +120,9 @@ impl Frames {
                     .read(true)
                     .write(true)
                     .open(UDMABUF_DEVICE)
-                    .inspect_err(|error| eprintln!("bande-media-engine: no {UDMABUF_DEVICE}: {error}"))
+                    .inspect_err(|error| {
+                        eprintln!("bande-media-engine: no {UDMABUF_DEVICE}: {error}")
+                    })
                     .ok()
             })
             .flatten();
@@ -275,7 +277,9 @@ impl Frames {
             },
             strides: [
                 u32::try_from(strides[0])?,
-                strides.get(1).map_or(Ok(0), |stride| u32::try_from(*stride))?,
+                strides
+                    .get(1)
+                    .map_or(Ok(0), |stride| u32::try_from(*stride))?,
             ],
             lengths: [first.len() as u64, second.len() as u64],
         };
