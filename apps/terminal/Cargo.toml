@@ -24,6 +24,7 @@ bande-l10n.workspace = true
 bande-notify.workspace = true
 bande-sound.workspace = true
 bande-spring.workspace = true
+bande-terminal-view.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 

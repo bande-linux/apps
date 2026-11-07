@@ -14,7 +14,16 @@ use crate::seed::CloudInit;
 use crate::{Error, Result};
 
 const NETWORK_ROOT: &str = "/tmp";
+const UNIT_PREFIX: &str = match option_env!("VELOX_TEST_UNIT_PREFIX") {
+    Some(prefix) => prefix,
+    None => "velox-vm",
+};
+
+pub fn unit_name(id: &str) -> String {
+    format!("{UNIT_PREFIX}-{id}.service")
+}
 const CONTROL_SOCKET: &str = "control.sock";
+const SERIAL_SOCKET: &str = "serial.sock";
 
 pub struct Library {
     data: PathBuf,
@@ -124,6 +133,10 @@ impl Library {
         Ok(machine)
     }
 
+    pub fn serial_socket(&self, id: &str) -> PathBuf {
+        self.runtime.join(id).join(SERIAL_SOCKET)
+    }
+
     pub fn control_socket(&self, id: &str) -> PathBuf {
         self.runtime.join(id).join(CONTROL_SOCKET)
     }
@@ -189,7 +202,7 @@ impl Machine {
     }
 
     pub fn unit(&self) -> String {
-        format!("velox-vm-{}.service", self.manifest.id)
+        unit_name(&self.manifest.id)
     }
 
     pub fn dir(&self) -> &Path {
@@ -225,7 +238,7 @@ impl Machine {
     }
 
     pub fn serial_socket(&self) -> PathBuf {
-        self.runtime.join("serial.sock")
+        self.runtime.join(SERIAL_SOCKET)
     }
 
     pub fn share_socket(&self, index: usize) -> PathBuf {
@@ -265,7 +278,7 @@ impl Machine {
     }
 
     pub(crate) fn network_unit(&self) -> String {
-        format!("velox-vm-{}-network.service", self.manifest.id)
+        format!("{UNIT_PREFIX}-{}-network.service", self.manifest.id)
     }
 
     pub(crate) fn reset_runtime(&self) -> Result<()> {

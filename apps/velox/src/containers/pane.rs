@@ -19,6 +19,7 @@ use super::widgets::{PortLinks, Split};
 use super::work::{Event, Request as Work};
 use crate::L10N;
 use crate::engine::{Action, Container, Engine, EngineInfo, Flavor, Sample};
+use crate::shell::ShellTarget;
 use crate::ui::{Centered, Request, symbol};
 
 const START_SYMBOL: &str = include_str!("../../data/symbols/start.svg");
@@ -515,6 +516,16 @@ impl Containers {
             (menu::LOGS, _, _) => self
                 .requests
                 .extend(logs.map(|target| Request::Containers(Work::Logs(target)))),
+            (menu::SHELL, Some(container), Some(engine)) => {
+                if container.running() {
+                    self.requests
+                        .push(Request::Containers(Work::Shell(ShellTarget::Exec {
+                            engine,
+                            container: container.id.clone(),
+                            name: container.name().to_owned(),
+                        })));
+                }
+            }
             (menu::TERMINAL, _, _) => self
                 .requests
                 .extend(terminal.map(|argv| Request::Containers(Work::Terminal(argv)))),

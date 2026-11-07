@@ -76,9 +76,11 @@ pub enum Request {
     PresentSnapshot(String),
     ChooseIso,
     ChooseFolder(String),
+    Serial(String),
 }
 
 pub enum Effect {
+    Serial(crate::shell::ShellTarget),
     Open(String),
     PresentClone(String),
     PresentSnapshot(String),
@@ -167,6 +169,15 @@ impl Hub {
                 let job = self.backend.clone_machine(id, new);
                 fleet.add_job(job, name, os);
                 fleet.set_job_phase(job);
+            }
+            Request::Serial(id) => {
+                let socket = bande_vm::Library::open().ok()?.serial_socket(&id);
+                let name = fleet.entry(&id)?.name().to_owned();
+                return Some(Effect::Serial(crate::shell::ShellTarget::Serial {
+                    machine: id,
+                    name,
+                    socket,
+                }));
             }
             Request::PresentClone(id) => return Some(Effect::PresentClone(id)),
             Request::PresentSnapshot(id) => return Some(Effect::PresentSnapshot(id)),

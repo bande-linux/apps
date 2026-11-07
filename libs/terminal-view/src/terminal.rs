@@ -13,7 +13,7 @@ use alacritty_terminal::vte::ansi::{ClearMode, CursorShape, CursorStyle, Handler
 use bande_toolkit::ui::ScrollExtent;
 use bande_xdg::file_uri;
 
-use crate::SCROLLBACK;
+pub const SCROLLBACK: usize = 10_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GridSize {

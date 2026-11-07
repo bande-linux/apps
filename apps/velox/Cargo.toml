@@ -21,6 +21,7 @@ bande-app.workspace = true
 bande-app-menu.workspace = true
 bande-fs.workspace = true
 bande-l10n.workspace = true
+bande-terminal-view.workspace = true
 bande-toolkit.workspace = true
 bande-vm.workspace = true
 bande-watch.workspace = true

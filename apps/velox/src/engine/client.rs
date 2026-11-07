@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 
@@ -237,6 +237,12 @@ pub(crate) fn is_container_id(id: &str) -> bool {
     !id.is_empty() && id.chars().all(|char| char.is_ascii_alphanumeric())
 }
 
+#[derive(Deserialize)]
+struct ExecCreated {
+    #[serde(rename = "Id")]
+    id: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Engine {
     socket: PathBuf,
@@ -348,6 +354,72 @@ impl Engine {
             200 => Ok((handle, response.body)),
             status => Err(Error::Status(status, format!("the engine refused {path}"))),
         }
+    }
+
+    pub fn create_exec(&self, container: &str, shells: &[&str]) -> Result<String, Error> {
+        let command = shells
+            .iter()
+            .map(|shell| format!("[ -x {shell} ] && exec {shell};"))
+            .collect::<String>();
+        let body = serde_json::to_vec(&serde_json::json!({
+            "AttachStdin": true,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": true,
+            "Cmd": ["/bin/sh", "-c", command],
+            "Env": ["TERM=xterm-256color"],
+        }))?;
+        let mut data: &[u8] = &body;
+        let mut reply = Vec::new();
+        self.request(
+            "POST",
+            &format!("/containers/{container}/exec"),
+            Some(Upload {
+                kind: "application/json",
+                length: body.len() as u64,
+                data: &mut data,
+            }),
+        )?
+        .read_to_end(&mut reply)?;
+        let created: ExecCreated = serde_json::from_slice(&reply)?;
+        Ok(created.id)
+    }
+
+    pub fn start_exec(&self, id: &str) -> Result<UnixStream, Error> {
+        let mut stream = UnixStream::connect(&self.socket)?;
+        let body = r#"{"Detach":false,"Tty":true}"#;
+        write!(
+            stream,
+            "POST /exec/{id}/start HTTP/1.1\r\nHost: docker\r\nUser-Agent: Velox\r\n\
+             Connection: Upgrade\r\nUpgrade: tcp\r\nContent-Type: application/json\r\n\
+             Content-Length: {}\r\n\r\n{body}",
+            body.len()
+        )?;
+        let mut head = Vec::new();
+        let mut byte = [0; 1];
+        while !head.ends_with(b"\r\n\r\n") {
+            if stream.read(&mut byte)? == 0 {
+                return Err(Error::Status(0, "the engine closed the shell".to_owned()));
+            }
+            head.push(byte[0]);
+        }
+        let status = String::from_utf8_lossy(&head)
+            .split_whitespace()
+            .nth(1)
+            .and_then(|status| status.parse::<u16>().ok())
+            .unwrap_or_default();
+        match status {
+            101 | 200 => Ok(stream),
+            status => Err(Error::Status(
+                status,
+                "the engine refused the shell".to_owned(),
+            )),
+        }
+    }
+
+    pub fn resize_exec(&self, id: &str, columns: usize, lines: usize) -> Result<(), Error> {
+        self.post(&format!("/exec/{id}/resize?h={lines}&w={columns}"))
+            .map(drop)
     }
 
     pub fn events(&self) -> Result<(UnixStream, Body<UnixStream>), Error> {

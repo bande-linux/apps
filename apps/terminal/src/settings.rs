@@ -2,9 +2,8 @@ use crate::session::ShellCommand;
 use alacritty_terminal::vte::ansi::CursorShape;
 use bande_app_settings::{Stored, flag, pairs};
 
-use crate::render::DEFAULT_FONT_SIZE;
-use crate::theme::Profile;
-use crate::{COLUMNS, ROWS, SCROLLBACK};
+use crate::{COLUMNS, ROWS};
+use bande_terminal_view::{DEFAULT_FONT_SIZE, Profile, SCROLLBACK};
 
 pub const FONT_SIZES: (f32, f32) = (9.0, 32.0);
 

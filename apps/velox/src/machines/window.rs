@@ -502,6 +502,10 @@ impl MachineWindow {
         }
     }
 
+    pub fn open_serial(&mut self) {
+        self.requests.push(Request::Serial(self.id.clone()));
+    }
+
     pub fn toggle_pause(&mut self) {
         match self.can(Act::Resume) {
             true => self.act(Act::Resume),

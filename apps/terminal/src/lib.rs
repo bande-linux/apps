@@ -1,29 +1,26 @@
 mod banner;
-mod keys;
 mod menu;
 mod panes;
 mod process;
-mod render;
 mod session;
 mod settings;
 mod settings_view;
 mod tabs;
-mod terminal;
-mod theme;
 
 use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
-pub use banner::{Banner, BannerAction};
-pub use keys::{
-    Command, MouseButton, MouseKind, bracketed, dropped_text, encode_key, mouse_report,
-    next_font_size, reports_mouse, shortcut, wants_scroll_as_arrows,
+pub use bande_terminal_view::{
+    CellPoint, Command, DEFAULT_FONT_SIZE, GridSize, Highlights, Link, MouseButton, MouseKind,
+    Painter, Pane, Profile, SCROLLBACK, SearchDirection, SelectionKind, Terminal, Theme, bracketed,
+    dropped_text, encode_key, is_openable, mouse_report, next_font_size, reports_mouse, shortcut,
+    wants_scroll_as_arrows,
 };
+pub use banner::{Banner, BannerAction};
 pub use menu::{CLOSE_WINDOW, MenuCommand, TerminalContext, app_menus, tab_menu, terminal_menu};
 pub use panes::{Axis, Divider, Layout, Side};
 pub use process::{Report, Reports};
-pub use render::{DEFAULT_FONT_SIZE, Painter, Pane};
 pub use session::{Notice, Session, ShellCommand};
 pub use settings::{
     COLUMN_RANGE, CloseAsk, CursorStyle, FONT_SIZES, NewTabFolder, ROW_RANGE, SCROLLBACK_CHOICES,
@@ -31,14 +28,9 @@ pub use settings::{
 };
 pub use settings_view::{SETTINGS_SIZE, settings_view};
 pub use tabs::{FULL_SCREEN_LEADING, STRIP_HEIGHT};
-pub use terminal::{
-    CellPoint, GridSize, Highlights, Link, SearchDirection, SelectionKind, Terminal, is_openable,
-};
-pub use theme::{Profile, Theme};
 
 pub static L10N: LazyLock<Localizer> =
     LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-terminal")));
 
 pub const COLUMNS: usize = 80;
 pub const ROWS: usize = 24;
-pub const SCROLLBACK: usize = 10_000;

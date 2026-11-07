@@ -1,0 +1,20 @@
+[package]
+name = "bande-terminal-view"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "A terminal emulator and its rendering over any byte stream, for the Bande apps"
+publish = false
+
+[dependencies]
+accesskit.workspace = true
+alacritty_terminal.workspace = true
+bande-design.workspace = true
+bande-toolkit.workspace = true
+bande-volumes.workspace = true
+bande-xdg.workspace = true
+
+[lints]
+workspace = true

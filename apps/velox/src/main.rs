@@ -10,12 +10,16 @@ use bande_toolkit::{
     Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use bande_velox::{
-    Act, Effect, Hub, Informer, L10N, LogsTarget, LogsView, MACHINE_WINDOW_SIZE, MachineRequest,
-    MachineWindow, Request, SIDEBAR_WIDTH, Section, Update, VeloxView, Work,
+    Act, ContainerRequest, Effect, Hub, Informer, L10N, LogsTarget, LogsView, MACHINE_WINDOW_SIZE,
+    MachineRequest, MachineWindow, Request, SIDEBAR_WIDTH, Section, ShellLink, ShellTarget,
+    ShellWindow, Update, VeloxView, Work,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
-const APP_ID: &str = "org.bande.Velox";
+const APP_ID: &str = match option_env!("VELOX_TEST_APP_ID") {
+    Some(id) => id,
+    None => "org.bande.Velox",
+};
 const WINDOW_SIZE: (u32, u32) = (920, 560);
 const LOGS_SIZE: (u32, u32) = (760, 480);
 const FIND: &str = "find";
@@ -37,6 +41,9 @@ const MACHINE_PAUSE: &str = "machine-pause";
 const MACHINE_SNAPSHOT: &str = "machine-take-snapshot";
 const MACHINE_CLONE: &str = "machine-clone";
 const MACHINE_OPEN: &str = "machine-open-console";
+const MACHINE_SERIAL: &str = "machine-serial";
+const SHOW_SHELL: &str = "show-shell:";
+const SHELL_SIZE: (u32, u32) = (760, 480);
 const MACHINE_WINDOW_TAG: &str = "machine";
 
 static INFO: Info = Info {
@@ -53,6 +60,7 @@ struct Pane {
     informer: Rc<Informer>,
     work: Work,
     logs: Vec<LogsTarget>,
+    shells: Vec<ShellTarget>,
     apps: Option<Apps>,
 }
 
@@ -70,6 +78,7 @@ impl Pane {
                 Request::OpenLink(link) => self.open_link(window, &link),
                 Request::Task(engine, api, task) => self.informer.run(engine, api, task),
                 Request::Watch(engine, ids) => self.informer.watch("overview", &engine, ids),
+                Request::Containers(ContainerRequest::Shell(target)) => self.shells.push(target),
                 Request::Containers(request) => {
                     let token = || window.activation_token(APP_ID).ok();
                     self.logs.extend(self.work.serve(request, token));
@@ -124,6 +133,11 @@ impl Pane {
                 .machines()
                 .0
                 .present_for_selected(MachineRequest::PresentClone),
+            MACHINE_SERIAL => self
+                .view
+                .machines()
+                .0
+                .present_for_selected(MachineRequest::Serial),
             MACHINE_OPEN => self
                 .view
                 .machines()
@@ -231,6 +245,7 @@ enum Screen {
     Main(Box<Pane>),
     Logs(Box<LogsView>),
     Machine(Box<MachineWindow>),
+    Shell(Box<ShellWindow>),
 }
 
 impl Screen {
@@ -239,6 +254,7 @@ impl Screen {
             Self::Main(pane) => pane.as_mut(),
             Self::Logs(logs) => logs.as_mut(),
             Self::Machine(machine) => machine.as_mut(),
+            Self::Shell(shell) => shell.as_mut(),
         }
     }
 
@@ -247,6 +263,7 @@ impl Screen {
             Self::Main(pane) => pane.as_ref(),
             Self::Logs(logs) => logs.as_ref(),
             Self::Machine(machine) => machine.as_ref(),
+            Self::Shell(shell) => shell.as_ref(),
         }
     }
 
@@ -254,7 +271,7 @@ impl Screen {
         match self {
             Self::Main(pane) => pane.view.machines().0.take_requests(),
             Self::Machine(machine) => machine.take_requests(),
-            Self::Logs(_) => Vec::new(),
+            Self::Logs(_) | Self::Shell(_) => Vec::new(),
         }
     }
 
@@ -262,7 +279,7 @@ impl Screen {
         match self {
             Self::Main(pane) => pane.view.machines_changed(),
             Self::Machine(machine) => machine.refresh(),
-            Self::Logs(_) => return false,
+            Self::Logs(_) | Self::Shell(_) => return false,
         }
         true
     }
@@ -271,7 +288,7 @@ impl Screen {
         match self {
             Self::Main(pane) => pane.view.present_notice(title, message),
             Self::Machine(machine) => machine.present_notice(title, message),
-            Self::Logs(_) => {}
+            Self::Logs(_) | Self::Shell(_) => {}
         }
     }
 
@@ -281,12 +298,16 @@ impl Screen {
                 matches!(pane.view.section(), Section::Machines | Section::Overview)
             }
             Self::Machine(machine) => machine.wants_stats(),
-            Self::Logs(_) => false,
+            Self::Logs(_) | Self::Shell(_) => false,
         }
     }
 }
 
 impl View for Screen {
+    fn keys(&self) -> Option<Keys> {
+        self.view_ref().keys()
+    }
+
     fn scene(&mut self, window: &mut Window) -> Scene {
         self.view().scene(window)
     }
@@ -382,6 +403,26 @@ impl Velox {
         }
     }
 
+    fn open_shell(cx: &mut Cx<Self>, target: ShellTarget) {
+        let shown = cx.windows().find(|window| {
+            matches!(cx.view(*window), Some(Screen::Shell(shell)) if shell.target() == &target)
+        });
+        if let Some(window) = shown {
+            return cx.raise(window, None);
+        }
+        let title = target.title();
+        let link = match ShellLink::connect(target) {
+            Ok(link) => link,
+            Err(error) => return tracing::warn!("cannot open the shell: {error}"),
+        };
+        let opened = cx.open(Kind::Secondary("shell"), &title, SHELL_SIZE, |appearance| {
+            Screen::Shell(Box::new(ShellWindow::new(link, appearance)))
+        });
+        if let Err(error) = opened {
+            tracing::warn!("cannot open the shell: {error}");
+        }
+    }
+
     fn connect(cx: &mut Cx<Self>, window: WindowId, command: Vec<String>) {
         let token = cx
             .window(window)
@@ -407,6 +448,7 @@ impl Velox {
             };
             match hub.serve(request) {
                 Some(Effect::Open(id)) => self.open_machine(cx, &id),
+                Some(Effect::Serial(target)) => Self::open_shell(cx, target),
                 Some(Effect::PresentClone(id)) => {
                     self.open_machine(cx, &id);
                     self.with_machine(cx, &id, |machine| machine.present_clone(None));
@@ -510,6 +552,8 @@ impl Velox {
                 Entry::item(&L10N.tr("machine-open"), MACHINE_OPEN)
                     .shortcut("Ctrl+O")
                     .enabled(connect || single(Act::Delete)),
+                Entry::item(&L10N.tr("machine-serial"), MACHINE_SERIAL)
+                    .enabled(can(Act::ShutDown) || can(Act::Resume)),
                 Entry::item(&L10N.tr("machine-send-ctrl-alt-delete"), MACHINE_SEND_KEYS)
                     .enabled(has_console),
                 Entry::separator(),
@@ -555,6 +599,7 @@ impl Velox {
                     work: Work::new(Rc::clone(&shared)),
                     informer: shared,
                     logs: Vec::new(),
+                    shells: Vec::new(),
                     apps: None,
                 }))
             },
@@ -569,6 +614,13 @@ impl Velox {
     }
 
     fn open_logs(&mut self, cx: &mut Cx<Self>) {
+        let shells = self
+            .pane(cx)
+            .map(|(_, pane)| std::mem::take(&mut pane.shells))
+            .unwrap_or_default();
+        for target in shells {
+            Self::open_shell(cx, target);
+        }
         let wanted = self
             .pane(cx)
             .map(|(_, pane)| std::mem::take(&mut pane.logs))
@@ -632,6 +684,10 @@ impl Program for Velox {
                 &logs.target().title(),
                 &format!("{SHOW_LOGS}{}", logs.target().key()),
             )),
+            Some(Screen::Shell(shell)) => Some(Entry::item(
+                &shell.target().title(),
+                &format!("{SHOW_SHELL}{}", shell.target().key()),
+            )),
             _ => None,
         }));
         let can_create = view.is_some_and(|view| view.machines_ref().can_create());
@@ -688,6 +744,10 @@ impl Program for Velox {
                     true
                 }
                 MACHINE_OPEN => true,
+                MACHINE_SERIAL => {
+                    machine.open_serial();
+                    true
+                }
                 _ => false,
             };
             if handled {
@@ -705,6 +765,15 @@ impl Program for Velox {
             }
             shown.request_redraw();
             return self.serve_machines(cx, window);
+        }
+        if let Some(key) = command.strip_prefix(SHOW_SHELL) {
+            let shown = cx.windows().find(|window| {
+                matches!(cx.view(*window), Some(Screen::Shell(shell)) if shell.target().key() == key)
+            });
+            if let Some(window) = shown {
+                cx.raise(window, None);
+            }
+            return;
         }
         if let Some(key) = command.strip_prefix(SHOW_LOGS) {
             let shown = cx.windows().find(|window| {
