@@ -119,6 +119,7 @@ impl Library {
             preset: Preset::Linux,
             installer: None,
             shares: Vec::new(),
+            graphics_3d: false,
         });
         fs::create_dir_all(&machine.dir)?;
         let made = host
@@ -173,6 +174,7 @@ impl Library {
             preset: installer.preset,
             installer: Some(utf8(&installer.iso)?.to_owned()),
             shares: Vec::new(),
+            graphics_3d: false,
         });
         fs::create_dir_all(&machine.dir)?;
         let made = host

@@ -361,6 +361,17 @@ impl Fleet {
                 }
             }
             Update::Opened(id) => self.to_open.push(id),
+            Update::Without3d(id) => {
+                let name = self
+                    .entries
+                    .get(&id)
+                    .map_or_else(|| id.clone(), |entry| entry.name().to_owned());
+                self.notices.push(Notice {
+                    id: Some(id),
+                    title: L10N.tr_args("machine-without-3d", [("name", name.into())]),
+                    message: L10N.tr("machine-without-3d-message"),
+                });
+            }
             Update::Network(id, network) => {
                 if let Some(entry) = self.entries.get_mut(&id) {
                     entry.network = (network.received, network.sent);

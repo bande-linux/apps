@@ -507,6 +507,7 @@ impl MachinesPane {
                 | Intent::Port(_)
                 | Intent::Linked(_)
                 | Intent::Eject
+                | Intent::Graphics3d(_)
                 | Intent::AddShare
                 | Intent::RemoveShare(_) => {}
                 Intent::ChooseIso => self.requests.push(Request::ChooseIso),

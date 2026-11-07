@@ -50,6 +50,8 @@ pub struct Manifest {
     pub installer: Option<String>,
     #[serde(default)]
     pub shares: Vec<Share>,
+    #[serde(default)]
+    pub graphics_3d: bool,
 }
 
 impl Manifest {

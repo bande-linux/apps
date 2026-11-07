@@ -52,6 +52,7 @@ enum Intent {
     Linked(bool),
     ChooseIso,
     Eject,
+    Graphics3d(bool),
     AddShare,
     RemoveShare(String),
 }

@@ -14,6 +14,7 @@ const FIRMWARE_VARS: &str = "/usr/share/AAVMF/AAVMF_VARS.fd";
 const SECURE_CODE: &str = "/usr/share/AAVMF/AAVMF_CODE.ms.fd";
 const SECURE_VARS: &str = "/usr/share/AAVMF/AAVMF_VARS.ms.fd";
 const VIRTIOFSD: &str = "/usr/libexec/virtiofsd";
+const RENDER_NODE: &str = "/dev/dri/renderD128";
 const SWTPM: &str = "swtpm";
 const MIB: u64 = 1024 * 1024;
 const OVERHEAD_MIB: u64 = 512;
@@ -42,6 +43,7 @@ pub struct Host {
     pub firmware_code: PathBuf,
     pub firmware_vars: PathBuf,
     pub accel: Accel,
+    pub allow_3d: bool,
 }
 
 impl Accel {
@@ -75,6 +77,7 @@ impl Host {
             firmware_code: firmware_code?,
             firmware_vars: firmware_vars?,
             accel: Accel::detect(),
+            allow_3d: true,
         })
     }
 
@@ -89,6 +92,17 @@ impl Host {
         }
         missing.dedup();
         missing
+    }
+
+    pub fn render_node() -> Option<PathBuf> {
+        Some(PathBuf::from(RENDER_NODE)).filter(|node| node.exists())
+    }
+
+    pub fn uses_3d(&self, machine: &Machine) -> bool {
+        self.allow_3d
+            && machine.manifest.graphics_3d
+            && machine.manifest.preset != Preset::Windows
+            && Self::render_node().is_some()
     }
 
     pub fn virtiofsd() -> Option<PathBuf> {
@@ -222,9 +236,11 @@ impl Host {
             ),
         ]);
         push(&["-serial", "chardev:serial"]);
-        match windows {
-            true => push(&["-device", "ramfb"]),
-            false => push(&["-device", "virtio-gpu-pci"]),
+        let accelerated = self.uses_3d(machine);
+        match (windows, accelerated) {
+            (true, _) => push(&["-device", "ramfb"]),
+            (false, true) => push(&["-device", "virtio-gpu-gl-pci"]),
+            (false, false) => push(&["-device", "virtio-gpu-pci"]),
         }
         push(&["-device", "qemu-xhci,id=usb"]);
         push(&["-device", "usb-kbd,bus=usb.0"]);
@@ -264,7 +280,13 @@ impl Host {
             "-device",
             "virtserialport,chardev=vdagent,name=com.redhat.spice.0",
         ]);
-        push(&["-display", "dbus,p2p=yes,gl=off"]);
+        match accelerated {
+            true => push(&[
+                "-display",
+                &format!("dbus,p2p=yes,gl=on,rendernode={RENDER_NODE}"),
+            ]),
+            false => push(&["-display", "dbus,p2p=yes,gl=off"]),
+        }
         if manifest.resume_from.is_some() {
             push(&["-S"]);
         }

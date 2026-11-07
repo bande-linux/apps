@@ -7,7 +7,7 @@ use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_toolkit::ui::{
     Axis, Button, Context, Form, FormLine, Label, ScrollView, SegmentedControl, Stack, Stepper,
-    Table, TextField, Ui, Widget, WidgetId,
+    Table, TextField, Toggle, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
     Appearance, FrameRegions, HEADER_LEADING, Header, Palette, Rect, Scene, TextSystem,
@@ -263,6 +263,10 @@ impl MachineWindow {
                     }
                 }
                 Intent::Choice(choice) => self.sheet_choice(&choice),
+                Intent::Graphics3d(on) => {
+                    self.requests
+                        .push(Request::Change(self.id.clone(), Change::Graphics3d(on)));
+                }
                 Intent::Eject => {
                     self.requests
                         .push(Request::Change(self.id.clone(), Change::Eject));
@@ -754,6 +758,36 @@ impl MachineWindow {
                 )),
             ));
         }
+        lines.push(FormLine::Heading(L10N.tr("machine-section-display")));
+        let has_memory =
+            manifest.snapshots.iter().any(|snapshot| snapshot.memory) || manifest.is_suspended();
+        let available =
+            bande_vm::Host::render_node().is_some() && manifest.preset != bande_vm::Preset::Windows;
+        let toggle_intents = Rc::clone(&self.intents);
+        let changeable = !locked && !has_memory && available;
+        let toggle: Box<dyn Widget> = match changeable {
+            true => boxed(Toggle::new(
+                &L10N.tr("machine-graphics-3d"),
+                manifest.graphics_3d,
+                move |on| push(&toggle_intents, Intent::Graphics3d(on)),
+            )),
+            false => boxed(Label::new(&L10N.tr(match manifest.graphics_3d {
+                true => "machine-on",
+                false => "machine-off",
+            }))),
+        };
+        let hint = match (available, has_memory, locked) {
+            (false, _, _) => Some("machine-graphics-3d-unavailable"),
+            (true, true, _) => Some("machine-graphics-3d-snapshots"),
+            (true, false, true) => Some("machine-shut-down-to-change"),
+            (true, false, false) => None,
+        };
+        let mut column: Vec<Box<dyn Widget>> = vec![toggle];
+        column.extend(hint.map(|key| boxed(Label::new(&L10N.tr(key)).secondary())));
+        lines.push(FormLine::Row(
+            L10N.tr("machine-graphics-3d"),
+            boxed(Stack::new(Axis::Vertical, 2.0, 0.0, column)),
+        ));
         lines.push(FormLine::Heading(L10N.tr("machine-section-shares")));
         for share in &manifest.shares {
             let intents = Rc::clone(&self.intents);

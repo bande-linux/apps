@@ -15,7 +15,9 @@ mod snapshot;
 mod unit;
 
 pub use clone::{CloneKind, NewClone};
-pub use display::{Damage, Display, DisplayEvent, DisplayInput, MouseButton, Scanout, Wheel};
+pub use display::{
+    Damage, Display, DisplayEvent, DisplayInput, GuestDmabuf, MouseButton, Scanout, Wheel,
+};
 pub use error::{Error, Result};
 pub use guest_agent::{GuestNetwork, guest_address, guest_network};
 pub use image::{Algorithm, CloudImage, ImageStore, catalog};
