@@ -1,9 +1,11 @@
 use std::collections::VecDeque;
-use std::io::{BufRead, BufReader, ErrorKind, Write};
+use std::io::{BufRead, BufReader, ErrorKind, IoSlice, Write};
+use std::mem::MaybeUninit;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 
+use rustix::net::{SendAncillaryBuffer, SendAncillaryMessage, SendFlags, sendmsg};
 use serde_json::{Value, json};
 
 use crate::{Error, Result};
@@ -76,12 +78,44 @@ impl Qmp {
     }
 
     pub fn execute(&mut self, command: &str, arguments: Value) -> Result<Value> {
+        let (id, request) = self.request(command, arguments)?;
+        self.writer.write_all(&request)?;
+        self.reply(id)
+    }
+
+    pub(crate) fn execute_with_fd(
+        &mut self,
+        command: &str,
+        arguments: Value,
+        fd: BorrowedFd<'_>,
+    ) -> Result<Value> {
+        let (id, request) = self.request(command, arguments)?;
+        let fds = [fd];
+        let mut space = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(1))];
+        let mut control = SendAncillaryBuffer::new(&mut space);
+        control.push(SendAncillaryMessage::ScmRights(&fds));
+        let mut sent = sendmsg(
+            &self.writer,
+            &[IoSlice::new(&request)],
+            &mut control,
+            SendFlags::empty(),
+        )?;
+        while sent < request.len() {
+            sent += self.writer.write(&request[sent..])?;
+        }
+        self.reply(id)
+    }
+
+    fn request(&mut self, command: &str, arguments: Value) -> Result<(u64, Vec<u8>)> {
         let id = self.next_id;
         self.next_id += 1;
         let mut request =
             serde_json::to_vec(&json!({"execute": command, "arguments": arguments, "id": id}))?;
         request.push(b'\n');
-        self.writer.write_all(&request)?;
+        Ok((id, request))
+    }
+
+    fn reply(&mut self, id: u64) -> Result<Value> {
         loop {
             let mut message = self.read_message()?;
             if let Some(event) = Event::from_message(&mut message) {

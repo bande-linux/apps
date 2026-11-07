@@ -32,6 +32,11 @@ const MACHINE_FORCE_STOP: &str = "machine-force-stop";
 const MACHINE_RESTART: &str = "machine-restart";
 const MACHINE_CONNECT: &str = "machine-connect";
 const MACHINE_DELETE: &str = "machine-delete";
+const MACHINE_SEND_KEYS: &str = "machine-send-ctrl-alt-delete";
+const MACHINE_PAUSE: &str = "machine-pause";
+const MACHINE_SNAPSHOT: &str = "machine-take-snapshot";
+const MACHINE_CLONE: &str = "machine-clone";
+const MACHINE_OPEN: &str = "machine-open-console";
 const MACHINE_WINDOW_TAG: &str = "machine";
 
 static INFO: Info = Info {
@@ -101,6 +106,29 @@ impl Pane {
                 machines.new_machine(ui);
             }
             MACHINE_CONNECT => self.view.machines().0.connect(),
+            MACHINE_PAUSE => {
+                let (machines, ui) = self.view.machines();
+                let act = match machines.can(Act::Resume) {
+                    true => Act::Resume,
+                    false => Act::Pause,
+                };
+                machines.act(ui, act);
+            }
+            MACHINE_SNAPSHOT => self
+                .view
+                .machines()
+                .0
+                .present_for_selected(MachineRequest::PresentSnapshot),
+            MACHINE_CLONE => self
+                .view
+                .machines()
+                .0
+                .present_for_selected(MachineRequest::PresentClone),
+            MACHINE_OPEN => self
+                .view
+                .machines()
+                .0
+                .present_for_selected(MachineRequest::Open),
             bande_velox::MACHINE_INSPECTOR => {
                 let (machines, ui) = self.view.machines();
                 machines.toggle_inspector(ui);
@@ -343,6 +371,15 @@ impl Velox {
         }
     }
 
+    fn with_machine(&self, cx: &mut Cx<Self>, id: &str, act: impl FnOnce(&mut MachineWindow)) {
+        if let Some(window) = self.machine_window(cx, id)
+            && let Some((shown, Screen::Machine(machine))) = cx.window(window)
+        {
+            act(machine);
+            shown.request_redraw();
+        }
+    }
+
     fn connect(cx: &mut Cx<Self>, window: WindowId, command: Vec<String>) {
         let token = cx
             .window(window)
@@ -368,6 +405,14 @@ impl Velox {
             };
             match hub.serve(request) {
                 Some(Effect::Open(id)) => self.open_machine(cx, &id),
+                Some(Effect::PresentClone(id)) => {
+                    self.open_machine(cx, &id);
+                    self.with_machine(cx, &id, |machine| machine.present_clone(None));
+                }
+                Some(Effect::PresentSnapshot(id)) => {
+                    self.open_machine(cx, &id);
+                    self.with_machine(cx, &id, MachineWindow::present_take_snapshot);
+                }
                 Some(Effect::Connect(command)) => Self::connect(cx, window, command),
                 None => {}
             }
@@ -429,18 +474,40 @@ impl Velox {
             Some(Screen::Machine(machine)) => machine.can_connect(),
             _ => false,
         };
+        let has_console = matches!(screen, Some(Screen::Machine(machine)) if machine.has_console());
+        let single = |act: Act| match screen {
+            Some(Screen::Main(pane)) => pane.view.machines_ref().single_can(act),
+            Some(Screen::Machine(machine)) => machine.can(act),
+            _ => false,
+        };
         let item = |key: &str, command: &str, act: Act| {
             Entry::item(&L10N.tr(key), command).enabled(can(act))
+        };
+        let (pause_key, pause_act) = match can(Act::Resume) {
+            true => ("machine-resume", Act::Resume),
+            false => ("machine-pause", Act::Pause),
         };
         Entry::submenu(
             &L10N.tr("machine-menu"),
             vec![
-                item("machine-start", MACHINE_START, Act::Start),
+                item("machine-start", MACHINE_START, Act::Start).shortcut("Ctrl+R"),
+                item(pause_key, MACHINE_PAUSE, pause_act),
                 item("machine-shut-down", MACHINE_SHUT_DOWN, Act::ShutDown),
                 item("machine-force-stop", MACHINE_FORCE_STOP, Act::ForceStop),
                 item("machine-restart", MACHINE_RESTART, Act::Restart),
                 Entry::separator(),
                 Entry::item(&L10N.tr("machine-connect"), MACHINE_CONNECT).enabled(connect),
+                Entry::item(&L10N.tr("machine-open"), MACHINE_OPEN)
+                    .shortcut("Ctrl+O")
+                    .enabled(connect || single(Act::Delete)),
+                Entry::item(&L10N.tr("machine-send-ctrl-alt-delete"), MACHINE_SEND_KEYS)
+                    .enabled(has_console),
+                Entry::separator(),
+                Entry::item(&L10N.tr("machine-take-snapshot-ellipsis"), MACHINE_SNAPSHOT)
+                    .shortcut("Shift+Ctrl+S")
+                    .enabled(single(Act::TakeSnapshot)),
+                Entry::item(&L10N.tr("machine-clone-ellipsis"), MACHINE_CLONE)
+                    .enabled(single(Act::Clone)),
                 Entry::separator(),
                 item("machine-delete-ellipsis", MACHINE_DELETE, Act::Delete),
             ],
@@ -589,6 +656,34 @@ impl Program for Velox {
                 cx.raise(window, None);
             }
             return;
+        }
+        if let Some(id) = window
+            && let Some((shown, Screen::Machine(machine))) = cx.window(id)
+        {
+            let handled = match command {
+                MACHINE_SEND_KEYS => {
+                    machine.send_ctrl_alt_delete();
+                    true
+                }
+                MACHINE_PAUSE => {
+                    machine.toggle_pause();
+                    true
+                }
+                MACHINE_SNAPSHOT => {
+                    machine.present_take_snapshot();
+                    true
+                }
+                MACHINE_CLONE => {
+                    machine.present_clone(None);
+                    true
+                }
+                MACHINE_OPEN => true,
+                _ => false,
+            };
+            if handled {
+                shown.request_redraw();
+                return self.serve_machines(cx, id);
+            }
         }
         if let Some(window) = window
             && let Some((shown, Screen::Machine(machine))) = cx.window(window)

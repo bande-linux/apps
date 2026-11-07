@@ -33,6 +33,8 @@ pub enum Error {
     Missing(String),
     NotUtf8(PathBuf),
     Cancelled,
+    NeedsShutDown,
+    HasSnapshots,
 }
 
 impl fmt::Display for Error {
@@ -56,6 +58,10 @@ impl fmt::Display for Error {
             Self::Unit { unit, result } => write!(f, "{unit} did not start: {result}"),
             Self::Missing(what) => write!(f, "{what} is not available"),
             Self::NotUtf8(path) => write!(f, "{} is not a UTF-8 path", path.display()),
+            Self::NeedsShutDown => write!(f, "shut the machine down first"),
+            Self::HasSnapshots => {
+                write!(f, "a machine with snapshots can only be cloned in full")
+            }
             Self::Cancelled => f.write_str("cancelled"),
         }
     }

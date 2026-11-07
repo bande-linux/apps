@@ -1,10 +1,12 @@
 mod backend;
+mod console;
 mod fleet;
 mod page;
 mod pane;
 mod present;
 mod readiness;
 mod sheet;
+mod snapshots;
 mod widgets;
 mod window;
 
@@ -14,7 +16,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 pub use self::backend::Act;
-use self::backend::{Backend, Change, Plan};
+use self::backend::{Backend, Change, Plan, SnapshotOp};
 pub use self::fleet::{Fleet, Notice};
 pub use self::pane::{INSPECTOR_COMMAND, MACHINES_KEY, MachinesPane};
 use self::sheet::Field;
@@ -40,6 +42,13 @@ enum Intent {
     Tab(usize),
     Change(Change),
     Connect,
+    RetryConsole,
+    Choice(String),
+    Snapshot(Vec<String>),
+    SnapshotTool(snapshots::Tool),
+    Text(String),
+    Port(String),
+    Linked(bool),
 }
 
 type Intents = Rc<RefCell<Vec<Intent>>>;
@@ -56,10 +65,16 @@ pub enum Request {
     Connect(String),
     Emulate,
     Change(String, Change),
+    Snapshot(String, SnapshotOp),
+    Clone(String, bande_vm::NewClone),
+    PresentClone(String),
+    PresentSnapshot(String),
 }
 
 pub enum Effect {
     Open(String),
+    PresentClone(String),
+    PresentSnapshot(String),
     Connect(Vec<String>),
 }
 
@@ -121,6 +136,25 @@ impl Hub {
                     .and_then(|entry| entry.ssh_command())
                     .map(Effect::Connect);
             }
+            Request::Snapshot(id, op) => {
+                fleet.mark(&id, op.act());
+                self.backend.snapshot(id, op);
+            }
+            Request::Clone(id, new) => {
+                let (name, os) = (
+                    new.name.clone(),
+                    fleet
+                        .entry(&id)
+                        .map(|entry| entry.listed.manifest.os.clone())
+                        .unwrap_or_default(),
+                );
+                fleet.mark(&id, Act::Clone);
+                let job = self.backend.clone_machine(id, new);
+                fleet.add_job(job, name, os);
+                fleet.set_job_phase(job);
+            }
+            Request::PresentClone(id) => return Some(Effect::PresentClone(id)),
+            Request::PresentSnapshot(id) => return Some(Effect::PresentSnapshot(id)),
             Request::Emulate => self.backend.emulate(),
             Request::Change(id, change) => self.backend.change(id, change),
         }

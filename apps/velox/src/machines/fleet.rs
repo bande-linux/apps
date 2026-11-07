@@ -38,6 +38,7 @@ pub struct Entry {
     pub paused: bool,
     pub pending: Option<Act>,
     pub usage: Option<Usage>,
+    pub address: Option<std::net::Ipv4Addr>,
     cpu_sample: Option<(Instant, u64)>,
 }
 
@@ -98,7 +99,12 @@ impl Entry {
             Act::ForceStop => {
                 self.running() && matches!(pending, None | Some(Act::ShutDown | Act::Restart))
             }
-            Act::Delete => pending.is_none() && !self.running(),
+            Act::Delete | Act::Clone => pending.is_none() && !self.running(),
+            Act::Pause => pending.is_none() && self.power() == Power::Running,
+            Act::Resume => pending.is_none() && self.power() == Power::Paused,
+            Act::TakeSnapshot | Act::Revert | Act::DeleteSnapshot => {
+                pending.is_none() && matches!(self.power(), Power::Running | Power::Stopped)
+            }
         }
     }
 
@@ -211,6 +217,12 @@ impl Fleet {
         );
     }
 
+    pub fn set_job_phase(&mut self, job: u64) {
+        if let Some(entry) = self.jobs.get_mut(&job) {
+            entry.phase = Phase::Creating;
+        }
+    }
+
     pub fn mark(&mut self, id: &str, act: Act) {
         if let Some(entry) = self.entries.get_mut(id) {
             entry.pending = Some(act);
@@ -255,6 +267,7 @@ impl Fleet {
                             paused: false,
                             pending: None,
                             usage: None,
+                            address: None,
                             cpu_sample: None,
                         },
                     };
@@ -274,6 +287,9 @@ impl Fleet {
                     entry.unit = state;
                     if !state.is_running() {
                         entry.paused = false;
+                        entry.usage = None;
+                        entry.address = None;
+                        entry.cpu_sample = None;
                         entry.listed.since = None;
                     } else if entry.listed.since.is_none() {
                         entry.listed.since = Some(SystemTime::now());
@@ -286,6 +302,11 @@ impl Fleet {
             Update::Paused(id, paused) => {
                 if let Some(entry) = self.entries.get_mut(&id) {
                     entry.paused = paused;
+                }
+            }
+            Update::Address(id, address) => {
+                if let Some(entry) = self.entries.get_mut(&id) {
+                    entry.address = address;
                 }
             }
             Update::Settled(id) => {
@@ -324,6 +345,12 @@ impl Fleet {
                     Act::ForceStop => "machine-cannot-force-stop",
                     Act::Restart => "machine-cannot-restart",
                     Act::Delete => "machine-cannot-delete",
+                    Act::Pause => "machine-cannot-pause",
+                    Act::Resume => "machine-cannot-resume",
+                    Act::TakeSnapshot => "machine-cannot-take-snapshot",
+                    Act::Revert => "machine-cannot-revert",
+                    Act::DeleteSnapshot => "machine-cannot-delete-snapshot",
+                    Act::Clone => "machine-cannot-clone",
                 };
                 self.notices.push(Notice {
                     id: Some(id),
