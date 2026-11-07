@@ -16,9 +16,10 @@ use bande_velox::{
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
-const APP_ID: &str = match option_env!("VELOX_TEST_APP_ID") {
+const APP_ID: &str = "org.bande.Velox";
+const RUNNING_ID: &str = match option_env!("VELOX_TEST_APP_ID") {
     Some(id) => id,
-    None => "org.bande.Velox",
+    None => APP_ID,
 };
 const WINDOW_SIZE: (u32, u32) = (920, 560);
 const LOGS_SIZE: (u32, u32) = (760, 480);
@@ -47,7 +48,7 @@ const SHELL_SIZE: (u32, u32) = (760, 480);
 const MACHINE_WINDOW_TAG: &str = "machine";
 
 static INFO: Info = Info {
-    id: APP_ID,
+    id: RUNNING_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
     name: || L10N.tr("app-name"),
@@ -80,7 +81,7 @@ impl Pane {
                 Request::Watch(engine, ids) => self.informer.watch("overview", &engine, ids),
                 Request::Containers(ContainerRequest::Shell(target)) => self.shells.push(target),
                 Request::Containers(request) => {
-                    let token = || window.activation_token(APP_ID).ok();
+                    let token = || window.activation_token(RUNNING_ID).ok();
                     self.logs.extend(self.work.serve(request, token));
                 }
             }
@@ -88,7 +89,7 @@ impl Pane {
     }
 
     fn open_link(&mut self, window: &mut Window, link: &str) {
-        let token = window.activation_token(APP_ID).ok();
+        let token = window.activation_token(RUNNING_ID).ok();
         let entry = self
             .apps
             .get_or_insert_with(|| Apps::load(data_dirs(), &config_dirs()))
@@ -426,7 +427,7 @@ impl Velox {
     fn connect(cx: &mut Cx<Self>, window: WindowId, command: Vec<String>) {
         let token = cx
             .window(window)
-            .and_then(|(window, _)| window.activation_token(APP_ID).ok());
+            .and_then(|(window, _)| window.activation_token(RUNNING_ID).ok());
         let mut argv = vec![TERMINAL.to_owned(), "-e".to_owned()];
         argv.extend(command);
         if let Err(error) = spawn_detached(TERMINAL_APP_ID, &argv, None, token.as_deref()) {
