@@ -87,3 +87,7 @@ engine-message = Browser searches with this engine when you type something that 
 engine-choices = Search engines
 engine-choose = Use This Engine
 engine-later = Not Now
+page-unresponsive = This page isn’t responding
+page-unresponsive-body = You can wait for it to respond or stop the page.
+wait = Wait
+stop-page = Stop Page

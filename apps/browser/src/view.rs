@@ -18,7 +18,7 @@ use bande_toolkit::{
 use web_host::Url;
 use web_host::{Clear, SiteData, Viewport};
 
-use crate::page::{Content, PageView};
+use crate::page::{Content, HangChoice, PageView};
 use crate::pages;
 use crate::places::{Place, Places};
 use crate::renderer::{Command, Link, LoadId, Outcome, Session, Update, Verdict, ViewId};
@@ -1116,6 +1116,12 @@ impl BrowserView {
                 self.with_page(index, |page| page.show(Content::Crashed(url)));
                 self.refresh_navigation();
             }
+            Outcome::Unresponsive if Some(update.load) == shown || Some(update.load) == pending => {
+                self.with_page(index, |page| page.set_unresponsive(true));
+            }
+            Outcome::Responsive => {
+                self.with_page(index, |page| page.set_unresponsive(false));
+            }
             Outcome::SiteData(sites) => self.show_website_data(sites),
             Outcome::Paused(paused) => self.renderer.send(Command::Resume {
                 request: paused.request,
@@ -1168,6 +1174,8 @@ impl BrowserView {
             Outcome::Relaid(..)
             | Outcome::Scroll(_)
             | Outcome::Paused(_)
+            | Outcome::Unresponsive
+            | Outcome::Responsive
             | Outcome::SiteData(_) => return,
         };
         let restored = match pending.target {
@@ -1404,6 +1412,15 @@ impl BrowserView {
             .unwrap_or(false)
         {
             self.reload();
+        }
+        let choice = self.with_page(index, PageView::take_hang_choice).flatten();
+        if let (Some(choice), Some(tab)) = (choice, self.tabs.get(index)) {
+            let view = tab.id;
+            self.renderer.send(match choice {
+                HangChoice::Wait => Command::Wait { view },
+                HangChoice::Stop => Command::Kill { view },
+            });
+            self.with_page(index, |page| page.set_unresponsive(false));
         }
         let hovered = self.with_page(index, PageView::take_hovered).flatten();
         if let (Some((x, y)), Some(tab)) = (hovered, self.tabs.get(index))
