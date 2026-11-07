@@ -133,7 +133,7 @@ impl Entry {
     }
 
     fn sample(&mut self, now: Instant) {
-        let usage = cgroup(&format!("velox-vm-{}.service", self.id())).and_then(|folder| {
+        let usage = cgroup(&bande_vm::unit_name(self.id())).and_then(|folder| {
             let stat = fs::read_to_string(folder.join("cpu.stat")).ok()?;
             let used = stat
                 .lines()

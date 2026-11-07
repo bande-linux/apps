@@ -18,7 +18,7 @@ pub use display::{Damage, Display, DisplayEvent, DisplayInput, MouseButton, Scan
 pub use error::{Error, Result};
 pub use guest_agent::guest_address;
 pub use image::{Algorithm, CloudImage, ImageStore, catalog};
-pub use library::{Library, Machine, NewMachine};
+pub use library::{Library, Machine, NewMachine, unit_name};
 pub use manifest::{Forward, Manifest};
 pub use qemu::{Accel, Host};
 pub use qmp::{Event, Qmp, RunState};

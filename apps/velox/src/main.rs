@@ -16,7 +16,10 @@ use bande_velox::{
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
-const APP_ID: &str = "org.bande.Velox";
+const APP_ID: &str = match option_env!("VELOX_TEST_APP_ID") {
+    Some(id) => id,
+    None => "org.bande.Velox",
+};
 const WINDOW_SIZE: (u32, u32) = (920, 560);
 const LOGS_SIZE: (u32, u32) = (760, 480);
 const FIND: &str = "find";
