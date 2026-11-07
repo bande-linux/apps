@@ -44,6 +44,7 @@ zbus = "=5.19.0"
 zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
 zeroize = "=1.8.1"
 bande-keyring = { path = "libs/keyring" }
+bande-terminal-view = { path = "libs/terminal-view" }
 bande-vm = { path = "libs/vm" }
 bande-app = { git = "https://github.com/bande-linux/desktop", rev = "12a452a3792a2fb566c3255ec5f5f87350fc0df2" }
 bande-app-menu = { git = "https://github.com/bande-linux/desktop", rev = "12a452a3792a2fb566c3255ec5f5f87350fc0df2" }

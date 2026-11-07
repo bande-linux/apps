@@ -15,7 +15,7 @@ use crate::settings::{
     COLUMN_RANGE, CloseAsk, CursorStyle, FONT_SIZES, FONTS, NewTabFolder, ROW_RANGE,
     SCROLLBACK_CHOICES, Settings,
 };
-use crate::theme::{Profile, Theme};
+use bande_terminal_view::{Profile, Theme};
 
 pub const SETTINGS_SIZE: (u32, u32) = (520, 600);
 const PREVIEW: f32 = 76.0;

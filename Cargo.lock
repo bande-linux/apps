@@ -1087,6 +1087,7 @@ dependencies = [
  "bande-notify",
  "bande-sound",
  "bande-spring",
+ "bande-terminal-view",
  "bande-toolkit",
  "bande-volumes",
  "bande-xdg",
@@ -1095,6 +1096,18 @@ dependencies = [
  "tempfile",
  "tracing",
  "zbus",
+]
+
+[[package]]
+name = "bande-terminal-view"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "alacritty_terminal",
+ "bande-design",
+ "bande-toolkit",
+ "bande-volumes",
+ "bande-xdg",
 ]
 
 [[package]]

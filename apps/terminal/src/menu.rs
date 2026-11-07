@@ -6,7 +6,7 @@ use bande_toolkit::ui::{Menu, MenuItem};
 use bande_xdg::path_from_file_uri;
 
 use crate::L10N;
-use crate::keys::Command;
+use bande_terminal_view::Command;
 
 const COMMANDS: [(Command, &str, &str, Option<&str>); 22] = [
     (Command::Copy, "copy", "menu-copy", Some("Shift+Ctrl+C")),

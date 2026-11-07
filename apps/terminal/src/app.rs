@@ -1877,7 +1877,12 @@ impl TerminalWindow {
                 })
             })
             .collect();
-        let dividers = tab.layout.dividers(area);
+        let dividers: Vec<Rect> = tab
+            .layout
+            .dividers(area)
+            .iter()
+            .map(|divider| divider.line)
+            .collect();
         self.blink_phase = self.blink_phase(Instant::now());
         self.painter.cursor_hidden = self.blinking() && self.blink_phase % 2 == 1;
         self.painter

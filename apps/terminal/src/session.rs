@@ -9,7 +9,7 @@ use alacritty_terminal::tty::{self, Options, Pty, Shell};
 use rustix::event::epoll::{self, CreateFlags, EventData, EventFlags};
 
 use crate::process::{self, Report, Reports};
-use crate::terminal::{GridSize, Terminal};
+use bande_terminal_view::{GridSize, Terminal};
 
 const READ_BUFFER: usize = 65536;
 const READS_PER_WAKE: usize = 16;

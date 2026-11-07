@@ -9,7 +9,6 @@ use bande_toolkit::{
     TextSystem,
 };
 
-use crate::panes::Divider;
 use crate::terminal::{CellPoint, GridSize, Highlights, Terminal};
 use crate::theme::{Profile, Theme, dimmed};
 
@@ -255,7 +254,7 @@ impl Painter {
     pub fn panes(
         &mut self,
         panes: &[Pane<'_>],
-        dividers: &[Divider],
+        dividers: &[Rect],
         highlights: &Highlights,
         composing: &str,
     ) -> Vec<Item> {
@@ -285,7 +284,7 @@ impl Painter {
             });
         }
         items.extend(dividers.iter().map(|divider| Item::Fill {
-            shape: Shape::rect(divider.line),
+            shape: Shape::rect(*divider),
             paint: self.theme.palette.edge.into(),
         }));
         items
