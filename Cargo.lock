@@ -1197,6 +1197,7 @@ dependencies = [
  "bande-app-menu",
  "bande-fs",
  "bande-l10n",
+ "bande-terminal-view",
  "bande-toolkit",
  "bande-vm",
  "bande-watch",

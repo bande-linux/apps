@@ -38,6 +38,7 @@ const MENU_PAUSE: &str = "machine-pause";
 const MENU_RESUME: &str = "machine-resume";
 const MENU_SNAPSHOT: &str = "machine-take-snapshot";
 const MENU_CLONE: &str = "machine-clone";
+const MENU_SERIAL: &str = "machine-serial";
 const MENU_CANCEL: &str = "machine-cancel-job";
 const CONFIRM_DELETE: &str = "delete";
 
@@ -384,6 +385,7 @@ impl MachinesPane {
             MenuItem::separator(),
             menu_item("machine-connect", MENU_CONNECT, ssh),
             menu_item("machine-open", MENU_OPEN, single),
+            menu_item("machine-serial", MENU_SERIAL, single && first.running()),
             menu_item(
                 "machine-take-snapshot-ellipsis",
                 MENU_SNAPSHOT,
@@ -430,6 +432,7 @@ impl MachinesPane {
             MENU_OPEN => self.requests.push(Request::Open(key)),
             MENU_SNAPSHOT => self.requests.push(Request::PresentSnapshot(key)),
             MENU_CLONE => self.requests.push(Request::PresentClone(key)),
+            MENU_SERIAL => self.requests.push(Request::Serial(key)),
             MENU_COPY_SSH => {
                 let command = self.fleet.borrow().entry(&key).and_then(|entry| {
                     let port = entry.ssh_port()?;

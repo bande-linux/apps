@@ -28,6 +28,7 @@ pub enum Request {
     CopyRun(Engine, String),
     Compose(Compose, Verb),
     Terminal(Vec<String>),
+    Shell(crate::shell::ShellTarget),
     Logs(LogsTarget),
     Watch(Engine, Vec<String>),
 }
@@ -58,6 +59,7 @@ impl Work {
         let out = self.informer.updates();
         match request {
             Request::Logs(target) => return Some(target),
+            Request::Shell(_) => {}
             Request::Inspect(engine, id) => {
                 spawn("velox-inspect", move || {
                     match inspect::inspect(&engine, &id) {

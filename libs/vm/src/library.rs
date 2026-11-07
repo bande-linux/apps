@@ -15,6 +15,7 @@ use crate::{Error, Result};
 
 const NETWORK_ROOT: &str = "/tmp";
 const CONTROL_SOCKET: &str = "control.sock";
+const SERIAL_SOCKET: &str = "serial.sock";
 
 pub struct Library {
     data: PathBuf,
@@ -116,6 +117,10 @@ impl Library {
         Ok(machine)
     }
 
+    pub fn serial_socket(&self, id: &str) -> PathBuf {
+        self.runtime.join(id).join(SERIAL_SOCKET)
+    }
+
     pub fn control_socket(&self, id: &str) -> PathBuf {
         self.runtime.join(id).join(CONTROL_SOCKET)
     }
@@ -179,7 +184,7 @@ impl Machine {
     }
 
     pub fn serial_socket(&self) -> PathBuf {
-        self.runtime.join("serial.sock")
+        self.runtime.join(SERIAL_SOCKET)
     }
 
     pub(crate) fn runtime_dir(&self) -> &Path {

@@ -6,6 +6,7 @@ use crate::engine::Action;
 
 pub const LOGS: &str = "container-logs";
 pub const TERMINAL: &str = "container-terminal";
+pub const SHELL: &str = "container-shell";
 pub const INSPECTOR: &str = "container-inspector";
 pub const DELETE: &str = "container-delete";
 pub const COPY_NAME: &str = "container-copy-name";
@@ -102,6 +103,7 @@ pub fn items(facts: &Facts) -> Vec<Item> {
     items.extend([
         Item::Separator,
         with(item(L10N.tr(LOGS), LOGS), Some("Ctrl+L"), facts.logs),
+        with(item(L10N.tr(SHELL), SHELL), None, single && facts.running),
         with(
             item(L10N.tr(TERMINAL), TERMINAL),
             None,
