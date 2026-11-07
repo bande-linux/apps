@@ -6,10 +6,15 @@ use bande_xdg::find_executable;
 use serde_json::{Value, json};
 
 use crate::library::Machine;
+use crate::manifest::Preset;
 use crate::{Error, Result};
 
 const FIRMWARE_CODE: &str = "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd";
 const FIRMWARE_VARS: &str = "/usr/share/AAVMF/AAVMF_VARS.fd";
+const SECURE_CODE: &str = "/usr/share/AAVMF/AAVMF_CODE.ms.fd";
+const SECURE_VARS: &str = "/usr/share/AAVMF/AAVMF_VARS.ms.fd";
+const VIRTIOFSD: &str = "/usr/libexec/virtiofsd";
+const SWTPM: &str = "swtpm";
 const MIB: u64 = 1024 * 1024;
 const OVERHEAD_MIB: u64 = 512;
 const TRANSLATION_CACHE_MIB: u64 = 256;
@@ -86,6 +91,14 @@ impl Host {
         missing
     }
 
+    pub fn virtiofsd() -> Option<PathBuf> {
+        locate(VIRTIOFSD)
+    }
+
+    pub fn swtpm() -> Option<PathBuf> {
+        locate(SWTPM)
+    }
+
     pub fn memory_max(&self, machine: &Machine) -> u64 {
         let overhead = match self.accel {
             Accel::Kvm => OVERHEAD_MIB,
@@ -125,6 +138,9 @@ impl Host {
             })
             .to_string()
         };
+        let socket_client = |id: &str, path: &Path| -> Result<String> {
+            Ok(format!("socket,id={id},path={}", keyval(path)?))
+        };
         let socket = |id: &str, path: &Path| -> Result<String> {
             Ok(format!(
                 "socket,id={id},path={},server=on,wait=off",
@@ -138,23 +154,44 @@ impl Host {
             &format!("guest={},debug-threads=on", keyval_str(&manifest.name)),
         ]);
         push(&["-uuid", &manifest.id, "-nodefaults", "-no-user-config"]);
-        push(&[
-            "-machine",
-            "virt,gic-version=3,pflash0=firmware,pflash1=vars",
-        ]);
+        let windows = manifest.preset == Preset::Windows;
+        let has_shares = !manifest.shares.is_empty();
+        let mut machine_options = "virt,gic-version=3,pflash0=firmware,pflash1=vars".to_owned();
+        if has_shares {
+            machine_options.push_str(",memory-backend=shared-memory");
+        }
+        push(&["-machine", &machine_options]);
         push(&["-accel", &accel, "-cpu", cpu]);
         push(&["-smp", &manifest.cpus.to_string()]);
         push(&["-m", &format!("{}M", manifest.memory_mib)]);
-        push(&["-blockdev", &file("firmware", &self.firmware_code, true)?]);
+        if has_shares {
+            push(&[
+                "-object",
+                &format!(
+                    "memory-backend-memfd,id=shared-memory,size={}M,share=on",
+                    manifest.memory_mib
+                ),
+            ]);
+        }
+        let code = match windows {
+            true => Path::new(SECURE_CODE),
+            false => self.firmware_code.as_path(),
+        };
+        push(&["-blockdev", &file("firmware", code, true)?]);
         push(&["-blockdev", &format("firmware", "raw", true)]);
         push(&["-blockdev", &file("vars", &machine.vars(), false)?]);
         push(&["-blockdev", &format("vars", "qcow2", false)]);
         push(&["-blockdev", &file("disk", &machine.disk(), false)?]);
         push(&["-blockdev", &format("disk", "qcow2", false)]);
-        push(&["-device", "virtio-blk-pci,drive=disk,bootindex=1"]);
-        push(&["-blockdev", &file("seed", &machine.seed(), true)?]);
-        push(&["-blockdev", &format("seed", "raw", true)]);
-        push(&["-device", "virtio-blk-pci,drive=seed"]);
+        match windows {
+            true => push(&["-device", "nvme,drive=disk,serial=velox,bootindex=1"]),
+            false => push(&["-device", "virtio-blk-pci,drive=disk,bootindex=1"]),
+        }
+        if machine.seed().exists() {
+            push(&["-blockdev", &file("seed", &machine.seed(), true)?]);
+            push(&["-blockdev", &format("seed", "raw", true)]);
+            push(&["-device", "virtio-blk-pci,drive=seed"]);
+        }
         push(&[
             "-netdev",
             &format!(
@@ -185,10 +222,40 @@ impl Host {
             ),
         ]);
         push(&["-serial", "chardev:serial"]);
-        push(&["-device", "virtio-gpu-pci"]);
+        match windows {
+            true => push(&["-device", "ramfb"]),
+            false => push(&["-device", "virtio-gpu-pci"]),
+        }
         push(&["-device", "qemu-xhci,id=usb"]);
         push(&["-device", "usb-kbd,bus=usb.0"]);
         push(&["-device", "usb-tablet,bus=usb.0"]);
+        if let Some(iso) = &manifest.installer {
+            push(&["-blockdev", &file("installer", Path::new(iso), true)?]);
+            push(&["-blockdev", &format("installer", "raw", true)]);
+            push(&[
+                "-device",
+                "usb-storage,drive=installer,bus=usb.0,removable=on,bootindex=2",
+            ]);
+        }
+        if windows {
+            push(&["-chardev", &socket_client("tpm", &machine.tpm_socket())?]);
+            push(&["-tpmdev", "emulator,id=tpm,chardev=tpm"]);
+            push(&["-device", "tpm-tis-device,tpmdev=tpm"]);
+        }
+        for (index, share) in manifest.shares.iter().enumerate() {
+            let id = format!("share{index}");
+            push(&[
+                "-chardev",
+                &socket_client(&id, &machine.share_socket(index))?,
+            ]);
+            push(&[
+                "-device",
+                &format!(
+                    "vhost-user-fs-pci,chardev={id},tag={}",
+                    keyval_str(&share.tag)
+                ),
+            ]);
+        }
         push(&[
             "-chardev",
             "qemu-vdagent,id=vdagent,name=vdagent,clipboard=on,mouse=off",
@@ -203,6 +270,40 @@ impl Host {
         }
         push(&["-sandbox", SANDBOX]);
         Ok(argv)
+    }
+
+    pub(crate) fn share_command(&self, machine: &Machine, index: usize) -> Result<Vec<String>> {
+        let virtiofsd = Self::virtiofsd().ok_or(Error::Missing("virtiofsd".into()))?;
+        let share = machine
+            .manifest
+            .shares
+            .get(index)
+            .ok_or_else(|| Error::NotListed(index.to_string()))?;
+        Ok(vec![
+            utf8(&virtiofsd)?.to_owned(),
+            "--socket-path".into(),
+            utf8(&machine.share_socket(index))?.to_owned(),
+            "--shared-dir".into(),
+            share.path.clone(),
+            "--sandbox".into(),
+            "namespace".into(),
+            "--cache".into(),
+            "auto".into(),
+        ])
+    }
+
+    pub(crate) fn tpm_command(&self, machine: &Machine) -> Result<Vec<String>> {
+        let swtpm = Self::swtpm().ok_or(Error::Missing(SWTPM.into()))?;
+        Ok(vec![
+            utf8(&swtpm)?.to_owned(),
+            "socket".into(),
+            "--tpm2".into(),
+            "--tpmstate".into(),
+            format!("dir={}", keyval(&machine.tpm_state())?),
+            "--ctrl".into(),
+            format!("type=unixio,path={}", keyval(&machine.tpm_socket())?),
+            "--terminate".into(),
+        ])
     }
 
     pub fn passt_command(&self, machine: &Machine) -> Result<Vec<String>> {
@@ -238,7 +339,27 @@ impl Host {
         .map(drop)
     }
 
+    pub(crate) fn create_blank(&self, disk: &Path, size_gib: u64) -> Result<()> {
+        self.qemu_img(&[
+            "create",
+            "-q",
+            "-f",
+            "qcow2",
+            utf8(disk)?,
+            &format!("{size_gib}G"),
+        ])
+        .map(drop)
+    }
+
     pub(crate) fn create_vars(&self, vars: &Path) -> Result<()> {
+        self.create_vars_for(vars, Preset::Linux)
+    }
+
+    pub(crate) fn create_vars_for(&self, vars: &Path, preset: Preset) -> Result<()> {
+        let source = match preset {
+            Preset::Linux => self.firmware_vars.as_path(),
+            Preset::Windows => Path::new(SECURE_VARS),
+        };
         self.qemu_img(&[
             "convert",
             "-q",
@@ -246,7 +367,7 @@ impl Host {
             "raw",
             "-O",
             "qcow2",
-            utf8(&self.firmware_vars)?,
+            utf8(source)?,
             utf8(vars)?,
         ])
         .map(drop)

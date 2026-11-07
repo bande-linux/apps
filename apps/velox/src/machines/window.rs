@@ -261,6 +261,14 @@ impl MachineWindow {
                     }
                 }
                 Intent::Choice(choice) => self.sheet_choice(&choice),
+                Intent::Eject => {
+                    self.requests.push(Request::Change(self.id.clone(), Change::Eject));
+                }
+                Intent::AddShare => self.requests.push(Request::ChooseFolder(self.id.clone())),
+                Intent::RemoveShare(tag) => {
+                    self.requests
+                        .push(Request::Change(self.id.clone(), Change::RemoveShare(tag)));
+                }
                 Intent::Change(change) => {
                     self.requests.push(Request::Change(self.id.clone(), change));
                 }
@@ -619,7 +627,7 @@ impl MachineWindow {
         let port_fleet = Rc::clone(&self.fleet);
         let port_intents = Rc::clone(&self.intents);
         let port = manifest.ssh_port();
-        let lines = vec![
+        let mut lines = vec![
             FormLine::Heading(L10N.tr("machine-section-machine")),
             FormLine::Row(
                 L10N.tr("machine-name"),
@@ -686,6 +694,59 @@ impl MachineWindow {
                 )),
             ),
         ];
+        if let Some(iso) = &manifest.installer {
+            let intents = Rc::clone(&self.intents);
+            let name = std::path::Path::new(iso)
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let mut eject = Button::new(&L10N.tr("machine-eject"), move || {
+                push(&intents, Intent::Eject)
+            });
+            eject.set_enabled(!locked);
+            lines.push(FormLine::Row(
+                L10N.tr("machine-iso"),
+                boxed(Stack::new(
+                    Axis::Horizontal,
+                    8.0,
+                    0.0,
+                    vec![boxed(Label::new(&name)), boxed(eject)],
+                )),
+            ));
+        }
+        lines.push(FormLine::Heading(L10N.tr("machine-section-shares")));
+        for share in &manifest.shares {
+            let intents = Rc::clone(&self.intents);
+            let tag = share.tag.clone();
+            let mut remove = Button::new(&L10N.tr("machine-share-remove"), move || {
+                push(&intents, Intent::RemoveShare(tag.clone()))
+            });
+            remove.set_enabled(!locked);
+            lines.push(FormLine::Row(
+                share.path.clone(),
+                boxed(Stack::new(
+                    Axis::Vertical,
+                    2.0,
+                    0.0,
+                    vec![
+                        boxed(remove),
+                        boxed(
+                            Label::new(&L10N.tr_args(
+                                "machine-share-mount",
+                                [("tag", share.tag.clone().into())],
+                            ))
+                            .secondary(),
+                        ),
+                    ],
+                )),
+            ));
+        }
+        let intents = Rc::clone(&self.intents);
+        let mut add = Button::new(&L10N.tr("machine-share-add"), move || {
+            push(&intents, Intent::AddShare)
+        });
+        add.set_enabled(!locked && bande_vm::Host::virtiofsd().is_some());
+        lines.push(FormLine::Row(String::new(), boxed(add)));
         boxed(ScrollView::new(Form::new(&Tab::Settings.title(), lines)))
     }
 }

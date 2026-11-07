@@ -1,3 +1,5 @@
+use std::fs;
+use std::path::Path;
 use std::collections::HashMap;
 
 use zbus::blocking::{Connection, MessageIterator};
@@ -6,6 +8,7 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 use zbus::{MatchRule, names::ErrorName};
 
 use crate::library::Machine;
+use crate::manifest::Preset;
 use crate::qemu::{Host, utf8};
 use crate::qmp::Qmp;
 use crate::ready::CreationWatch;
@@ -105,7 +108,8 @@ impl Units {
             ),
         ];
         let watch = CreationWatch::new(machine.runtime_dir())?;
-        self.run_job(
+        let helpers = self.start_helpers(host, machine, &watch)?;
+        let started = self.run_job(
             &unit,
             "StartTransientUnit",
             &(
@@ -114,7 +118,13 @@ impl Units {
                 properties,
                 vec![(&network, network_properties)],
             ),
-        )?;
+        );
+        if let Err(error) = started {
+            for helper in helpers {
+                let _ = self.stop(&helper);
+            }
+            return Err(error);
+        }
         let pid = self.main_pid(&unit)?;
         let exited = || Error::Unit {
             unit: unit.clone(),
@@ -124,6 +134,63 @@ impl Units {
             return Err(exited());
         }
         Qmp::connect(&machine.qmp_socket()).map_err(|_| exited())
+    }
+
+    fn start_helpers(
+        &self,
+        host: &Host,
+        machine: &Machine,
+        watch: &CreationWatch,
+    ) -> Result<Vec<String>> {
+        let mut helpers = Vec::new();
+        if machine.manifest.preset == Preset::Windows {
+            fs::create_dir_all(machine.tpm_state())?;
+            let unit = machine.tpm_unit();
+            self.start_helper(&unit, host.tpm_command(machine)?, machine, &machine.tpm_socket(), watch)?;
+            helpers.push(unit);
+        }
+        for index in 0..machine.manifest.shares.len() {
+            let unit = machine.share_unit(index);
+            self.start_helper(
+                &unit,
+                host.share_command(machine, index)?,
+                machine,
+                &machine.share_socket(index),
+                watch,
+            )?;
+            helpers.push(unit);
+        }
+        Ok(helpers)
+    }
+
+    fn start_helper(
+        &self,
+        unit: &str,
+        argv: Vec<String>,
+        machine: &Machine,
+        socket: &Path,
+        watch: &CreationWatch,
+    ) -> Result<()> {
+        let properties: Vec<(&str, Value)> = vec![
+            (
+                "Description",
+                Value::from(format!("Velox helper for {}", machine.manifest.name)),
+            ),
+            ("Type", Value::from("exec")),
+            ("ExecStart", exec(argv)),
+            ("CollectMode", Value::from("inactive-or-failed")),
+            ("NoNewPrivileges", Value::from(true)),
+        ];
+        let none: Vec<(&str, Vec<(&str, Value)>)> = Vec::new();
+        self.run_job(unit, "StartTransientUnit", &(unit, "fail", properties, none))?;
+        let pid = self.main_pid(unit)?;
+        if !watch.appears_before_exit(socket, pid)? {
+            return Err(Error::Unit {
+                unit: unit.to_owned(),
+                result: "the helper exited while starting".into(),
+            });
+        }
+        Ok(())
     }
 
     pub fn stop(&self, unit: &str) -> Result<()> {

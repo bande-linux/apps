@@ -49,6 +49,10 @@ enum Intent {
     Text(String),
     Port(String),
     Linked(bool),
+    ChooseIso,
+    Eject,
+    AddShare,
+    RemoveShare(String),
 }
 
 type Intents = Rc<RefCell<Vec<Intent>>>;
@@ -69,6 +73,8 @@ pub enum Request {
     Clone(String, bande_vm::NewClone),
     PresentClone(String),
     PresentSnapshot(String),
+    ChooseIso,
+    ChooseFolder(String),
 }
 
 pub enum Effect {
@@ -106,9 +112,17 @@ impl Hub {
         let changed = !updates.is_empty();
         let mut fleet = self.fleet.borrow_mut();
         for update in updates {
+            if let backend::Update::FolderChosen(id, path) = update {
+                self.backend.change(id, Change::AddShare(path));
+                continue;
+            }
             fleet.apply(update);
         }
         changed
+    }
+
+    pub fn take_windows_to_open(&self) -> Vec<String> {
+        std::mem::take(&mut self.fleet.borrow_mut().to_open)
     }
 
     pub fn take_notices(&self) -> Vec<Notice> {
@@ -155,6 +169,10 @@ impl Hub {
             }
             Request::PresentClone(id) => return Some(Effect::PresentClone(id)),
             Request::PresentSnapshot(id) => return Some(Effect::PresentSnapshot(id)),
+            Request::ChooseIso => self.backend.choose_iso(L10N.tr("machine-iso-choose")),
+            Request::ChooseFolder(id) => {
+                self.backend.choose_folder(id, L10N.tr("machine-share-choose"));
+            }
             Request::Emulate => self.backend.emulate(),
             Request::Change(id, change) => self.backend.change(id, change),
         }

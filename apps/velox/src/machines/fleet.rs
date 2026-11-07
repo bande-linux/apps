@@ -61,6 +61,8 @@ pub struct Fleet {
     pub created: Vec<(u64, String)>,
     pub notices: Vec<Notice>,
     pub focus: Option<String>,
+    pub to_open: Vec<String>,
+    pub chosen_iso: Option<PathBuf>,
 }
 
 impl Entry {
@@ -102,7 +104,12 @@ impl Entry {
             Act::Delete | Act::Clone => pending.is_none() && !self.running(),
             Act::Pause => pending.is_none() && self.power() == Power::Running,
             Act::Resume => pending.is_none() && self.power() == Power::Paused,
-            Act::TakeSnapshot | Act::Revert | Act::DeleteSnapshot => {
+            Act::TakeSnapshot => {
+                pending.is_none()
+                    && matches!(self.power(), Power::Running | Power::Stopped)
+                    && self.listed.manifest.shares.is_empty()
+            }
+            Act::Revert | Act::DeleteSnapshot => {
                 pending.is_none() && matches!(self.power(), Power::Running | Power::Stopped)
             }
         }
@@ -186,6 +193,8 @@ impl Default for Fleet {
             created: Vec::new(),
             notices: Vec::new(),
             focus: None,
+            to_open: Vec::new(),
+            chosen_iso: None,
         }
     }
 }
@@ -309,6 +318,9 @@ impl Fleet {
                     entry.address = address;
                 }
             }
+            Update::Opened(id) => self.to_open.push(id),
+            Update::IsoChosen(path) => self.chosen_iso = Some(path),
+            Update::FolderChosen(..) => {}
             Update::Settled(id) => {
                 if let Some(entry) = self.entries.get_mut(&id) {
                     entry.pending = None;

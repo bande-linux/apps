@@ -12,8 +12,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime};
 
 use bande_vm::{
-    ActiveState, CloudImage, CloudInit, Forward, Host, ImageStore, Library, Machine, Manifest,
-    NewClone, NewMachine, Qmp, Units,
+    ActiveState, CloudImage, CloudInit, Forward, Host, ImageStore, Installer, Library, Machine,
+    Manifest, NewClone, NewMachine, Qmp, Share, Units,
 };
 use bande_watch::{Changes, FolderWatch};
 use serde::{Deserialize, Serialize};
@@ -25,6 +25,7 @@ const SSH_PORT: u16 = 22;
 const READINESS_FOLDERS: [&str; 2] = ["/var/lib/dpkg", "/etc"];
 const PAUSED: &str = "STOP";
 const RESUMED: &str = "RESUME";
+const SHARE_TAG_LIMIT: usize = 30;
 const AGENT_PORT: &str = "VSERPORT_CHANGE";
 const AGENT_ID: &str = "agent-port";
 const ADDRESS_WAITS: [Duration; 4] = [
@@ -87,6 +88,9 @@ pub enum Change {
     Cpus(u32),
     Memory(u64),
     SshPort(u16),
+    Eject,
+    AddShare(PathBuf),
+    RemoveShare(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -95,10 +99,14 @@ pub enum Phase {
     Creating,
 }
 
+pub enum Source {
+    Cloud(CloudImage, CloudInit),
+    Iso(Installer),
+}
+
 pub struct Plan {
-    pub image: CloudImage,
+    pub source: Source,
     pub new: NewMachine,
-    pub cloud_init: CloudInit,
     pub login: Login,
 }
 
@@ -110,6 +118,9 @@ pub enum Update {
     Unit(String, ActiveState),
     Paused(String, bool),
     Address(String, Option<std::net::Ipv4Addr>),
+    Opened(String),
+    IsoChosen(PathBuf),
+    FolderChosen(String, PathBuf),
     Settled(String),
     Job(u64, Phase),
     Created(u64, String),
@@ -452,6 +463,15 @@ impl Worker {
             Change::Name(name) => manifest.name = name,
             Change::Cpus(cpus) => manifest.cpus = cpus,
             Change::Memory(memory) => manifest.memory_mib = memory,
+            Change::Eject => manifest.installer = None,
+            Change::AddShare(path) => {
+                let tag = share_tag(&path, &manifest.shares);
+                manifest.shares.push(Share {
+                    tag,
+                    path: path.display().to_string(),
+                });
+            }
+            Change::RemoveShare(tag) => manifest.shares.retain(|share| share.tag != tag),
             Change::SshPort(port) => {
                 manifest
                     .forwards
@@ -483,10 +503,22 @@ impl Worker {
     fn create(&self, job: u64, plan: Plan, cancelled: &AtomicBool) -> Result<String, String> {
         let mut host = Host::detect().map_err(|error| error.to_string())?;
         host.accel = self.host().ok_or("virtualization is not ready")?.accel;
+        let (image, cloud_init) = match plan.source {
+            Source::Cloud(image, cloud_init) => (image, cloud_init),
+            Source::Iso(installer) => {
+                self.out.send(Update::Job(job, Phase::Creating));
+                let machine = Self::library()?
+                    .create_from_iso(&host, plan.new, &installer)
+                    .map_err(|error| error.to_string())?;
+                write_login(machine.dir(), &plan.login).map_err(|error| error.to_string())?;
+                self.out.send(Update::Opened(machine.manifest.id.clone()));
+                return Ok(machine.manifest.id);
+            }
+        };
         let store = ImageStore::open().map_err(|error| error.to_string())?;
         let mut shown = None;
         let base = store
-            .fetch(&plan.image, &mut |done, total| {
+            .fetch(&image, &mut |done, total| {
                 let fraction = total
                     .filter(|total| *total > 0)
                     .map(|total| (done as f64 / total as f64 * 100.0).floor() as f32 / 100.0);
@@ -506,11 +538,32 @@ impl Worker {
             })?;
         self.out.send(Update::Job(job, Phase::Creating));
         let machine = Self::library()?
-            .create(&host, plan.new, &base, &plan.cloud_init)
+            .create(&host, plan.new, &base, &cloud_init)
             .map_err(|error| error.to_string())?;
         write_login(machine.dir(), &plan.login).map_err(|error| error.to_string())?;
         Ok(machine.manifest.id)
     }
+}
+
+fn share_tag(path: &Path, shares: &[Share]) -> String {
+    let base: String = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "share".to_owned())
+        .chars()
+        .map(|character| match character.is_ascii_alphanumeric() {
+            true => character,
+            false => '-',
+        })
+        .take(SHARE_TAG_LIMIT)
+        .collect();
+    (1..)
+        .map(|index| match index {
+            1 => base.clone(),
+            index => format!("{base}-{index}"),
+        })
+        .find(|tag| !shares.iter().any(|share| share.tag == *tag))
+        .unwrap_or(base)
 }
 
 fn read_login(dir: &Path) -> Login {
@@ -681,6 +734,32 @@ impl Backend {
             }
         });
         job
+    }
+
+    pub fn choose_iso(&self, title: String) {
+        let worker = self.worker();
+        spawn("velox-vm-choose", move || {
+            match crate::volumes::choose_iso(&title) {
+                Ok(Some(path)) => {
+                    worker.out.send(Update::IsoChosen(path));
+                }
+                Ok(None) => {}
+                Err(error) => tracing::warn!("cannot ask for a disc image: {error}"),
+            }
+        });
+    }
+
+    pub fn choose_folder(&self, id: String, title: String) {
+        let worker = self.worker();
+        spawn("velox-vm-choose", move || {
+            match crate::volumes::choose_folder(&title) {
+                Ok(Some(path)) => {
+                    worker.out.send(Update::FolderChosen(id, path));
+                }
+                Ok(None) => {}
+                Err(error) => tracing::warn!("cannot ask for a folder: {error}"),
+            }
+        });
     }
 
     pub fn snapshot(&self, id: String, op: SnapshotOp) {

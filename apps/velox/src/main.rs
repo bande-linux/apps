@@ -423,6 +423,14 @@ impl Velox {
     }
 
     fn machines_changed(&mut self, cx: &mut Cx<Self>) {
+        let to_open = self
+            .hub
+            .as_ref()
+            .map(Hub::take_windows_to_open)
+            .unwrap_or_default();
+        for id in to_open {
+            self.open_machine(cx, &id);
+        }
         let notices = self.hub.as_ref().map(Hub::take_notices).unwrap_or_default();
         for notice in notices {
             let target = notice

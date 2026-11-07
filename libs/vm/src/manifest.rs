@@ -13,6 +13,19 @@ pub struct Forward {
     pub guest: u16,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Preset {
+    #[default]
+    Linux,
+    Windows,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Share {
+    pub tag: String,
+    pub path: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Manifest {
     pub id: String,
@@ -31,6 +44,12 @@ pub struct Manifest {
     pub current_snapshot: Option<String>,
     #[serde(default)]
     pub resume_from: Option<String>,
+    #[serde(default)]
+    pub preset: Preset,
+    #[serde(default)]
+    pub installer: Option<String>,
+    #[serde(default)]
+    pub shares: Vec<Share>,
 }
 
 impl Manifest {

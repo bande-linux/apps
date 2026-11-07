@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rustix::process::getuid;
 use rustix::rand::{GetRandomFlags, getrandom};
 
-use crate::manifest::{Forward, Manifest};
+use crate::manifest::{Forward, Manifest, Preset};
 use crate::qemu::{Host, utf8};
 use crate::seed::CloudInit;
 use crate::{Error, Result};
@@ -29,6 +29,11 @@ pub struct NewMachine {
     pub memory_mib: u64,
     pub disk_gib: u64,
     pub forwards: Vec<Forward>,
+}
+
+pub struct Installer {
+    pub iso: PathBuf,
+    pub preset: Preset,
 }
 
 pub struct Machine {
@@ -102,6 +107,9 @@ impl Library {
             snapshots: Vec::new(),
             current_snapshot: None,
             resume_from: None,
+            preset: Preset::Linux,
+            installer: None,
+            shares: Vec::new(),
         });
         fs::create_dir_all(&machine.dir)?;
         let made = host
@@ -125,6 +133,44 @@ impl Library {
         remove_folder(&machine.runtime)?;
         remove_folder(&machine.network)?;
         self.collect_linked(host)
+    }
+
+    pub fn create_from_iso(
+        &self,
+        host: &Host,
+        new: NewMachine,
+        installer: &Installer,
+    ) -> Result<Machine> {
+        let machine = self.machine(Manifest {
+            id: random_uuid()?,
+            name: new.name,
+            os: new.os,
+            created: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |since| since.as_secs()),
+            cpus: new.cpus,
+            memory_mib: new.memory_mib,
+            disk_gib: new.disk_gib,
+            base_image: String::new(),
+            mac: random_mac()?,
+            forwards: new.forwards,
+            snapshots: Vec::new(),
+            current_snapshot: None,
+            resume_from: None,
+            preset: installer.preset,
+            installer: Some(utf8(&installer.iso)?.to_owned()),
+            shares: Vec::new(),
+        });
+        fs::create_dir_all(&machine.dir)?;
+        let made = host
+            .create_blank(&machine.disk(), new.disk_gib)
+            .and_then(|()| host.create_vars_for(&machine.vars(), installer.preset))
+            .and_then(|()| machine.save());
+        if let Err(error) = made {
+            let _ = fs::remove_dir_all(&machine.dir);
+            return Err(error);
+        }
+        Ok(machine)
     }
 
     pub(crate) fn machine(&self, manifest: Manifest) -> Machine {
@@ -180,6 +226,26 @@ impl Machine {
 
     pub fn serial_socket(&self) -> PathBuf {
         self.runtime.join("serial.sock")
+    }
+
+    pub fn share_socket(&self, index: usize) -> PathBuf {
+        self.runtime.join(format!("share-{index}.sock"))
+    }
+
+    pub(crate) fn tpm_socket(&self) -> PathBuf {
+        self.runtime.join("tpm.sock")
+    }
+
+    pub(crate) fn tpm_state(&self) -> PathBuf {
+        self.dir.join("tpm")
+    }
+
+    pub(crate) fn tpm_unit(&self) -> String {
+        format!("velox-vm-{}-tpm.service", self.manifest.id)
+    }
+
+    pub(crate) fn share_unit(&self, index: usize) -> String {
+        format!("velox-vm-{}-share-{index}.service", self.manifest.id)
     }
 
     pub(crate) fn runtime_dir(&self) -> &Path {

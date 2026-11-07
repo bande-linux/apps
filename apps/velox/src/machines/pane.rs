@@ -499,7 +499,11 @@ impl MachinesPane {
                 | Intent::SnapshotTool(_)
                 | Intent::Text(_)
                 | Intent::Port(_)
-                | Intent::Linked(_) => {}
+                | Intent::Linked(_)
+                | Intent::Eject
+                | Intent::AddShare
+                | Intent::RemoveShare(_) => {}
+                Intent::ChooseIso => self.requests.push(Request::ChooseIso),
             }
         }
         self.refresh(ui);
@@ -536,7 +540,16 @@ impl MachinesPane {
         ))))
     }
 
+    fn pick_up_iso(&mut self, ui: &mut Ui) {
+        let chosen = self.fleet.borrow_mut().chosen_iso.take();
+        if let (Some(path), Some(draft)) = (chosen, &mut self.draft) {
+            draft.set_iso(path);
+            ui.present_sheet(draft.alert(&self.intents, None));
+        }
+    }
+
     pub fn refresh(&mut self, ui: &mut Ui) {
+        self.pick_up_iso(ui);
         let Some(slot) = self.slot else {
             return;
         };

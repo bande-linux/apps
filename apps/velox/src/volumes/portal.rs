@@ -13,7 +13,17 @@ const CHOOSER: &str = "org.freedesktop.portal.FileChooser";
 const REQUEST: &str = "org.freedesktop.portal.Request";
 const SUCCESS: u32 = 0;
 
-fn ask(method: &str, title: &str, option: (&str, Value<'_>)) -> zbus::Result<Option<PathBuf>> {
+struct Filter<'a> {
+    label: String,
+    patterns: Vec<(u32, &'a str)>,
+}
+
+fn ask(
+    method: &str,
+    title: &str,
+    filter: Option<Filter<'_>>,
+    option: (&str, Value<'_>),
+) -> zbus::Result<Option<PathBuf>> {
     let connection = Connection::session()?;
     let sender = connection
         .unique_name()
@@ -24,20 +34,13 @@ fn ask(method: &str, title: &str, option: (&str, Value<'_>)) -> zbus::Result<Opt
         .map_err(zbus::Error::from)?;
     let request = Proxy::new(&connection, DESKTOP, handle, REQUEST)?;
     let mut responses = request.receive_signal("Response")?;
-    let kind = L10N.tr("filter-tar");
-    let filter = vec![(
-        kind.as_str(),
-        vec![
-            (0u32, "*.tar"),
-            (0u32, "*.tar.gz"),
-            (1u32, "application/x-tar"),
-        ],
-    )];
-    let options = HashMap::from([
-        ("handle_token", Value::from(token.as_str())),
-        ("filters", Value::from(filter)),
-        option,
-    ]);
+    let mut options = HashMap::from([("handle_token", Value::from(token.as_str())), option]);
+    if let Some(filter) = &filter {
+        options.insert(
+            "filters",
+            Value::from(vec![(filter.label.as_str(), filter.patterns.clone())]),
+        );
+    }
     connection.call_method(
         Some(DESKTOP),
         DESKTOP_PATH,
@@ -61,10 +64,43 @@ fn ask(method: &str, title: &str, option: (&str, Value<'_>)) -> zbus::Result<Opt
         }))
 }
 
+fn tar_filter() -> Filter<'static> {
+    Filter {
+        label: L10N.tr("filter-tar"),
+        patterns: vec![(0, "*.tar"), (0, "*.tar.gz"), (1, "application/x-tar")],
+    }
+}
+
 pub fn choose_archive(title: &str) -> zbus::Result<Option<PathBuf>> {
-    ask("OpenFile", title, ("multiple", Value::from(false)))
+    ask(
+        "OpenFile",
+        title,
+        Some(tar_filter()),
+        ("multiple", Value::from(false)),
+    )
 }
 
 pub fn choose_save_path(title: &str, name: &str) -> zbus::Result<Option<PathBuf>> {
-    ask("SaveFile", title, ("current_name", Value::from(name)))
+    ask(
+        "SaveFile",
+        title,
+        Some(tar_filter()),
+        ("current_name", Value::from(name)),
+    )
+}
+
+pub fn choose_iso(title: &str) -> zbus::Result<Option<PathBuf>> {
+    ask(
+        "OpenFile",
+        title,
+        Some(Filter {
+            label: L10N.tr("filter-iso"),
+            patterns: vec![(0, "*.iso"), (1, "application/x-iso9660-image")],
+        }),
+        ("multiple", Value::from(false)),
+    )
+}
+
+pub fn choose_folder(title: &str) -> zbus::Result<Option<PathBuf>> {
+    ask("OpenFile", title, None, ("directory", Value::from(true)))
 }

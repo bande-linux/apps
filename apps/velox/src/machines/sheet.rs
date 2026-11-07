@@ -3,11 +3,11 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use bande_toolkit::ui::{
-    Alert, Form, FormLine, Label, PopUpButton, RadioGroup, Stepper, TextField, Widget,
+    Alert, Button, Form, FormLine, Label, PopUpButton, RadioGroup, Stepper, TextField, Widget,
 };
-use bande_vm::{CloudInit, Forward, NewMachine, catalog};
+use bande_vm::{CloudInit, Forward, Host, Installer, NewMachine, Preset, catalog};
 
-use super::backend::{Login, Plan};
+use super::backend::{Login, Plan, Source};
 use super::fleet::Fleet;
 use super::{Intent, Intents, push};
 use crate::L10N;
@@ -29,6 +29,7 @@ const GUEST_AGENT: &str = "qemu-guest-agent";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
     Image,
+    Installer,
     Resources,
     Identity,
 }
@@ -43,6 +44,7 @@ pub enum Field {
     User(String),
     Key(usize),
     Port(String),
+    Preset(usize),
 }
 
 pub struct Draft {
@@ -58,6 +60,8 @@ pub struct Draft {
     key: usize,
     port: String,
     limits: (u32, u64),
+    iso: Option<PathBuf>,
+    preset: Preset,
 }
 
 fn host_limits() -> (u32, u64) {
@@ -156,14 +160,33 @@ impl Draft {
             key: 0,
             port: port.to_string(),
             limits,
+            iso: None,
+            preset: Preset::Linux,
+        }
+    }
+
+    fn from_iso(&self) -> bool {
+        self.image == catalog().len()
+    }
+
+    pub fn set_iso(&mut self, path: PathBuf) {
+        self.iso = Some(path);
+    }
+
+    fn os(&self) -> String {
+        match (self.from_iso(), self.preset) {
+            (true, Preset::Windows) => L10N.tr("machine-preset-windows"),
+            (true, Preset::Linux) => L10N.tr("machine-preset-linux"),
+            (false, _) => catalog()
+                .get(self.image)
+                .map(|image| image.os.to_owned())
+                .unwrap_or_default(),
         }
     }
 
     fn default_name(&self, fleet: &Fleet) -> String {
-        let base: String = catalog()
-            .get(self.image)
-            .map(|image| image.os)
-            .unwrap_or_default()
+        let base: String = self
+            .os()
             .split_whitespace()
             .next()
             .unwrap_or("machine")
@@ -191,12 +214,19 @@ impl Draft {
             Field::User(user) => self.user = user,
             Field::Key(key) => self.key = key,
             Field::Port(port) => self.port = port,
+            Field::Preset(index) => {
+                self.preset = match index {
+                    1 => Preset::Windows,
+                    _ => Preset::Linux,
+                };
+            }
         }
     }
 
     pub fn advance(&mut self, fleet: &Fleet) {
         self.step = match self.step {
-            Step::Image => Step::Resources,
+            Step::Image if self.from_iso() => Step::Installer,
+            Step::Image | Step::Installer => Step::Resources,
             _ => Step::Identity,
         };
         if self.step == Step::Identity && !self.named {
@@ -207,6 +237,7 @@ impl Draft {
     pub fn back(&mut self) {
         self.step = match self.step {
             Step::Identity => Step::Resources,
+            Step::Resources if self.from_iso() => Step::Installer,
             _ => Step::Image,
         };
     }
@@ -235,13 +266,59 @@ impl Draft {
         };
         let alert = match self.step {
             Step::Image => {
-                let names: Vec<&str> = catalog().iter().map(|image| image.os).collect();
+                let iso = L10N.tr("machine-image-iso");
+                let mut names: Vec<&str> = catalog().iter().map(|image| image.os).collect();
+                names.push(&iso);
                 new("machine-step-image").accessory(RadioGroup::new(
                     &L10N.tr("machine-image"),
                     &names,
                     Some(self.image),
                     index(Field::Image),
                 ))
+            }
+            Step::Installer => {
+                let chooser = Rc::clone(intents);
+                let presets = [
+                    L10N.tr("machine-preset-linux"),
+                    L10N.tr("machine-preset-windows"),
+                ];
+                let chosen = self.iso.as_ref().map_or_else(
+                    || L10N.tr("machine-iso-none"),
+                    |path| {
+                        path.file_name()
+                            .map(|name| name.to_string_lossy().into_owned())
+                            .unwrap_or_default()
+                    },
+                );
+                let mut lines = vec![
+                    FormLine::Row(
+                        L10N.tr("machine-iso"),
+                        Box::new(Label::new(&chosen)) as Box<dyn Widget>,
+                    ),
+                    FormLine::Row(
+                        String::new(),
+                        Box::new(Button::new(&L10N.tr("machine-iso-choose"), move || {
+                            push(&chooser, Intent::ChooseIso)
+                        })),
+                    ),
+                    FormLine::Row(
+                        L10N.tr("machine-preset"),
+                        Box::new(PopUpButton::new(
+                            &L10N.tr("machine-preset"),
+                            &presets,
+                            usize::from(self.preset == Preset::Windows),
+                            index(Field::Preset),
+                        )),
+                    ),
+                ];
+                if self.preset == Preset::Windows && Host::swtpm().is_none() {
+                    lines.push(FormLine::Row(
+                        String::new(),
+                        Box::new(Label::new(&L10N.tr("machine-windows-needs-swtpm")).secondary()),
+                    ));
+                }
+                new("machine-step-installer")
+                    .accessory(Form::new(&L10N.tr("machine-step-installer"), lines))
             }
             Step::Resources => {
                 let gigabytes =
@@ -308,6 +385,21 @@ impl Draft {
                         ))
                     }
                 };
+                if self.from_iso() {
+                    let lines = vec![FormLine::Row(
+                        L10N.tr("machine-name"),
+                        Box::new(TextField::new(
+                            &L10N.tr("machine-name"),
+                            &self.name,
+                            field(Field::Name),
+                        )) as Box<dyn Widget>,
+                    )];
+                    return new("machine-step-identity")
+                        .accessory(Form::new(&L10N.tr("machine-step-identity"), lines))
+                        .other(&L10N.tr("machine-back"), BACK)
+                        .cancel(&L10N.tr("machine-cancel"), CANCEL)
+                        .primary(&L10N.tr("machine-create"), CONTINUE);
+                }
                 let lines = vec![
                     FormLine::Row(
                         L10N.tr("machine-name"),
@@ -362,6 +454,27 @@ impl Draft {
         {
             return Err(L10N.tr_args("machine-name-taken", [("name", name.into())]));
         }
+        if self.from_iso() {
+            let iso = self
+                .iso
+                .clone()
+                .ok_or_else(|| L10N.tr("machine-iso-none"))?;
+            return Ok(Plan {
+                source: Source::Iso(Installer {
+                    iso,
+                    preset: self.preset,
+                }),
+                new: NewMachine {
+                    name,
+                    os: self.os(),
+                    cpus: self.cpus,
+                    memory_mib: self.memory_gib * 1024,
+                    disk_gib: self.disk_gib,
+                    forwards: Vec::new(),
+                },
+                login: Login::default(),
+            });
+        }
         let user = self.user.trim().to_owned();
         if !valid_user(&user) {
             return Err(L10N.tr("machine-invalid-user"));
@@ -388,9 +501,17 @@ impl Draft {
             .ok_or_else(|| L10N.tr("machine-image"))?;
         let identity = key_file.with_extension("");
         Ok(Plan {
-            image,
+            source: Source::Cloud(
+                image,
+                CloudInit {
+                    hostname: name.clone(),
+                    user: user.clone(),
+                    ssh_keys: vec![key],
+                    packages: vec![GUEST_AGENT.to_owned()],
+                },
+            ),
             new: NewMachine {
-                name: name.clone(),
+                name,
                 os: image.os.to_owned(),
                 cpus: self.cpus,
                 memory_mib: self.memory_gib * 1024,
@@ -399,12 +520,6 @@ impl Draft {
                     host: port,
                     guest: SSH_PORT,
                 }],
-            },
-            cloud_init: CloudInit {
-                hostname: name,
-                user: user.clone(),
-                ssh_keys: vec![key],
-                packages: vec![GUEST_AGENT.to_owned()],
             },
             login: Login {
                 user,

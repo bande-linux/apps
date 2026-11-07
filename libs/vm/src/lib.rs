@@ -18,8 +18,8 @@ pub use display::{Damage, Display, DisplayEvent, DisplayInput, MouseButton, Scan
 pub use error::{Error, Result};
 pub use guest_agent::guest_address;
 pub use image::{Algorithm, CloudImage, ImageStore, catalog};
-pub use library::{Library, Machine, NewMachine};
-pub use manifest::{Forward, Manifest};
+pub use library::{Installer, Library, Machine, NewMachine};
+pub use manifest::{Forward, Manifest, Preset, Share};
 pub use qemu::{Accel, Host};
 pub use qmp::{Event, Qmp, RunState};
 pub use seed::CloudInit;
