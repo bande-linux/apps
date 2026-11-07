@@ -335,6 +335,16 @@ impl CalendarView {
             });
     }
 
+    pub fn show_event(&mut self, uid: &str) {
+        let day = self.library.calendars.iter().find_map(|calendar| {
+            let object = calendar.objects.get(calendar.find(uid)?)?;
+            Some(object.parsed.as_ref()?.events.first()?.start.date())
+        });
+        if let Some(day) = day {
+            self.go_to(day);
+        }
+    }
+
     pub fn go_to(&mut self, day: Date) {
         self.focus = day;
         self.mini_month = day.first_of_month();

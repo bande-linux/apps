@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 accesskit.workspace = true
 bande-app.workspace = true
+bande-search.workspace = true
 base64.workspace = true
 jiff.workspace = true
 roxmltree.workspace = true

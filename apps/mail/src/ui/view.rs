@@ -703,6 +703,13 @@ impl MailView {
         self.reload();
     }
 
+    pub fn show_message(&mut self, id: MessageId) {
+        if let Ok(Some(summary)) = self.store.summary(id) {
+            self.choose_place(Place::Mailbox(summary.mailbox));
+            self.select(id);
+        }
+    }
+
     pub fn select(&mut self, id: MessageId) {
         let Some(summary) = self
             .messages
@@ -2199,6 +2206,7 @@ impl MailView {
             return;
         };
         self.workers.retain(|worker| worker.account != id);
+        std::thread::spawn(crate::donate::forget_in_search);
         if let Err(error) = self.store.remove_account(id) {
             tracing::warn!("cannot remove {}: {error}", account.email);
         }

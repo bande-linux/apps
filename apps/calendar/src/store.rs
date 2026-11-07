@@ -390,6 +390,7 @@ impl Library {
             calendars,
         };
         library.ensure_local();
+        crate::donate::offer_to_search(&library.calendars);
         library
     }
 
@@ -444,6 +445,7 @@ impl Library {
     }
 
     pub fn save(&self, index: usize) {
+        crate::donate::offer_to_search(&self.calendars);
         let (Some(dir), Some(calendar)) = (&self.dir, self.calendars.get(index)) else {
             return;
         };

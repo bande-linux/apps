@@ -293,6 +293,16 @@ impl Mail {
     }
 
     fn open_argument(&mut self, cx: &mut Cx<Self>, argument: &str) {
+        if let Some(message) = argument
+            .strip_prefix(bande_mail::donate::MESSAGE_ARGUMENT)
+            .and_then(|message| message.parse().ok())
+        {
+            if let Some(view) = main_view(cx, self.main, &mut self.parked) {
+                view.show_message(message);
+            }
+            self.serve_main(cx);
+            return;
+        }
         if let Some(draft) = from_mailto(argument) {
             if let Some(view) = main_view(cx, self.main, &mut self.parked) {
                 view.compose(draft);
