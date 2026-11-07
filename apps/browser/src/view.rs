@@ -1,12 +1,14 @@
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use accesskit::TreeUpdate;
 use bande_app::{Detached, TabDrop, TabDropTarget, TabHost, View};
 use bande_toolkit::ui::{
-    BUTTON_HEIGHT, Button, Context, Event, FreeLayout, Key, Modifiers, Pointer, PointerButton,
-    TEXT_FIELD_HEIGHT, TabAction, TabLabel, TabStrip, TabStripLayout, TabsShown, TextField, Ui,
-    WidgetId, frame_time,
+    Alert, BUTTON_HEIGHT, Bounded, Button, Cell as TableCell, Column, Context, Event, FreeLayout,
+    Key, Modifiers, Pointer, PointerButton, PopUpButton, RadioGroup, Row, TEXT_FIELD_HEIGHT,
+    TabAction, TabLabel, TabStrip, TabStripLayout, Table, TabsShown, TextField, Ui, WidgetId,
+    frame_time,
 };
 use bande_toolkit::{
     Appearance, Elevation, FrameRegions, HEADER_LEADING, Header, Image, Item, Point, Radius, Rect,
@@ -14,12 +16,13 @@ use bande_toolkit::{
     WindowEvent,
 };
 use web_host::Url;
-use web_host::Viewport;
+use web_host::{Clear, SiteData, Viewport};
 
-use crate::page::{Content, PageView};
+use crate::page::{Content, HangChoice, PageView};
 use crate::pages;
 use crate::places::{Place, Places};
 use crate::renderer::{Command, Link, LoadId, Outcome, Session, Update, Verdict, ViewId};
+use crate::settings::{BrowserSettings, SearchEngine};
 use crate::{L10N, address};
 
 const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
@@ -37,6 +40,10 @@ const SUGGESTION_INSET: f32 = 6.0;
 const HISTORY_SHOWN: usize = 500;
 const ZOOMS: [f32; 9] = [0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 2.0];
 const DEFAULT_ZOOM: usize = 4;
+const SITES_HEIGHT: f32 = 240.0;
+const SITE_COLUMN: f32 = 200.0;
+const DATA_COLUMN: f32 = 140.0;
+const HOUR: u64 = 3600;
 const FIRST_VIEWPORT: Viewport = Viewport {
     width: 1088.0,
     height: 706.0,
@@ -53,6 +60,69 @@ enum Signal {
     Reload,
     Stop,
     Typed(String),
+    ClearHistory,
+    RemoveSites,
+    AskRemoveAll,
+    RemoveAll,
+    ShowSites,
+    EngineChosen,
+    EngineDeclined,
+}
+
+#[derive(Clone, Copy)]
+enum Range {
+    LastHour,
+    Today,
+    TodayAndYesterday,
+    All,
+}
+
+impl Range {
+    const ALL: [Self; 4] = [
+        Self::LastHour,
+        Self::Today,
+        Self::TodayAndYesterday,
+        Self::All,
+    ];
+
+    fn label(self) -> String {
+        L10N.tr(match self {
+            Self::LastHour => "clear-last-hour",
+            Self::Today => "clear-today",
+            Self::TodayAndYesterday => "clear-today-yesterday",
+            Self::All => "clear-all-history",
+        })
+    }
+
+    fn since(self) -> u64 {
+        let midnight = |days: i64| {
+            jiff::Zoned::now()
+                .start_of_day()
+                .and_then(|today| today.checked_sub(jiff::Span::new().days(days)))
+                .map(|start| u64::try_from(start.timestamp().as_second()).unwrap_or(0))
+                .unwrap_or(0)
+        };
+        match self {
+            Self::LastHour => crate::places::now().saturating_sub(HOUR),
+            Self::Today => midnight(0),
+            Self::TodayAndYesterday => midnight(1),
+            Self::All => 0,
+        }
+    }
+}
+
+fn site_detail(site: &SiteData) -> String {
+    let mut parts = Vec::new();
+    if site.cookies > 0 {
+        parts.push(L10N.tr_args("site-cookies", [("count", site.cookies.into())]));
+    }
+    if site.cache_bytes > 0 {
+        parts.push(L10N.tr_args(
+            "site-cache",
+            [("size", bande_fs::format_size(site.cache_bytes).into())],
+        ));
+    }
+    parts.join(", ")
 }
 
 type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -214,6 +284,14 @@ pub(crate) struct BrowserView {
     page_size: Option<(f32, f32)>,
     suggestions: Vec<Place>,
     suggested: Option<usize>,
+    settings: Rc<Cell<BrowserSettings>>,
+    insecure_allowed: HashSet<String>,
+    site_data_wanted: bool,
+    clear_range: Rc<Cell<usize>>,
+    chosen_sites: Rc<RefCell<Vec<String>>>,
+    engines: Vec<SearchEngine>,
+    engine_pick: Rc<Cell<Option<usize>>>,
+    waiting_query: Option<String>,
 }
 
 impl BrowserView {
@@ -223,6 +301,7 @@ impl BrowserView {
         renderer: Link,
         ids: Rc<Cell<u64>>,
         places: Rc<Places>,
+        settings: Rc<Cell<BrowserSettings>>,
     ) -> Self {
         let signals: Signals = Rc::default();
         let mut host = FreeLayout::new();
@@ -283,6 +362,14 @@ impl BrowserView {
             page_size: None,
             suggestions: Vec::new(),
             suggested: None,
+            settings,
+            insecure_allowed: HashSet::new(),
+            site_data_wanted: false,
+            clear_range: Rc::new(Cell::new(0)),
+            chosen_sites: Rc::default(),
+            engines: Vec::new(),
+            engine_pick: Rc::new(Cell::new(None)),
+            waiting_query: None,
         };
         view.refresh_navigation();
         view
@@ -725,6 +812,7 @@ impl BrowserView {
     }
 
     fn start(&mut self, index: usize, url: Url, target: Target) {
+        let (url, fallback) = self.upgraded(url);
         self.save_scroll(index);
         let zoom = self.tabs.get(index).map_or(1.0, |tab| tab.zoom);
         let viewport = self
@@ -745,7 +833,7 @@ impl BrowserView {
         tab.pending = Some(Pending {
             load,
             target,
-            fallback: None,
+            fallback,
         });
         self.renderer.send(Command::Load {
             view: tab.id,
@@ -765,6 +853,240 @@ impl BrowserView {
             self.focus_page();
         }
         self.refresh_navigation();
+    }
+
+    fn upgraded(&self, url: Url) -> (Url, Option<Url>) {
+        let allowed = url
+            .host_str()
+            .is_some_and(|host| self.insecure_allowed.contains(host));
+        if url.scheme() != "http" || !self.settings.get().https_only || allowed {
+            return (url, None);
+        }
+        let mut secure = url.clone();
+        match secure.set_scheme("https") {
+            Ok(()) => (secure, Some(url)),
+            Err(()) => (url, None),
+        }
+    }
+
+    fn search(&mut self, query: String) {
+        match self.settings.get().search {
+            Some(engine) => {
+                if let Some(url) = engine.search(&query) {
+                    self.navigate(url);
+                }
+            }
+            None => self.ask_search_engine(Some(query)),
+        }
+    }
+
+    pub(crate) fn ask_search_engine(&mut self, query: Option<String>) {
+        self.waiting_query = query;
+        self.engines = SearchEngine::shuffled();
+        self.engine_pick.set(None);
+        let names: Vec<&str> = self.engines.iter().map(|engine| engine.name()).collect();
+        let pick = Rc::clone(&self.engine_pick);
+        let choices = RadioGroup::new(&L10N.tr("engine-choices"), &names, None, move |index| {
+            pick.set(Some(index))
+        });
+        let signals = Rc::clone(&self.signals);
+        self.ui.present_sheet(
+            Alert::new(
+                &L10N.tr("engine-title"),
+                &L10N.tr("engine-message"),
+                move |action| {
+                    signals.borrow_mut().push(match action {
+                        "choose" => Signal::EngineChosen,
+                        _ => Signal::EngineDeclined,
+                    });
+                },
+            )
+            .accessory(choices)
+            .primary(&L10N.tr("engine-choose"), "choose")
+            .cancel(&L10N.tr("engine-later"), "later"),
+        );
+    }
+
+    fn engine_chosen(&mut self) {
+        let picked = self
+            .engine_pick
+            .get()
+            .and_then(|index| self.engines.get(index).copied());
+        let Some(engine) = picked else {
+            let query = self.waiting_query.take();
+            return self.ask_search_engine(query);
+        };
+        self.save_settings(BrowserSettings {
+            search: Some(engine),
+            search_asked: true,
+            ..self.settings.get()
+        });
+        if let Some(query) = self.waiting_query.take() {
+            self.search(query);
+        }
+    }
+
+    fn engine_declined(&mut self) {
+        self.waiting_query = None;
+        self.save_settings(BrowserSettings {
+            search_asked: true,
+            ..self.settings.get()
+        });
+    }
+
+    fn save_settings(&self, settings: BrowserSettings) {
+        self.settings.set(settings);
+        if let Some(folder) = bande_app_settings::settings_folder() {
+            let saved = std::fs::create_dir_all(&folder)
+                .and_then(|()| bande_app_settings::Stored::save(&settings, &folder));
+            if let Err(error) = saved {
+                tracing::warn!("cannot save the browser settings: {error}");
+            }
+        }
+    }
+
+    pub(crate) fn ask_clear_history(&mut self) {
+        let ranges: Vec<String> = Range::ALL.iter().map(|range| range.label()).collect();
+        let chosen = Rc::clone(&self.clear_range);
+        let range = PopUpButton::new(
+            &L10N.tr("clear-range"),
+            &ranges,
+            chosen.get().min(ranges.len() - 1),
+            move |index| chosen.set(index),
+        );
+        let signals = Rc::clone(&self.signals);
+        self.ui.present_sheet(
+            Alert::new(
+                &L10N.tr("clear-history-title"),
+                &L10N.tr("clear-history-message"),
+                move |action| {
+                    if action == "clear" {
+                        signals.borrow_mut().push(Signal::ClearHistory);
+                    }
+                },
+            )
+            .accessory(range)
+            .destructive(&L10N.tr("clear-history-button"), "clear")
+            .cancel(&L10N.tr("cancel"), "cancel"),
+        );
+    }
+
+    fn clear_history(&mut self) {
+        let range = Range::ALL
+            .get(self.clear_range.get())
+            .copied()
+            .unwrap_or(Range::LastHour);
+        let since = range.since();
+        if let Err(error) = self.places.clear_history(since) {
+            tracing::warn!("cannot clear the history: {error}");
+        }
+        self.renderer.send(Command::ClearData {
+            session: Session::Default,
+            clear: Clear {
+                since,
+                cookies: true,
+                cache: true,
+                sites: None,
+            },
+        });
+        self.closed.clear();
+    }
+
+    pub(crate) fn ask_website_data(&mut self) {
+        let Some(tab) = self.tabs.get(self.active) else {
+            return;
+        };
+        self.site_data_wanted = true;
+        self.renderer.send(Command::SiteData {
+            view: tab.id,
+            session: self.session,
+        });
+    }
+
+    fn show_website_data(&mut self, sites: Vec<SiteData>) {
+        if !std::mem::take(&mut self.site_data_wanted) {
+            return;
+        }
+        self.chosen_sites.borrow_mut().clear();
+        let mut table = Table::new(vec![
+            Column::new(&L10N.tr("site-column"), SITE_COLUMN)
+                .flexible()
+                .unsortable(),
+            Column::new(&L10N.tr("data-column"), DATA_COLUMN).unsortable(),
+        ]);
+        let empty = sites.is_empty();
+        table.set_rows(
+            sites
+                .iter()
+                .map(|site| {
+                    Row::new(
+                        site.site.clone(),
+                        vec![
+                            TableCell::new(site.site.as_str()),
+                            TableCell::new(site_detail(site)).muted(),
+                        ],
+                    )
+                })
+                .collect(),
+        );
+        let chosen = Rc::clone(&self.chosen_sites);
+        let table = table.on_selection(move |keys| *chosen.borrow_mut() = keys.to_vec());
+        let signals = Rc::clone(&self.signals);
+        let message = match empty {
+            true => L10N.tr("website-data-empty"),
+            false => L10N.tr("website-data-message"),
+        };
+        let mut alert = Alert::new(&L10N.tr("website-data-title"), &message, move |action| {
+            let signal = match action {
+                "remove" => Signal::RemoveSites,
+                "remove-all" => Signal::AskRemoveAll,
+                _ => return,
+            };
+            signals.borrow_mut().push(signal);
+        });
+        if !empty {
+            alert = alert
+                .accessory(Bounded::new(table, SITES_HEIGHT))
+                .other(&L10N.tr("remove"), "remove")
+                .other(&L10N.tr("remove-all"), "remove-all");
+        }
+        self.ui
+            .present_sheet(alert.primary(&L10N.tr("done"), "done"));
+    }
+
+    pub(crate) fn remove_sites(&mut self, sites: Option<Vec<String>>) {
+        if sites.as_ref().is_some_and(Vec::is_empty) {
+            return self.ask_website_data();
+        }
+        self.renderer.send(Command::ClearData {
+            session: self.session,
+            clear: Clear {
+                since: 0,
+                cookies: true,
+                cache: true,
+                sites,
+            },
+        });
+        self.ask_website_data();
+    }
+
+    fn ask_remove_all(&mut self) {
+        let signals = Rc::clone(&self.signals);
+        self.ui.present_sheet(
+            Alert::new(
+                &L10N.tr("remove-all-title"),
+                &L10N.tr("remove-all-message"),
+                move |action| {
+                    let signal = match action {
+                        "remove" => Signal::RemoveAll,
+                        _ => Signal::ShowSites,
+                    };
+                    signals.borrow_mut().push(signal);
+                },
+            )
+            .destructive(&L10N.tr("remove-now"), "remove")
+            .cancel(&L10N.tr("cancel"), "cancel"),
+        );
     }
 
     pub(crate) fn is_loading(&self) -> bool {
@@ -794,6 +1116,13 @@ impl BrowserView {
                 self.with_page(index, |page| page.show(Content::Crashed(url)));
                 self.refresh_navigation();
             }
+            Outcome::Unresponsive if Some(update.load) == shown || Some(update.load) == pending => {
+                self.with_page(index, |page| page.set_unresponsive(true));
+            }
+            Outcome::Responsive => {
+                self.with_page(index, |page| page.set_unresponsive(false));
+            }
+            Outcome::SiteData(sites) => self.show_website_data(sites),
             Outcome::Paused(paused) => self.renderer.send(Command::Resume {
                 request: paused.request,
                 verdict: Verdict::Continue,
@@ -842,7 +1171,12 @@ impl BrowserView {
                 tab.shown = None;
                 (url.clone(), None, Content::Crashed(url), None)
             }
-            Outcome::Relaid(..) | Outcome::Scroll(_) | Outcome::Paused(_) => return,
+            Outcome::Relaid(..)
+            | Outcome::Scroll(_)
+            | Outcome::Paused(_)
+            | Outcome::Unresponsive
+            | Outcome::Responsive
+            | Outcome::SiteData(_) => return,
         };
         let restored = match pending.target {
             Target::New => {
@@ -1049,8 +1383,12 @@ impl BrowserView {
             return false;
         };
         match address::typed(&field.text()) {
-            Some(typed) => {
+            Some(address::Input::Address(typed)) => {
                 self.navigate_typed(typed);
+                true
+            }
+            Some(address::Input::Search(query)) => {
+                self.search(query);
                 true
             }
             None => false,
@@ -1063,11 +1401,26 @@ impl BrowserView {
         if let Some(url) = self.with_page(index, PageView::take_followed).flatten() {
             self.follow(url);
         }
+        if let Some(url) = self.with_page(index, PageView::take_continued).flatten() {
+            if let Some(host) = url.host_str() {
+                self.insecure_allowed.insert(host.to_owned());
+            }
+            self.navigate(url);
+        }
         if self
             .with_page(index, PageView::take_reload)
             .unwrap_or(false)
         {
             self.reload();
+        }
+        let choice = self.with_page(index, PageView::take_hang_choice).flatten();
+        if let (Some(choice), Some(tab)) = (choice, self.tabs.get(index)) {
+            let view = tab.id;
+            self.renderer.send(match choice {
+                HangChoice::Wait => Command::Wait { view },
+                HangChoice::Stop => Command::Kill { view },
+            });
+            self.with_page(index, |page| page.set_unresponsive(false));
         }
         let hovered = self.with_page(index, PageView::take_hovered).flatten();
         if let (Some((x, y)), Some(tab)) = (hovered, self.tabs.get(index))
@@ -1095,6 +1448,16 @@ impl BrowserView {
                     Signal::Reload => self.reload(),
                     Signal::Stop => self.stop(),
                     Signal::Typed(text) => self.suggest(&text),
+                    Signal::ClearHistory => self.clear_history(),
+                    Signal::RemoveSites => {
+                        let sites = self.chosen_sites.borrow().clone();
+                        self.remove_sites(Some(sites));
+                    }
+                    Signal::AskRemoveAll => self.ask_remove_all(),
+                    Signal::RemoveAll => self.remove_sites(None),
+                    Signal::ShowSites => self.ask_website_data(),
+                    Signal::EngineChosen => self.engine_chosen(),
+                    Signal::EngineDeclined => self.engine_declined(),
                 }
             }
         }

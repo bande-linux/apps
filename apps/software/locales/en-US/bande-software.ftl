@@ -103,6 +103,7 @@ problem-not-found = { $name } isn’t in the package lists any more. Check for u
 problem-dependencies = { $name } needs packages that can’t be installed right now. Install pending updates in Software Update, then try again.
 problem-system-package = { $name } is part of the system and can’t be removed.
 problem-unsigned = { $name } isn’t signed by a trusted source, so it wasn’t installed.
+problem-not-authorized = Nothing was changed, because no administrator’s password was given. If no password window appeared, log out and back in, then try again.
 problem-no-packagekit = Installing apps needs PackageKit, which isn’t installed.
 details = Details
 remove = Remove

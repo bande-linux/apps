@@ -24,6 +24,7 @@ const CANVAS: Color = Color::WHITE;
 const TEXT: Color = Color::hex(0x202122);
 const SECONDARY: Color = Color::hex(0x54595d);
 const BUTTON: Color = Color::hex(0xeaecf0);
+const SCRIM: Color = Color::WHITE.with_alpha(160);
 const BUTTON_PADDING: f32 = 14.0;
 const BUTTON_RADIUS: f32 = 8.0;
 
@@ -50,6 +51,20 @@ pub(crate) enum Content {
     },
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HangChoice {
+    Wait,
+    Stop,
+}
+
+#[derive(Default)]
+struct Hang {
+    built_for: Option<Rect>,
+    items: Vec<Item>,
+    wait: Rect,
+    stop: Rect,
+}
+
 pub(crate) struct PageView {
     id: WidgetId,
     frame: Rect,
@@ -64,8 +79,11 @@ pub(crate) struct PageView {
     jump: Option<f32>,
     pressed: Option<Point>,
     followed: Option<Url>,
+    continued: Option<Url>,
     reload: Option<Rect>,
     reload_pressed: bool,
+    hang: Option<Hang>,
+    hang_choice: Option<HangChoice>,
     hovered: Option<(f32, f32)>,
     shown_offset: Cell<f32>,
     zoom: f32,
@@ -87,15 +105,142 @@ impl PageView {
             jump: None,
             pressed: None,
             followed: None,
+            continued: None,
             reload: None,
             reload_pressed: false,
+            hang: None,
+            hang_choice: None,
             hovered: None,
             shown_offset: Cell::new(0.0),
             zoom: 1.0,
         }
     }
 
+    pub(crate) fn set_unresponsive(&mut self, unresponsive: bool) {
+        self.hang = unresponsive.then(Hang::default);
+    }
+
+    pub(crate) fn take_hang_choice(&mut self) -> Option<HangChoice> {
+        self.hang_choice.take()
+    }
+
+    fn hang_button_at(&self, point: Point) -> Option<HangChoice> {
+        let hang = self.hang.as_ref()?;
+        let inside = |button: Rect| {
+            point.x >= button.x
+                && point.y >= button.y
+                && point.x < button.x + button.width
+                && point.y < button.y + button.height
+        };
+        match (inside(hang.wait), inside(hang.stop)) {
+            (true, _) => Some(HangChoice::Wait),
+            (_, true) => Some(HangChoice::Stop),
+            _ => None,
+        }
+    }
+
+    fn build_hang(&mut self, cx: &mut Context) {
+        let frame = self.frame;
+        let Some(hang) = self
+            .hang
+            .as_mut()
+            .filter(|hang| hang.built_for != Some(frame))
+        else {
+            return;
+        };
+        let column = (frame.width - 2.0 * MARGIN).clamp(0.0, MESSAGE_WIDTH);
+        let paragraph = |cx: &mut Context, text: &str, size: f32, weight, color| {
+            cx.text.paragraph(
+                text,
+                TextStyle::new(size, color).weight(weight),
+                Some(column - 2.0 * MARGIN),
+                TextAlign::Center,
+            )
+        };
+        let title = paragraph(
+            cx,
+            &L10N.tr("page-unresponsive"),
+            TITLE_SIZE,
+            TextStyle::SEMIBOLD,
+            TEXT,
+        );
+        let body = paragraph(
+            cx,
+            &L10N.tr("page-unresponsive-body"),
+            BODY_SIZE,
+            TextStyle::REGULAR,
+            TEXT,
+        );
+        let label = |cx: &mut Context, text: &str| {
+            cx.text.paragraph(
+                text,
+                TextStyle::new(BODY_SIZE, TEXT).weight(TextStyle::SEMIBOLD),
+                None,
+                TextAlign::Start,
+            )
+        };
+        let wait = label(cx, &L10N.tr("wait"));
+        let stop = label(cx, &L10N.tr("stop-page"));
+        let button_height = wait.height() + BUTTON_PADDING;
+        let card_height = MARGIN
+            + title.height()
+            + BODY_SIZE
+            + body.height()
+            + BODY_SIZE
+            + button_height
+            + MARGIN;
+        let card = Rect::new(
+            frame.x + (frame.width - column) / 2.0,
+            frame.y + ((frame.height - card_height) / 2.0).max(MARGIN),
+            column,
+            card_height,
+        );
+        let wait_width = wait.painted_width() + 2.0 * BUTTON_PADDING;
+        let stop_width = stop.painted_width() + 2.0 * BUTTON_PADDING;
+        let buttons_y = card.y + card_height - MARGIN - button_height;
+        let left = card.x + (card.width - wait_width - stop_width - BUTTON_PADDING) / 2.0;
+        hang.wait = Rect::new(left, buttons_y, wait_width, button_height);
+        hang.stop = Rect::new(
+            left + wait_width + BUTTON_PADDING,
+            buttons_y,
+            stop_width,
+            button_height,
+        );
+        let text_x = card.x + MARGIN;
+        let body_y = card.y + MARGIN + title.height() + BODY_SIZE;
+        hang.items = vec![
+            Item::Fill {
+                shape: Shape::rounded(frame, self.radius),
+                paint: SCRIM.into(),
+            },
+            Item::Fill {
+                shape: Shape::rounded(card, BUTTON_RADIUS * 2.0),
+                paint: CANVAS.into(),
+            },
+            Item::Text {
+                origin: Point::new(text_x, card.y + MARGIN),
+                paragraph: title,
+            },
+            Item::Text {
+                origin: Point::new(text_x, body_y),
+                paragraph: body,
+            },
+        ];
+        for (button, label) in [(hang.wait, wait), (hang.stop, stop)] {
+            hang.items.push(Item::Fill {
+                shape: Shape::rounded(button, BUTTON_RADIUS),
+                paint: BUTTON.into(),
+            });
+            hang.items.push(Item::Text {
+                origin: Point::new(button.x + BUTTON_PADDING, button.y + BUTTON_PADDING / 2.0),
+                paragraph: label,
+            });
+        }
+        hang.built_for = Some(frame);
+    }
+
     pub(crate) fn show(&mut self, content: Content) {
+        self.hang = None;
         self.content = content;
         self.laid_out_width = None;
         self.scroll = ScrollState::default();
@@ -187,6 +332,10 @@ impl PageView {
 
     pub(crate) fn take_followed(&mut self) -> Option<Url> {
         self.followed.take()
+    }
+
+    pub(crate) fn take_continued(&mut self) -> Option<Url> {
+        self.continued.take()
     }
 
     pub(crate) fn take_reload(&mut self) -> bool {
@@ -347,9 +496,13 @@ impl PageView {
                 if moved > 4.0 {
                     return false;
                 }
+                if self.hang.is_some() {
+                    self.hang_choice = self.hang_button_at(pointer.position);
+                    return self.hang_choice.is_some();
+                }
                 if self.reload_at(pointer.position) {
                     match &self.content {
-                        Content::Insecure { http, .. } => self.followed = Some(http.clone()),
+                        Content::Insecure { http, .. } => self.continued = Some(http.clone()),
                         _ => self.reload_pressed = true,
                     }
                     return true;
@@ -373,6 +526,7 @@ impl Widget for PageView {
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
+        self.build_hang(cx);
         if self.laid_out_width != Some(frame.width) {
             self.lay_out(cx, frame.width);
         }
@@ -429,6 +583,9 @@ impl Widget for PageView {
             items: content,
         });
         self.scroll.paint_scrollbar(cx, self.frame, items);
+        if let Some(hang) = &self.hang {
+            items.extend(hang.items.iter().cloned());
+        }
     }
 
     fn access(&self, cx: &Context) -> Node {
@@ -463,7 +620,10 @@ impl Widget for PageView {
 
     fn cursor(&self, point: Point) -> Option<Cursor> {
         Some(
-            match self.link_at(point).is_some() || self.reload_at(point) {
+            match self.link_at(point).is_some()
+                || self.reload_at(point)
+                || self.hang_button_at(point).is_some()
+            {
                 true => Cursor::Pointer,
                 false => Cursor::Default,
             },

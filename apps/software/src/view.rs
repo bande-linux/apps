@@ -299,6 +299,7 @@ fn problem_text(problem: Problem, task: Task, name: &str) -> String {
         (Problem::Dependencies, _) => "problem-dependencies",
         (Problem::SystemPackage, _) => "problem-system-package",
         (Problem::Unsigned, _) => "problem-unsigned",
+        (Problem::NotAuthorized, _) => "problem-not-authorized",
         (Problem::NoPackageKit, _) => "problem-no-packagekit",
         (Problem::NeedsX11, _) => "needs-x11",
         (Problem::Other | Problem::Cancelled, Task::Install) => "install-failed",
