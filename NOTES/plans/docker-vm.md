@@ -501,8 +501,8 @@ its own: `Table::sidebar()` is the shared source list, and Velox, Settings and t
 
 Left from V1: the ≤ 8 s boot. Debian `generic` under KVM reaches SSH about 13 s after the unit starts;
 the guest's own part is 5.5 s, so 7–8 s go to QEMU, AAVMF and GRUB.
-V3 not measured yet: 1080p at 60 fps and a release build's cost (a debug build showed about 1.7 % with
-a still guest, most of it the main window's 2 s stats).
+V3 not measured yet: 1080p at 60 fps and a release build's cost (a debug build used about 1.7 % of a core with
+a still guest and the main window open).
 
 D3 (desktop): the theme icon, with A1; the app ships the same SVG for hicolor. **Kernel: none.** If V0 hits a guest timer, PMU or vGIC
 fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
