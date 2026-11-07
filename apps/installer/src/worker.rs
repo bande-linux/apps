@@ -25,6 +25,7 @@ pub enum Message {
     State(State),
     Progress(Progress),
     Back,
+    Refused,
 }
 
 pub struct Feed {
@@ -92,6 +93,7 @@ fn run(client: &Client, path: &Path, machine: &Machine, jobs: Receiver<Job>, out
         let message = match outcome {
             Outcome::Done(state) => Message::State(state),
             Outcome::Back => Message::Back,
+            Outcome::Refused => Message::Refused,
         };
         if !out.send(message) {
             break;
