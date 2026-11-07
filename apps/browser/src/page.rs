@@ -64,6 +64,7 @@ pub(crate) struct PageView {
     jump: Option<f32>,
     pressed: Option<Point>,
     followed: Option<Url>,
+    continued: Option<Url>,
     reload: Option<Rect>,
     reload_pressed: bool,
     hovered: Option<(f32, f32)>,
@@ -87,6 +88,7 @@ impl PageView {
             jump: None,
             pressed: None,
             followed: None,
+            continued: None,
             reload: None,
             reload_pressed: false,
             hovered: None,
@@ -187,6 +189,10 @@ impl PageView {
 
     pub(crate) fn take_followed(&mut self) -> Option<Url> {
         self.followed.take()
+    }
+
+    pub(crate) fn take_continued(&mut self) -> Option<Url> {
+        self.continued.take()
     }
 
     pub(crate) fn take_reload(&mut self) -> bool {
@@ -349,7 +355,7 @@ impl PageView {
                 }
                 if self.reload_at(pointer.position) {
                     match &self.content {
-                        Content::Insecure { http, .. } => self.followed = Some(http.clone()),
+                        Content::Insecure { http, .. } => self.continued = Some(http.clone()),
                         _ => self.reload_pressed = true,
                     }
                     return true;

@@ -487,10 +487,13 @@ dependencies = [
  "accesskit",
  "bande-app",
  "bande-app-menu",
+ "bande-app-settings",
  "bande-l10n",
  "bande-toolkit",
  "bande-xdg",
  "base64 0.22.1",
+ "image",
+ "jiff",
  "rusqlite",
  "rustix",
  "tracing",
@@ -5513,7 +5516,7 @@ dependencies = [
 [[package]]
 name = "web-atoms"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "hashbrown 0.16.1",
 ]
@@ -5521,7 +5524,7 @@ dependencies = [
 [[package]]
 name = "web-av1"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "rav1d",
 ]
@@ -5529,7 +5532,7 @@ dependencies = [
 [[package]]
 name = "web-content"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "encoding_rs",
  "web-atoms",
@@ -5546,7 +5549,7 @@ dependencies = [
 [[package]]
 name = "web-css"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "encoding_rs",
  "web-atoms",
@@ -5555,7 +5558,7 @@ dependencies = [
 [[package]]
 name = "web-dom"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "web-atoms",
  "web-html",
@@ -5564,7 +5567,7 @@ dependencies = [
 [[package]]
 name = "web-host"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "linebender_resource_handle",
  "rustix",
@@ -5576,7 +5579,7 @@ dependencies = [
 [[package]]
 name = "web-html"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "encoding_rs",
  "web-atoms",
@@ -5585,7 +5588,7 @@ dependencies = [
 [[package]]
 name = "web-image"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "gif",
  "image-webp",
@@ -5599,7 +5602,7 @@ dependencies = [
 [[package]]
 name = "web-ipc"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "landlock",
  "libc",
@@ -5613,7 +5616,7 @@ dependencies = [
 [[package]]
 name = "web-layout"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "web-atoms",
  "web-dom",
@@ -5624,7 +5627,7 @@ dependencies = [
 [[package]]
 name = "web-net"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "brotli-decompressor",
  "encoding_rs",
@@ -5639,7 +5642,7 @@ dependencies = [
 [[package]]
 name = "web-netd"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "rustix",
  "web-ipc",
@@ -5649,7 +5652,7 @@ dependencies = [
 [[package]]
 name = "web-paint"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "linebender_resource_handle",
  "web-dom",
@@ -5662,7 +5665,7 @@ dependencies = [
 [[package]]
 name = "web-renderer"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "rustix",
  "web-content",
@@ -5673,7 +5676,7 @@ dependencies = [
 [[package]]
 name = "web-style"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "web-atoms",
  "web-css",
@@ -5693,7 +5696,7 @@ dependencies = [
 [[package]]
 name = "web-text"
 version = "0.1.0"
-source = "git+https://github.com/bande-linux/web?rev=3ad0f44dca51dce908db6b9f24b494515b792153#3ad0f44dca51dce908db6b9f24b494515b792153"
+source = "git+https://github.com/bande-linux/web?rev=e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9#e2132fc53c808d4eabb5b968c2c5c3f1ad0a7bc9"
 dependencies = [
  "brotli-decompressor",
  "flate2",

@@ -4,6 +4,7 @@ mod pages;
 mod places;
 mod renderer;
 mod session;
+mod settings;
 mod tiles;
 mod view;
 
@@ -14,13 +15,19 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::LazyLock;
 
-use bande_app::{Cx, Detached, Info, Keys, Kind, Menus, Program, TabCarry, TabDrop, WindowId};
+use bande_app::{
+    Cx, Detached, Info, Keys, Kind, Menus, Program, Settings as SettingsWindowInfo, TabCarry,
+    TabDrop, View, WindowId,
+};
 use bande_app_menu::Entry;
+use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_l10n::Localizer;
+use bande_toolkit::Appearance;
 use web_host::Url;
 
 use crate::places::{Place, Places};
 use crate::renderer::{Renderer, Session};
+use crate::settings::{BrowserSettings, Launch, SETTINGS_SIZE, settings_view};
 use crate::view::{Ask, BrowserView, CarriedTab, SavedWindow};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-browser.ftl");
@@ -32,8 +39,20 @@ pub(crate) static INFO: Info = Info {
     version: env!("CARGO_PKG_VERSION"),
     name: || L10N.tr("app-name"),
     keys: Keys::Standard,
-    settings: None,
+    settings: Some(SettingsWindowInfo {
+        title: || L10N.tr("settings-title"),
+        size: SETTINGS_SIZE,
+        view: settings_window,
+    }),
 };
+
+fn settings_window(appearance: Appearance) -> Box<dyn View> {
+    Box::new(SettingsWindow::<BrowserSettings>::new(
+        appearance,
+        settings_folder(),
+        settings_view,
+    ))
+}
 
 const WINDOW_SIZE: (u32, u32) = (1100, 760);
 const SESSION_FILE: &str = "browser-session";
@@ -52,6 +71,7 @@ const SHOW_TAB: &str = "show-tab-";
 const PLACES_FILE: &str = "browser-places.sqlite";
 const SCHEME_TYPE: &str = "x-scheme-handler/https";
 const MENU_LABEL: usize = 60;
+const SETTINGS_SOURCE: usize = 1;
 const SHOW_HISTORY: &str = "show-history";
 const RECENT_PAGE: &str = "recent-page-";
 const RECENT_SHOWN: usize = 10;
@@ -62,6 +82,8 @@ const ZOOM_IN: &str = "zoom-in";
 const ZOOM_OUT: &str = "zoom-out";
 const ACTUAL_SIZE: &str = "actual-size";
 const SYSTEM_BROWSER: &str = "open-in-system-browser";
+const CLEAR_HISTORY: &str = "clear-history";
+const WEBSITE_DATA: &str = "website-data";
 
 struct Browser {
     renderer: Renderer,
@@ -72,12 +94,14 @@ struct Browser {
     carried_session: Session,
     session_file: Option<PathBuf>,
     places: Rc<Places>,
+    settings: Rc<Cell<BrowserSettings>>,
+    settings_watch: Option<SettingsWatch>,
 }
 
-fn addresses(arguments: &[String]) -> Vec<Url> {
+fn addresses(arguments: &[String], settings: BrowserSettings) -> Vec<Url> {
     arguments
         .iter()
-        .filter_map(|argument| address::parse(argument))
+        .filter_map(|argument| address::parse(argument, settings.search))
         .collect()
 }
 
@@ -95,14 +119,15 @@ impl Browser {
         session: Session,
         size: (u32, u32),
     ) -> Result<WindowId, bande_app::Error> {
-        let (renderer, ids, places) = (
+        let (renderer, ids, places, settings) = (
             self.renderer.link(),
             Rc::clone(&self.ids),
             Rc::clone(&self.places),
+            Rc::clone(&self.settings),
         );
         Ok(
             cx.open(Kind::Main, &L10N.tr("app-name"), size, move |appearance| {
-                BrowserView::new(appearance, session, renderer, ids, places)
+                BrowserView::new(appearance, session, renderer, ids, places, settings)
             })?,
         )
     }
@@ -226,6 +251,7 @@ impl Program for Browser {
     type View = BrowserView;
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        let folder = settings_folder();
         let mut browser = Self {
             renderer: renderer::start()?,
             ids: Rc::default(),
@@ -235,12 +261,29 @@ impl Program for Browser {
             carried_session: Session::Default,
             session_file: cx.state_file(SESSION_FILE),
             places: Rc::new(open_places(cx.state_file(PLACES_FILE))?),
+            settings: Rc::new(Cell::new(
+                folder
+                    .as_deref()
+                    .map(BrowserSettings::load)
+                    .unwrap_or_default(),
+            )),
+            settings_watch: folder
+                .as_deref()
+                .and_then(|folder| SettingsWatch::start(folder, BrowserSettings::FILE)),
         };
-        let urls = addresses(&arguments);
+        let settings = browser.settings.get();
+        let urls = addresses(&arguments, settings);
         if !urls.is_empty() {
             browser.open_urls(cx, urls);
-        } else if !browser.restore(cx) {
+        } else if settings.launch == Launch::NewWindow || !browser.restore(cx) {
             browser.open_window(cx, Session::Default, blank());
+        }
+        if settings.search.is_none()
+            && let Some(window) = cx.focused().or_else(|| cx.windows().next())
+            && let Some((shown, view)) = cx.window(window)
+        {
+            view.ask_search_engine(None);
+            shown.request_redraw();
         }
         Ok(browser)
     }
@@ -278,6 +321,8 @@ impl Program for Browser {
         let mut history = history;
         history.push(Entry::separator());
         history.push(Entry::item(&L10N.tr("show-history"), SHOW_HISTORY).shortcut("Ctrl+Y"));
+        history.push(Entry::item(&L10N.tr("clear-history"), CLEAR_HISTORY).enabled(view.is_some()));
+        history.push(Entry::item(&L10N.tr("website-data"), WEBSITE_DATA).enabled(view.is_some()));
         let recent = self.places.recent(RECENT_SHOWN);
         if !recent.is_empty() {
             history.push(Entry::separator());
@@ -384,6 +429,8 @@ impl Program for Browser {
                 NEW_TAB => view.new_tab(),
                 SHOW_HISTORY => view.show_history(),
                 SHOW_BOOKMARKS => view.show_bookmarks(),
+                CLEAR_HISTORY => view.ask_clear_history(),
+                WEBSITE_DATA => view.ask_website_data(),
                 ADD_BOOKMARK => {
                     view.toggle_bookmark();
                 }
@@ -412,7 +459,7 @@ impl Program for Browser {
     }
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, _directory: &Path) {
-        let urls = addresses(&arguments);
+        let urls = addresses(&arguments, self.settings.get());
         match urls.is_empty() {
             true => self.open_window(cx, Session::Default, blank()),
             false => self.open_urls(cx, urls),
@@ -451,10 +498,21 @@ impl Program for Browser {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.renderer.fd()]
+        let mut sources = vec![self.renderer.fd()];
+        sources.extend(self.settings_watch.iter().map(SettingsWatch::fd));
+        sources
     }
 
-    fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {
+    fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
+        if index == SETTINGS_SOURCE {
+            if let Some(watch) = &mut self.settings_watch {
+                watch.drain();
+            }
+            if let Some(folder) = settings_folder() {
+                self.settings.set(BrowserSettings::load(&folder));
+            }
+            return;
+        }
         let mut touched: Vec<WindowId> = Vec::new();
         for update in self.renderer.updates() {
             let target = cx.windows().find(|window| {

@@ -186,4 +186,20 @@ impl Places {
         )?;
         Ok(true)
     }
+
+    pub(crate) fn clear_history(&self, since: u64) -> rusqlite::Result<()> {
+        let since = i64::try_from(since).unwrap_or(i64::MAX);
+        let transaction = self.db.unchecked_transaction()?;
+        transaction.execute("DELETE FROM visits WHERE time >= ?1", params![since])?;
+        transaction.execute(
+            "DELETE FROM pages WHERE url NOT IN (SELECT url FROM visits)",
+            [],
+        )?;
+        transaction.execute(
+            "UPDATE pages SET last = (SELECT max(time) FROM visits WHERE visits.url = pages.url),
+             visits = (SELECT count(*) FROM visits WHERE visits.url = pages.url)",
+            [],
+        )?;
+        transaction.commit()
+    }
 }
