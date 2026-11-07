@@ -17,12 +17,12 @@ struct Offer {
     items: Vec<Donation>,
 }
 
-fn take_offer(offer: &Offer) -> zbus::Result<()> {
+fn take_offer(offer: Offer) -> zbus::Result<()> {
     let session = Connection::session()?;
     let index = IndexProxyBlocking::new(&session)?;
     if index.cursor(DOMAIN)? != offer.fingerprint {
         index.forget_all(DOMAIN)?;
-        index.donate(DOMAIN, offer.items.clone(), &offer.fingerprint)?;
+        index.donate(DOMAIN, offer.items, &offer.fingerprint)?;
     }
     Ok(())
 }
@@ -39,7 +39,7 @@ fn offers() -> Option<&'static Sender<Offer>> {
                         while let Ok(newer) = received.try_recv() {
                             offer = newer;
                         }
-                        if let Err(error) = take_offer(&offer) {
+                        if let Err(error) = take_offer(offer) {
                             tracing::debug!("search has not taken the events: {error}");
                         }
                     }
