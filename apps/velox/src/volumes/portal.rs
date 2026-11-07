@@ -24,7 +24,10 @@ fn ask(
     filter: Option<Filter<'_>>,
     option: (&str, Value<'_>),
 ) -> zbus::Result<Option<PathBuf>> {
-    let connection = Connection::session()?;
+    let connection = match option_env!("VELOX_TEST_PORTAL_BUS") {
+        Some(address) => zbus::blocking::connection::Builder::address(address)?.build()?,
+        None => Connection::session()?,
+    };
     let sender = connection
         .unique_name()
         .map(|name| name.trim_start_matches(':').replace('.', "_"))
