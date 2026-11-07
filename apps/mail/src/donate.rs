@@ -51,12 +51,17 @@ fn offer(store: &Store, session: &Connection) -> Result<()> {
         let Some(last) = changes.last().map(|change| change.change) else {
             return Ok(());
         };
-        let (present, removed): (Vec<_>, Vec<_>) = changes
+        let (present, removed): (Vec<_>, Vec<_>) =
+            changes.iter().partition(|change| change.content.is_some());
+        let items = present
             .iter()
-            .partition(|change| change.content.is_some());
-        let items = present.iter().flat_map(|change| donations(change)).collect();
+            .flat_map(|change| donations(change))
+            .collect();
         index.donate(DOMAIN, items, CURSOR)?;
-        let gone = removed.iter().map(|change| change.message.to_string()).collect();
+        let gone = removed
+            .iter()
+            .map(|change| change.message.to_string())
+            .collect();
         index.forget(DOMAIN, gone)?;
         store.search_changes_done(last)?;
     }

@@ -150,7 +150,6 @@ impl Mailbox {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchContent {
     pub subject: String,
     pub sender_name: String,
@@ -166,6 +165,7 @@ pub struct SearchChange {
     pub content: Option<SearchContent>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Summary {
     pub id: MessageId,
     pub mailbox: MailboxId,

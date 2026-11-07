@@ -56,7 +56,10 @@ pub fn offer_to_search(calendars: &[Calendar]) {
     for calendar in calendars {
         for stored in &calendar.objects {
             stored.data.hash(&mut hasher);
-            let Some(event) = stored.parsed.as_ref().and_then(|object| object.events.first())
+            let Some(event) = stored
+                .parsed
+                .as_ref()
+                .and_then(|object| object.events.first())
             else {
                 continue;
             };
