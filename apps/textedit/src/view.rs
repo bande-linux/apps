@@ -292,6 +292,14 @@ impl DocumentView {
         }
     }
 
+    pub fn printable(&mut self) -> (String, bande_app::Document) {
+        let document = match self.content() {
+            Content::Rich(rich) => bande_app::rich_document(rich, false),
+            Content::Plain(text) => bande_app::text_document(text.to_string(), true),
+        };
+        (self.name(), document)
+    }
+
     pub fn name(&self) -> String {
         self.path.as_deref().and_then(Path::file_name).map_or_else(
             || self.untitled.clone(),

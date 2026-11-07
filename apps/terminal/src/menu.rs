@@ -271,6 +271,8 @@ fn command_entries(commands: &[Option<Command>]) -> Vec<Entry> {
         .collect()
 }
 
+const PRINT_SHORTCUT: &str = "Shift+Ctrl+P";
+
 pub fn app_menus(windowed: bool) -> Menus {
     let mut shell = command_entries(&[
         Some(Command::NewWindow),
@@ -284,6 +286,8 @@ pub fn app_menus(windowed: bool) -> Menus {
             &L10N.tr("menu-show-in-files"),
             &MenuCommand::ShowInFiles.action(),
         ),
+        Entry::separator(),
+        bande_app_menu::print_item(windowed).shortcut(PRINT_SHORTCUT),
         Entry::separator(),
         Entry::item(&L10N.tr("menu-close-window"), CLOSE_WINDOW).enabled(windowed),
     ]);

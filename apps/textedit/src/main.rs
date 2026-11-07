@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, WindowId};
-use bande_app_menu::{Entry, edit_submenu};
+use bande_app_menu::{Entry, PRINT, edit_submenu, print_item};
 use bande_inbox::Inbox;
 use bande_textedit::{
     CHOICES, COLORS, DocumentView, FAMILIES, Format, L10N, LineEnding, Loaded, MAX_FILE_BYTES,
@@ -324,6 +324,7 @@ impl TextEdit {
                     .shortcut("Shift+Ctrl+S")
                     .enabled(windowed),
                 Self::revert_menu(view, on_disk, edited),
+                print_item(windowed),
                 Entry::submenu(&L10N.tr("reopen-with-encoding"), reopen)
                     .enabled(on_disk && !edited && text_format),
             ],
@@ -508,6 +509,13 @@ impl TextEdit {
     fn document_command(&mut self, cx: &mut Cx<Self>, window: WindowId, command: &str) -> bool {
         if command == "save-as" {
             self.ask_save_path(cx, window);
+            return true;
+        }
+        if command == PRINT {
+            if let Some(view) = Self::view(cx, window) {
+                let (title, document) = view.printable();
+                cx.print(&title, document);
+            }
             return true;
         }
         let Some(view) = Self::view(cx, window) else {

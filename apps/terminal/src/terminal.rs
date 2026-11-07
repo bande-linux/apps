@@ -686,6 +686,13 @@ impl Terminal {
             .collect()
     }
 
+    pub fn all_text(&self) -> String {
+        let grid = self.term.grid();
+        let start = GridPoint::new(Line(-(grid.history_size() as i32)), Column(0));
+        let end = GridPoint::new(Line(grid.screen_lines() as i32 - 1), grid.last_column());
+        self.term.bounds_to_string(start, end)
+    }
+
     pub fn selected_text(&self) -> Option<String> {
         self.term
             .selection_to_string()

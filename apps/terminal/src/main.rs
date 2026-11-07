@@ -243,6 +243,13 @@ impl Program for Terminals {
             }
             return;
         };
+        if command == bande_app_menu::PRINT {
+            if let Some((_, view)) = cx.window(window) {
+                let (title, text) = view.printable_text();
+                cx.print(&title, bande_app::text_document(text, true));
+            }
+            return;
+        }
         if command == CLOSE_WINDOW {
             if self.should_close(cx, window) {
                 cx.close(window);

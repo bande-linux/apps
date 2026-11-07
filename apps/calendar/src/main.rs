@@ -213,6 +213,8 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
                 Entry::separator(),
                 entry("import-menu", IMPORT),
                 entry("export", EXPORT),
+                Entry::separator(),
+                bande_app_menu::print_item(true),
             ],
         ),
         edit_submenu(Vec::new()),
@@ -993,6 +995,14 @@ impl Program for CalendarApp {
     fn command(&mut self, cx: &mut Cx<Self>, _window: Option<WindowId>, command: &str) {
         match command {
             REFRESH => self.with_view(cx, |app, view| app.sync(view, Refresh::All)),
+            bande_app_menu::PRINT => {
+                let mut printable = None;
+                self.with_view(cx, |_, view| printable = Some(view.printable()));
+                if let Some((title, text)) = printable {
+                    let document = bande_app::text_document(format!("{title}\n{text}"), false);
+                    cx.print(&title, document);
+                }
+            }
             IMPORT => choose(self.chosen.outbox(), None),
             _ => {
                 if self.main.is_none() && command != EXPORT {
