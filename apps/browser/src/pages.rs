@@ -130,3 +130,34 @@ pub(crate) fn listing(
     }
     document(title, palette, &body)
 }
+
+pub(crate) fn reader_style(palette: &Palette) -> String {
+    format!(
+        "html {{ background: {sheet}; }}
+         body {{ margin: 0; min-height: 100vh; background: {sheet}; color: {ink}; \
+         font-family: Inter, sans-serif; font-size: 18px; line-height: 1.6; }}
+         article {{ max-width: 660px; margin: 0 auto; padding: 48px 32px 96px 32px; }}
+         h1 {{ font-size: 34px; line-height: 1.2; font-weight: 600; margin: 0 0 8px 0; }}
+         h2 {{ font-size: 25px; line-height: 1.25; font-weight: 600; margin: 36px 0 12px 0; }}
+         h3, h4, h5, h6 {{ font-size: 20px; font-weight: 600; margin: 28px 0 8px 0; }}
+         .site {{ color: {ink3}; font-size: 14px; margin: 0 0 32px 0; }}
+         p, ul, ol, dl, blockquote, pre, figure, table {{ margin: 0 0 20px 0; }}
+         a {{ color: {accent}; text-decoration: none; }}
+         a:hover {{ text-decoration: underline; }}
+         img {{ max-width: 100%; height: auto; border-radius: 8px; }}
+         figcaption {{ color: {ink2}; font-size: 14px; margin-top: 8px; }}
+         blockquote {{ padding-left: 16px; border-left: 3px solid {hairline}; color: {ink2}; }}
+         pre {{ background: {well}; padding: 12px 16px; border-radius: 8px; font-size: 14px; \
+         white-space: pre-wrap; }}
+         code {{ font-size: 15px; }}
+         table {{ border-collapse: collapse; font-size: 15px; }}
+         td, th {{ border: 1px solid {hairline}; padding: 6px 10px; }}",
+        sheet = css(palette.sheet),
+        ink = css(palette.ink),
+        ink2 = css(palette.ink2),
+        ink3 = css(palette.ink3),
+        accent = css(palette.accent_text),
+        hairline = css(palette.hairline),
+        well = css(palette.well),
+    )
+}

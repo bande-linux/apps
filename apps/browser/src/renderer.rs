@@ -2,7 +2,8 @@ use std::io;
 use std::path::PathBuf;
 
 pub(crate) use web_host::{
-    Command, Host as Renderer, Link, Links, LoadId, Outcome, Session, Update, Verdict, ViewId,
+    Command, DownloadId, Host as Renderer, Link, Links, LoadId, Offer, Outcome, Session, Update,
+    Verdict, ViewId,
 };
 use web_host::{Helpers, Program};
 use zbus::blocking::{Connection, Proxy};

@@ -24,6 +24,10 @@ const CANVAS: Color = Color::WHITE;
 const TEXT: Color = Color::hex(0x202122);
 const SECONDARY: Color = Color::hex(0x54595d);
 const BUTTON: Color = Color::hex(0xeaecf0);
+const FOUND_CURRENT: Color = Color::hex(0xffb000).with_alpha(170);
+const FOUND_OTHER: Color = Color::hex(0xffe066).with_alpha(120);
+const FOUND_RADIUS: f32 = 3.0;
+const FOUND_MARGIN: f32 = 64.0;
 const SCRIM: Color = Color::WHITE.with_alpha(160);
 const BUTTON_PADDING: f32 = 14.0;
 const BUTTON_RADIUS: f32 = 8.0;
@@ -82,6 +86,9 @@ pub(crate) struct PageView {
     continued: Option<Url>,
     reload: Option<Rect>,
     reload_pressed: bool,
+    found: Vec<Vec<web_host::Rect>>,
+    current_found: Option<usize>,
+    reveal: Option<(f32, f32)>,
     hang: Option<Hang>,
     hang_choice: Option<HangChoice>,
     hovered: Option<(f32, f32)>,
@@ -108,12 +115,82 @@ impl PageView {
             continued: None,
             reload: None,
             reload_pressed: false,
+            found: Vec::new(),
+            current_found: None,
+            reveal: None,
             hang: None,
             hang_choice: None,
             hovered: None,
             shown_offset: Cell::new(0.0),
             zoom: 1.0,
         }
+    }
+
+    pub(crate) fn set_found(&mut self, found: Vec<Vec<web_host::Rect>>) {
+        self.found = found;
+        self.current_found = None;
+    }
+
+    pub(crate) fn found_count(&self) -> usize {
+        self.found.len()
+    }
+
+    pub(crate) fn current_found(&self) -> Option<usize> {
+        self.current_found
+    }
+
+    pub(crate) fn step_found(&mut self, forward: bool) {
+        let count = self.found.len();
+        if count == 0 {
+            self.current_found = None;
+            return;
+        }
+        let next = match self.current_found {
+            Some(current) if forward => (current + 1) % count,
+            Some(current) => (current + count - 1) % count,
+            None => self.first_found_from_view(),
+        };
+        self.current_found = Some(next);
+        if let Some(rects) = self.found.get(next) {
+            let zoom = self.document_zoom();
+            let top = rects.iter().map(|rect| rect.y).fold(f32::MAX, f32::min);
+            let bottom = rects
+                .iter()
+                .map(|rect| rect.y + rect.height)
+                .fold(f32::MIN, f32::max);
+            self.reveal = Some((top * zoom, bottom * zoom));
+        }
+    }
+
+    fn first_found_from_view(&self) -> usize {
+        let top = self.shown_offset.get() / self.document_zoom();
+        self.found
+            .iter()
+            .position(|rects| rects.iter().any(|rect| rect.y + rect.height >= top))
+            .unwrap_or(0)
+    }
+
+    fn found_items(&self, top: f32, bottom: f32) -> Vec<Item> {
+        let mut items = Vec::new();
+        for (index, rects) in self.found.iter().enumerate() {
+            let color = match Some(index) == self.current_found {
+                true => FOUND_CURRENT,
+                false => FOUND_OTHER,
+            };
+            for rect in rects {
+                if rect.y + rect.height < top || rect.y > bottom {
+                    continue;
+                }
+                items.push(Item::Fill {
+                    shape: Shape::rounded(
+                        Rect::new(rect.x - 1.0, rect.y, rect.width + 2.0, rect.height),
+                        FOUND_RADIUS,
+                    ),
+                    paint: color.into(),
+                });
+            }
+        }
+        items
     }
 
     pub(crate) fn set_unresponsive(&mut self, unresponsive: bool) {
@@ -241,6 +318,8 @@ impl PageView {
 
     pub(crate) fn show(&mut self, content: Content) {
         self.hang = None;
+        self.found.clear();
+        self.current_found = None;
         self.content = content;
         self.laid_out_width = None;
         self.scroll = ScrollState::default();
@@ -534,6 +613,10 @@ impl Widget for PageView {
         if let Some(y) = self.jump.take() {
             self.scroll.follow(cx, y, y + frame.height);
         }
+        if let Some((top, bottom)) = self.reveal.take() {
+            self.scroll
+                .reveal(cx, top - FOUND_MARGIN, bottom + FOUND_MARGIN);
+        }
         let offset = self.scroll.offset(cx);
         let zoom = self.document_zoom();
         if let Some(tiles) = &mut self.tiles {
@@ -555,7 +638,9 @@ impl Widget for PageView {
         let zoom = self.document_zoom();
         let (visible, canvas) = match &self.tiles {
             Some(tiles) => {
-                let shown = tiles.visible(offset / zoom, (offset + self.frame.height) / zoom);
+                let (top, bottom) = (offset / zoom, (offset + self.frame.height) / zoom);
+                let mut shown = tiles.visible(top, bottom);
+                shown.extend(self.found_items(top, bottom));
                 let shown = match zoom == 1.0 {
                     true => shown,
                     false => vec![Item::Scale {

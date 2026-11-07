@@ -1,4 +1,5 @@
 mod address;
+mod downloads;
 mod page;
 mod pages;
 mod places;
@@ -19,14 +20,15 @@ use bande_app::{
     Cx, Detached, Info, Keys, Kind, Menus, Program, Settings as SettingsWindowInfo, TabCarry,
     TabDrop, View, WindowId,
 };
-use bande_app_menu::Entry;
+use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_l10n::Localizer;
 use bande_toolkit::Appearance;
 use web_host::Url;
 
+use crate::downloads::Downloads;
 use crate::places::{Place, Places};
-use crate::renderer::{Renderer, Session};
+use crate::renderer::{Outcome, Renderer, Session};
 use crate::settings::{BrowserSettings, Launch, SETTINGS_SIZE, settings_view};
 use crate::view::{Ask, BrowserView, CarriedTab, SavedWindow};
 
@@ -84,6 +86,11 @@ const ACTUAL_SIZE: &str = "actual-size";
 const SYSTEM_BROWSER: &str = "open-in-system-browser";
 const CLEAR_HISTORY: &str = "clear-history";
 const WEBSITE_DATA: &str = "website-data";
+const FIND: &str = "find";
+const FIND_NEXT: &str = "find-next";
+const FIND_PREVIOUS: &str = "find-previous";
+const READER: &str = "reader";
+const SHOW_DOWNLOADS: &str = "show-downloads";
 
 struct Browser {
     renderer: Renderer,
@@ -96,6 +103,7 @@ struct Browser {
     places: Rc<Places>,
     settings: Rc<Cell<BrowserSettings>>,
     settings_watch: Option<SettingsWatch>,
+    downloads: Rc<Downloads>,
 }
 
 fn addresses(arguments: &[String], settings: BrowserSettings) -> Vec<Url> {
@@ -119,15 +127,16 @@ impl Browser {
         session: Session,
         size: (u32, u32),
     ) -> Result<WindowId, bande_app::Error> {
-        let (renderer, ids, places, settings) = (
+        let (renderer, ids, places, settings, downloads) = (
             self.renderer.link(),
             Rc::clone(&self.ids),
             Rc::clone(&self.places),
             Rc::clone(&self.settings),
+            Rc::clone(&self.downloads),
         );
         Ok(
             cx.open(Kind::Main, &L10N.tr("app-name"), size, move |appearance| {
-                BrowserView::new(appearance, session, renderer, ids, places, settings)
+                BrowserView::new(appearance, session, renderer, ids, places, settings, downloads)
             })?,
         )
     }
@@ -195,6 +204,16 @@ impl Browser {
         }
     }
 
+    fn downloads_changed(&mut self, cx: &mut Cx<Self>) {
+        let windows: Vec<WindowId> = cx.windows().collect();
+        for window in windows {
+            if let Some((shown, view)) = cx.window(window) {
+                view.downloads_changed();
+                shown.request_redraw();
+            }
+        }
+    }
+
     fn float_window(
         &mut self,
         cx: &mut Cx<Self>,
@@ -252,8 +271,11 @@ impl Program for Browser {
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let folder = settings_folder();
+        let renderer = renderer::start()?;
+        let downloads = Rc::new(Downloads::new(renderer.link()));
         let mut browser = Self {
-            renderer: renderer::start()?,
+            renderer,
+            downloads,
             ids: Rc::default(),
             next_private: 0,
             carry: TabCarry::default(),
@@ -320,7 +342,33 @@ impl Program for Browser {
             Entry::item(&L10N.tr("zoom-in"), ZOOM_IN).shortcut("Ctrl+="),
             Entry::item(&L10N.tr("zoom-out"), ZOOM_OUT).shortcut("Ctrl+-"),
             Entry::item(&L10N.tr("actual-size"), ACTUAL_SIZE).shortcut("Ctrl+0"),
+            Entry::separator(),
+            Entry::item(
+                &L10N.tr(if view.is_some_and(BrowserView::in_reader) {
+                    "reader-leave"
+                } else {
+                    "reader-enter"
+                }),
+                READER,
+            )
+            .shortcut("Shift+Ctrl+R")
+            .enabled(view.is_some_and(BrowserView::reader_available)),
+            Entry::item(&L10N.tr("show-downloads"), SHOW_DOWNLOADS)
+                .shortcut("Ctrl+J")
+                .enabled(!self.downloads.is_empty()),
         ];
+        let can_step = view.is_some_and(BrowserView::can_find_step);
+        let edit = edit_submenu(vec![
+            Entry::item(&L10N.tr("menu-find"), FIND)
+                .shortcut("Ctrl+F")
+                .enabled(view.is_some()),
+            Entry::item(&L10N.tr("menu-find-next"), FIND_NEXT)
+                .shortcut("Ctrl+G")
+                .enabled(can_step),
+            Entry::item(&L10N.tr("menu-find-previous"), FIND_PREVIOUS)
+                .shortcut("Shift+Ctrl+G")
+                .enabled(can_step),
+        ]);
         let mut history = history;
         history.push(Entry::separator());
         history.push(Entry::item(&L10N.tr("show-history"), SHOW_HISTORY).shortcut("Ctrl+H"));
@@ -383,6 +431,7 @@ impl Program for Browser {
         Menus {
             menus: vec![
                 Entry::submenu(&L10N.tr("menu-file"), file),
+                edit,
                 Entry::submenu(&L10N.tr("menu-view"), page),
                 Entry::submenu(&L10N.tr("menu-history"), history),
                 Entry::submenu(&L10N.tr("menu-bookmarks"), bookmarks),
@@ -433,6 +482,11 @@ impl Program for Browser {
                 SHOW_BOOKMARKS => view.show_bookmarks(),
                 CLEAR_HISTORY => view.ask_clear_history(),
                 WEBSITE_DATA => view.ask_website_data(),
+                FIND => view.open_find(),
+                FIND_NEXT => view.find_step(true),
+                FIND_PREVIOUS => view.find_step(false),
+                READER => view.toggle_reader(),
+                SHOW_DOWNLOADS => view.toggle_downloads(),
                 ADD_BOOKMARK => {
                     view.toggle_bookmark();
                 }
@@ -517,6 +571,20 @@ impl Program for Browser {
         }
         let mut touched: Vec<WindowId> = Vec::new();
         for update in self.renderer.updates() {
+            match &update.outcome {
+                Outcome::Offered(offer) => self.downloads.offered(offer, &downloads_folder()),
+                Outcome::Progress { download, received } => {
+                    self.downloads.progress(*download, *received);
+                    self.downloads_changed(cx);
+                    continue;
+                }
+                Outcome::Saved { download, error } => {
+                    self.downloads.saved(*download, error.clone());
+                    self.downloads_changed(cx);
+                    continue;
+                }
+                _ => {}
+            }
             let target = cx.windows().find(|window| {
                 cx.view(*window)
                     .is_some_and(|view| view.has_tab(update.view))
@@ -575,6 +643,13 @@ fn open_in_system_browser(url: &Url) {
     if let Err(error) = launched {
         tracing::warn!("cannot open {url} in {}: {error}", browser.id);
     }
+}
+
+fn downloads_folder() -> PathBuf {
+    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+    let user_dirs = bande_xdg::config_home()
+        .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
+    bande_xdg::user_dir(&home, user_dirs.as_deref(), bande_xdg::UserDir::Downloads)
 }
 
 fn main() -> ExitCode {

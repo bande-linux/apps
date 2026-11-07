@@ -6,9 +6,9 @@ use accesskit::TreeUpdate;
 use bande_app::{Detached, TabDrop, TabDropTarget, TabHost, View};
 use bande_toolkit::ui::{
     Alert, BUTTON_HEIGHT, Bounded, Button, Cell as TableCell, Column, Context, Event, FreeLayout,
-    Key, Modifiers, Pointer, PointerButton, PopUpButton, RadioGroup, Row, TEXT_FIELD_HEIGHT,
-    TabAction, TabLabel, TabStrip, TabStripLayout, Table, TabsShown, TextField, Ui, WidgetId,
-    frame_time,
+    Key, Label, Modifiers, Pointer, PointerButton, PopUpButton, RadioGroup, Row, SearchField,
+    TEXT_FIELD_HEIGHT, TabAction, TabLabel, TabStrip, TabStripLayout, Table, TabsShown, TextField,
+    Ui, WidgetId, frame_time,
 };
 use bande_toolkit::{
     Appearance, Elevation, FrameRegions, Header, Image, Item, Point, Radius, Rect, SHEET_INSET,
@@ -18,10 +18,13 @@ use bande_toolkit::{
 use web_host::Url;
 use web_host::{Clear, SiteData, Viewport};
 
+use crate::downloads::{Downloads, PANEL_WIDTH, Panel, PanelAction, show_in_files};
 use crate::page::{Content, HangChoice, PageView};
 use crate::pages;
 use crate::places::{Place, Places};
-use crate::renderer::{Command, Link, LoadId, Outcome, Session, Update, Verdict, ViewId};
+use crate::renderer::{
+    Command, DownloadId, Link, LoadId, Outcome, Session, Update, Verdict, ViewId,
+};
 use crate::settings::{BrowserSettings, SearchEngine};
 use crate::{L10N, address};
 
@@ -44,6 +47,9 @@ const SITES_HEIGHT: f32 = 240.0;
 const SITE_COLUMN: f32 = 200.0;
 const DATA_COLUMN: f32 = 140.0;
 const HOUR: u64 = 3600;
+const FIND_BAR: f32 = 44.0;
+const FIND_FIELD: f32 = 280.0;
+const FIND_COUNT: f32 = 110.0;
 const FIRST_VIEWPORT: Viewport = Viewport {
     width: 1088.0,
     height: 706.0,
@@ -52,6 +58,10 @@ const FIRST_VIEWPORT: Viewport = Viewport {
 const BACK: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
 const FORWARD: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="m6 3.5 4.5 4.5L6 12.5" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
 const STOP: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="m4.5 4.5 7 7m0-7-7 7" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>"##;
+const READER: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M3 4h10M3 7h10M3 10h10M3 13h6" stroke="#201E1A" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>"##;
+const DOWNLOADS: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M8 2.5v8m-3.5-3.5L8 10.5 11.5 7M3 13.5h10" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
+const UP: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 10 8 5.5l4.5 4.5" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
+const DOWN: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 6 8 10.5 12.5 6" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
 const RELOAD: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M12.6 6.2A5 5 0 1 0 13 9" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" fill="none"/><path d="M13 2.8v3.6H9.4" stroke="#201E1A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>"##;
 
 enum Signal {
@@ -67,6 +77,13 @@ enum Signal {
     ShowSites,
     EngineChosen,
     EngineDeclined,
+    FindTyped(String),
+    FindStep(bool),
+    FindClose,
+    ToggleReader,
+    ToggleDownloads,
+    DownloadCancel(DownloadId),
+    DownloadShow(DownloadId),
 }
 
 #[derive(Clone, Copy)]
@@ -172,6 +189,7 @@ struct Pending {
     load: LoadId,
     target: Target,
     fallback: Option<Url>,
+    reader: bool,
 }
 
 struct Tab {
@@ -187,6 +205,8 @@ struct Tab {
     title: Option<String>,
     deferred: Option<Url>,
     zoom: f32,
+    readable: bool,
+    reader: bool,
 }
 
 impl Tab {
@@ -204,6 +224,8 @@ impl Tab {
             title: None,
             deferred: None,
             zoom: 1.0,
+            readable: false,
+            reader: false,
         }
     }
 
@@ -255,8 +277,26 @@ struct Toolbar {
     back: WidgetId,
     forward: WidgetId,
     address: WidgetId,
+    reader: WidgetId,
     reload: WidgetId,
+    downloads: WidgetId,
     stop_shown: bool,
+}
+
+struct FindBar {
+    field: WidgetId,
+    count: WidgetId,
+    previous: WidgetId,
+    next: WidgetId,
+    close: WidgetId,
+    open: bool,
+    query: String,
+    shown_count: String,
+}
+
+struct OpenPanel {
+    id: WidgetId,
+    listing: u64,
 }
 
 pub(crate) struct BrowserView {
@@ -292,6 +332,9 @@ pub(crate) struct BrowserView {
     engines: Vec<SearchEngine>,
     engine_pick: Rc<Cell<Option<usize>>>,
     waiting_query: Option<String>,
+    find: FindBar,
+    downloads: Rc<Downloads>,
+    panel: Option<OpenPanel>,
 }
 
 impl BrowserView {
@@ -302,6 +345,7 @@ impl BrowserView {
         ids: Rc<Cell<u64>>,
         places: Rc<Places>,
         settings: Rc<Cell<BrowserSettings>>,
+        downloads: Rc<Downloads>,
     ) -> Self {
         let signals: Signals = Rc::default();
         let mut host = FreeLayout::new();
@@ -325,6 +369,42 @@ impl BrowserView {
             Rect::default(),
         );
         let reload = host.insert_in_header(reload_button(&signals, false), Rect::default());
+        let reader_button = host.insert_in_header(
+            symbol(READER, &L10N.tr("reader"), &signals, || Signal::ToggleReader),
+            Rect::default(),
+        );
+        let downloads_button = host.insert_in_header(
+            symbol(DOWNLOADS, &L10N.tr("downloads"), &signals, || {
+                Signal::ToggleDownloads
+            }),
+            Rect::default(),
+        );
+        let typed_find = Rc::clone(&signals);
+        let find_field = host.insert(
+            SearchField::new(&L10N.tr("find-placeholder"), "", move |text| {
+                typed_find
+                    .borrow_mut()
+                    .push(Signal::FindTyped(text.to_owned()));
+            }),
+            Rect::default(),
+        );
+        let find_count = host.insert(Label::new("").secondary(), Rect::default());
+        let find_previous = host.insert(
+            symbol(UP, &L10N.tr("find-previous"), &signals, || {
+                Signal::FindStep(false)
+            }),
+            Rect::default(),
+        );
+        let find_next = host.insert(
+            symbol(DOWN, &L10N.tr("find-next"), &signals, || {
+                Signal::FindStep(true)
+            }),
+            Rect::default(),
+        );
+        let find_close = host.insert(
+            symbol(STOP, &L10N.tr("find-close"), &signals, || Signal::FindClose),
+            Rect::default(),
+        );
         let host_id = bande_toolkit::ui::Widget::id(&host);
         let mut ui = Ui::new(
             Box::new(host),
@@ -338,7 +418,9 @@ impl BrowserView {
                 back,
                 forward,
                 address,
+                reader: reader_button,
                 reload,
+                downloads: downloads_button,
                 stop_shown: false,
             },
             host: host_id,
@@ -370,6 +452,18 @@ impl BrowserView {
             engines: Vec::new(),
             engine_pick: Rc::new(Cell::new(None)),
             waiting_query: None,
+            find: FindBar {
+                field: find_field,
+                count: find_count,
+                previous: find_previous,
+                next: find_next,
+                close: find_close,
+                open: false,
+                query: String::new(),
+                shown_count: String::new(),
+            },
+            downloads,
+            panel: None,
         };
         view.refresh_navigation();
         view
@@ -834,6 +928,7 @@ impl BrowserView {
             load,
             target,
             fallback,
+            reader: false,
         });
         self.renderer.send(Command::Load {
             view: tab.id,
@@ -1089,6 +1184,216 @@ impl BrowserView {
         );
     }
 
+    pub(crate) fn reader_available(&self) -> bool {
+        self.tabs
+            .get(self.active)
+            .is_some_and(|tab| tab.pending.is_none() && (tab.readable || tab.reader))
+    }
+
+    pub(crate) fn in_reader(&self) -> bool {
+        self.tabs.get(self.active).is_some_and(|tab| tab.reader)
+    }
+
+    pub(crate) fn toggle_reader(&mut self) {
+        if !self.reader_available() {
+            return;
+        }
+        let index = self.active;
+        if self.tabs[index].reader {
+            return self.reload();
+        }
+        self.save_scroll(index);
+        let palette = self.ui.context().palette;
+        let style = pages::reader_style(&palette);
+        let Some(tab) = self.tabs.get_mut(index) else {
+            return;
+        };
+        let Some(entry) = tab.current else {
+            return;
+        };
+        tab.next_load += 1;
+        let load = LoadId(tab.next_load);
+        tab.pending = Some(Pending {
+            load,
+            target: Target::Entry(entry),
+            fallback: None,
+            reader: true,
+        });
+        self.renderer.send(Command::Reader {
+            view: tab.id,
+            load,
+            style,
+        });
+        self.refresh_navigation();
+    }
+
+    pub(crate) fn open_find(&mut self) {
+        self.find.open = true;
+        let field = self.find.field;
+        self.ui.set_focus(field);
+        self.ui.update_widget(field, |field: &mut SearchField, _| {
+            let length = field.text().len();
+            field.select(0..length);
+        });
+    }
+
+    pub(crate) fn find_step(&mut self, forward: bool) {
+        if !self.find.open {
+            self.open_find();
+            return self.send_find(self.active);
+        }
+        let index = self.active;
+        self.with_page(index, |page| page.step_found(forward));
+        self.show_find_count();
+    }
+
+    pub(crate) fn can_find_step(&self) -> bool {
+        !self.find.query.is_empty()
+    }
+
+    fn close_find(&mut self) {
+        self.find.open = false;
+        self.find.query.clear();
+        let field = self.find.field;
+        self.ui
+            .update_widget(field, |field: &mut SearchField, _| {
+                field.select(0..field.text().len());
+            });
+        self.set_find_text("");
+        for index in 0..self.tabs.len() {
+            self.send_find(index);
+            self.with_page(index, |page| page.set_found(Vec::new()));
+        }
+        self.show_find_count();
+        self.focus_page();
+    }
+
+    fn set_find_text(&mut self, text: &str) {
+        let field = SearchField::new(&L10N.tr("find-placeholder"), text, {
+            let typed = Rc::clone(&self.signals);
+            move |text| typed.borrow_mut().push(Signal::FindTyped(text.to_owned()))
+        });
+        let old = self.find.field;
+        if let Some(id) = self.host().and_then(|host| host.replace(old, field)) {
+            self.find.field = id;
+        }
+    }
+
+    fn send_find(&mut self, index: usize) {
+        let query = self.find.query.clone();
+        if let Some(tab) = self.tabs.get(index)
+            && let Some(load) = tab.shown
+        {
+            self.renderer.send(Command::Find {
+                view: tab.id,
+                load,
+                query,
+            });
+        }
+    }
+
+    fn found(&mut self, index: usize, found: Vec<Vec<web_host::Rect>>) {
+        let open = self.find.open;
+        self.with_page(index, |page| {
+            page.set_found(found);
+            if open {
+                page.step_found(true);
+            }
+        });
+        if index == self.active {
+            self.show_find_count();
+        }
+    }
+
+    fn show_find_count(&mut self) {
+        let index = self.active;
+        let (total, current) = self
+            .with_page(index, |page| (page.found_count(), page.current_found()))
+            .unwrap_or((0, None));
+        let text = match (self.find.query.is_empty(), total, current) {
+            (true, _, _) => String::new(),
+            (false, 0, _) => L10N.tr("find-none"),
+            (false, total, current) => L10N.tr_args(
+                "find-count",
+                [
+                    ("current", (current.unwrap_or(0) + 1).into()),
+                    ("total", total.into()),
+                ],
+            ),
+        };
+        if text == self.find.shown_count {
+            return;
+        }
+        let label = Label::new(&text).secondary();
+        let old = self.find.count;
+        if let Some(id) = self.host().and_then(|host| host.replace(old, label)) {
+            self.find.count = id;
+        }
+        self.find.shown_count = text;
+    }
+
+    pub(crate) fn toggle_downloads(&mut self) {
+        match self.panel.is_some() {
+            true => self.close_panel(),
+            false => self.open_panel(),
+        }
+    }
+
+    fn open_panel(&mut self) {
+        self.close_panel();
+        if self.downloads.is_empty() {
+            return;
+        }
+        let signals = Rc::clone(&self.signals);
+        let panel = Panel::new(&self.downloads, move |action| {
+            signals.borrow_mut().push(match action {
+                PanelAction::Cancel(id) => Signal::DownloadCancel(id),
+                PanelAction::Show(id) => Signal::DownloadShow(id),
+            });
+        });
+        let listing = self.downloads.listing();
+        if let Some(id) = self.host().map(|host| host.insert(panel, Rect::default())) {
+            self.panel = Some(OpenPanel { id, listing });
+        }
+    }
+
+    fn close_panel(&mut self) {
+        if let Some(panel) = self.panel.take()
+            && let Some(host) = self.host()
+        {
+            host.remove(panel.id);
+        }
+    }
+
+    pub(crate) fn downloads_changed(&mut self) {
+        let Some(panel) = &self.panel else {
+            return;
+        };
+        let (id, listing) = (panel.id, panel.listing);
+        if listing != self.downloads.listing() {
+            self.open_panel();
+        } else {
+            Panel::refresh(&mut self.ui, id, &self.downloads);
+        }
+    }
+
+    pub(crate) fn download_offered(&mut self, index: usize) {
+        let Some(tab) = self.tabs.get_mut(index) else {
+            return;
+        };
+        tab.pending = None;
+        let shown = tab.shown.is_some();
+        let url = tab.shown_url().map(Url::to_string);
+        if index == self.active {
+            self.set_address(url.as_deref().unwrap_or_default());
+            self.open_panel();
+        }
+        if !shown {
+            self.with_page(index, |page| page.show(Content::Blank));
+        }
+        self.refresh_navigation();
+    }
+
     pub(crate) fn is_loading(&self) -> bool {
         self.tabs
             .get(self.active)
@@ -1123,6 +1428,8 @@ impl BrowserView {
                 self.with_page(index, |page| page.set_unresponsive(false));
             }
             Outcome::SiteData(sites) => self.show_website_data(sites),
+            Outcome::Found(found) if Some(update.load) == shown => self.found(index, found),
+            Outcome::Offered(_) if Some(update.load) == pending => self.download_offered(index),
             Outcome::Paused(paused) => self.renderer.send(Command::Resume {
                 request: paused.request,
                 verdict: Verdict::Continue,
@@ -1139,9 +1446,13 @@ impl BrowserView {
         let Some(pending) = tab.pending.take() else {
             return;
         };
+        tab.reader = false;
+        tab.readable = false;
         let (url, title, content, scroll) = match outcome {
             Outcome::Frame(frame) => {
                 tab.shown = Some(load);
+                tab.reader = pending.reader;
+                tab.readable = frame.readable;
                 let content = Content::Document {
                     list: frame.list,
                     links: frame.links,
@@ -1176,7 +1487,11 @@ impl BrowserView {
             | Outcome::Paused(_)
             | Outcome::Unresponsive
             | Outcome::Responsive
-            | Outcome::SiteData(_) => return,
+            | Outcome::SiteData(_)
+            | Outcome::Found(_)
+            | Outcome::Offered(_)
+            | Outcome::Progress { .. }
+            | Outcome::Saved { .. } => return,
         };
         let restored = match pending.target {
             Target::New => {
@@ -1192,12 +1507,14 @@ impl BrowserView {
             Target::Entry(entry) => tab.entries.get_mut(entry).and_then(|saved| {
                 saved.url = url.clone();
                 tab.current = Some(entry);
-                Some(saved.scroll).filter(|scroll| *scroll > 0.0)
+                Some(saved.scroll).filter(|scroll| *scroll > 0.0 && !pending.reader)
             }),
         };
         tab.title = title;
         let label = tab.label();
-        let record = tab.session == Session::Default && matches!(content, Content::Document { .. });
+        let record = tab.session == Session::Default
+            && !pending.reader
+            && matches!(content, Content::Document { .. });
         if record
             && let Err(error) = self
                 .places
@@ -1218,6 +1535,9 @@ impl BrowserView {
                 self.set_address(address_text(&url));
             }
             self.window_title = Some(label);
+        }
+        if self.find.open {
+            self.send_find(index);
         }
         self.refresh_navigation();
         self.changed = true;
@@ -1310,7 +1630,11 @@ impl BrowserView {
     }
 
     fn save_scroll(&mut self, index: usize) {
-        if self.tabs.get(index).is_none_or(|tab| tab.shown.is_none()) {
+        if self
+            .tabs
+            .get(index)
+            .is_none_or(|tab| tab.shown.is_none() || tab.reader)
+        {
             return;
         }
         let offset = self.with_page(index, |page| page.offset()).unwrap_or(0.0);
@@ -1370,6 +1694,7 @@ impl BrowserView {
             (self.toolbar.back, self.can_go_back()),
             (self.toolbar.forward, self.can_go_forward()),
             (self.toolbar.reload, loading || has_page),
+            (self.toolbar.reader, self.reader_available()),
         ];
         for (id, on) in enabled {
             if let Some(button) = self.ui.widget_as::<Button>(id) {
@@ -1458,6 +1783,21 @@ impl BrowserView {
                     Signal::ShowSites => self.ask_website_data(),
                     Signal::EngineChosen => self.engine_chosen(),
                     Signal::EngineDeclined => self.engine_declined(),
+                    Signal::FindTyped(text) => {
+                        self.find.query = text;
+                        self.send_find(self.active);
+                    }
+                    Signal::FindStep(forward) => self.find_step(forward),
+                    Signal::FindClose => self.close_find(),
+                    Signal::ToggleReader => self.toggle_reader(),
+                    Signal::ToggleDownloads => self.toggle_downloads(),
+                    Signal::DownloadCancel(id) => self.downloads.cancel(id),
+                    Signal::DownloadShow(id) => {
+                        if let Some(path) = self.downloads.path(id) {
+                            show_in_files(path);
+                        }
+                        self.close_panel();
+                    }
                 }
             }
         }
@@ -1499,7 +1839,62 @@ impl BrowserView {
         )
     }
 
-    fn frames(&self, width: f32) -> [(WidgetId, Rect); 4] {
+    fn find_frames(&self, sheet: Rect) -> [(WidgetId, Rect); 5] {
+        let hidden = Rect::default();
+        if !self.find.open {
+            return [
+                (self.find.field, hidden),
+                (self.find.count, hidden),
+                (self.find.previous, hidden),
+                (self.find.next, hidden),
+                (self.find.close, hidden),
+            ];
+        }
+        let middle = |height: f32| sheet.y + ((FIND_BAR - height) / 2.0).round();
+        let field = Rect::new(
+            sheet.x + SIDE,
+            middle(TEXT_FIELD_HEIGHT),
+            FIND_FIELD,
+            TEXT_FIELD_HEIGHT,
+        );
+        let count = Rect::new(field.x + field.width + SIDE, middle(18.0), FIND_COUNT, 18.0);
+        let previous = Rect::new(
+            count.x + count.width + GAP,
+            middle(SYMBOL_BUTTON),
+            SYMBOL_BUTTON,
+            SYMBOL_BUTTON,
+        );
+        let next = Rect::new(
+            previous.x + SYMBOL_BUTTON + GAP,
+            previous.y,
+            SYMBOL_BUTTON,
+            SYMBOL_BUTTON,
+        );
+        let close = Rect::new(
+            sheet.x + sheet.width - SIDE - SYMBOL_BUTTON,
+            previous.y,
+            SYMBOL_BUTTON,
+            SYMBOL_BUTTON,
+        );
+        [
+            (self.find.field, field),
+            (self.find.count, count),
+            (self.find.previous, previous),
+            (self.find.next, next),
+            (self.find.close, close),
+        ]
+    }
+
+    fn panel_frame(&self, sheet: Rect) -> Rect {
+        Rect::new(
+            (sheet.x + sheet.width - PANEL_WIDTH - SIDE).max(sheet.x),
+            sheet.y + GAP,
+            PANEL_WIDTH.min(sheet.width),
+            self.downloads.panel_height(),
+        )
+    }
+
+    fn frames(&self, width: f32) -> [(WidgetId, Rect); 6] {
         let middle = |height: f32| ((TOOLBAR_HEIGHT - height) / 2.0).round();
         let back = Rect::new(
             window_controls_end(true) + SIDE,
@@ -1514,7 +1909,7 @@ impl BrowserView {
             SYMBOL_BUTTON,
         );
         let leading = forward.x + SYMBOL_BUTTON + SIDE;
-        let trailing = width - SIDE - SYMBOL_BUTTON - SIDE;
+        let trailing = width - SIDE - 3.0 * (SYMBOL_BUTTON + GAP) - SIDE;
         let room = (trailing - leading).max(0.0);
         let address_width = (width * 0.5).clamp(ADDRESS_MIN, ADDRESS_MAX).min(room);
         let centred = (width - address_width) / 2.0;
@@ -1531,22 +1926,22 @@ impl BrowserView {
             SYMBOL_BUTTON,
             SYMBOL_BUTTON,
         );
+        let reader = Rect::new(reload.x + SYMBOL_BUTTON + GAP, reload.y, SYMBOL_BUTTON, SYMBOL_BUTTON);
+        let downloads = match self.downloads.is_empty() {
+            true => Rect::default(),
+            false => Rect::new(reader.x + SYMBOL_BUTTON + GAP, reload.y, SYMBOL_BUTTON, SYMBOL_BUTTON),
+        };
         [
             (self.toolbar.back, back),
             (self.toolbar.forward, forward),
             (self.toolbar.address, address),
             (self.toolbar.reload, reload),
+            (self.toolbar.reader, reader),
+            (self.toolbar.downloads, downloads),
         ]
     }
 
-    pub(crate) fn input(&mut self, event: &Event) {
-        if !self.handle_unhandled(&WindowEvent::Input(event.clone())) {
-            self.ui.handle(event);
-        }
-        self.settle();
-    }
-
-    pub(crate) fn paint(&mut self, width: u32, height: u32) -> Scene {
+    fn paint(&mut self, width: u32, height: u32) -> Scene {
         let (w, h) = (width as f32, height as f32);
         self.width = w;
         let sheet = self.sheet(w, h);
@@ -1556,17 +1951,36 @@ impl BrowserView {
             Radius::concentric(Radius::XL, SHEET_INSET as f32)
         };
         let frames = self.frames(w);
+        let find_frames = self.find_frames(sheet);
+        let page_frame = match self.find.open {
+            true => Rect::new(
+                sheet.x,
+                sheet.y + FIND_BAR,
+                sheet.width,
+                (sheet.height - FIND_BAR).max(0.0),
+            ),
+            false => sheet,
+        };
         let pages: Vec<(WidgetId, Rect)> = self
             .tabs
             .iter()
             .enumerate()
             .map(|(index, tab)| match index == self.active {
-                true => (tab.page, sheet),
+                true => (tab.page, page_frame),
                 false => (tab.page, Rect::default()),
             })
             .collect();
+        let panel = self
+            .panel
+            .as_ref()
+            .map(|panel| (panel.id, self.panel_frame(sheet)));
         if let Some(host) = self.host() {
-            for (id, frame) in frames.into_iter().chain(pages) {
+            for (id, frame) in frames
+                .into_iter()
+                .chain(find_frames)
+                .chain(pages)
+                .chain(panel)
+            {
                 host.set_frame(id, frame);
             }
         }
@@ -1611,6 +2025,7 @@ impl BrowserView {
             });
         }
         items.extend(controls);
+        self.paint_download_progress(w, &mut items);
         self.paint_suggestions(&mut items);
         items.extend(dialog);
         Scene {
@@ -1619,6 +2034,26 @@ impl BrowserView {
             background: palette.chassis,
             items,
         }
+    }
+
+    fn paint_download_progress(&self, width: f32, items: &mut Vec<Item>) {
+        let Some(progress) = self.downloads.overall() else {
+            return;
+        };
+        let button = self.frames(width)[5].1;
+        let palette = self.ui.context().palette;
+        let track = Rect::new(button.x + 4.0, button.y + button.height - 3.0, button.width - 8.0, 2.0);
+        items.push(Item::Fill {
+            shape: Shape::rounded(track, 1.0),
+            paint: palette.hairline.into(),
+        });
+        items.push(Item::Fill {
+            shape: Shape::rounded(
+                Rect::new(track.x, track.y, track.width * progress, track.height),
+                1.0,
+            ),
+            paint: palette.accent_text.into(),
+        });
     }
 
     fn follow_viewport(&mut self) {
@@ -1640,7 +2075,12 @@ impl BrowserView {
     fn header(&self, width: f32) -> Header {
         Header {
             title_x: width,
-            items: self.frames(width).iter().map(|(_, frame)| *frame).collect(),
+            items: self
+                .frames(width)
+                .iter()
+                .map(|(_, frame)| *frame)
+                .filter(|frame| frame.width > 0.0)
+                .collect(),
             tabs: Vec::new(),
         }
     }
@@ -1767,6 +2207,25 @@ impl BrowserView {
         };
         match input {
             Event::Key {
+                key: Key::Enter,
+                modifiers,
+            } if self.ui.focus() == Some(self.find.field) => {
+                self.find_step(!modifiers.shift);
+                true
+            }
+            Event::Key {
+                key: Key::Escape, ..
+            } if self.ui.focus() == Some(self.find.field) => {
+                self.close_find();
+                true
+            }
+            Event::Key {
+                key: Key::Escape, ..
+            } if self.panel.is_some() => {
+                self.close_panel();
+                true
+            }
+            Event::Key {
                 key: Key::Function(5),
                 modifiers,
             } if *modifiers == Modifiers::default() => {
@@ -1831,6 +2290,10 @@ impl BrowserView {
     }
 }
 
+fn panel_id(panel: &OpenPanel) -> WidgetId {
+    panel.id
+}
+
 impl View for BrowserView {
     fn scene(&mut self, window: &mut Window) -> Scene {
         self.full_screen = window.header_height() == 0;
@@ -1861,6 +2324,16 @@ impl View for BrowserView {
                 self.asks.push(Ask::TabDrop(drop));
             }
             return true;
+        }
+        if let WindowEvent::Input(Event::PointerDown(pointer)) = &event
+            && let Some(panel) = &self.panel
+            && let Some(frame) = self.host().and_then(|host| host.frame_of(panel_id(panel)))
+            && !frame.contains(pointer.position)
+        {
+            let button = self.frames(self.width)[5].1;
+            if !button.contains(pointer.position) {
+                self.close_panel();
+            }
         }
         if let WindowEvent::Input(input) = &event
             && let Some(handled) = self
