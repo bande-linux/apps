@@ -9,8 +9,8 @@ use bande_toolkit::ui::{
     TextField, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
-    Appearance, FrameRegions, Header, Palette, Rect, Scene, TextSystem, WINDOW_HEADER_HEIGHT,
-    Window, WindowEvent, window_controls_end,
+    Appearance, FrameRegions, HEADER_LEADING, Header, Palette, Rect, Scene, TextSystem,
+    WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 
 use super::backend::{Act, Change};
@@ -24,7 +24,6 @@ use crate::ui::{Centered, symbol};
 
 pub const MACHINE_WINDOW_SIZE: (u32, u32) = (720, 520);
 const TOOLBAR: f32 = WINDOW_HEADER_HEIGHT as f32;
-const LEADING: f32 = window_controls_end(true) + 16.0;
 const TITLE_ROOM: f32 = 200.0;
 const CENTER_WIDTH: f32 = 360.0;
 const START_SYMBOL: &str = include_str!("../../data/symbols/start.svg");
@@ -88,7 +87,7 @@ impl MachineWindow {
             super::page::blank(),
             Vec::new(),
             TOOLBAR,
-            LEADING + TITLE_ROOM,
+            HEADER_LEADING + TITLE_ROOM,
         );
         let bar_id = bar.id();
         let mut ui = Ui::new(Box::new(bar), Context::new(TextSystem::new(), palette));
@@ -463,7 +462,7 @@ impl View for MachineWindow {
             self.full_screen = full_screen;
             let start = match full_screen {
                 true => TITLE_ROOM,
-                false => LEADING + TITLE_ROOM,
+                false => HEADER_LEADING + TITLE_ROOM,
             };
             if let Some(bar) = self.ui.widget_as::<Bar>(self.bar) {
                 bar.set_start(start);
@@ -486,7 +485,7 @@ impl View for MachineWindow {
         window.set_header(Header {
             title_x: match full_screen {
                 true => 16.0,
-                false => LEADING,
+                false => HEADER_LEADING,
             },
             items,
             tabs: Vec::new(),

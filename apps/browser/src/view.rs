@@ -9,9 +9,9 @@ use bande_toolkit::ui::{
     WidgetId, frame_time,
 };
 use bande_toolkit::{
-    Appearance, Elevation, FrameRegions, Header, Image, Item, Point, Radius, Rect, SHEET_INSET,
-    Scene, Shape, TextStyle, TextSystem, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
-    window_controls_end,
+    Appearance, Elevation, FrameRegions, HEADER_LEADING, Header, Image, Item, Point, Radius, Rect,
+    SHEET_INSET, Scene, Shape, TextStyle, TextSystem, Transfer, WINDOW_HEADER_HEIGHT, Window,
+    WindowEvent,
 };
 use web_host::Url;
 use web_host::Viewport;
@@ -1139,7 +1139,7 @@ impl BrowserView {
     fn frames(&self, width: f32) -> [(WidgetId, Rect); 4] {
         let middle = |height: f32| ((TOOLBAR_HEIGHT - height) / 2.0).round();
         let back = Rect::new(
-            window_controls_end(true) + SIDE,
+            HEADER_LEADING,
             middle(SYMBOL_BUTTON),
             SYMBOL_BUTTON,
             SYMBOL_BUTTON,
@@ -1273,6 +1273,29 @@ impl BrowserView {
             items: self.frames(width).iter().map(|(_, frame)| *frame).collect(),
             tabs: Vec::new(),
         }
+    }
+
+    fn strip_free_space(&self, width: f32) -> Vec<Rect> {
+        if !self.strip_shown() {
+            return Vec::new();
+        }
+        let layout = self.strip_layout();
+        let row = layout.new_tab;
+        let bottom = row.y + row.height;
+        let mut areas = vec![
+            Rect::new(0.0, 0.0, width, row.y),
+            Rect::new(0.0, bottom, width, STRIP_HEIGHT - bottom),
+        ];
+        let mut x = 0.0;
+        for item in layout.tabs.iter().chain([&layout.new_tab]) {
+            areas.push(Rect::new(x, row.y, item.x - x, row.height));
+            x = item.x + item.width;
+        }
+        areas.push(Rect::new(x, row.y, width - x, row.height));
+        for area in &mut areas {
+            area.y += TOOLBAR_HEIGHT;
+        }
+        areas
     }
 
     fn strip_input(&mut self, window: &mut Window, input: &Event) -> Option<bool> {
@@ -1481,6 +1504,7 @@ impl View for BrowserView {
         }
         let (width, height) = window.size();
         window.set_header(self.header(width as f32));
+        window.set_move_areas(self.strip_free_space(width as f32));
         self.paint(width, height)
     }
 

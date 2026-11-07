@@ -16,8 +16,8 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{
-    Appearance, FrameRegions, Header, Item, Rect, Scene, Shape, TextRole, TextSystem,
-    WINDOW_HEADER_HEIGHT, Window, WindowEvent, window_controls_end,
+    Appearance, FrameRegions, HEADER_LEADING, Header, Item, Rect, Scene, Shape, TextRole,
+    TextSystem, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use serde::Deserialize;
 
@@ -34,7 +34,6 @@ const INSET: f32 = 12.0;
 const GAP: f32 = 10.0;
 const SEARCH_WIDTH: f32 = 180.0;
 const TAIL: u32 = 1000;
-const TITLE_X: f32 = window_controls_end(true) + 16.0;
 const HEADER_SIZE: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -484,7 +483,7 @@ impl LogsView {
 
     fn header(&self) -> Header {
         Header {
-            title_x: TITLE_X,
+            title_x: HEADER_LEADING,
             items: self
                 .ui
                 .widget_ref::<LogsRoot>(self.root)

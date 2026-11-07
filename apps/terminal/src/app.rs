@@ -13,11 +13,10 @@ use bande_app_settings::{Stored, settings_folder};
 use bande_spring::{Decay, State as SpringState};
 use bande_terminal::{
     Axis, Banner, BannerAction, CellPoint, CloseAsk, Command, Divider, FULL_SCREEN_LEADING,
-    GridSize, HEADER_LEADING, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind,
-    NewTabFolder, Notice, Painter, Pane, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind,
-    Session, Settings, Terminal, TerminalContext, bracketed, dropped_text, encode_key, is_openable,
-    mouse_report, next_font_size, reports_mouse, shortcut, tab_menu, terminal_menu,
-    wants_scroll_as_arrows,
+    GridSize, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, NewTabFolder, Notice,
+    Painter, Pane, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings,
+    Terminal, TerminalContext, bracketed, dropped_text, encode_key, is_openable, mouse_report,
+    next_font_size, reports_mouse, shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
 use bande_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollExtent, ScrollPhase,
@@ -25,8 +24,8 @@ use bande_toolkit::ui::{
     TabsShown,
 };
 use bande_toolkit::{
-    Appearance, DragAction, DragEvent, FrameRegions, Header, Item, MenuPlacement, Point, Radius,
-    Rect, SHEET_INSET, Scene, Shape, Transfer, Window, WindowEvent,
+    Appearance, DragAction, DragEvent, FrameRegions, HEADER_LEADING, Header, Item, MenuPlacement,
+    Point, Radius, Rect, SHEET_INSET, Scene, Shape, Transfer, Window, WindowEvent,
 };
 
 use crate::APP_ID;
