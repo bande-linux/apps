@@ -149,6 +149,7 @@ pub struct TerminalWindow {
     header: f32,
     banner: Option<Banner>,
     banner_focused: bool,
+    composing: String,
     droppable: bool,
     pending: Option<Pending>,
     last_query: String,
@@ -210,6 +211,7 @@ impl TerminalWindow {
             header: 0.0,
             banner: None,
             banner_focused: false,
+            composing: String::new(),
             droppable: false,
             pending: None,
             last_query: String::new(),
@@ -1890,7 +1892,8 @@ impl TerminalWindow {
         let dividers = tab.layout.dividers(area);
         self.blink_phase = self.blink_phase(Instant::now());
         self.painter.cursor_hidden = self.blinking() && self.blink_phase % 2 == 1;
-        self.painter.panes(&panes, &dividers, &highlights)
+        self.painter
+            .panes(&panes, &dividers, &highlights, &self.composing)
     }
 }
 
@@ -2049,6 +2052,10 @@ impl View for TerminalWindow {
                 if let Some(banner) = &mut self.banner {
                     banner.handle(&Event::Commit(text.replace(['\r', '\n'], " ")));
                 }
+            }
+            WindowEvent::Input(Event::Preedit { text, .. }) if !self.banner_focused => {
+                self.composing = text;
+                window.request_redraw();
             }
             WindowEvent::Input(event @ (Event::Commit(_) | Event::Preedit { .. })) => {
                 if self.banner_focused
