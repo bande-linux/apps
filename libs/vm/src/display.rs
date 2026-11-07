@@ -438,10 +438,7 @@ impl Listener {
         let Some(fourcc) = fourcc_of(pixman) else {
             return Ok(None);
         };
-        let memory = File::from(OwnedFd::from(memfd_create(
-            "velox-display",
-            MemfdFlags::CLOEXEC,
-        )?));
+        let memory = File::from(memfd_create("velox-display", MemfdFlags::CLOEXEC)?);
         memory.set_len(u64::from(stride) * u64::from(height))?;
         memory.write_all_at(data, 0)?;
         let shared = memory.try_clone()?;
