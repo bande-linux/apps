@@ -2,7 +2,7 @@
 # with-desktop.sh <desktop checkout> <cargo args...>: runs `cargo <args>` on the workspace with each
 # bande-linux/desktop crate it uses patched to that checkout, to try a desktop branch on the apps
 # before it merges, e.g. `ci/with-desktop.sh ~/bande-linux/wt/desktop-x check --workspace
-# --all-targets`. Cargo.lock is put back afterwards. Same lock, gentle and target dir as ci/gate.sh.
+# --all-targets`. Cargo.lock is put back afterwards. Same build queue and target dir as ci/gate.sh.
 # Cargo keeps a locked version over a [patch] of another version and only warns, so the desktop
 # crates leave the lock for the run, and it fails if any of them still comes from the git pin.
 set -euo pipefail
@@ -10,12 +10,13 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 desktop=$(realpath "${1:?usage: with-desktop.sh <desktop checkout> <cargo args...>}")
 shift
 [ $# -gt 0 ] || { echo "with-desktop: name the cargo command" >&2; exit 2; }
+if [ -z "${BUILD_RUN_JOB:-}" ] && [ -x "$HOME/bande-linux/bin/build-run" ]; then
+    BUILD_EXTRA_DIRS=$desktop exec "$HOME/bande-linux/bin/build-run" "$root" ci/with-desktop.sh "$desktop" "$@"
+fi
 [ ! -f ~/.cargo/env ] || . ~/.cargo/env
 source=https://github.com/bande-linux/desktop
 export CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_TERM_COLOR=never
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$root/target}
-gentle=$HOME/bande-linux/bin/gentle
-[ -x "$gentle" ] || gentle=env
 crates=$(cargo metadata -q --no-deps --format-version 1 --manifest-path "$desktop/Cargo.toml" |
     jq -r '.packages[] | "\(.name) \(.manifest_path | rtrimstr("/Cargo.toml"))"')
 saved=$(mktemp)
@@ -46,4 +47,4 @@ if [ -n "$still_pinned" ]; then
     exit 1
 fi
 echo "== cargo $*"
-flock "$HOME/bande-linux/kbuild.lock" "$gentle" cargo "${patches[@]}" "$@"
+cargo "${patches[@]}" "$@"

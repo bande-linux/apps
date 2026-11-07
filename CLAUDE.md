@@ -11,7 +11,7 @@
 
 ## Factory Verification
 - **No panics**: No `.unwrap()`, `.expect()` or `panic!` in production code (the workspace `[workspace.lints.clippy]` denies them). Use proper error handling.
-- **Build first, test once**: each change only needs to compile: `cargo fmt --all` and `cargo check --locked --all-targets -p bande-<app>` at the workspace root, under `flock ~/bande-linux/kbuild.lock ~/bande-linux/bin/gentle`, with `CARGO_TARGET_DIR` in your worktree. The full gate, `ci/gate.sh` (fmt, clippy `--all-targets -D warnings`, tests, all `--locked`, on a private session bus), runs once on `main` when a batch of work has merged, and `main` fixes whatever it finds then.
+- **Build first, test once**: each change only needs to compile: `apps-check <worktree> -p bande-<app>` (`cargo fmt --all` and `cargo check --locked --all-targets` through the build queue, target in your worktree). Anything else heavy goes through the queue too: `build-run <worktree> cargo ...`, on whichever build machine is free (`build-run --here` to stay on the mini, for a benchmark or a binary you run next). The full gate, `ci/gate.sh` (fmt, clippy `--all-targets -D warnings`, tests, all `--locked`, on a private session bus), runs once on `main` when a batch of work has merged, and `main` fixes whatever it finds then.
 
 ## Desktop crates
 - Every app is a `bande-app` app (`bande_app::run` in `src/main.rs`): windows, menus, standard keys, appearance, Settings… and single instance come from it, never from the app; `ci/check-app.sh` checks this. Start a new app with `ci/new-app.sh`.

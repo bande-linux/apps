@@ -9,8 +9,8 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{
-    Appearance, Color, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape,
-    TextAlign, TextRole, TextSize, TextStyle, TextSystem, grown_line, window_controls_end,
+    Appearance, Color, HEADER_LEADING, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET,
+    Scene, Shape, TextAlign, TextRole, TextSize, TextStyle, TextSystem, grown_line,
 };
 
 use bande_app_menu::Entry;
@@ -45,7 +45,6 @@ const GROUP_LABEL: f32 = 20.0;
 const EDGE_GRAB: f32 = 4.0;
 const EDGE_SNAP: f32 = 24.0;
 const SIDE: f32 = 12.0;
-const LEADING: f32 = window_controls_end(true) + 16.0;
 const BUTTON_SIZE: f32 = 28.0;
 const ITEM_GAP: f32 = 16.0;
 const CLEAR_WIDTH: f32 = 120.0;
@@ -447,7 +446,7 @@ impl MonitorView {
         let middle = |height: f32| ((TOOLBAR_HEIGHT - height) / 2.0).round();
         let leading = match self.full_screen {
             true => SIDE,
-            false => LEADING + self.title_width + ITEM_GAP,
+            false => HEADER_LEADING + self.title_width + ITEM_GAP,
         };
         let count = self.tabs.len() as f32;
         let tabs_for =
@@ -471,7 +470,7 @@ impl MonitorView {
         );
         let floor = match self.full_screen {
             true => SIDE,
-            false => LEADING,
+            false => HEADER_LEADING,
         };
         let inspect_x = (tabs.x - ITEM_GAP - BUTTON_SIZE).max(floor);
         let stop_x = (inspect_x - BUTTON_GAP - BUTTON_SIZE).max(floor);
@@ -1394,7 +1393,7 @@ impl Screen for MonitorView {
             .map(|(_, frame)| frame)
             .collect();
         Some(Header {
-            title_x: LEADING,
+            title_x: HEADER_LEADING,
             items,
             tabs: Vec::new(),
         })
