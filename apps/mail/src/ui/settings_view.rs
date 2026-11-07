@@ -1136,14 +1136,18 @@ impl SettingsView {
         rebuild
     }
 
-    fn layout(&mut self, width: f32, height: f32) {
+    fn tabs_frame(width: f32) -> Rect {
         let tabs_width = TAB_WIDTH * TABS.len() as f32;
-        let tabs = Rect::new(
+        Rect::new(
             ((width - tabs_width) / 2.0).round(),
             ((TOOLBAR_HEIGHT - SEGMENTED_HEIGHT) / 2.0).round(),
             tabs_width,
             SEGMENTED_HEIGHT,
-        );
+        )
+    }
+
+    fn layout(&mut self, width: f32, height: f32) {
+        let tabs = Self::tabs_frame(width);
         let inset = SHEET_INSET as f32;
         let content = Rect::new(
             inset,
@@ -1170,6 +1174,12 @@ impl View for SettingsView {
             self.titled = Some(self.tab);
         }
         let (width, height) = window.size();
+        let tabs = Self::tabs_frame(width as f32);
+        let after_tabs = tabs.x + tabs.width;
+        window.set_move_areas(vec![
+            Rect::new(0.0, 0.0, tabs.x, TOOLBAR_HEIGHT),
+            Rect::new(after_tabs, 0.0, width as f32 - after_tabs, TOOLBAR_HEIGHT),
+        ]);
         self.layout(width as f32, height as f32);
         let mut scene = self.ui.scene(width, height);
         scene.background = self.ui.context().palette.sheet;

@@ -8,7 +8,7 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{
-    Appearance, Header, Palette, Rect, SHEET_INSET, Scene, TextSystem, window_controls_end,
+    Appearance, HEADER_LEADING, Header, Palette, Rect, SHEET_INSET, Scene, TextSystem,
 };
 
 use crate::L10N;
@@ -24,7 +24,6 @@ use crate::view::{
 pub const INSPECTOR_SIZE: (u32, u32) = (680, 520);
 const HEADER: f32 = bande_toolkit::WINDOW_HEADER_HEIGHT as f32;
 const SIDE: f32 = 12.0;
-const LEADING: f32 = window_controls_end(true) + 16.0;
 const BUTTON_SIZE: f32 = 28.0;
 const ITEM_GAP: f32 = 16.0;
 const SEGMENT_WIDTH: f32 = 96.0;
@@ -783,7 +782,7 @@ impl Screen for InspectorView {
         Some(Header {
             title_x: match self.full_screen {
                 true => SIDE,
-                false => LEADING,
+                false => HEADER_LEADING,
             },
             items: self
                 .toolbar_frames()

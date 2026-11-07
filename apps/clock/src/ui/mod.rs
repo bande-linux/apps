@@ -16,8 +16,8 @@ use bande_toolkit::ui::{
     SegmentedControl, Stack, Stepper, Table, TextField, Toggle, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
-    Appearance, Header, Image, Rect, Scene, TextSystem, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
-    window_controls_end,
+    Appearance, HEADER_LEADING, Header, Image, Rect, Scene, TextSystem, WINDOW_HEADER_HEIGHT,
+    Window, WindowEvent,
 };
 use jiff::civil::{Date, Weekday, date};
 use jiff::tz::TimeZone;
@@ -1044,8 +1044,7 @@ impl ClockView {
 
     fn header(&self, width: f32) -> (Rect, Rect) {
         let tabs_width = SEGMENT_WIDTH * Page::ALL.len() as f32;
-        let leading = window_controls_end(true) + SIDE;
-        let x = ((width - tabs_width) / 2.0).round().max(leading);
+        let x = ((width - tabs_width) / 2.0).round().max(HEADER_LEADING);
         let tabs = Rect::new(
             x,
             ((HEADER - SEGMENTED_HEIGHT) / 2.0).round(),
@@ -1091,7 +1090,7 @@ impl View for ClockView {
             layout.set_frame(body_id, body);
         }
         window.set_header(Header {
-            title_x: window_controls_end(true) + SIDE,
+            title_x: HEADER_LEADING,
             items: [tabs, add]
                 .into_iter()
                 .filter(|rect| rect.width > 0.0)

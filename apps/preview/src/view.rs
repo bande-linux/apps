@@ -13,8 +13,8 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{
-    Appearance, FrameRegions, Header, Image, Radius, Rect, SHEET_INSET, Scene, TextSystem,
-    Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent, window_controls_end,
+    Appearance, FrameRegions, HEADER_LEADING, Header, Image, Radius, Rect, SHEET_INSET, Scene,
+    TextSystem, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 
 use crate::canvas::{Canvas, Zoom};
@@ -868,12 +868,7 @@ impl PreviewView {
         let middle = ((TOOLBAR_HEIGHT - SYMBOL_BUTTON) / 2.0).round();
         let mut frames = vec![(
             self.toolbar.sidebar,
-            Rect::new(
-                window_controls_end(true) + SIDE,
-                middle,
-                SYMBOL_BUTTON,
-                SYMBOL_BUTTON,
-            ),
+            Rect::new(HEADER_LEADING, middle, SYMBOL_BUTTON, SYMBOL_BUTTON),
         )];
         let searching = self.is_document();
         let search_room = if searching { SEARCH_WIDTH + SIDE } else { 0.0 };
@@ -900,7 +895,7 @@ impl PreviewView {
         let frames = self.tool_frames(width);
         let title_x = match self.sidebar_visible() {
             true => SIDEBAR_WIDTH + TITLE_GAP,
-            false => window_controls_end(true) + SIDE + SYMBOL_BUTTON + TITLE_GAP,
+            false => HEADER_LEADING + SYMBOL_BUTTON + TITLE_GAP,
         };
         Header {
             title_x,

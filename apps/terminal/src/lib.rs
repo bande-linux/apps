@@ -32,7 +32,7 @@ pub use settings::{
     Settings,
 };
 pub use settings_view::{SETTINGS_SIZE, settings_view};
-pub use tabs::{FULL_SCREEN_LEADING, HEADER_LEADING, STRIP_HEIGHT};
+pub use tabs::{FULL_SCREEN_LEADING, STRIP_HEIGHT};
 pub use terminal::{
     CellPoint, GridSize, Highlights, Link, SearchDirection, SelectionKind, Terminal, is_openable,
 };
