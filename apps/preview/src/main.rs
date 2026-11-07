@@ -438,7 +438,9 @@ impl Program for Preview {
         let Some(mut window) = saved.read::<SavedWindow>() else {
             return;
         };
-        window.paths.retain(|path| path.exists());
+        window
+            .paths
+            .retain(|path| bande_volumes::on_connected_volume(path) || path.exists());
         if window.paths.is_empty() {
             return;
         }
