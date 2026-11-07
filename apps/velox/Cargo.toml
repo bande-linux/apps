@@ -37,7 +37,7 @@ workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "admin"
-depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+depends = "$auto, gpgv, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 suggests = "docker-compose, podman, qemu-system-arm, qemu-efi-aarch64, qemu-system-modules-opengl, qemu-utils, passt, swtpm, virtiofsd"
 extended-description = """\
 Velox shows the containers of the computer's Docker Engine or Podman, grouped \

@@ -2,6 +2,7 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::ops::ControlFlow;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -23,12 +24,27 @@ pub enum Algorithm {
 }
 
 #[derive(Clone, Copy, Debug)]
+enum Signed {
+    Https,
+    Detached {
+        url: &'static str,
+        keys: &'static [u8],
+    },
+    Inline {
+        keys: &'static [u8],
+    },
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct CloudImage {
     pub os: &'static str,
     pub url: &'static str,
     pub checksums: &'static str,
     pub algorithm: Algorithm,
+    signed: Signed,
 }
+
+const GPGV: &str = "gpgv";
 
 const CATALOG: &[CloudImage] = &[
     CloudImage {
@@ -36,18 +52,26 @@ const CATALOG: &[CloudImage] = &[
         url: "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-arm64.qcow2",
         checksums: "https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS",
         algorithm: Algorithm::Sha512,
+        signed: Signed::Https,
     },
     CloudImage {
         os: "Ubuntu 26.04 LTS",
         url: "https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-arm64.img",
         checksums: "https://cloud-images.ubuntu.com/resolute/current/SHA256SUMS",
         algorithm: Algorithm::Sha256,
+        signed: Signed::Detached {
+            url: "https://cloud-images.ubuntu.com/resolute/current/SHA256SUMS.gpg",
+            keys: include_bytes!("../data/ubuntu.gpg"),
+        },
     },
     CloudImage {
         os: "Fedora Cloud 43",
         url: "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-43-1.6.aarch64.qcow2",
         checksums: "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/aarch64/images/Fedora-Cloud-43-1.6-aarch64-CHECKSUM",
         algorithm: Algorithm::Sha256,
+        signed: Signed::Inline {
+            keys: include_bytes!("../data/fedora.gpg"),
+        },
     },
 ];
 
@@ -155,6 +179,7 @@ impl ImageStore {
             .with_config()
             .limit(CHECKSUMS_LIMIT)
             .read_to_string()?;
+        let checksums = self.verified(image, checksums)?;
         let expected = image
             .listed_checksum(&checksums)
             .ok_or_else(|| Error::NotListed(image.file_name().into()))?;
@@ -174,6 +199,60 @@ impl ImageStore {
                 Err(error)
             }
         }
+    }
+
+    fn verified(&self, image: &CloudImage, checksums: String) -> Result<String> {
+        let keys = match image.signed {
+            Signed::Https => return Ok(checksums),
+            Signed::Detached { keys, .. } | Signed::Inline { keys } => keys,
+        };
+        fs::create_dir_all(&self.dir)?;
+        let folder = self.dir.join(format!(".verify-{}", std::process::id()));
+        fs::create_dir_all(&folder)?;
+        let checked = self.run_gpgv(image, &checksums, keys, &folder);
+        let _ = fs::remove_dir_all(&folder);
+        checked
+    }
+
+    fn run_gpgv(
+        &self,
+        image: &CloudImage,
+        checksums: &str,
+        keys: &[u8],
+        folder: &std::path::Path,
+    ) -> Result<String> {
+        let keyring = folder.join("keys.gpg");
+        let signed = folder.join("sums");
+        fs::write(&keyring, keys)?;
+        fs::write(&signed, checksums)?;
+        let mut command = Command::new(GPGV);
+        command.arg("--keyring").arg(&keyring);
+        if let Signed::Inline { .. } = image.signed {
+            command.args(["--output", "-"]);
+        }
+        if let Signed::Detached { url, .. } = image.signed {
+            let signature = folder.join("sums.sig");
+            let mut bytes = Vec::new();
+            self.agent
+                .get(url)
+                .call()?
+                .into_body()
+                .into_reader()
+                .take(CHECKSUMS_LIMIT)
+                .read_to_end(&mut bytes)?;
+            fs::write(&signature, bytes)?;
+            command.arg(signature);
+        }
+        let output = command.arg(&signed).stdin(Stdio::null()).output()?;
+        if !output.status.success() {
+            return Err(Error::Signature(
+                String::from_utf8_lossy(&output.stderr).into_owned(),
+            ));
+        }
+        Ok(match image.signed {
+            Signed::Inline { .. } => String::from_utf8_lossy(&output.stdout).into_owned(),
+            _ => checksums.to_owned(),
+        })
     }
 
     fn download(

@@ -7,7 +7,7 @@ mod overview;
 mod readiness;
 mod resources;
 mod ui;
-mod volumes;
+pub(crate) mod volumes;
 
 use std::sync::LazyLock;
 

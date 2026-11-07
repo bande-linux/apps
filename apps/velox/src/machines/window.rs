@@ -262,7 +262,8 @@ impl MachineWindow {
                 }
                 Intent::Choice(choice) => self.sheet_choice(&choice),
                 Intent::Eject => {
-                    self.requests.push(Request::Change(self.id.clone(), Change::Eject));
+                    self.requests
+                        .push(Request::Change(self.id.clone(), Change::Eject));
                 }
                 Intent::AddShare => self.requests.push(Request::ChooseFolder(self.id.clone())),
                 Intent::RemoveShare(tag) => {

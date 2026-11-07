@@ -34,6 +34,7 @@ pub enum Error {
     NotUtf8(PathBuf),
     Cancelled,
     NeedsShutDown,
+    Signature(String),
     HasSnapshots,
 }
 
@@ -58,6 +59,12 @@ impl fmt::Display for Error {
             Self::Unit { unit, result } => write!(f, "{unit} did not start: {result}"),
             Self::Missing(what) => write!(f, "{what} is not available"),
             Self::NotUtf8(path) => write!(f, "{} is not a UTF-8 path", path.display()),
+            Self::Signature(message) => {
+                write!(
+                    f,
+                    "the vendor's checksums are not signed correctly: {message}"
+                )
+            }
             Self::NeedsShutDown => write!(f, "shut the machine down first"),
             Self::HasSnapshots => {
                 write!(f, "a machine with snapshots can only be cloned in full")

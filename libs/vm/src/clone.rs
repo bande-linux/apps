@@ -25,6 +25,15 @@ pub struct NewClone {
     pub snapshot: Option<String>,
 }
 
+fn copy_folder(from: &Path, to: &Path) -> Result<()> {
+    fs::create_dir_all(to)?;
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        fs::copy(entry.path(), to.join(entry.file_name()))?;
+    }
+    Ok(())
+}
+
 impl Library {
     pub fn clone_machine(
         &self,
@@ -77,6 +86,10 @@ impl Library {
         new: &NewClone,
     ) -> Result<Option<String>> {
         host.copy_image(&source.vars(), &clone.vars(), new.snapshot.as_deref(), None)?;
+        let tpm = source.tpm_state();
+        if tpm.is_dir() {
+            copy_folder(&tpm, &clone.tpm_state())?;
+        }
         if source.seed().exists() {
             rewrite_seed(&source.seed(), &clone.seed(), &clone.manifest.id, &new.name)?;
         }

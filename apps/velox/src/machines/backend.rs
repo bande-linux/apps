@@ -738,28 +738,30 @@ impl Backend {
 
     pub fn choose_iso(&self, title: String) {
         let worker = self.worker();
-        spawn("velox-vm-choose", move || {
-            match crate::volumes::choose_iso(&title) {
+        spawn(
+            "velox-vm-choose",
+            move || match crate::volumes::portal::choose_iso(&title) {
                 Ok(Some(path)) => {
                     worker.out.send(Update::IsoChosen(path));
                 }
                 Ok(None) => {}
                 Err(error) => tracing::warn!("cannot ask for a disc image: {error}"),
-            }
-        });
+            },
+        );
     }
 
     pub fn choose_folder(&self, id: String, title: String) {
         let worker = self.worker();
-        spawn("velox-vm-choose", move || {
-            match crate::volumes::choose_folder(&title) {
+        spawn(
+            "velox-vm-choose",
+            move || match crate::volumes::portal::choose_folder(&title) {
                 Ok(Some(path)) => {
                     worker.out.send(Update::FolderChosen(id, path));
                 }
                 Ok(None) => {}
                 Err(error) => tracing::warn!("cannot ask for a folder: {error}"),
-            }
-        });
+            },
+        );
     }
 
     pub fn snapshot(&self, id: String, op: SnapshotOp) {

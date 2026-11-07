@@ -1,6 +1,6 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::collections::HashMap;
 
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::message::Type;
@@ -146,7 +146,13 @@ impl Units {
         if machine.manifest.preset == Preset::Windows {
             fs::create_dir_all(machine.tpm_state())?;
             let unit = machine.tpm_unit();
-            self.start_helper(&unit, host.tpm_command(machine)?, machine, &machine.tpm_socket(), watch)?;
+            self.start_helper(
+                &unit,
+                host.tpm_command(machine)?,
+                machine,
+                &machine.tpm_socket(),
+                watch,
+            )?;
             helpers.push(unit);
         }
         for index in 0..machine.manifest.shares.len() {
@@ -182,7 +188,11 @@ impl Units {
             ("NoNewPrivileges", Value::from(true)),
         ];
         let none: Vec<(&str, Vec<(&str, Value)>)> = Vec::new();
-        self.run_job(unit, "StartTransientUnit", &(unit, "fail", properties, none))?;
+        self.run_job(
+            unit,
+            "StartTransientUnit",
+            &(unit, "fail", properties, none),
+        )?;
         let pid = self.main_pid(unit)?;
         if !watch.appears_before_exit(socket, pid)? {
             return Err(Error::Unit {

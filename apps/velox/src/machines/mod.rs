@@ -21,6 +21,7 @@ pub use self::fleet::{Fleet, Notice};
 pub use self::pane::{INSPECTOR_COMMAND, MACHINES_KEY, MachinesPane};
 use self::sheet::Field;
 pub use self::window::{MACHINE_WINDOW_SIZE, MachineWindow};
+use crate::L10N;
 
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(2);
 pub(crate) const MACHINES_SYMBOL: &str = include_str!("symbols/machines.svg");
@@ -171,7 +172,8 @@ impl Hub {
             Request::PresentSnapshot(id) => return Some(Effect::PresentSnapshot(id)),
             Request::ChooseIso => self.backend.choose_iso(L10N.tr("machine-iso-choose")),
             Request::ChooseFolder(id) => {
-                self.backend.choose_folder(id, L10N.tr("machine-share-choose"));
+                self.backend
+                    .choose_folder(id, L10N.tr("machine-share-choose"));
             }
             Request::Emulate => self.backend.emulate(),
             Request::Change(id, change) => self.backend.change(id, change),
