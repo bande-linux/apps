@@ -66,6 +66,7 @@ enum Signal {
     RemoveAll,
     ShowSites,
     EngineChosen,
+    EngineDeclined,
 }
 
 #[derive(Clone, Copy)]
@@ -110,27 +111,16 @@ impl Range {
     }
 }
 
-fn amount(bytes: u64) -> String {
-    const UNITS: [&str; 4] = ["bytes", "KB", "MB", "GB"];
-    let mut value = bytes as f64;
-    let mut unit = 0;
-    while value >= 1000.0 && unit + 1 < UNITS.len() {
-        value /= 1000.0;
-        unit += 1;
-    }
-    match unit {
-        0 => format!("{bytes} {}", UNITS[0]),
-        _ => format!("{value:.1} {}", UNITS[unit]),
-    }
-}
-
 fn site_detail(site: &SiteData) -> String {
     let mut parts = Vec::new();
     if site.cookies > 0 {
         parts.push(L10N.tr_args("site-cookies", [("count", site.cookies.into())]));
     }
     if site.cache_bytes > 0 {
-        parts.push(L10N.tr_args("site-cache", [("size", amount(site.cache_bytes).into())]));
+        parts.push(L10N.tr_args(
+            "site-cache",
+            [("size", bande_fs::format_size(site.cache_bytes).into())],
+        ));
     }
     parts.join(", ")
 }
@@ -873,10 +863,7 @@ impl BrowserView {
             return (url, None);
         }
         let mut secure = url.clone();
-        match secure
-            .set_scheme("https")
-            .and_then(|()| secure.set_port(None))
-        {
+        match secure.set_scheme("https") {
             Ok(()) => (secure, Some(url)),
             Err(()) => (url, None),
         }
@@ -908,9 +895,10 @@ impl BrowserView {
                 &L10N.tr("engine-title"),
                 &L10N.tr("engine-message"),
                 move |action| {
-                    if action == "choose" {
-                        signals.borrow_mut().push(Signal::EngineChosen);
-                    }
+                    signals.borrow_mut().push(match action {
+                        "choose" => Signal::EngineChosen,
+                        _ => Signal::EngineDeclined,
+                    });
                 },
             )
             .accessory(choices)
@@ -928,20 +916,32 @@ impl BrowserView {
             let query = self.waiting_query.take();
             return self.ask_search_engine(query);
         };
-        let settings = BrowserSettings {
+        self.save_settings(BrowserSettings {
             search: Some(engine),
+            search_asked: true,
             ..self.settings.get()
-        };
+        });
+        if let Some(query) = self.waiting_query.take() {
+            self.search(query);
+        }
+    }
+
+    fn engine_declined(&mut self) {
+        self.waiting_query = None;
+        self.save_settings(BrowserSettings {
+            search_asked: true,
+            ..self.settings.get()
+        });
+    }
+
+    fn save_settings(&self, settings: BrowserSettings) {
         self.settings.set(settings);
         if let Some(folder) = bande_app_settings::settings_folder() {
             let saved = std::fs::create_dir_all(&folder)
                 .and_then(|()| bande_app_settings::Stored::save(&settings, &folder));
             if let Err(error) = saved {
-                tracing::warn!("cannot save the search engine: {error}");
+                tracing::warn!("cannot save the browser settings: {error}");
             }
-        }
-        if let Some(query) = self.waiting_query.take() {
-            self.search(query);
         }
     }
 
@@ -1440,6 +1440,7 @@ impl BrowserView {
                     Signal::RemoveAll => self.remove_sites(None),
                     Signal::ShowSites => self.ask_website_data(),
                     Signal::EngineChosen => self.engine_chosen(),
+                    Signal::EngineDeclined => self.engine_declined(),
                 }
             }
         }

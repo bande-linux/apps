@@ -87,6 +87,7 @@ impl SearchEngine {
 pub(crate) struct BrowserSettings {
     pub(crate) launch: Launch,
     pub(crate) search: Option<SearchEngine>,
+    pub(crate) search_asked: bool,
     pub(crate) https_only: bool,
 }
 
@@ -108,6 +109,7 @@ impl Stored for BrowserSettings {
                         .into_iter()
                         .find(|engine| engine.key() == value);
                 }
+                "search-asked" => settings.search_asked = flag(value).unwrap_or(false),
                 "https-only" => settings.https_only = flag(value).unwrap_or(false),
                 _ => {}
             }
@@ -122,8 +124,8 @@ impl Stored for BrowserSettings {
         };
         let search = self.search.map_or("", SearchEngine::key);
         format!(
-            "launch = {launch}\nsearch = {search}\nhttps-only = {}\n",
-            self.https_only
+            "launch = {launch}\nsearch = {search}\nsearch-asked = {}\nhttps-only = {}\n",
+            self.search_asked, self.https_only
         )
     }
 }

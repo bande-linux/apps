@@ -273,12 +273,15 @@ impl Program for Browser {
         };
         let settings = browser.settings.get();
         let urls = addresses(&arguments, settings);
-        if !urls.is_empty() {
+        let urls_empty = urls.is_empty();
+        if !urls_empty {
             browser.open_urls(cx, urls);
         } else if settings.launch == Launch::NewWindow || !browser.restore(cx) {
             browser.open_window(cx, Session::Default, blank());
         }
-        if settings.search.is_none()
+        if urls_empty
+            && settings.search.is_none()
+            && !settings.search_asked
             && let Some(window) = cx.focused().or_else(|| cx.windows().next())
             && let Some((shown, view)) = cx.window(window)
         {

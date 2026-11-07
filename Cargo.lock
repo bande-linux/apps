@@ -509,6 +509,7 @@ dependencies = [
  "bande-app",
  "bande-app-menu",
  "bande-app-settings",
+ "bande-fs",
  "bande-l10n",
  "bande-toolkit",
  "bande-xdg",
