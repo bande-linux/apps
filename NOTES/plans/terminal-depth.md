@@ -31,8 +31,8 @@ is what is left. Delete this plan when the list is done.
 | URLs and paths clickable | Have Ctrl+click and the context menu (Open Link, Copy Link, Show in Files) |
 | Drag and drop files | Have: shell-quoted paths |
 | Title from OSC 0/2, current folder from OSC 7 | Have |
-| Edit Title (Shell menu) | Have Shell → Edit Title (Shift+Ctrl+I); an empty title goes back to the program's |
-| Marks, jump between commands, select a command's output | Have Jump to Previous/Next Command (Shift+Ctrl+Up/Down) and Edit → Select Command Output (Shift+Ctrl+O). Marks come from Return and from shell integration (OSC 133: C starts the output, D or A ends it), so a multi-line prompt is left out when the shell reports it; without shell integration the output runs to the line before the next command line |
+| Edit Title (Shell menu) | Have Shell → Edit Title; an empty title goes back to the program's |
+| Marks, jump between commands, select a command's output | Have Jump to Previous/Next Command and Edit → Select Command Output. Marks come from Return and from shell integration (OSC 133: C starts the output, D or A ends it), so a multi-line prompt is left out when the shell reports it; without shell integration the output runs to the line before the next command line |
 | Option-click moves the cursor | Have Alt+click on the prompt line (arrow keys sent to the shell); Alt+drag still selects a block |
 | Window restore | Have: windows and tab folders come back after a restart |
 | Big output | Fast: `seq 1 2000000` finishes in 1.2 s (release build, headless); tabs (`\t`) used to draw as missing-glyph boxes, fixed |

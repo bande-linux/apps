@@ -370,7 +370,7 @@ impl TextEdit {
                     ],
                 ),
                 Entry::separator(),
-                item("make-rich", "make-rich").shortcut("Shift+Ctrl+T"),
+                item("make-rich", "make-rich"),
             ],
         };
         entries.push(Entry::separator());
@@ -431,8 +431,8 @@ impl TextEdit {
         })
         .chain([
             Entry::separator(),
-            item("indent", "style:indent").shortcut("Ctrl+]"),
-            item("outdent", "style:outdent").shortcut("Ctrl+["),
+            item("indent", "style:indent"),
+            item("outdent", "style:outdent"),
         ])
         .collect();
         let headings = (0..=3)
@@ -469,7 +469,7 @@ impl TextEdit {
             Entry::submenu(&L10N.tr("menu-list"), lists),
             Entry::submenu(&L10N.tr("menu-styles"), headings),
             Entry::separator(),
-            item("make-plain", "make-plain").shortcut("Shift+Ctrl+T"),
+            item("make-plain", "make-plain"),
         ]
     }
 
@@ -627,9 +627,7 @@ impl Program for TextEdit {
             item("find-previous", "find-previous")
                 .shortcut("Shift+Ctrl+G")
                 .enabled(windowed),
-            item("use-selection", "use-selection")
-                .shortcut("Ctrl+E")
-                .enabled(windowed),
+            item("use-selection", "use-selection").enabled(windowed),
             Entry::separator(),
             item("go-to-line", "go-to-line")
                 .shortcut("Ctrl+L")

@@ -24,7 +24,7 @@ apt install bande-mail
   Remote Content in one of their messages. Composing: the account new messages are sent from and whether replies
   quote the original. Rules (each can be edited or removed): if any or all of several conditions hold (From, To or Cc, or
   Subject contains a text), move new unread Inbox mail to a mailbox, flag it or mark it read,
-  while Mail is open; Message → Apply Rules (Alt+Ctrl+L) runs them on the chosen messages. They are kept in
+  while Mail is open; Message → Apply Rules runs them on the chosen messages. They are kept in
   `~/.config/bande/mail.conf`; signatures, servers and rules in the offline store.
 - **Finding servers**, in this order: the provider's own autoconfig
   (`autoconfig.<domain>`, then `<domain>/.well-known/autoconfig`), Mozilla's ISPDB
@@ -60,11 +60,11 @@ apt install bande-mail
   banner, which Mail then remembers for that sender (or by themselves when Settings → Viewing
   allows it), and then only over HTTPS, at
   most 20 per message, 10 MB each, decoded with limits on their size.
-- **Toolbar and keys.** Get Mail (Shift+Ctrl+N), New Message (Ctrl+N), Archive (Shift+Ctrl+A),
-  Delete (Delete or Backspace), Junk (Shift+Ctrl+J), Reply (Ctrl+R), Reply All (Shift+Ctrl+R),
-  Forward (Shift+Ctrl+F), Flag (Shift+Ctrl+L; Message → Flag picks one of seven colours, kept
-  on the server as macOS does), Mark as Read or Unread (Shift+Ctrl+U), Send
-  (Shift+Ctrl+D), Close Window (Ctrl+W), Quit (Ctrl+Q) and Search (Ctrl+F), which finds messages
+- **Toolbar and keys.** Get Mail (F5), New Message (Ctrl+N), Archive (Shift+Ctrl+A),
+  Delete (Delete or Backspace), Junk, Reply (Ctrl+R), Reply All (Shift+Ctrl+R),
+  Forward (Shift+Ctrl+F), Flag (Message → Flag picks one of seven colours, kept
+  on the server as macOS does), Mark as Read or Unread, Send
+  (Ctrl+Enter), Close Window (Ctrl+W), Quit (Ctrl+Q) and Search (Ctrl+F), which finds messages
   with every word in their sender, recipients, subject or text; `from:`, `to:` and `subject:`
   keep a word to that field, and quotes keep words together. View sorts the list by date, sender, subject, size or unread first,
   either way. Mailbox → Mark All as Read marks the shown mailbox read, and Message → Move To files the
@@ -130,7 +130,7 @@ Each one is in Debian, except where noted:
 
 | Crate | Why |
 |---|---|
-| `native-tls` | TLS for IMAP, SMTP and HTTPS through the system OpenSSL and CA store; one TLS stack, security updates from Debian |
+| `rustls`, `rustls-platform-verifier` | TLS 1.2 and 1.3 for IMAP, SMTP and HTTPS on aws-lc-rs (not in Debian; the provider the Browser needs for post-quantum key exchange), checked against the system's CA store; the same TLS stack and crypto provider as Calendar, Software, Velox and Browser |
 | `mailparse` | MIME parsing, charsets and encoded words of incoming mail |
 | `rusqlite` | the offline store, on the system `libsqlite3` |
 | `html5ever` | a correct HTML tokenizer for turning mail HTML into safe text |

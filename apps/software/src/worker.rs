@@ -59,7 +59,6 @@ pub enum Problem {
     SystemPackage,
     Unsigned,
     NoPackageKit,
-    NoFlatpak,
     NeedsX11,
     Cancelled,
     Other,
@@ -96,25 +95,17 @@ pub enum Message {
         also: Vec<String>,
     },
     Details(String, Facts),
-    FlatpakDetails(String, flatpak::Facts),
+    FlatpakDetails(String, String, flatpak::Facts),
     Updates(Vec<Package>, Vec<flatpak::Update>),
     Failed(String, Failure),
-    FlathubProgress(Progress),
     Flathub(Result<bool, Failure>),
 }
-
-pub const FLATPAK_PACKAGE: &str = "flatpak";
 
 fn flatpak_failure(error: flatpak::Error) -> Option<Failure> {
     tracing::warn!("flatpak: {error}");
     let details = match error {
         flatpak::Error::Cancelled => return None,
-        flatpak::Error::Missing => {
-            return Some(Failure {
-                problem: Problem::NoFlatpak,
-                details: String::new(),
-            });
-        }
+        flatpak::Error::Missing => error.to_string(),
         flatpak::Error::Failed(details) => details,
     };
     let lower = details.to_lowercase();
@@ -146,28 +137,10 @@ fn flatpak_progress(status: Status, percent: Option<u32>) -> Progress {
     }
 }
 
-fn turn_on_flathub(client: &Client, arch: &str, out: &Outbox<Message>) -> Result<(), Failure> {
-    match flatpak::enable_flathub() {
-        Err(flatpak::Error::Missing) => {
-            install(client, arch, FLATPAK_PACKAGE, &|progress| {
-                out.send(Message::FlathubProgress(progress));
-            })
-            .map_err(|error| {
-                failure(&error).unwrap_or(Failure {
-                    problem: Problem::Cancelled,
-                    details: String::new(),
-                })
-            })?;
-            out.send(Message::FlathubProgress(Progress::default()));
-            flatpak::enable_flathub()
-        }
-        enabled => enabled,
-    }
-    .map_err(|error| {
-        flatpak_failure(error).unwrap_or(Failure {
-            problem: Problem::Cancelled,
-            details: String::new(),
-        })
+fn flathub_failure(error: flatpak::Error) -> Failure {
+    flatpak_failure(error).unwrap_or(Failure {
+        problem: Problem::Cancelled,
+        details: String::new(),
     })
 }
 
@@ -368,17 +341,16 @@ fn transact(
                 });
                 flatpak_settled(key, removed)
             }
-            Job::Flathub(true) => {
-                Message::Flathub(turn_on_flathub(client, arch, out).map(|()| true))
-            }
-            Job::Flathub(false) => {
-                Message::Flathub(flatpak::disable_flathub().map(|()| false).map_err(|error| {
-                    flatpak_failure(error).unwrap_or(Failure {
-                        problem: Problem::Cancelled,
-                        details: String::new(),
-                    })
-                }))
-            }
+            Job::Flathub(true) => Message::Flathub(
+                flatpak::enable_flathub()
+                    .map(|()| true)
+                    .map_err(flathub_failure),
+            ),
+            Job::Flathub(false) => Message::Flathub(
+                flatpak::disable_flathub()
+                    .map(|()| false)
+                    .map_err(flathub_failure),
+            ),
         };
         if !out.send(message) {
             return;
@@ -411,7 +383,7 @@ fn ask(client: &Client, arch: &str, queries: &Receiver<Query>, out: &Outbox<Mess
                 reference,
                 installed,
             } => match flatpak::facts(&remote, &reference, installed) {
-                Ok(facts) => Message::FlatpakDetails(key, facts),
+                Ok(facts) => Message::FlatpakDetails(key, remote, facts),
                 Err(error) => {
                     tracing::warn!("cannot read the details of {reference}: {error}");
                     continue;

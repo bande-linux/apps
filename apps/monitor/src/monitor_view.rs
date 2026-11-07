@@ -861,9 +861,6 @@ impl MonitorView {
                 true
             }
             Key::Character('e') if modifiers.control => self.open_stop_dialog(false),
-            Key::Character('r' | 'R') if modifiers.control && modifiers.shift => {
-                self.show_in_files()
-            }
             Key::Character('i') if modifiers.control => self.inspect(),
             Key::Escape if !self.monitor.search().is_empty() => {
                 self.clear_search();

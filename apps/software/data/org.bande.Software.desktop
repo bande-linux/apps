@@ -6,4 +6,4 @@ Icon=org.bande.Software
 Exec=bande-software
 StartupNotify=true
 Categories=System;PackageManager;
-Keywords=apps;store;install;flatpak;
+Keywords=apps;store;install;

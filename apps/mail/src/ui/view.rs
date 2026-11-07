@@ -39,20 +39,16 @@ use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status
 use bande_app_settings::{Stored, settings_folder};
 use bande_keyring::Keyring;
 
-pub const SHORTCUTS: [(&str, &str); 13] = [
+pub const SHORTCUTS: [(&str, &str); 9] = [
     ("compose", "Ctrl+N"),
-    ("get-mail", "Shift+Ctrl+N"),
+    ("get-mail", "F5"),
     ("find", "Ctrl+F"),
     ("reply", "Ctrl+R"),
     ("reply-all", "Shift+Ctrl+R"),
     ("forward", "Shift+Ctrl+F"),
-    ("toggle-read", "Shift+Ctrl+U"),
-    ("toggle-flag", "Shift+Ctrl+L"),
     ("archive", "Shift+Ctrl+A"),
-    ("junk", "Shift+Ctrl+J"),
     ("delete", "Delete"),
-    ("send", "Shift+Ctrl+D"),
-    ("apply-rules", "Alt+Ctrl+L"),
+    ("send", "Ctrl+Enter"),
 ];
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 pub const LIST_WIDTH: f32 = 340.0;

@@ -274,12 +274,7 @@ impl Program for Preview {
         };
         let file_menu = vec![
             item("menu-open", OPEN, Some("Ctrl+O"), true),
-            item(
-                "menu-show-in-files",
-                SHOW_IN_FILES,
-                Some("Shift+Ctrl+R"),
-                file,
-            ),
+            item("menu-show-in-files", SHOW_IN_FILES, None, file),
             item("menu-get-info", GET_INFO, Some("Ctrl+I"), file),
         ];
         let edit = vec![
@@ -302,35 +297,35 @@ impl Program for Preview {
             true => "menu-stop-slideshow",
             false => "menu-slideshow",
         };
-        let mut view_menu = vec![item(sidebar_key, SIDEBAR, Some("Alt+Ctrl+S"), several)];
+        let mut view_menu = vec![item(sidebar_key, SIDEBAR, Some("F9"), several)];
         if document {
             view_menu.extend([
-                item("menu-thumbnails", THUMBNAILS, Some("Alt+Ctrl+2"), several),
-                item("menu-contents", CONTENTS, Some("Alt+Ctrl+3"), contents),
+                item("menu-thumbnails", THUMBNAILS, None, several),
+                item("menu-contents", CONTENTS, None, contents),
             ]);
         }
         let zoomable = picture || document;
         view_menu.extend([
             Entry::separator(),
             item("menu-actual-size", ACTUAL_SIZE, Some("Ctrl+0"), zoomable),
-            item("menu-zoom-to-fit", ZOOM_TO_FIT, Some("Ctrl+9"), zoomable),
+            item("menu-zoom-to-fit", ZOOM_TO_FIT, None, zoomable),
             item("menu-zoom-in", ZOOM_IN, Some("Ctrl+="), zoomable),
             item("menu-zoom-out", ZOOM_OUT, Some("Ctrl+-"), zoomable),
             Entry::separator(),
             item("menu-play", PLAY, None, animated),
-            item(
-                slideshow_key,
-                SLIDESHOW,
-                Some("Shift+Ctrl+F"),
-                file && !document,
-            ),
+            item(slideshow_key, SLIDESHOW, Some("F5"), file && !document),
         ]);
         let go = vec![
-            item("menu-next", NEXT, Some("Alt+Ctrl+Down"), file),
-            item("menu-previous", PREVIOUS, Some("Alt+Ctrl+Up"), file),
+            item("menu-next", NEXT, Some("Right"), file),
+            item("menu-previous", PREVIOUS, Some("Left"), file),
         ];
         let tools = vec![
-            item("menu-rotate-left", ROTATE_LEFT, Some("Ctrl+L"), picture),
+            item(
+                "menu-rotate-left",
+                ROTATE_LEFT,
+                Some("Shift+Ctrl+R"),
+                picture,
+            ),
             item("menu-rotate-right", ROTATE_RIGHT, Some("Ctrl+R"), picture),
             Entry::separator(),
             item("menu-flip-horizontal", FLIP_HORIZONTAL, None, picture),

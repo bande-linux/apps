@@ -38,7 +38,8 @@ pub enum Problem {
     NoNetwork,
     NoSpace,
     Dependencies,
-    Other,
+    Install,
+    Remove,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,11 +106,11 @@ fn download_size(client: &Client, applied: &Applied, own: &str) -> u64 {
         })
 }
 
-fn failed(error: &Error) -> State {
+fn failed(error: &Error, attempted: Problem) -> State {
     let (problem, details) = match error {
         Error::Missing => (Problem::Unavailable, String::new()),
-        Error::Vanished => (Problem::Other, error.to_string()),
-        Error::Bus(bus) => (Problem::Other, bus.to_string()),
+        Error::Vanished => (attempted, error.to_string()),
+        Error::Bus(bus) => (attempted, bus.to_string()),
         Error::Failed(failure) => {
             let problem = match failure.code {
                 ErrorCode::Locked => Problem::Locked,
@@ -117,7 +118,7 @@ fn failed(error: &Error) -> State {
                 ErrorCode::NoNetwork => Problem::NoNetwork,
                 ErrorCode::NoSpace => Problem::NoSpace,
                 ErrorCode::Dependencies => Problem::Dependencies,
-                _ => Problem::Other,
+                _ => attempted,
             };
             (problem, failure.details.clone())
         }
@@ -149,7 +150,7 @@ pub fn inspect(client: &Client, path: &Path, machine: &Machine, deb: Option<&Deb
 pub fn preview(client: &Client, path: &Path, deb: &Deb) -> State {
     let present = match installed(client, deb) {
         Ok(present) => present,
-        Err(error) => return failed(&error),
+        Err(error) => return failed(&error, Problem::Install),
     };
     let action = match present {
         None => Action::Install,
@@ -174,7 +175,7 @@ pub fn preview(client: &Client, path: &Path, deb: &Deb) -> State {
             missing: deb::missing_requirements(&failure.details),
             details: failure.details,
         },
-        Err(error) => failed(&error),
+        Err(error) => failed(&error, Problem::Install),
     }
 }
 
@@ -200,6 +201,15 @@ pub fn apps(files: &[String]) -> Vec<DesktopEntry> {
 pub enum Outcome {
     Done(State),
     Back,
+    Refused,
+}
+
+fn interrupted(error: &Error, attempted: Problem) -> Outcome {
+    match error {
+        Error::Failed(failure) if failure.code == ErrorCode::Cancelled => Outcome::Back,
+        Error::Failed(failure) if failure.code == ErrorCode::NotAuthorized => Outcome::Refused,
+        _ => Outcome::Done(failed(error, attempted)),
+    }
 }
 
 fn signed(client: &Client, deb: &Deb) -> Option<Signed> {
@@ -247,15 +257,7 @@ pub fn install(
                 restart: applied.restart,
             })
         }
-        Err(Error::Failed(failure))
-            if matches!(
-                failure.code,
-                ErrorCode::NotAuthorized | ErrorCode::Cancelled
-            ) =>
-        {
-            Outcome::Back
-        }
-        Err(error) => Outcome::Done(failed(&error)),
+        Err(error) => interrupted(&error, Problem::Install),
     }
 }
 
@@ -274,7 +276,7 @@ pub fn removal(client: &Client, deb: &Deb) -> State {
             &deb.name,
             &[Info::Removing, Info::Obsoleting],
         )),
-        Err(error) => failed(&error),
+        Err(error) => failed(&error, Problem::Remove),
     }
 }
 
@@ -283,14 +285,6 @@ pub fn remove(client: &Client, deb: &Deb, progress: &dyn Fn(Progress)) -> Outcom
         installed_ids(client, deb).and_then(|ids| client.remove(&ids, Mode::Apply, progress));
     match removed {
         Ok(_) => Outcome::Done(State::Removed),
-        Err(Error::Failed(failure))
-            if matches!(
-                failure.code,
-                ErrorCode::NotAuthorized | ErrorCode::Cancelled
-            ) =>
-        {
-            Outcome::Back
-        }
-        Err(error) => Outcome::Done(failed(&error)),
+        Err(error) => interrupted(&error, Problem::Remove),
     }
 }

@@ -1,7 +1,7 @@
 [package]
 name = "bande-textedit"
 description = "Bande TextEdit: a simple editor for text documents"
-version = "0.1.0"
+version = "0.1.2"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true

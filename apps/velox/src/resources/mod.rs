@@ -103,9 +103,7 @@ pub fn age(seconds: i64) -> String {
 
 pub fn file_menu(ready: bool) -> Vec<Entry> {
     vec![
-        Entry::item(&L10N.tr("pull-image-menu"), images::PULL)
-            .shortcut("Shift+Ctrl+N")
-            .enabled(ready),
+        Entry::item(&L10N.tr("pull-image-menu"), images::PULL).enabled(ready),
         Entry::item(&L10N.tr("run-image-menu"), images::RUN).enabled(ready),
         Entry::separator(),
         Entry::item(&L10N.tr("reclaim-space-menu"), overview::RECLAIM).enabled(ready),

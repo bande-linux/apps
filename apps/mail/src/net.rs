@@ -1,8 +1,11 @@
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, Shutdown, TcpStream, ToSocketAddrs};
+use std::sync::Arc;
 use std::time::Duration;
 
-use native_tls::{Certificate, TlsConnector, TlsStream};
+use rustls::pki_types::ServerName;
+use rustls::{ClientConfig, ClientConnection, StreamOwned};
+use rustls_platform_verifier::BuilderVerifierExt;
 
 use crate::error::{Error, Result};
 
@@ -42,36 +45,30 @@ pub struct Server {
 
 #[derive(Clone)]
 pub struct Network {
-    pub extra_roots: Vec<Vec<u8>>,
     pub timeout: Duration,
 }
 
 impl Default for Network {
     fn default() -> Self {
         Self {
-            extra_roots: Vec::new(),
             timeout: COMMAND_TIMEOUT,
         }
     }
 }
 
-impl Network {
-    fn connector(&self) -> Result<TlsConnector> {
-        let mut builder = TlsConnector::builder();
-        for pem in &self.extra_roots {
-            let certificate =
-                Certificate::from_pem(pem).map_err(|error| Error::Tls(error.to_string()))?;
-            builder.add_root_certificate(certificate);
-        }
-        builder
-            .build()
-            .map_err(|error| Error::Tls(error.to_string()))
-    }
+fn tls_config() -> Result<Arc<ClientConfig>> {
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .and_then(|builder| builder.with_platform_verifier())
+        .map_err(|error| Error::Tls(error.to_string()))?
+        .with_no_client_auth();
+    Ok(Arc::new(config))
 }
 
 enum Stream {
     Plain(TcpStream),
-    Tls(Box<TlsStream<TcpStream>>),
+    Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
 }
 
 impl Stream {
@@ -171,11 +168,17 @@ impl Link {
                 "data arrived before the secure connection started".to_owned(),
             ));
         }
-        let connector = self.network.connector()?;
         let host = self.host.trim_start_matches('[').trim_end_matches(']');
-        let tls = connector
-            .connect(host, tcp)
+        let name =
+            ServerName::try_from(host.to_owned()).map_err(|error| Error::Tls(error.to_string()))?;
+        let session = ClientConnection::new(tls_config()?, name)
             .map_err(|error| Error::Tls(error.to_string()))?;
+        let mut tls = StreamOwned::new(session, tcp);
+        while tls.conn.is_handshaking() {
+            tls.conn
+                .complete_io(&mut tls.sock)
+                .map_err(|error| Error::Tls(error.to_string()))?;
+        }
         Ok(Self {
             stream: Stream::Tls(Box::new(tls)),
             buffer: Vec::new(),

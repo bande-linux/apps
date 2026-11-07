@@ -257,6 +257,7 @@ impl Painter {
         panes: &[Pane<'_>],
         dividers: &[Divider],
         highlights: &Highlights,
+        composing: &str,
     ) -> Vec<Item> {
         let resting = Highlights::default();
         let split = panes.len() > 1;
@@ -265,6 +266,9 @@ impl Painter {
             let shown = if pane.focused { highlights } else { &resting };
             let origin = Point::new(pane.frame.x, pane.frame.y);
             let mut drawn = self.terminal(pane.terminal, origin, shown);
+            if pane.focused {
+                drawn.extend(self.composing(pane.terminal, origin, composing));
+            }
             if split && !pane.focused {
                 drawn.push(Item::Fill {
                     shape: Shape::rect(pane.frame),
@@ -285,6 +289,45 @@ impl Painter {
             paint: self.theme.palette.edge.into(),
         }));
         items
+    }
+
+    fn composing(&mut self, terminal: &Terminal, origin: Point, text: &str) -> Vec<Item> {
+        let Some((column, line)) = terminal.cursor_cell().filter(|_| !text.is_empty()) else {
+            return Vec::new();
+        };
+        let metrics = self.metrics;
+        let color = self.theme.foreground;
+        let at = Point::new(
+            origin.x + PADDING + column as f32 * metrics.cell_width,
+            origin.y + PADDING + line as f32 * metrics.cell_height + terminal.scroll_shift(),
+        );
+        let width = text.chars().count() as f32 * metrics.cell_width;
+        let run = Run {
+            line: 0,
+            column: 0,
+            text: text.to_owned(),
+            color,
+            bold: false,
+        };
+        vec![
+            Item::Fill {
+                shape: Shape::rect(Rect::new(at.x, at.y, width, metrics.cell_height)),
+                paint: self.theme.background.into(),
+            },
+            Item::Text {
+                origin: at,
+                paragraph: self.paragraph(&run),
+            },
+            Item::Fill {
+                shape: Shape::rect(Rect::new(
+                    at.x,
+                    at.y + metrics.cell_height - snap(2.0, metrics.scale),
+                    width,
+                    hairline(1.0, metrics.scale),
+                )),
+                paint: color.into(),
+            },
+        ]
     }
 
     pub fn terminal(

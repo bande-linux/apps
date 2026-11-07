@@ -32,6 +32,7 @@ enum Intent {
     AskRemove,
     Remove,
     Back,
+    Retry,
     Open(usize),
     Close,
 }
@@ -90,6 +91,7 @@ pub struct Installer {
     identity: Option<Identity>,
     state: State,
     ready: Option<State>,
+    refused: bool,
     jobs: Sender<Job>,
     feed: Feed,
     canceller: Canceller,
@@ -120,6 +122,7 @@ impl Installer {
             identity: None,
             state: State::Reading,
             ready: None,
+            refused: false,
             jobs,
             feed,
             canceller,
@@ -183,6 +186,10 @@ impl Installer {
                 }
             }
             Message::Back => self.back(),
+            Message::Refused => {
+                self.refused = true;
+                self.back();
+            }
         }
     }
 
@@ -191,6 +198,7 @@ impl Installer {
     }
 
     fn act(&mut self, intent: Intent) {
+        self.refused = false;
         match intent {
             Intent::Install => {
                 self.state = State::Installing(Progress::default());
@@ -222,6 +230,10 @@ impl Installer {
                 self.ask(Job::Remove);
             }
             Intent::Back => self.back(),
+            Intent::Retry => {
+                self.state = State::Reading;
+                self.ask(Job::Inspect);
+            }
             Intent::Open(index) => {
                 if let State::Installed { apps, .. } = &self.state
                     && let Some(entry) = apps.get(index)
@@ -527,13 +539,17 @@ impl Installer {
                     Problem::NoNetwork => L10N.tr("failed-no-network"),
                     Problem::NoSpace => L10N.tr("failed-no-space"),
                     Problem::Dependencies => L10N.tr("failed-dependencies"),
-                    Problem::Other => L10N.tr("failed-other"),
+                    Problem::Install => L10N.tr("failed-install"),
+                    Problem::Remove => L10N.tr("failed-remove"),
                 };
                 let mut widgets = vec![boxed(Label::new(&sentence))];
                 if !details.is_empty() {
                     widgets.push(disclosure(&L10N.tr("details"), details));
                 }
-                widgets.push(row(vec![close()]));
+                widgets.push(row(vec![
+                    close(),
+                    boxed(self.button(&L10N.tr("try-again"), Intent::Retry).primary()),
+                ]));
                 widgets
             }
         }
@@ -541,6 +557,9 @@ impl Installer {
 
     fn rebuild(&mut self) {
         let mut widgets = self.header();
+        if self.refused {
+            widgets.push(boxed(Label::new(&L10N.tr("not-authorized"))));
+        }
         widgets.extend(self.body());
         let page = boxed(Stack::new(Axis::Vertical, SPACING, PADDING, widgets));
         if let Some(content) = self.ui.widget(self.content)

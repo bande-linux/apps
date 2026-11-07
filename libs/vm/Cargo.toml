@@ -15,6 +15,7 @@ rustix = { workspace = true, features = ["event", "fs", "process", "rand"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+rustls.workspace = true
 ureq.workspace = true
 zbus.workspace = true
 

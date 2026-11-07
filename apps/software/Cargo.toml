@@ -1,7 +1,7 @@
 [package]
 name = "bande-software"
-description = "Bande Software: browse, search and install apps from Debian and Flathub"
-version = "0.1.0"
+description = "Bande Software: browse, search and install apps from Debian"
+version = "0.1.5"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
@@ -19,6 +19,7 @@ flate2.workspace = true
 image.workspace = true
 jiff.workspace = true
 jxl-oxide.workspace = true
+rustls.workspace = true
 ureq.workspace = true
 roxmltree.workspace = true
 serde.workspace = true
@@ -42,11 +43,12 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "admin"
 depends = "$auto, appstream, packagekit, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
-recommends = "bande-polkit, flatpak"
+recommends = "bande-polkit"
 extended-description = """\
-The app store of the Bande desktop: browse and search the apps Debian and \
-Flathub describe with AppStream, read about them before installing, and \
-hide apps that need X11, which Bande does not run."""
+The app store of the Bande desktop: browse and search the apps Debian \
+describes with AppStream, read about them before installing, and hide apps \
+that need X11, which Bande does not run. With flatpak installed, it offers \
+Flathub's apps too."""
 assets = [
     ["target/release/bande-software", "usr/bin/", "755"],
     ["data/org.bande.Software.desktop", "usr/share/applications/", "644"],

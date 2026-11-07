@@ -337,9 +337,9 @@ in a read-only monospaced `TextView` with [Copy], at most one link, and live re-
 | Menu | Items |
 |---|---|
 | Velox | About Velox, Settings… Ctrl+, , Hide, Quit Ctrl+Q |
-| File | New Virtual Machine… Ctrl+N, Pull Image… Shift+Ctrl+N, Run Image…, Close Window Ctrl+W |
+| File | New Virtual Machine… Ctrl+N, Pull Image…, Run Image…, Close Window Ctrl+W |
 | View | Overview Ctrl+1, Containers Ctrl+2, Images Ctrl+3, Volumes Ctrl+4, Networks Ctrl+5, Machines Ctrl+6, Show/Hide Inspector Ctrl+I, Find Ctrl+F, Columns ▸ |
-| Container | Start, Stop, Restart, Pause/Resume, Show Logs Ctrl+L, Open in Terminal Shift+Ctrl+T, Copy ▸, Delete… Ctrl+Backspace; for a project: Start/Stop/Restart/Down Project |
+| Container | Start, Stop, Restart, Pause/Resume, Show Logs Ctrl+L, Open in Terminal, Copy ▸, Delete… Delete; for a project: Start/Stop/Restart/Down Project |
 | Image | Run…, Remove…, Prune Unused…; Volume/Network items appear in the same menu slot for their pane |
 | Machine | Start/Resume Ctrl+R, Pause, Shut Down, Force Stop, Open Console Ctrl+O, Take Snapshot… Shift+Ctrl+S, Clone…, Delete… |
 | Window | Velox, then each Logs and Machine window |
