@@ -154,7 +154,9 @@ struct Utility {
 
 impl Utility {
     fn open_paths(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
-        let paths = arguments.iter().map(|argument| directory.join(argument));
+        let paths = arguments.iter().map(|argument| {
+            bande_xdg::path_from_file_uri(argument).unwrap_or_else(|| directory.join(argument))
+        });
         if arguments
             .first()
             .is_some_and(|first| first == COMPRESS_FLAG)

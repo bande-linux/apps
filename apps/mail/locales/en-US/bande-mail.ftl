@@ -138,6 +138,7 @@ attachment-open = Open Attachment
 attachment-save = Save to Downloads Folder
 attachment-save-as = Save Attachment…
 attachment-save-title = Save Attachment
+attachment-save-failed = The attachment couldn’t be saved: { $error }
 remote-content-loading = Loading remote content…
 
 settings-title = Settings

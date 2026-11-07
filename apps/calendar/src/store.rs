@@ -302,7 +302,11 @@ fn write_atomically(file: &Path, text: &str) -> std::io::Result<()> {
         .open(&staging)?;
     staged.write_all(text.as_bytes())?;
     staged.sync_all()?;
-    std::fs::rename(&staging, file)
+    std::fs::rename(&staging, file)?;
+    match file.parent() {
+        Some(folder) => std::fs::File::open(folder)?.sync_all(),
+        None => Ok(()),
+    }
 }
 
 fn read_or_set_aside<T: serde::de::DeserializeOwned>(file: &Path) -> Option<T> {

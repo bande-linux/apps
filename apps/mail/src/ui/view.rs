@@ -1729,6 +1729,14 @@ impl MailView {
             std::fs::create_dir_all(&folder).and_then(|()| write_new(&folder, &name, &data));
         if let Err(error) = saved {
             tracing::warn!("cannot save {name}: {error}");
+            self.requests.push(Request::Notify {
+                summary: L10N.tr_args(
+                    "attachment-save-failed",
+                    [("error", error.to_string().into())],
+                ),
+                body: name,
+                sound: false,
+            });
         }
     }
 
@@ -2948,7 +2956,13 @@ fn write_new(folder: &std::path::Path, name: &str, data: &[u8]) -> std::io::Resu
             .create_new(true)
             .open(&path)
         {
-            Ok(mut file) => return file.write_all(data).map(|()| path),
+            Ok(mut file) => {
+                let written = file.write_all(data).and_then(|()| file.sync_all());
+                if written.is_err() {
+                    let _ = std::fs::remove_file(&path);
+                }
+                return written.map(|()| path);
+            }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(error) => return Err(error),
         }
