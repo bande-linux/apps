@@ -1,10 +1,14 @@
 [Desktop Entry]
 Type=Application
 Name=Calculator
+Name[sv]=Kalkylator
 GenericName=Calculator
+GenericName[sv]=Kalkylator
 Comment=Basic, scientific and programmer calculations with a paper tape
+Comment[sv]=Grundläggande, vetenskapliga och programmerarberäkningar med pappersremsa
 Icon=org.bande.Calculator
 Exec=bande-calculator
 StartupNotify=true
 Categories=Utility;Calculator;
 Keywords=calculate;math;arithmetic;scientific;programmer;hex;binary;rpn;
+Keywords[sv]=räkna;matematik;aritmetik;vetenskaplig;programmerare;hex;binär;rpn;kalkylator;

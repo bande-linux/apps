@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Browser</name>
   <summary>Browse the web</summary>
+  <summary xml:lang="sv">Surfa på webben</summary>
   <description>
     <p>A web browser built on Bande's own web engine: private by default, with no telemetry and no ads.</p>
   </description>

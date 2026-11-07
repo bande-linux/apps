@@ -1,19 +1,25 @@
 [Desktop Entry]
 Type=Application
 Name=Clock
+Name[sv]=Klocka
 GenericName=Clock
+GenericName[sv]=Klocka
 Comment=Alarms, timers, a stopwatch and the time around the world
+Comment[sv]=Alarm, timers, stoppur och tiden runt om i världen
 Icon=org.bande.Clock
 Exec=bande-clock %U
 Categories=Utility;Clock;
 Keywords=alarm;timer;stopwatch;world;time;zone;countdown;
+Keywords[sv]=alarm;timer;stoppur;värld;tid;tidszon;nedräkning;
 StartupNotify=true
 Actions=new-alarm;new-timer;
 
 [Desktop Action new-alarm]
 Name=New Alarm
+Name[sv]=Nytt alarm
 Exec=bande-clock --new-alarm
 
 [Desktop Action new-timer]
 Name=New Timer
+Name[sv]=Ny timer
 Exec=bande-clock --new-timer

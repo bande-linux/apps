@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Calendar</name>
   <summary>Keep your events and CalDAV calendars in sync</summary>
+  <summary xml:lang="sv">Håll dina händelser och CalDAV-kalendrar synkade</summary>
   <description>
     <p>Day, week, month and year views of local, CalDAV and subscribed calendars, with alerts, search and .ics import.</p>
   </description>

@@ -1,16 +1,21 @@
 [Desktop Entry]
 Type=Application
 Name=Calendar
+Name[sv]=Kalender
 GenericName=Calendar
+GenericName[sv]=Kalender
 Comment=Keep your events and CalDAV calendars in sync
+Comment[sv]=Håll dina händelser och CalDAV-kalendrar synkade
 Icon=org.bande.Calendar
 Exec=bande-calendar %U
 Categories=Office;Calendar;
 Keywords=calendar;event;meeting;caldav;ics;webcal;schedule;
+Keywords[sv]=kalender;händelse;möte;caldav;ics;webcal;schema;
 MimeType=text/calendar;x-scheme-handler/webcal;x-scheme-handler/webcals;
 StartupNotify=true
 Actions=new-event;
 
 [Desktop Action new-event]
 Name=New Event
+Name[sv]=Ny händelse
 Exec=bande-calendar --new-event

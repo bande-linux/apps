@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Velox</name>
   <summary>See, start and stop your containers</summary>
+  <summary xml:lang="sv">Se, starta och stoppa dina containrar</summary>
   <description>
     <p>Velox shows the containers of the computer's Docker Engine or Podman, grouped by Compose project, and starts and stops them. It follows the engine live.</p>
     <p>Velox never installs or configures an engine. When none is found, it shows the steps to set up Docker Engine or Podman.</p>

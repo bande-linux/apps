@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Template</name>
   <summary>A starting point for a Bande app</summary>
+  <summary xml:lang="sv">En startpunkt för en Bande-app</summary>
   <description>
     <p>A window that says hello, with the menus, keys and single instance every Bande app has.</p>
   </description>

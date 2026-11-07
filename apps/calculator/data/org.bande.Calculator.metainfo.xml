@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Calculator</name>
   <summary>Basic, scientific and programmer calculations with a paper tape</summary>
+  <summary xml:lang="sv">Grundläggande, vetenskapliga och programmerarberäkningar med pappersremsa</summary>
   <description>
     <p>Calculate with exact decimal arithmetic in Basic, Scientific and Programmer modes, keep a paper tape of every calculation, and use Reverse Polish Notation if you prefer it.</p>
   </description>

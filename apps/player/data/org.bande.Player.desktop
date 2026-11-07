@@ -1,7 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=Player
+Name[sv]=Spelare
 Comment=Play audio and video files
+Comment[sv]=Spela upp ljud- och videofiler
 Icon=org.bande.Player
 Exec=bande-player %U
 StartupNotify=true

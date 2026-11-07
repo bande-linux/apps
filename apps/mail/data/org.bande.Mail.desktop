@@ -1,16 +1,21 @@
 [Desktop Entry]
 Type=Application
 Name=Mail
+Name[sv]=E-post
 GenericName=Mail Client
+GenericName[sv]=E-postprogram
 Comment=Read and send mail from all your accounts
+Comment[sv]=Läs och skicka e-post från alla dina konton
 Icon=org.bande.Mail
 Exec=bande-mail %u
 Categories=Network;Email;
 Keywords=email;mail;imap;smtp;inbox;
+Keywords[sv]=e-post;mejl;imap;smtp;inkorg;email;mail;
 MimeType=x-scheme-handler/mailto;
 StartupNotify=true
 Actions=compose;
 
 [Desktop Action compose]
 Name=New Message
+Name[sv]=Nytt meddelande
 Exec=bande-mail mailto:

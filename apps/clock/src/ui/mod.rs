@@ -27,8 +27,8 @@ use self::widgets::{Digits, Fixed, Line};
 use crate::cities::{self, City, city_name};
 use crate::model::{Alarm, Clock, DEFAULT_SOUND, Days, Timer, TimerState, boot_now};
 
-const ENGLISH: &str = include_str!("../../locales/en-US/bande-clock.ftl");
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-clock")));
 
 const HEADER: f32 = WINDOW_HEADER_HEIGHT as f32;
 const SEGMENT_WIDTH: f32 = 96.0;

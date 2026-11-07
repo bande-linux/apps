@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>TextEdit</name>
   <summary>Write and edit text documents</summary>
+  <summary xml:lang="sv">Skriv och redigera textdokument</summary>
   <description>
     <p>A simple editor for text documents, in the spirit of macOS TextEdit.</p>
     <ul>

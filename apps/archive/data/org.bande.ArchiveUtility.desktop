@@ -1,10 +1,13 @@
 [Desktop Entry]
 Type=Application
 Name=Archive Utility
+Name[sv]=Arkivverktyg
 Comment=Expand and create compressed archives
+Comment[sv]=Packa upp och skapa komprimerade arkiv
 Icon=org.bande.ArchiveUtility
 Exec=bande-archive %F
 StartupNotify=true
 MimeType=application/zip;application/x-tar;application/x-compressed-tar;application/x-bzip2-compressed-tar;application/x-xz-compressed-tar;application/x-zstd-compressed-tar;application/gzip;application/x-bzip2;application/x-xz;application/zstd;application/x-7z-compressed;
 Categories=Utility;Archiving;Compression;
 Keywords=zip;unzip;tar;7z;compress;extract;
+Keywords[sv]=zip;packa upp;tar;7z;komprimera;extrahera;arkiv;

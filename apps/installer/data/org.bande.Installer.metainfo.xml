@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Package Installer</name>
   <summary>Install software packages from files</summary>
+  <summary xml:lang="sv">Installera programvarupaket från filer</summary>
   <description>
     <p>Opens .deb files from Files or a browser, checks that they fit this computer, shows what else they install or remove, and installs, upgrades or removes them through PackageKit.</p>
   </description>

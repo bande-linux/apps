@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Archive Utility</name>
   <summary>Expand and create compressed archives</summary>
+  <summary xml:lang="sv">Packa upp och skapa komprimerade arkiv</summary>
   <description>
     <p>Opens zip, tar, gzip, bzip2, xz, zstd and 7-Zip archives by expanding them next to themselves, asks for the password of encrypted ones and makes the archives of Files' Compress command.</p>
     <p>Items that would land outside the folder, decompression bombs and setuid permissions are refused.</p>

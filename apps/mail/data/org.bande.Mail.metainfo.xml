@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Mail</name>
   <summary>Read and send mail from all your accounts</summary>
+  <summary xml:lang="sv">Läs och skicka e-post från alla dina konton</summary>
   <description>
     <p>IMAP and SMTP accounts in one window, with search, drafts, attachments and notifications for new mail.</p>
   </description>

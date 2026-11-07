@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Player</name>
   <summary>Play audio and video files</summary>
+  <summary xml:lang="sv">Spela upp ljud- och videofiler</summary>
   <description>
     <p>Plays common music and film files with simple controls over the picture, full screen, speed, audio and subtitle tracks, and media keys.</p>
   </description>

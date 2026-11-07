@@ -1,15 +1,20 @@
 [Desktop Entry]
 Type=Application
 Name=Terminal
+Name[sv]=Terminal
 GenericName=Terminal Emulator
+GenericName[sv]=Terminalemulator
 Comment=Use the command line
+Comment[sv]=Använd kommandoraden
 Icon=org.bande.Terminal
 Exec=bande-terminal
 StartupNotify=true
 Categories=System;TerminalEmulator;
 Keywords=shell;prompt;command;commandline;cmd;
+Keywords[sv]=skal;prompt;kommando;kommandorad;cmd;
 Actions=new-window;
 
 [Desktop Action new-window]
 Name=New Window
+Name[sv]=Nytt fönster
 Exec=bande-terminal --new-window

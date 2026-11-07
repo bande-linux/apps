@@ -1,7 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=Preview
+Name[sv]=Förhandsvisning
 Comment=View images and PDF documents
+Comment[sv]=Visa bilder och PDF-dokument
 Icon=org.bande.Preview
 Exec=bande-preview %U
 StartupNotify=true

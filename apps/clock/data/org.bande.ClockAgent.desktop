@@ -1,7 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=Clock Alarms
+Name[sv]=Klockalarm
 Comment=Rings Clock's alarms and timers when Clock is closed
+Comment[sv]=Ringer Klockans alarm och timers när Klocka är stängd
 Exec=bande-clock --background
 TryExec=bande-clock
 Icon=org.bande.Clock
