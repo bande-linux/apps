@@ -173,6 +173,7 @@ pub struct DocumentView {
     requests: Vec<Request>,
     outbox: Outbox<Message>,
     session: Option<Session>,
+    versions: Vec<u64>,
 }
 
 fn editor_of(ui: &mut Ui, id: WidgetId) -> Option<&mut TextView> {
@@ -245,6 +246,7 @@ impl DocumentView {
             requests: Vec::new(),
             outbox,
             session,
+            versions: Vec::new(),
         };
         view.apply_settings();
         view.saved = Some(view.revision());
@@ -464,6 +466,7 @@ impl DocumentView {
         self.stored = Some((revision, !from_disk));
         self.settle_at = None;
         self.persist();
+        self.list_versions();
     }
 
     pub fn failed(&mut self, error: &str) {
@@ -609,11 +612,23 @@ impl DocumentView {
         });
     }
 
-    pub fn versions(&self) -> Vec<u64> {
-        match (&self.session, &self.path) {
-            (Some(session), Some(path)) => session.versions(path),
-            _ => Vec::new(),
-        }
+    pub fn versions(&self) -> &[u64] {
+        &self.versions
+    }
+
+    pub fn set_versions(&mut self, versions: Vec<u64>) {
+        self.versions = versions;
+    }
+
+    fn list_versions(&self) {
+        let (Some(session), Some(path)) = (self.session.clone(), self.path.clone()) else {
+            return;
+        };
+        let (outbox, token) = (self.outbox.clone(), self.token);
+        spawn("versions", move || {
+            let versions = session.versions(&path);
+            outbox.send(Message::Versions { token, versions });
+        });
     }
 
     pub fn revert_to(&mut self, version: u64) {
@@ -660,6 +675,7 @@ impl DocumentView {
                 self.saved = Some(revision);
                 self.format_changed = false;
                 self.persist();
+                self.list_versions();
                 self.requests.push(Request::Remember(path));
                 if std::mem::take(&mut self.close_after_save) {
                     self.requests.push(Request::Close);

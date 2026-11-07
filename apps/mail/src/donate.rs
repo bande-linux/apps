@@ -1,5 +1,7 @@
+use std::time::Duration;
+
 use bande_search::{Donation, IndexProxyBlocking};
-use zbus::blocking::Connection;
+use zbus::blocking::{Connection, connection};
 
 use crate::error::Result;
 use crate::store::{SearchChange, Store};
@@ -8,6 +10,13 @@ pub const DOMAIN: &str = "org.bande.Mail";
 pub const MESSAGE_ARGUMENT: &str = "message:";
 const BATCH: usize = 200;
 const CURSOR: &str = "1";
+const CALL_TIMEOUT: Duration = Duration::from_secs(25);
+
+fn session() -> zbus::Result<Connection> {
+    connection::Builder::session()?
+        .method_timeout(CALL_TIMEOUT)
+        .build()
+}
 
 fn donations(change: &SearchChange) -> Vec<Donation> {
     let Some(content) = &change.content else {
@@ -68,7 +77,7 @@ fn offer(store: &Store, session: &Connection) -> Result<()> {
 }
 
 pub fn offer_to_search(store: &Store) {
-    let offered = Connection::session()
+    let offered = session()
         .map_err(Into::into)
         .and_then(|session| offer(store, &session));
     if let Err(error) = offered {
@@ -77,8 +86,8 @@ pub fn offer_to_search(store: &Store) {
 }
 
 pub fn forget_in_search() {
-    let forgotten = Connection::session()
-        .and_then(|session| IndexProxyBlocking::new(&session)?.forget_all(DOMAIN));
+    let forgotten =
+        session().and_then(|session| IndexProxyBlocking::new(&session)?.forget_all(DOMAIN));
     if let Err(error) = forgotten {
         tracing::debug!("search has not forgotten the mail: {error}");
     }

@@ -519,7 +519,6 @@ impl Runner {
     fn sync_one(&mut self, mailbox: &Mailbox) -> Result<()> {
         let (session, store) = self.connected()?;
         let report = sync_mailbox(session, store, mailbox)?;
-        crate::donate::offer_to_search(store);
         if report.changed {
             self.emit(Event::Changed(self.account.id));
         }
@@ -536,6 +535,7 @@ impl Runner {
             }
         }
         self.emit(Event::Synced(self.account.id, mailbox.id));
+        crate::donate::offer_to_search(&self.store);
         Ok(())
     }
 

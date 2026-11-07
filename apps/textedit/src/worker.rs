@@ -25,6 +25,10 @@ pub enum Message {
         words: usize,
         characters: usize,
     },
+    Versions {
+        token: u64,
+        versions: Vec<u64>,
+    },
     Chosen(Vec<PathBuf>),
     SaveTo {
         token: u64,
