@@ -58,6 +58,7 @@ pub enum Problem {
     Dependencies,
     SystemPackage,
     Unsigned,
+    NotAuthorized,
     NoPackageKit,
     NeedsX11,
     Cancelled,
@@ -151,7 +152,8 @@ fn failure(error: &Error) -> Option<Failure> {
         Error::Vanished | Error::Bus(_) => (Problem::Other, error.to_string()),
         Error::Failed(failure) => {
             let problem = match failure.code {
-                ErrorCode::Cancelled | ErrorCode::NotAuthorized => return None,
+                ErrorCode::Cancelled => return None,
+                ErrorCode::NotAuthorized => Problem::NotAuthorized,
                 ErrorCode::NoNetwork => Problem::NoNetwork,
                 ErrorCode::Locked => Problem::Locked,
                 ErrorCode::NoSpace => Problem::NoSpace,
