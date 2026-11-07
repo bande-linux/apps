@@ -916,6 +916,7 @@ dependencies = [
  "bande-media",
  "bande-media-view",
  "bande-toolkit",
+ "bande-xdg",
  "gstreamer",
  "gstreamer-app",
  "gstreamer-video",

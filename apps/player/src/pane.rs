@@ -17,29 +17,6 @@ pub fn file_title(path: &Path) -> String {
         .map_or_else(String::new, |name| name.to_string_lossy().into_owned())
 }
 
-pub fn percent_decoded(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut decoded = Vec::with_capacity(bytes.len());
-    let mut at = 0;
-    while at < bytes.len() {
-        let escaped = (bytes[at] == b'%')
-            .then(|| text.get(at + 1..at + 3))
-            .flatten()
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
-        match escaped {
-            Some(byte) => {
-                decoded.push(byte);
-                at += 3;
-            }
-            None => {
-                decoded.push(bytes[at]);
-                at += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&decoded).into_owned()
-}
-
 const AUDIO_SIZE: (u32, u32) = (420, 360);
 const LARGEST_FIT: (f64, f64) = (1120.0, 700.0);
 
