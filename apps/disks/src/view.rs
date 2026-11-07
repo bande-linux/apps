@@ -476,9 +476,12 @@ impl DisksView {
         let Some((name, device, size)) = self.target(target) else {
             return;
         };
-        let image_size = std::fs::metadata(&file)
-            .map(|metadata| metadata.len())
-            .unwrap_or(0);
+        let image_size = match bande_volumes::on_connected_volume(&file) {
+            true => 0,
+            false => std::fs::metadata(&file)
+                .map(|metadata| metadata.len())
+                .unwrap_or(0),
+        };
         let image_name = file
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())

@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+bande-volumes.workspace = true
 serde.workspace = true
 accesskit.workspace = true
 bande-app.workspace = true

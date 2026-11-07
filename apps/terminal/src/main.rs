@@ -101,7 +101,7 @@ impl Terminals {
         cx: &mut Cx<Self>,
         folders: Vec<Option<PathBuf>>,
         active: usize,
-        mut command: Option<alacritty_terminal::tty::Shell>,
+        mut command: Option<bande_terminal::ShellCommand>,
     ) -> Result<WindowId, bande_app::Error> {
         let serial = self.next_serial();
         let remembered = command.is_none();
@@ -117,7 +117,7 @@ impl Terminals {
             let mut terminal = Terminal::new(grid);
             terminal.resize(grid, painter.metrics.pixel_cell_size());
             let folder = folder
-                .filter(|folder| folder.is_dir())
+                .filter(|folder| bande_volumes::quick_is_dir(folder))
                 .or_else(|| self.home.clone());
             terminal.set_options(self.settings.cursor.shape(), self.settings.scrollback);
             let shell = command.take().or_else(|| self.settings.shell());

@@ -40,7 +40,11 @@ pub fn file_rows(path: &Path) -> Vec<Row> {
     if let Some(folder) = path.parent() {
         rows.push((L10N.tr("info-where"), folder.display().to_string()));
     }
-    if let Ok(metadata) = std::fs::metadata(path) {
+    let metadata = match bande_volumes::on_connected_volume(path) {
+        true => Err(std::io::ErrorKind::Unsupported.into()),
+        false => std::fs::metadata(path),
+    };
+    if let Ok(metadata) = metadata {
         rows.push((L10N.tr("info-size"), bande_fs::format_size(metadata.len())));
         if let Ok(created) = metadata.created() {
             rows.push((L10N.tr("info-created"), bande_fs::format_list_date(created)));

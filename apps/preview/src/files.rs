@@ -31,6 +31,9 @@ pub fn mime_of_name(path: &Path) -> &'static str {
 }
 
 pub fn neighbour(path: &Path, forward: bool) -> Option<PathBuf> {
+    if bande_volumes::on_connected_volume(path) {
+        return None;
+    }
     let folder = path.parent()?;
     let entries: Vec<Entry> = bande_fs::list(folder, false, Sort::default())
         .ok()?

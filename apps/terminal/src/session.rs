@@ -47,14 +47,46 @@ pub struct Session {
     exited: bool,
 }
 
+pub type ShellCommand = (String, Vec<String>);
+
+fn enter_server_folder_in_the_shell(
+    shell: Option<ShellCommand>,
+    directory: Option<PathBuf>,
+) -> (Option<ShellCommand>, Option<PathBuf>) {
+    let Some(folder) = directory
+        .as_ref()
+        .filter(|folder| bande_volumes::on_connected_volume(folder))
+        .cloned()
+    else {
+        return (shell, directory);
+    };
+    let (program, arguments) = shell.unwrap_or_default();
+    let start = match program.is_empty() {
+        true => r#"cd -- "$1"; exec "${SHELL:-/bin/sh}" -l"#,
+        false => r#"cd -- "$1"; shift; exec "$@""#,
+    };
+    let mut wrapped = vec![
+        "-c".to_owned(),
+        start.to_owned(),
+        "sh".to_owned(),
+        folder.to_string_lossy().into_owned(),
+    ];
+    if !program.is_empty() {
+        wrapped.push(program);
+        wrapped.extend(arguments);
+    }
+    (Some(("/bin/sh".to_owned(), wrapped)), None)
+}
+
 impl Session {
     pub fn spawn(
         terminal: Terminal,
-        shell: Option<Shell>,
+        shell: Option<ShellCommand>,
         directory: Option<PathBuf>,
     ) -> io::Result<Self> {
+        let (shell, directory) = enter_server_folder_in_the_shell(shell, directory);
         let options = Options {
-            shell,
+            shell: shell.map(|(program, arguments)| Shell::new(program, arguments)),
             working_directory: directory,
             drain_on_exit: true,
             env: HashMap::from([

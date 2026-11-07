@@ -7,10 +7,10 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use alacritty_terminal::term::TermMode;
-use alacritty_terminal::tty::Shell;
 use bande_app::{Detached, TabDrop, TabDropTarget, TabHost, View, move_tab};
 use bande_app_settings::{Stored, settings_folder};
 use bande_spring::{Decay, State as SpringState};
+use bande_terminal::ShellCommand;
 use bande_terminal::{
     Axis, Banner, BannerAction, CellPoint, CloseAsk, Command, Divider, FULL_SCREEN_LEADING,
     GridSize, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, NewTabFolder, Notice,
@@ -1475,8 +1475,16 @@ impl TerminalWindow {
             .activation_token(APP_ID)
             .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
             .ok();
-        if let Err(error) = bande_xdg::open(uri, token.as_deref()) {
-            tracing::warn!("cannot open {uri}: {error}");
+        let uri = uri.to_owned();
+        let spawned = std::thread::Builder::new()
+            .name("open link".to_owned())
+            .spawn(move || {
+                if let Err(error) = bande_xdg::open(&uri, token.as_deref()) {
+                    tracing::warn!("cannot open {uri}: {error}");
+                }
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot open a link: {error}");
         }
     }
 
@@ -2239,7 +2247,7 @@ pub const NEW_WINDOW_OPTION: &str = "--new-window";
 
 #[derive(Debug, Default)]
 pub struct Arguments {
-    pub command: Option<Shell>,
+    pub command: Option<ShellCommand>,
     pub directory: Option<PathBuf>,
     pub new_window: bool,
 }
@@ -2251,7 +2259,7 @@ impl Arguments {
             match arg.as_str() {
                 "-e" => {
                     if let Some(program) = args.next() {
-                        parsed.command = Some(Shell::new(program, args.collect()));
+                        parsed.command = Some((program, args.collect()));
                     }
                     break;
                 }

@@ -121,7 +121,10 @@ impl TextEdit {
     }
 
     fn open_path(&mut self, cx: &mut Cx<Self>, path: PathBuf) {
-        let path = std::fs::canonicalize(&path).unwrap_or(path);
+        let path = match bande_volumes::on_connected_volume(&path) {
+            true => path,
+            false => std::fs::canonicalize(&path).unwrap_or(path),
+        };
         let shown = cx.windows().find(|window| {
             cx.view(*window)
                 .is_some_and(|view| view.path.as_deref() == Some(path.as_path()))
@@ -168,7 +171,12 @@ impl TextEdit {
     }
 
     fn open_record(&mut self, cx: &mut Cx<Self>, session: &Session, id: String, record: Record) {
-        if !record.edited && record.path.as_deref().is_none_or(|path| !path.exists()) {
+        if !record.edited
+            && record
+                .path
+                .as_deref()
+                .is_none_or(|path| !bande_volumes::on_connected_volume(path) && !path.exists())
+        {
             session.forget(&id);
             return;
         }

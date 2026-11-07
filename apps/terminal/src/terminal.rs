@@ -664,7 +664,8 @@ impl Terminal {
         };
         let dropped = text[typed.len()..].chars().count();
         let end = end.sub(term, Boundary::None, dropped);
-        (point <= end && path.symlink_metadata().is_ok()).then(|| Link {
+        let exists = bande_volumes::on_connected_volume(&path) || path.symlink_metadata().is_ok();
+        (point <= end && exists).then(|| Link {
             range: start..=end,
             uri: file_uri(&path),
         })

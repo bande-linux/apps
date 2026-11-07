@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+bande-volumes.workspace = true
 accesskit.workspace = true
 encoding_rs.workspace = true
 html5ever.workspace = true

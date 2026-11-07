@@ -1,4 +1,4 @@
-use alacritty_terminal::tty::Shell;
+use crate::session::ShellCommand;
 use alacritty_terminal::vte::ansi::CursorShape;
 use bande_app_settings::{Stored, flag, pairs};
 
@@ -173,10 +173,10 @@ impl Default for Settings {
 }
 
 impl Settings {
-    pub fn shell(&self) -> Option<Shell> {
+    pub fn shell(&self) -> Option<ShellCommand> {
         let command = self.shell.trim();
         (!command.is_empty()).then(|| {
-            Shell::new(
+            (
                 "/bin/sh".to_owned(),
                 vec!["-c".to_owned(), format!("exec {command}")],
             )
