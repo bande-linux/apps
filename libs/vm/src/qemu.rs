@@ -198,8 +198,8 @@ impl Host {
             "virtserialport,chardev=vdagent,name=com.redhat.spice.0",
         ]);
         push(&["-display", "dbus,p2p=yes,gl=off"]);
-        if let Some(tag) = &manifest.resume_from {
-            push(&["-loadvm", tag]);
+        if manifest.resume_from.is_some() {
+            push(&["-S"]);
         }
         push(&["-sandbox", SANDBOX]);
         Ok(argv)

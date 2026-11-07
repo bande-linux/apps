@@ -277,7 +277,9 @@ impl Screen {
 
     fn wants_stats(&self) -> bool {
         match self {
-            Self::Main(pane) => pane.view.section() == Section::Machines,
+            Self::Main(pane) => {
+                matches!(pane.view.section(), Section::Machines | Section::Overview)
+            }
             Self::Machine(machine) => machine.wants_stats(),
             Self::Logs(_) => false,
         }

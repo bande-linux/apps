@@ -336,8 +336,7 @@ impl Session {
                     )
                 }
                 Command::Offer => {
-                    let serial = self.clipboard.serial.fetch_add(1, Ordering::SeqCst) + 1;
-                    tracing::warn!("LAB grab serial {serial}");
+                    let serial = self.clipboard.serial.fetch_add(1, Ordering::SeqCst);
                     connection
                         .call_method(
                             Some(QEMU),
@@ -595,7 +594,7 @@ impl GuestClipboard {
     async fn unregister(&self) {}
 
     async fn grab(&self, selection: u32, serial: u32, mimes: Vec<String>) {
-        self.clipboard.serial.store(serial, Ordering::SeqCst);
+        self.clipboard.serial.store(serial + 1, Ordering::SeqCst);
         if selection == CLIPBOARD_SELECTION && mimes.iter().any(|mime| mime == TEXT) {
             let _ = self.commands.send(Command::GuestGrabbed);
         }
@@ -604,7 +603,6 @@ impl GuestClipboard {
     async fn release(&self, _selection: u32) {}
 
     async fn request(&self, selection: u32, mimes: Vec<String>) -> fdo::Result<(String, Vec<u8>)> {
-        tracing::warn!("LAB request {selection} {mimes:?}");
         let offered = self
             .clipboard
             .offered

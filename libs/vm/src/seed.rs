@@ -19,7 +19,7 @@ pub struct CloudInit {
 }
 
 const NEW_MACHINE_ID: &str = "rm -f /etc/machine-id && systemd-machine-id-setup";
-const START_AGENT: &str = "systemctl start qemu-guest-agent";
+const START_AGENT: &str = "systemctl start qemu-guest-agent || true";
 
 pub(crate) fn rewrite_seed(
     source: &Path,

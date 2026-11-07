@@ -60,6 +60,14 @@ impl Machine {
         self.save()
     }
 
+    pub fn resume_snapshot(&self, qmp: &mut Qmp) -> Result<()> {
+        if let Some(tag) = &self.manifest.resume_from {
+            qmp.snapshot_load(tag, STATE_NODE, &DEVICES)?;
+            qmp.resume()?;
+        }
+        Ok(())
+    }
+
     pub fn delete_snapshot(&mut self, host: &Host, qmp: Option<&mut Qmp>, id: &str) -> Result<()> {
         let parent = self.snapshot(id)?.parent;
         match qmp {

@@ -13,6 +13,7 @@ use bande_toolkit::ui::{
 use self::cards::{Caption, Card, Grid, Live};
 use crate::L10N;
 use crate::engine::{Flavor, Reclaim, Sample, Task};
+use crate::machines::Fleet;
 use crate::resources::{
     Act, Acts, Field, Fields, Pane, Scope, Store, Strip, boxed, push, size, tell,
 };
@@ -48,6 +49,7 @@ pub struct Overview {
     samples: HashMap<String, (Sample, Option<Sample>)>,
     round: HashSet<String>,
     history: VecDeque<Point>,
+    fleet: Rc<RefCell<Fleet>>,
 }
 
 fn rate(now: &Sample, before: Option<&Sample>, value: fn(&Sample) -> u64) -> f64 {
@@ -69,6 +71,16 @@ fn speed(bytes: f64) -> String {
 }
 
 impl Overview {
+    pub fn set_fleet(&mut self, fleet: Rc<RefCell<Fleet>>) {
+        self.fleet = fleet;
+    }
+
+    pub fn machines_sampled(&mut self) {
+        if self.samples.is_empty() && self.fleet.borrow().running() > 0 {
+            self.close_round();
+        }
+    }
+
     pub fn sample(&mut self, id: String, sample: Sample) {
         if self.round.contains(&id) {
             self.close_round();
@@ -96,6 +108,16 @@ impl Overview {
             point.written += rate(now, before.as_ref(), |sample| sample.written);
             point.received += rate(now, before.as_ref(), |sample| sample.received);
             point.sent += rate(now, before.as_ref(), |sample| sample.sent);
+        }
+        for usage in self
+            .fleet
+            .borrow()
+            .entries
+            .values()
+            .filter_map(|entry| entry.usage)
+        {
+            point.cpu += f64::from(usage.cpu);
+            point.memory += usage.memory as f64;
         }
         if self.history.len() == SPAN {
             self.history.pop_front();
@@ -164,6 +186,7 @@ impl Pane for Overview {
             card("pane-images", Act::Navigate(Section::Images)),
             card("pane-volumes", Act::Navigate(Section::Volumes)),
             card("card-disk", Act::Command(RECLAIM)),
+            card("machine-pane", Act::Navigate(Section::Machines)),
         ];
         self.cards = stats.iter().map(Widget::id).collect();
         let live = [
@@ -180,7 +203,7 @@ impl Pane for Overview {
             vec![
                 boxed(Strip::new(vec![boxed(caption), boxed(reclaim)])),
                 boxed(Grid::new(
-                    4,
+                    5,
                     SPACING,
                     stats.into_iter().map(boxed).collect(),
                 )),
@@ -204,6 +227,10 @@ impl Pane for Overview {
         let known = |bytes: Option<u64>| bytes.map_or_else(|| "—".to_owned(), size);
         let images = scope.store.images.len();
         let volumes = scope.store.volumes.len();
+        let machines = (
+            self.fleet.borrow().running(),
+            self.fleet.borrow().entries.len(),
+        );
         let values = [
             (
                 running.to_string(),
@@ -238,6 +265,10 @@ impl Pane for Overview {
                     )],
                 ),
             ),
+            (
+                machines.0.to_string(),
+                L10N.tr_args("card-of-total", [("total", machines.1.into())]),
+            ),
         ];
         for (id, (value, caption)) in self.cards.iter().zip(values) {
             if let Some(card) = ui.widget_as::<Card>(*id) {
@@ -245,7 +276,7 @@ impl Pane for Overview {
             }
         }
         let last = self.history.back().copied().unwrap_or_default();
-        let quiet = running == 0;
+        let quiet = running == 0 && machines.0 == 0;
         let note = quiet.then(|| L10N.tr("no-running-containers"));
         let live = [
             (

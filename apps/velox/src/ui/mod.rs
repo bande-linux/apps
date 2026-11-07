@@ -254,6 +254,7 @@ impl VeloxView {
 
     pub fn set_hub(&mut self, hub: &Hub) {
         self.machines.set_fleet(hub.fleet());
+        self.resources.set_fleet(hub.fleet());
         self.refresh();
     }
 
@@ -266,6 +267,7 @@ impl VeloxView {
     }
 
     pub fn machines_changed(&mut self) {
+        self.resources.machines_sampled();
         self.refresh();
     }
 

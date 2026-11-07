@@ -170,7 +170,6 @@ impl Console {
     }
 
     pub fn clipboard_changed(&mut self, window: &mut Window) {
-        tracing::warn!("LAB clipboard changed");
         self.reading_clipboard = true;
         if let Err(error) = window.paste() {
             tracing::warn!("cannot read the clipboard for the guest: {error}");
@@ -178,7 +177,6 @@ impl Console {
     }
 
     pub fn pasted(&mut self, text: &str) {
-        tracing::warn!("LAB pasted {text:?} reading {}", self.reading_clipboard);
         if std::mem::take(&mut self.reading_clipboard) {
             self.display.offer_clipboard(text.to_owned());
         }

@@ -335,7 +335,10 @@ impl Worker {
         let (Some(host), Some(units)) = (self.host(), self.units()) else {
             return Err("virtualization is not ready".to_owned());
         };
-        let started = units.start(&host, machine);
+        let started = units.start(&host, machine).and_then(|mut qmp| {
+            machine.resume_snapshot(&mut qmp)?;
+            Ok(qmp)
+        });
         if machine.manifest.resume_from.is_some() {
             let mut resumed = Self::machine(&machine.manifest.id)?;
             resumed.manifest.resume_from = None;

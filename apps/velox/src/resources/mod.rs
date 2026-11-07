@@ -13,6 +13,7 @@ use crate::L10N;
 use crate::engine::{
     Container, DiskUsage, EngineInfo, Image, Network, Pulling, Task, Update, Volume,
 };
+use crate::machines::Fleet;
 use crate::ui::{Section, symbol};
 use crate::{images, networks, overview, volumes};
 
@@ -427,6 +428,16 @@ impl Resources {
         };
         ui.set_focus(search);
         true
+    }
+
+    pub fn set_fleet(&mut self, fleet: Rc<RefCell<Fleet>>) {
+        self.overview.set_fleet(fleet);
+    }
+
+    pub fn machines_sampled(&mut self) {
+        if self.shown == Some(Section::Overview) {
+            self.overview.machines_sampled();
+        }
     }
 
     pub fn hide(&mut self, ui: &mut Ui, root: WidgetId) {
