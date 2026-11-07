@@ -165,7 +165,7 @@ impl Draft {
         }
     }
 
-    fn from_iso(&self) -> bool {
+    fn installs_from_iso(&self) -> bool {
         self.image == catalog().len()
     }
 
@@ -174,7 +174,7 @@ impl Draft {
     }
 
     fn os(&self) -> String {
-        match (self.from_iso(), self.preset) {
+        match (self.installs_from_iso(), self.preset) {
             (true, Preset::Windows) => L10N.tr("machine-preset-windows"),
             (true, Preset::Linux) => L10N.tr("machine-preset-linux"),
             (false, _) => catalog()
@@ -225,7 +225,7 @@ impl Draft {
 
     pub fn advance(&mut self, fleet: &Fleet) {
         self.step = match self.step {
-            Step::Image if self.from_iso() => Step::Installer,
+            Step::Image if self.installs_from_iso() => Step::Installer,
             Step::Image | Step::Installer => Step::Resources,
             _ => Step::Identity,
         };
@@ -237,7 +237,7 @@ impl Draft {
     pub fn back(&mut self) {
         self.step = match self.step {
             Step::Identity => Step::Resources,
-            Step::Resources if self.from_iso() => Step::Installer,
+            Step::Resources if self.installs_from_iso() => Step::Installer,
             _ => Step::Image,
         };
     }
@@ -385,7 +385,7 @@ impl Draft {
                         ))
                     }
                 };
-                if self.from_iso() {
+                if self.installs_from_iso() {
                     let lines = vec![FormLine::Row(
                         L10N.tr("machine-name"),
                         Box::new(TextField::new(
@@ -454,7 +454,7 @@ impl Draft {
         {
             return Err(L10N.tr_args("machine-name-taken", [("name", name.into())]));
         }
-        if self.from_iso() {
+        if self.installs_from_iso() {
             let iso = self
                 .iso
                 .clone()
