@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use bande_xdg::find_executable;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::library::Machine;
 use crate::{Error, Result};
@@ -20,6 +20,7 @@ const REQUIRED: [(&str, &str); 5] = [
     (FIRMWARE_CODE, "qemu-efi-aarch64"),
     (FIRMWARE_VARS, "qemu-efi-aarch64"),
 ];
+const DBUS_DISPLAY_PACKAGE: &str = "qemu-system-modules-opengl";
 const SANDBOX: &str = "on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,10 +48,21 @@ impl Accel {
     }
 }
 
+fn has_dbus_display() -> bool {
+    let architecture = std::env::consts::ARCH;
+    Path::new(&format!(
+        "/usr/lib/{architecture}-linux-gnu/qemu/ui-dbus.so"
+    ))
+    .is_file()
+}
+
 impl Host {
     pub fn detect() -> Result<Self> {
         let [qemu, qemu_img, passt, firmware_code, firmware_vars] =
             REQUIRED.map(|(path, package)| locate(path).ok_or(Error::Missing(package.into())));
+        if !has_dbus_display() {
+            return Err(Error::Missing(DBUS_DISPLAY_PACKAGE.into()));
+        }
         Ok(Self {
             qemu: qemu?,
             qemu_img: qemu_img?,
@@ -67,6 +79,9 @@ impl Host {
             .filter(|(path, _)| locate(path).is_none())
             .map(|(_, package)| *package)
             .collect();
+        if !has_dbus_display() {
+            missing.push(DBUS_DISPLAY_PACKAGE);
+        }
         missing.dedup();
         missing
     }
@@ -155,7 +170,7 @@ impl Host {
         push(&["-chardev", &socket("agent", &machine.agent_socket())?]);
         push(&[
             "-device",
-            "virtserialport,chardev=agent,name=org.qemu.guest_agent.0",
+            "virtserialport,id=agent-port,chardev=agent,name=org.qemu.guest_agent.0",
         ]);
         push(&["-chardev", &socket("qmp", &machine.qmp_socket())?]);
         push(&["-object", "monitor-qmp,id=qmp-monitor,chardev=qmp"]);
@@ -169,7 +184,23 @@ impl Host {
                 keyval(&machine.console_log())?
             ),
         ]);
-        push(&["-serial", "chardev:serial", "-display", "none"]);
+        push(&["-serial", "chardev:serial"]);
+        push(&["-device", "virtio-gpu-pci"]);
+        push(&["-device", "qemu-xhci,id=usb"]);
+        push(&["-device", "usb-kbd,bus=usb.0"]);
+        push(&["-device", "usb-tablet,bus=usb.0"]);
+        push(&[
+            "-chardev",
+            "qemu-vdagent,id=vdagent,name=vdagent,clipboard=on,mouse=off",
+        ]);
+        push(&[
+            "-device",
+            "virtserialport,chardev=vdagent,name=com.redhat.spice.0",
+        ]);
+        push(&["-display", "dbus,p2p=yes,gl=off"]);
+        if manifest.resume_from.is_some() {
+            push(&["-S"]);
+        }
         push(&["-sandbox", SANDBOX]);
         Ok(argv)
     }
@@ -204,6 +235,7 @@ impl Host {
             utf8(overlay)?,
             &format!("{size_gib}G"),
         ])
+        .map(drop)
     }
 
     pub(crate) fn create_vars(&self, vars: &Path) -> Result<()> {
@@ -217,15 +249,58 @@ impl Host {
             utf8(&self.firmware_vars)?,
             utf8(vars)?,
         ])
+        .map(drop)
     }
 
-    fn qemu_img(&self, arguments: &[&str]) -> Result<()> {
+    pub(crate) fn snapshot_image(&self, action: &str, tag: &str, image: &str) -> Result<()> {
+        self.qemu_img(&["snapshot", action, tag, image]).map(drop)
+    }
+
+    pub(crate) fn copy_image(
+        &self,
+        source: &Path,
+        target: &Path,
+        snapshot: Option<&str>,
+        base: Option<&Path>,
+    ) -> Result<()> {
+        let at_snapshot = snapshot.map(|tag| format!("snapshot.name={tag}"));
+        let mut arguments = vec!["convert", "-q", "-O", "qcow2"];
+        if let Some(at_snapshot) = &at_snapshot {
+            arguments.extend(["-l", at_snapshot]);
+        }
+        if let Some(base) = base.filter(|base| !base.as_os_str().is_empty()) {
+            arguments.extend(["-B", utf8(base)?, "-F", "qcow2"]);
+        }
+        arguments.extend([utf8(source)?, utf8(target)?]);
+        self.qemu_img(&arguments).map(drop)
+    }
+
+    pub(crate) fn backing_of(&self, image: &Path) -> Result<Option<PathBuf>> {
+        let info = self.image_info(image)?;
+        Ok(info["full-backing-filename"].as_str().map(PathBuf::from))
+    }
+
+    pub(crate) fn state_size(&self, image: &Path, tag: &str) -> Result<u64> {
+        let info = self.image_info(image)?;
+        Ok(info["snapshots"]
+            .as_array()
+            .and_then(|snapshots| snapshots.iter().find(|snapshot| snapshot["name"] == tag))
+            .and_then(|snapshot| snapshot["vm-state-size"].as_u64())
+            .unwrap_or_default())
+    }
+
+    fn image_info(&self, image: &Path) -> Result<Value> {
+        let output = self.qemu_img(&["info", "-U", "--output=json", utf8(image)?])?;
+        Ok(serde_json::from_slice(&output)?)
+    }
+
+    fn qemu_img(&self, arguments: &[&str]) -> Result<Vec<u8>> {
         let output = Command::new(&self.qemu_img)
             .args(arguments)
             .stdin(Stdio::null())
             .output()?;
         if output.status.success() {
-            return Ok(());
+            return Ok(output.stdout);
         }
         Err(Error::Tool {
             program: "qemu-img".into(),

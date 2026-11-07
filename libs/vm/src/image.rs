@@ -33,7 +33,7 @@ pub struct CloudImage {
 const CATALOG: &[CloudImage] = &[
     CloudImage {
         os: "Debian 13",
-        url: "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-arm64.qcow2",
+        url: "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-arm64.qcow2",
         checksums: "https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS",
         algorithm: Algorithm::Sha512,
     },

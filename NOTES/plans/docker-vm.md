@@ -38,9 +38,6 @@ App `apps/velox`, package `bande-velox`, id `org.bande.Velox`, name "Velox".
   `passt`, `swtpm`.
 - **Host pages are 16K.** Some arm64 images built with a 4K-page jemalloc crash in native
   containers.
-- **Compositor:** it has keyboard-shortcuts-inhibit, pointer constraints, relative pointer,
-  dmabuf and subsurfaces; the toolkit uses none yet. Files, the file chooser and Mail each draw
-  their own sidebar: there is no shared source-list widget.
 
 ## Scope (the brief's sections → v1)
 
@@ -93,11 +90,28 @@ Calendar's and Mail's `worker.rs`.
 - **Why not libvirt:** a resident or socket-activated daemon, XML, a second daemon for D-Bus,
   session mode still limited, and the console still comes from QEMU. crosvm and
   cloud-hypervisor lack Debian packages or arm64 UEFI, snapshots and display.
-- **Console:** QEMU's D-Bus display (`org.qemu.Display1`, p2p via QMP `add_client`) using the
-  zbus-based `qemu-display` crate, or our own bindings for its few interfaces.
-  - Frames arrive as shared-memory scanouts plus damage, or dmabuf with `gl=on`.
-  - Resize goes through `SetUIInfo`; input goes through a virtio-tablet, so no grab is needed.
-  - VNC/SPICE were rejected: no Rust SPICE client, and VNC copies every frame.
+- **Console (`libs/vm/src/display.rs`, `machines/console.rs`):** QEMU's D-Bus display over a p2p
+  connection (QMP `getfd` + `add_client`), our own zbus bindings. QEMU is the auth server on both
+  the display and the listener socket. Frames arrive as the guest's memfd (`Listener.Unix.Map`) plus
+  damage, shown with `ExternalSurface::show_shm`; when QEMU only has bytes (`Scanout`, `Update`), we
+  copy them into a memfd of our own. Resize goes through `SetUIInfo`; input goes through USB
+  (`usb-kbd`, `usb-tablet` on `qemu-xhci`, which the firmware understands too), so the pointer stays
+  free and a click captures only the keyboard. The guest's hardware cursor becomes the Wayland cursor
+  (`Cursor::Image`). The session closes when the tab or window goes away, so nothing runs for a
+  hidden console. dmabuf waits for guest 3D (`gl=on`).
+- **Clipboard:** `qemu-vdagent` on the virtio port `com.redhat.spice.0`; needs `spice-vdagent` in a
+  guest X session. Guest copies are read at once; host copies are read when the window gets them,
+  and anything marked as a password stays home. `spice-vdagent` wants grab serials counted from 0,
+  and QEMU calls `Register` on us when the guest agent restarts, which starts them over.
+- **Snapshots:** internal qcow2 with vmstate in `disk`, covering `disk` and `vars`; the tree (name,
+  date, parent, memory) lives in the manifest. A running machine saves memory; a stopped one saves
+  disks with `qemu-img`. Reverting to a memory snapshot while stopped starts QEMU with `-S`, then
+  `snapshot-load` and `cont`: `-loadvm` picks `vars` for the vmstate and fails.
+- **Clones:** a full clone is `qemu-img convert` keeping the base image. A linked clone freezes the
+  source's disk as `images/linked-<id>.qcow2` and puts a new overlay on it for both machines, so
+  either can be deleted in any order; the frozen layer goes when nothing uses it. That replaces the
+  plan's "refuse to delete the base". A source with snapshots only clones in full. Both get a new
+  MAC, UUID and seed (`instance-id`, hostname, `machine-id`).
 
 ## GUI
 
@@ -174,8 +188,8 @@ Calendar's and Mail's `worker.rs`.
   `Form` for inspectors and settings, `SearchField`, `Segmented`, `Sheet`, `Alert`,
   `ContextMenu`, `Progress`, `Stepper`, `Slider`, `PopUpButton`, `TextView` (read-only, for
   logs).
-  - New, in the desktop repo: a source-list widget (D4), the graph (D2), the external surface
-    for the console (D1).
+  - The sidebar is the toolkit's `Table::sidebar()`, the graph its `Graph`, the console its
+    `SurfaceView`.
 
 ### Main window
 
@@ -286,8 +300,9 @@ double-click or Open Console):
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Console:** the guest display. When the VM is stopped, a centred [Start]. Before V3, or for
-  headless images, it shows "No display · Open in Terminal" (ssh).
+- **Console:** the guest display. When the VM is stopped, a centred [Start]. An image with no display
+  driver shows QEMU's "Display output is not active" (why the catalog has Debian's `generic` image,
+  not `genericcloud`, whose kernel has no DRM or USB input).
 - **Info:** the inspector's form at full size, with larger graphs.
 - **Snapshots:** a tree table (Name, Date, Size, ◆ current) with [Take Snapshot…] [Revert…]
   [Delete…] [Clone…].
@@ -407,7 +422,7 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 
 ## V0 findings (2026-11-02, mini, QEMU 11.1.2, passt 2026-10-02, Debian 13 genericcloud)
 
-- **KVM was not testable:** `/dev/kvm` is `root:kvm 0660` plus a uaccess ACL for the
+- **KVM over SSH (solved since):** `/dev/kvm` is `root:kvm 0660` plus a uaccess ACL for the
   seated session, and the seat had only the greeter, so an SSH session gets `EACCES`. The
   spike ran on **TCG** (`-accel tcg,thread=multi,tb-size=256 -cpu max,pauth-impdef=on`).
   KVM needs the owner's seated session, or `kvm` group membership for SSH-only use (owner's
@@ -477,33 +492,17 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 
 | # | Repo | What | Done when |
 |---|---|---|---|
-| A1 | apps | **Vertical slice:** app from the template; sidebar (in-app until D4) with Containers; `engine/http` + socket order + informer; Containers table with Compose disclosure rows, state dots, Status/Ports columns, Start/Stop; engine pill; engine not-ready view with copyable steps | `docker run`/`podman rm` elsewhere show up live; restarting the engine reconnects and reconciles; 0 wake-ups/s idle; the not-ready view turns into the list without a restart |
-| A2 | apps | Full container UX: pending badges, CPU/MEM column for visible rows, inspector (Ctrl+I) with every section, context and Container menus, Copy ▸, delete confirmations, Logs window (filter, auto-scroll, wrap, copy, clear, ANSI), Open in Terminal | logs follow with no timer; closing the inspector ends its stats stream (`ss` shows it) |
-| A3 | apps | Images (pull field + job, Run… sheet, In Use, prune, remove), Volumes (grouped, Used By), Networks (disclosure, create/remove), Overview with cards and Reclaim Space | pull/prune/reclaim match `/system/df`; Overview's live cards stop when it is hidden |
-| A4 | apps | Compose project actions (Up/Down/Restart via `docker compose`) | a sample project goes up and down from the menu, and grouping follows |
-| D4 | desktop | Source-list widget in `bande-widgets` (sections, counts, selection, accessibility) from Files' sidebar; Files adopts it | Files unchanged in use; Velox swaps its in-app sidebar for it |
-| D2 | desktop | Activity Monitor's graph (`Graph`, `paint_graph`) moved into `bande-widgets`; Monitor uses it | Monitor unchanged; Velox inspector Stats and Overview cards use it |
-| V0 ✓ | apps | Spike on the mini: hand-written QEMU argv, Debian cloud image + seed, QMP `snapshot-save/load`; settle `pmu`, `highmem`, P-core pinning | boots to SSH with times recorded; the defaults go into `vm/qemu.rs` |
-| V1 | apps | Machines pane (table, states, inspector, empty state, Machine menu), virtualization not-ready view, New Virtual Machine sheet (cloud images), transient units, QMP, passt with SSH forward, guest-agent IP, Open in Terminal; Machine window with Info and Settings tabs | create→SSH ≤ 8 s; the VM survives Quit; state follows `systemctl --user stop`; the SIGKILL + `fsck` test is clean |
-| D1 | desktop | External surface widget (`wl_subsurface` fed by memfd shm + damage, then dmabuf); client keyboard-shortcuts-inhibit and pointer lock | a test app shows a moving buffer at 0 CPU while still; Super reaches an inhibited surface |
-| V3 | apps | Console tab over D-Bus display: resize via `SetUIInfo`, capture/release, clipboard via `qemu-vdagent` | a Debian desktop guest is usable; a still guest costs 0 % CPU |
-| V4 | apps | Snapshots tab (live save/load/delete as jobs, tree, revert/delete confirmations) and Clone… (full via `FICLONE`/`qemu-img`, linked with base guard; new MAC/UUID/instance-id) | revert restores RAM state; deleting a linked clone's base is refused |
 | A6 | apps | `libs/terminal-view` from Terminal (emulator + renderer + keys over a byte stream); embedded exec and serial console | Terminal unchanged; exec and serial work in Velox |
 | V5 | apps | ISO path in the sheet with presets, virtiofs shares and USB in Settings, swtpm + Secure Boot, signed SUMS | a Windows 11 ARM ISO installs with no manual flags |
 | A7 | apps | Velox extras: Ctrl+K palette, crash notifications (`bande-notify`), optional status item via the tray with the background mode (as Calendar's) | each off by default and measured at 0 wake-ups while idle |
 
-Done: **A1** (2026-11-02), with A2's pending badges and the filter field. **A3** (2026-11-02):
-Overview cards stream stats only while shown (`Informer::watch(owner, ids)`, reusable by A2), and
-Machines cards are left for V1. **A2 + A4** (2026-11-02): with the inspector open the table drops
-its Image and Ports columns (both are in the inspector); Logs reattach with `since` after the
-window is hidden or the container restarts; Docker's apt steps use `trixie` on Debian testing.
-Docker's Status text ("Up 3 hours") refreshes on every event and when the window becomes active,
-never on a timer.
-**V1** (2026-11-02): Machines pane, New Virtual Machine sheet, Machine window (Info, Settings;
-Console and Snapshots shown disabled), actions and Connect via SSH, the not-ready view. Without
-KVM the pane offers "Use Emulation" (TCG). Restart is a guest shutdown then a start. Left: the
-guest-agent IP, the Overview's Machines cards, Clone/Pause from the menus, and the ≤ 8 s boot (see
-V0 findings).
+Done and merged: A1–A4, V0, V1, D1 (`SurfaceView`), D2 (`Graph`), V3 and V4. D4 needs no widget of
+its own: `Table::sidebar()` is the shared source list, and Velox, Settings and the file chooser use it.
+
+Left from V1: the ≤ 8 s boot. Debian `generic` under KVM reaches SSH about 13 s after the unit starts;
+the guest's own part is 5.5 s, so 7–8 s go to QEMU, AAVMF and GRUB.
+V3 not measured yet: 1080p at 60 fps and a release build's cost (a debug build used about 1.7 % of a core with
+a still guest and the main window open).
 
 D3 (desktop): the theme icon, with A1; the app ships the same SVG for hicolor. **Kernel: none.** If V0 hits a guest timer, PMU or vGIC
 fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.

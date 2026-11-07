@@ -24,6 +24,7 @@ const DEFAULT_DISK_GIB: u64 = 32;
 const DISK_RANGE: (f64, f64) = (8.0, 1024.0);
 const DISK_STEP: f64 = 8.0;
 const NAME_LIMIT: usize = 63;
+const GUEST_AGENT: &str = "qemu-guest-agent";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
@@ -111,7 +112,7 @@ pub fn port_free(fleet: &Fleet, port: u16) -> bool {
     !port_taken(fleet, port) && TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
-fn valid_name(name: &str) -> bool {
+pub fn valid_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= NAME_LIMIT
         && !name.starts_with('-')
@@ -403,7 +404,7 @@ impl Draft {
                 hostname: name,
                 user: user.clone(),
                 ssh_keys: vec![key],
-                packages: Vec::new(),
+                packages: vec![GUEST_AGENT.to_owned()],
             },
             login: Login {
                 user,

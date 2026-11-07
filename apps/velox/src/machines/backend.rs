@@ -9,11 +9,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use bande_vm::{
     ActiveState, CloudImage, CloudInit, Forward, Host, ImageStore, Library, Machine, Manifest,
-    NewMachine, Qmp, Units,
+    NewClone, NewMachine, Qmp, Units,
 };
 use bande_watch::{Changes, FolderWatch};
 use serde::{Deserialize, Serialize};
@@ -25,6 +25,14 @@ const SSH_PORT: u16 = 22;
 const READINESS_FOLDERS: [&str; 2] = ["/var/lib/dpkg", "/etc"];
 const PAUSED: &str = "STOP";
 const RESUMED: &str = "RESUME";
+const AGENT_PORT: &str = "VSERPORT_CHANGE";
+const AGENT_ID: &str = "agent-port";
+const ADDRESS_WAITS: [Duration; 4] = [
+    Duration::ZERO,
+    Duration::from_secs(5),
+    Duration::from_secs(15),
+    Duration::from_secs(30),
+];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Login {
@@ -48,6 +56,29 @@ pub enum Act {
     ForceStop,
     Restart,
     Delete,
+    Pause,
+    Resume,
+    TakeSnapshot,
+    Revert,
+    DeleteSnapshot,
+    Clone,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SnapshotOp {
+    Take(String),
+    Revert(String),
+    Delete(String),
+}
+
+impl SnapshotOp {
+    pub fn act(&self) -> Act {
+        match self {
+            Self::Take(_) => Act::TakeSnapshot,
+            Self::Revert(_) => Act::Revert,
+            Self::Delete(_) => Act::DeleteSnapshot,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +109,7 @@ pub enum Update {
     Listed(Vec<Listed>),
     Unit(String, ActiveState),
     Paused(String, bool),
+    Address(String, Option<std::net::Ipv4Addr>),
     Settled(String),
     Job(u64, Phase),
     Created(u64, String),
@@ -255,6 +287,8 @@ impl Worker {
         };
         lock(&self.shared.monitors).insert(id.clone(), handle);
         let worker = self.clone();
+        let agent = machine.agent_socket();
+        self.look_up_address(&id, agent.clone());
         spawn("velox-vm-qmp", move || {
             if let Ok(status) = qmp.status() {
                 worker.out.send(Update::Paused(
@@ -266,6 +300,10 @@ impl Worker {
                 let paused = match event.name.as_str() {
                     PAUSED => true,
                     RESUMED => false,
+                    AGENT_PORT if event.data["open"] == true && event.data["id"] == AGENT_ID => {
+                        worker.look_up_address(&id, agent.clone());
+                        continue;
+                    }
                     _ => continue,
                 };
                 if !worker.out.send(Update::Paused(id.clone(), paused)) {
@@ -276,15 +314,69 @@ impl Worker {
         });
     }
 
+    fn look_up_address(&self, id: &str, agent: PathBuf) {
+        let worker = self.clone();
+        let id = id.to_owned();
+        spawn("velox-vm-address", move || {
+            for wait in ADDRESS_WAITS {
+                std::thread::sleep(wait);
+                if worker.shared.stopped.load(Ordering::SeqCst) {
+                    return;
+                }
+                if let Ok(Some(address)) = bande_vm::guest_address(&agent) {
+                    worker.out.send(Update::Address(id, Some(address)));
+                    return;
+                }
+            }
+        });
+    }
+
     fn start(&self, machine: &Machine) -> Result<(), String> {
         let (Some(host), Some(units)) = (self.host(), self.units()) else {
             return Err("virtualization is not ready".to_owned());
         };
-        let qmp = units
-            .start(&host, machine)
-            .map_err(|error| error.to_string())?;
+        let started = units.start(&host, machine).and_then(|mut qmp| {
+            machine.resume_snapshot(&mut qmp)?;
+            Ok(qmp)
+        });
+        if machine.manifest.resume_from.is_some() {
+            let mut resumed = Self::machine(&machine.manifest.id)?;
+            resumed.manifest.resume_from = None;
+            resumed.save().map_err(|error| error.to_string())?;
+        }
+        let qmp = started.map_err(|error| error.to_string())?;
         self.watch(machine, Some(qmp));
         Ok(())
+    }
+
+    fn snapshot(&self, id: &str, op: SnapshotOp) -> Result<(), String> {
+        let (Some(host), Some(units)) = (self.host(), self.units()) else {
+            return Err("virtualization is not ready".to_owned());
+        };
+        let text = |error: bande_vm::Error| error.to_string();
+        let mut machine = Self::machine(id)?;
+        let running = units.state(&machine.unit()).map_err(text)?.is_running();
+        let mut qmp = match running {
+            true => Some(Qmp::connect(&machine.control_socket()).map_err(text)?),
+            false => None,
+        };
+        match op {
+            SnapshotOp::Take(name) => machine
+                .take_snapshot(&host, qmp.as_mut(), &name)
+                .map_err(text),
+            SnapshotOp::Revert(tag) => {
+                machine
+                    .revert_snapshot(&host, qmp.as_mut(), &tag)
+                    .map_err(text)?;
+                match machine.manifest.resume_from.is_some() {
+                    true => self.start(&machine),
+                    false => Ok(()),
+                }
+            }
+            SnapshotOp::Delete(tag) => machine
+                .delete_snapshot(&host, qmp.as_mut(), &tag)
+                .map_err(text),
+        }
     }
 
     fn until_stopped(
@@ -338,10 +430,18 @@ impl Worker {
                 {
                     return Err("shut the machine down first".to_owned());
                 }
+                let host = self.host().ok_or("virtualization is not ready")?;
                 Self::library()?
-                    .delete(machine)
+                    .delete(&host, machine)
                     .map_err(|error| error.to_string())
             }
+            Act::Pause => Qmp::connect(&machine.control_socket())
+                .and_then(|mut qmp| qmp.pause())
+                .map_err(|error| error.to_string()),
+            Act::Resume => Qmp::connect(&machine.control_socket())
+                .and_then(|mut qmp| qmp.resume())
+                .map_err(|error| error.to_string()),
+            Act::TakeSnapshot | Act::Revert | Act::DeleteSnapshot | Act::Clone => Ok(()),
         }
     }
 
@@ -363,6 +463,21 @@ impl Worker {
             }
         }
         machine.save().map_err(|error| error.to_string())
+    }
+
+    fn clone_machine(&self, id: &str, new: NewClone) -> Result<String, String> {
+        let host = self.host().ok_or("virtualization is not ready")?;
+        let units = self.units().ok_or("virtualization is not ready")?;
+        let text = |error: bande_vm::Error| error.to_string();
+        let mut source = Self::machine(id)?;
+        if units.state(&source.unit()).map_err(text)?.is_running() {
+            return Err("shut the machine down first".to_owned());
+        }
+        let clone = Self::library()?
+            .clone_machine(&host, &mut source, new)
+            .map_err(text)?;
+        write_login(clone.dir(), &read_login(source.dir())).map_err(|error| error.to_string())?;
+        Ok(clone.manifest.id)
     }
 
     fn create(&self, job: u64, plan: Plan, cancelled: &AtomicBool) -> Result<String, String> {
@@ -562,6 +677,44 @@ impl Backend {
                 }
                 Err(message) => {
                     worker.out.send(Update::JobFailed(job, message));
+                }
+            }
+        });
+        job
+    }
+
+    pub fn snapshot(&self, id: String, op: SnapshotOp) {
+        let worker = self.worker();
+        spawn("velox-vm-snapshot", move || {
+            let act = op.act();
+            if let Err(message) = worker.snapshot(&id, op) {
+                worker.out.send(Update::Failed {
+                    id: id.clone(),
+                    act,
+                    message,
+                });
+            }
+            worker.out.send(Update::Settled(id));
+            let _ = worker.recheck.send(Recheck::Relist);
+        });
+    }
+
+    pub fn clone_machine(&mut self, id: String, new: NewClone) -> u64 {
+        let job = self.next_job;
+        self.next_job += 1;
+        let worker = self.worker();
+        spawn("velox-vm-clone", move || {
+            let cloned = worker.clone_machine(&id, new);
+            worker.out.send(Update::Settled(id.clone()));
+            match cloned {
+                Ok(clone) => {
+                    worker.out.send(Update::Created(job, clone.clone()));
+                    worker.relist();
+                    worker.out.send(Update::Settled(clone));
+                }
+                Err(message) => {
+                    worker.out.send(Update::JobFailed(job, message));
+                    let _ = worker.recheck.send(Recheck::Relist);
                 }
             }
         });

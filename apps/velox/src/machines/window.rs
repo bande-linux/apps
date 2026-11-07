@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -6,7 +7,7 @@ use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_toolkit::ui::{
     Axis, Button, Context, Form, FormLine, Label, ScrollView, SegmentedControl, Stack, Stepper,
-    TextField, Ui, Widget, WidgetId,
+    Table, TextField, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
     Appearance, FrameRegions, HEADER_LEADING, Header, Palette, Rect, Scene, TextSystem,
@@ -14,10 +15,12 @@ use bande_toolkit::{
 };
 
 use super::backend::{Act, Change};
+use super::console::{Console, Outcome};
 use super::fleet::{Fleet, Status};
 use super::present;
-use super::sheet::port_free;
-use super::widgets::{Bar, Slot};
+use super::sheet::{CONTINUE, port_free};
+use super::snapshots::{self, Sheet, Tool, ToolIds};
+use super::widgets::{Bar, Slot, ToolRow};
 use super::{Intent, Intents, Request, push};
 use crate::L10N;
 use crate::ui::{Centered, symbol};
@@ -68,7 +71,13 @@ pub struct MachineWindow {
     stop: WidgetId,
     tab: Tab,
     shown: Option<Shown>,
-    console: Option<WidgetId>,
+    slot: Option<WidgetId>,
+    session: Option<Console>,
+    failure: Option<String>,
+    hidden: bool,
+    snapshot_tools: Option<ToolIds>,
+    selected_snapshot: Option<String>,
+    sheet: Option<Sheet>,
     intents: Intents,
     requests: Vec<Request>,
     full_screen: bool,
@@ -100,9 +109,15 @@ impl MachineWindow {
             bar: bar_id,
             start: WidgetId::next(),
             stop: WidgetId::next(),
-            tab: Tab::Info,
+            tab: Tab::Console,
             shown: None,
-            console: None,
+            slot: None,
+            session: None,
+            failure: None,
+            hidden: false,
+            snapshot_tools: None,
+            selected_snapshot: None,
+            sheet: None,
             intents,
             requests: Vec::new(),
             full_screen: false,
@@ -138,10 +153,6 @@ impl MachineWindow {
         if let Some(bar) = self.ui.widget_as::<Bar>(self.bar) {
             bar.set_tools(vec![boxed(tabs), boxed(start), boxed(stop)]);
         }
-    }
-
-    pub fn console_slot(&self) -> Option<WidgetId> {
-        self.console
     }
 
     pub fn machine(&self) -> &str {
@@ -194,6 +205,10 @@ impl MachineWindow {
     }
 
     pub fn act(&mut self, act: Act) {
+        let act = match act {
+            Act::Start if self.can(Act::Resume) => Act::Resume,
+            act => act,
+        };
         if act == Act::Delete || !self.can(act) {
             return;
         }
@@ -227,6 +242,25 @@ impl MachineWindow {
                 }
                 Intent::Act(act) => self.act(act),
                 Intent::Connect => self.connect(),
+                Intent::RetryConsole => self.failure = None,
+                Intent::Snapshot(keys) => self.selected_snapshot = keys.first().cloned(),
+                Intent::SnapshotTool(tool) => self.snapshot_tool(tool),
+                Intent::Text(text) => match &mut self.sheet {
+                    Some(Sheet::Take { name }) => *name = text,
+                    Some(Sheet::Clone(draft)) => draft.name = text,
+                    _ => {}
+                },
+                Intent::Port(text) => {
+                    if let Some(Sheet::Clone(draft)) = &mut self.sheet {
+                        draft.port = text;
+                    }
+                }
+                Intent::Linked(linked) => {
+                    if let Some(Sheet::Clone(draft)) = &mut self.sheet {
+                        draft.linked = linked;
+                    }
+                }
+                Intent::Choice(choice) => self.sheet_choice(&choice),
                 Intent::Change(change) => {
                     self.requests.push(Request::Change(self.id.clone(), change));
                 }
@@ -243,9 +277,13 @@ impl MachineWindow {
             fleet.entry(&self.id).map(|entry| Shown {
                 tab: self.tab,
                 running: entry.running(),
-                pending: entry.pending.is_some(),
+                pending: match self.tab {
+                    Tab::Console => !entry.running() && entry.pending.is_some(),
+                    _ => entry.pending.is_some(),
+                },
             })
         };
+        self.sync_console();
         let rebuild = match self.tab {
             Tab::Info => true,
             _ => shown != self.shown,
@@ -257,8 +295,9 @@ impl MachineWindow {
             }
             self.shown = shown;
         }
+        self.fill_snapshots();
         let states = [
-            (self.start, self.can(Act::Start)),
+            (self.start, self.can(Act::Start) || self.can(Act::Resume)),
             (self.stop, self.can(Act::ShutDown)),
         ];
         for (id, enabled) in states {
@@ -268,8 +307,202 @@ impl MachineWindow {
         }
     }
 
+    fn sync_console(&mut self) {
+        let (running, settled) = {
+            let fleet = self.fleet.borrow();
+            let entry = fleet.entry(&self.id);
+            (
+                entry.is_some_and(|entry| entry.running()),
+                entry.is_some_and(|entry| entry.pending.is_none()),
+            )
+        };
+        let wanted = self.tab == Tab::Console && running && !self.hidden;
+        if !wanted {
+            if self.session.take().is_some() {
+                self.show_in_slot(None);
+            }
+            if !running {
+                self.failure = None;
+            }
+            return;
+        }
+        if self.session.is_none() && settled && self.failure.is_none() {
+            match Console::open(&self.id) {
+                Ok(console) => {
+                    self.session = Some(console);
+                    self.shown = None;
+                }
+                Err(error) => self.failure = Some(error.to_string()),
+            }
+        }
+    }
+
+    fn show_in_slot(&mut self, view: Option<Box<dyn Widget>>) {
+        let content = view.unwrap_or_else(|| match self.shown.clone() {
+            Some(shown) => self.console_placeholder(&shown),
+            None => super::page::blank(),
+        });
+        if let Some(slot) = self.slot.and_then(|slot| self.ui.widget_as::<Slot>(slot)) {
+            slot.set(content);
+        }
+    }
+
+    fn console_settled(&mut self, window: &mut Window, outcome: Outcome) -> bool {
+        match outcome {
+            Outcome::Nothing => false,
+            Outcome::Redraw => true,
+            Outcome::Show(view) => {
+                self.show_in_slot(Some(view));
+                true
+            }
+            Outcome::NoPicture => {
+                self.show_in_slot(None);
+                true
+            }
+            Outcome::Closed(reason) => {
+                self.session = None;
+                self.failure = Some(reason.unwrap_or_default());
+                self.show_in_slot(None);
+                window.set_cursor(self.ui.cursor());
+                true
+            }
+        }
+    }
+
+    pub fn send_ctrl_alt_delete(&self) {
+        if let Some(console) = &self.session {
+            console.send_ctrl_alt_delete();
+        }
+    }
+
+    pub fn has_console(&self) -> bool {
+        self.session.is_some()
+    }
+
+    fn fill_snapshots(&mut self) {
+        let Some(tools) = self.snapshot_tools.filter(|_| self.tab == Tab::Snapshots) else {
+            return;
+        };
+        let fleet = Rc::clone(&self.fleet);
+        let fleet = fleet.borrow();
+        let Some(entry) = fleet.entry(&self.id) else {
+            return;
+        };
+        if let Some(table) = self.ui.widget_as::<Table>(tools.table) {
+            table.set_rows(snapshots::rows(entry));
+            table.set_expanded_rows(snapshots::expanded(entry));
+        }
+        let selected = self.selected_snapshot.as_deref().filter(|id| {
+            entry
+                .listed
+                .manifest
+                .snapshots
+                .iter()
+                .any(|snapshot| snapshot.id == *id)
+        });
+        let states = [
+            (tools.take, entry.can(Act::TakeSnapshot)),
+            (
+                tools.revert,
+                selected.is_some_and(|id| snapshots::can_revert(entry, id)),
+            ),
+            (
+                tools.delete,
+                selected.is_some() && entry.can(Act::DeleteSnapshot),
+            ),
+            (tools.clone, entry.can(Act::Clone)),
+        ];
+        for (id, enabled) in states {
+            if let Some(button) = self.ui.widget_as::<Button>(id) {
+                button.set_enabled(enabled);
+            }
+        }
+    }
+
+    fn present_sheet(&mut self, sheet: Sheet, error: Option<&str>) {
+        let fleet = Rc::clone(&self.fleet);
+        let fleet = fleet.borrow();
+        let Some(entry) = fleet.entry(&self.id) else {
+            return;
+        };
+        if let Some(alert) = snapshots::present(&sheet, &self.intents, entry, error) {
+            self.ui.present_sheet(alert);
+            self.sheet = Some(sheet);
+        }
+    }
+
+    pub fn present_take_snapshot(&mut self) {
+        let name = {
+            let fleet = self.fleet.borrow();
+            fleet.entry(&self.id).map(snapshots::next_snapshot_name)
+        };
+        if let Some(name) = name.filter(|_| self.can(Act::TakeSnapshot)) {
+            self.present_sheet(Sheet::Take { name }, None);
+        }
+    }
+
+    pub fn present_clone(&mut self, snapshot: Option<String>) {
+        let draft = {
+            let fleet = self.fleet.borrow();
+            fleet
+                .entry(&self.id)
+                .map(|entry| snapshots::draft_clone(&fleet, entry, snapshot))
+        };
+        if let Some(draft) = draft.filter(|_| self.can(Act::Clone)) {
+            self.present_sheet(Sheet::Clone(draft), None);
+        }
+    }
+
+    fn snapshot_tool(&mut self, tool: Tool) {
+        let selected = self.selected_snapshot.clone().filter(|id| {
+            self.fleet.borrow().entry(&self.id).is_some_and(|entry| {
+                entry
+                    .listed
+                    .manifest
+                    .snapshots
+                    .iter()
+                    .any(|snapshot| snapshot.id == *id)
+            })
+        });
+        match (tool, selected) {
+            (Tool::Take, _) => self.present_take_snapshot(),
+            (Tool::Revert, Some(id)) => self.present_sheet(Sheet::Revert(id), None),
+            (Tool::Delete, Some(id)) => self.present_sheet(Sheet::Delete(id), None),
+            (Tool::Clone, selected) => self.present_clone(selected),
+            _ => {}
+        }
+    }
+
+    fn sheet_choice(&mut self, choice: &str) {
+        let Some(sheet) = self.sheet.take() else {
+            return;
+        };
+        if choice != CONTINUE {
+            return;
+        }
+        if let Sheet::Clone(draft) = &sheet {
+            let made = snapshots::clone_request(draft, &self.fleet.borrow());
+            match made {
+                Ok(new) => self.requests.push(Request::Clone(self.id.clone(), new)),
+                Err(message) => self.present_sheet(sheet, Some(&message)),
+            }
+            return;
+        }
+        if let Some(op) = snapshots::snapshot_op(sheet) {
+            self.requests.push(Request::Snapshot(self.id.clone(), op));
+        }
+    }
+
+    pub fn toggle_pause(&mut self) {
+        match self.can(Act::Resume) {
+            true => self.act(Act::Resume),
+            false => self.act(Act::Pause),
+        }
+    }
+
     fn content(&mut self, shown: Option<&Shown>) -> Box<dyn Widget> {
-        self.console = None;
+        self.slot = None;
+        self.snapshot_tools = None;
         let Some(shown) = shown else {
             return centered(vec![boxed(
                 Label::new(&L10N.tr("machine-gone")).secondary(),
@@ -277,8 +510,9 @@ impl MachineWindow {
         };
         match self.tab {
             Tab::Console => {
-                let slot = Slot::new(self.console_placeholder(shown));
-                self.console = Some(slot.id());
+                let view = self.session.as_mut().and_then(Console::view);
+                let slot = Slot::new(view.unwrap_or_else(|| self.console_placeholder(shown)));
+                self.slot = Some(slot.id());
                 boxed(slot)
             }
             Tab::Info => {
@@ -294,24 +528,25 @@ impl MachineWindow {
                 boxed(ScrollView::new(Form::new(&Tab::Info.title(), lines)))
             }
             Tab::Snapshots => {
-                let disabled = |key: &str| {
-                    let mut button = Button::new(&L10N.tr(key), || {});
-                    button.set_enabled(false);
-                    boxed(button)
-                };
-                centered(vec![
-                    boxed(Label::new(&L10N.tr("machine-snapshots-later")).secondary()),
-                    boxed(Stack::new(
-                        Axis::Horizontal,
-                        8.0,
-                        0.0,
-                        vec![
-                            disabled("machine-take-snapshot"),
-                            disabled("machine-revert"),
-                            disabled("machine-delete"),
-                        ],
-                    )),
-                ])
+                let table = snapshots::table(&self.intents);
+                let button =
+                    |key: &str, tool: Tool| snapshots::tool_button(&self.intents, key, tool);
+                let take = button("machine-take-snapshot-ellipsis", Tool::Take);
+                let revert = button("machine-revert-ellipsis", Tool::Revert);
+                let delete = button("machine-delete-snapshot-ellipsis", Tool::Delete);
+                let clone = button("machine-clone-ellipsis", Tool::Clone);
+                self.snapshot_tools = Some(ToolIds {
+                    table: table.id(),
+                    take: take.id(),
+                    revert: revert.id(),
+                    delete: delete.id(),
+                    clone: clone.id(),
+                });
+                boxed(ToolRow::new(
+                    boxed(table),
+                    vec![boxed(take), boxed(revert), boxed(delete), boxed(clone)],
+                    TOOLBAR,
+                ))
             }
             Tab::Settings => self.settings(shown),
         }
@@ -319,26 +554,37 @@ impl MachineWindow {
 
     fn console_placeholder(&self, shown: &Shown) -> Box<dyn Widget> {
         let intents = Rc::clone(&self.intents);
-        match shown.running {
-            true => {
-                let mut connect = Button::new(&L10N.tr("machine-connect"), move || {
-                    push(&intents, Intent::Connect)
-                });
-                connect.set_enabled(self.can_connect());
-                centered(vec![
-                    boxed(Label::new(&L10N.tr("machine-no-display"))),
-                    boxed(Label::new(&L10N.tr("machine-console-later")).secondary()),
-                    row(boxed(connect)),
-                ])
-            }
-            false => {
-                let mut start = Button::new(&L10N.tr("machine-start"), move || {
-                    push(&intents, Intent::Act(Act::Start))
-                });
-                start.set_enabled(self.can(Act::Start));
-                centered(vec![row(boxed(start))])
-            }
+        if !shown.running {
+            let mut start = Button::new(&L10N.tr("machine-start"), move || {
+                push(&intents, Intent::Act(Act::Start))
+            });
+            start.set_enabled(self.can(Act::Start));
+            return centered(vec![row(boxed(start))]);
         }
+        let mut connect = Button::new(&L10N.tr("machine-connect"), move || {
+            push(&intents, Intent::Connect)
+        });
+        connect.set_enabled(self.can_connect());
+        let message = match (&self.failure, &self.session) {
+            (Some(reason), _) if !reason.is_empty() => L10N.tr_args(
+                "machine-console-failed",
+                [("reason", reason.clone().into())],
+            ),
+            (Some(_), _) => L10N.tr("machine-console-off"),
+            (None, Some(console)) if console.has_closed_picture() => L10N.tr("machine-console-off"),
+            (None, _) => L10N.tr("machine-console-connecting"),
+        };
+        let retry_intents = Rc::clone(&self.intents);
+        let mut children = vec![boxed(Label::new(&message).secondary())];
+        let mut buttons = vec![boxed(connect)];
+        if self.failure.is_some() {
+            buttons.push(boxed(Button::new(
+                &L10N.tr("machine-console-retry"),
+                move || push(&retry_intents, Intent::RetryConsole),
+            )));
+        }
+        children.push(boxed(Stack::new(Axis::Horizontal, 8.0, 0.0, buttons)));
+        centered(children)
     }
 
     fn settings(&self, shown: &Shown) -> Box<dyn Widget> {
@@ -477,6 +723,14 @@ impl View for MachineWindow {
         });
         window.set_title(&self.title());
         let scene = View::scene(&mut self.ui, window);
+        if let (Some(console), Some(frame)) = (
+            self.session.as_mut(),
+            self.slot
+                .and_then(|slot| self.ui.widget_ref::<Slot>(slot))
+                .map(Widget::frame),
+        ) {
+            console.place(frame, window.scale());
+        }
         let items = self
             .ui
             .widget_ref::<Bar>(self.bar)
@@ -493,7 +747,38 @@ impl View for MachineWindow {
         scene
     }
 
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        self.session.iter().map(Console::fd).collect()
+    }
+
+    fn source_ready(&mut self, window: &mut Window, _index: usize) -> bool {
+        let Some(console) = self.session.as_mut() else {
+            return false;
+        };
+        let outcome = console.pump(window, &mut self.ui);
+        let settled = self.console_settled(window, outcome);
+        window.set_cursor(self.ui.cursor());
+        settled
+    }
+
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        match &event {
+            WindowEvent::ToplevelChanged(state) if state.suspended != self.hidden => {
+                self.hidden = state.suspended;
+                self.refresh();
+            }
+            WindowEvent::ClipboardChanged => {
+                if let Some(console) = &mut self.session {
+                    console.clipboard_changed(window);
+                }
+            }
+            WindowEvent::Pasted(text) => {
+                if let Some(console) = &mut self.session {
+                    console.pasted(text);
+                }
+            }
+            _ => {}
+        }
         let handled = View::event(&mut self.ui, window, event);
         let pumped = self.pump();
         if let Some(request) = self.ui.take_clipboard_request()
@@ -519,10 +804,17 @@ impl View for MachineWindow {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.ui.deadline()
+        let console = self.session.as_ref().and_then(Console::deadline);
+        match (self.ui.deadline(), console) {
+            (Some(ui), Some(console)) => Some(ui.min(console)),
+            (ui, console) => ui.or(console),
+        }
     }
 
-    fn tick(&mut self, _window: &mut Window, _now: Instant) -> bool {
+    fn tick(&mut self, _window: &mut Window, now: Instant) -> bool {
+        if let Some(console) = &mut self.session {
+            console.tick(now);
+        }
         true
     }
 

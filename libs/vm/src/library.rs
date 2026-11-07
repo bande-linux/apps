@@ -14,10 +14,12 @@ use crate::seed::CloudInit;
 use crate::{Error, Result};
 
 const NETWORK_ROOT: &str = "/tmp";
+const CONTROL_SOCKET: &str = "control.sock";
 
 pub struct Library {
     data: PathBuf,
     runtime: PathBuf,
+    pub(crate) images: PathBuf,
 }
 
 pub struct NewMachine {
@@ -42,11 +44,19 @@ impl Library {
         let runtime = env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
             .ok_or(Error::Missing("XDG_RUNTIME_DIR".into()))?;
-        Ok(Self::at(data.join("velox/vms"), runtime.join("velox")))
+        Ok(Self {
+            images: data.join("velox/images"),
+            data: data.join("velox/vms"),
+            runtime: runtime.join("velox"),
+        })
     }
 
-    pub fn at(data: PathBuf, runtime: PathBuf) -> Self {
-        Self { data, runtime }
+    pub fn at(data: PathBuf, runtime: PathBuf, images: PathBuf) -> Self {
+        Self {
+            data,
+            runtime,
+            images,
+        }
     }
 
     pub fn machines(&self) -> Result<Vec<Machine>> {
@@ -89,6 +99,9 @@ impl Library {
             base_image: utf8(base_image)?.to_owned(),
             mac,
             forwards: new.forwards,
+            snapshots: Vec::new(),
+            current_snapshot: None,
+            resume_from: None,
         });
         fs::create_dir_all(&machine.dir)?;
         let made = host
@@ -103,13 +116,18 @@ impl Library {
         Ok(machine)
     }
 
-    pub fn delete(&self, machine: Machine) -> Result<()> {
-        fs::remove_dir_all(&machine.dir)?;
-        remove_folder(&machine.runtime)?;
-        remove_folder(&machine.network)
+    pub fn control_socket(&self, id: &str) -> PathBuf {
+        self.runtime.join(id).join(CONTROL_SOCKET)
     }
 
-    fn machine(&self, manifest: Manifest) -> Machine {
+    pub fn delete(&self, host: &Host, machine: Machine) -> Result<()> {
+        fs::remove_dir_all(&machine.dir)?;
+        remove_folder(&machine.runtime)?;
+        remove_folder(&machine.network)?;
+        self.collect_linked(host)
+    }
+
+    pub(crate) fn machine(&self, manifest: Manifest) -> Machine {
         Machine {
             dir: self.data.join(&manifest.id),
             runtime: self.runtime.join(&manifest.id),
@@ -153,7 +171,7 @@ impl Machine {
     }
 
     pub fn control_socket(&self) -> PathBuf {
-        self.runtime.join("control.sock")
+        self.runtime.join(CONTROL_SOCKET)
     }
 
     pub fn agent_socket(&self) -> PathBuf {
@@ -229,7 +247,12 @@ fn random_bytes<const N: usize>() -> Result<[u8; N]> {
     Ok(bytes)
 }
 
-fn random_uuid() -> Result<String> {
+pub(crate) fn random_id() -> Result<String> {
+    let bytes = random_bytes::<8>()?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+pub(crate) fn random_uuid() -> Result<String> {
     let mut bytes = random_bytes::<16>()?;
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
@@ -244,7 +267,7 @@ fn random_uuid() -> Result<String> {
     ))
 }
 
-fn random_mac() -> Result<String> {
+pub(crate) fn random_mac() -> Result<String> {
     let [a, b, c] = random_bytes::<3>()?;
     Ok(format!("52:54:00:{a:02x}:{b:02x}:{c:02x}"))
 }

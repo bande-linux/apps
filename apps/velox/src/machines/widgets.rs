@@ -264,3 +264,77 @@ impl Widget for Bar {
         &mut self.children
     }
 }
+
+pub struct ToolRow {
+    id: WidgetId,
+    children: Vec<Box<dyn Widget>>,
+    height: f32,
+    frame: Rect,
+}
+
+impl ToolRow {
+    const SPACING: f32 = 8.0;
+    const INSET: f32 = 12.0;
+
+    pub fn new(content: Box<dyn Widget>, tools: Vec<Box<dyn Widget>>, height: f32) -> Self {
+        let mut children = vec![content];
+        children.extend(tools);
+        Self {
+            id: WidgetId::next(),
+            children,
+            height,
+            frame: Rect::default(),
+        }
+    }
+}
+
+impl Widget for ToolRow {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, _cx: &mut Context, available: Size) -> Size {
+        available
+    }
+
+    fn place(&mut self, cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+        let content = Rect::new(
+            frame.x,
+            frame.y + self.height,
+            frame.width,
+            (frame.height - self.height).max(0.0),
+        );
+        self.children[0].measure(cx, Size::new(content.width, content.height));
+        self.children[0].place(cx, content);
+        let mut x = frame.x + Self::INSET;
+        for tool in &mut self.children[1..] {
+            let size = tool.measure(cx, Size::new(frame.width, self.height));
+            let y = frame.y + (self.height - size.height) / 2.0;
+            tool.place(cx, Rect::new(x, y, size.width, size.height));
+            x += size.width + Self::SPACING;
+        }
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        for child in &self.children {
+            child.paint(cx, items);
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        Node::new(Role::GenericContainer)
+    }
+
+    fn children(&self) -> &[Box<dyn Widget>] {
+        &self.children
+    }
+
+    fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+        &mut self.children
+    }
+}

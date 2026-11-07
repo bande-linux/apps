@@ -5,6 +5,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::Result;
+use crate::snapshot::Snapshot;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Forward {
@@ -24,6 +25,12 @@ pub struct Manifest {
     pub base_image: String,
     pub mac: String,
     pub forwards: Vec<Forward>,
+    #[serde(default)]
+    pub snapshots: Vec<Snapshot>,
+    #[serde(default)]
+    pub current_snapshot: Option<String>,
+    #[serde(default)]
+    pub resume_from: Option<String>,
 }
 
 impl Manifest {

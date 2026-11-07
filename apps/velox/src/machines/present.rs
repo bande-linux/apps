@@ -41,6 +41,12 @@ pub fn pending_text(act: Act) -> String {
         Act::ForceStop => "pending-stop",
         Act::Restart => "machine-pending-restart",
         Act::Delete => "machine-pending-delete",
+        Act::Pause => "machine-pending-pause",
+        Act::Resume => "machine-pending-resume",
+        Act::TakeSnapshot => "machine-pending-snapshot",
+        Act::Revert => "machine-pending-revert",
+        Act::DeleteSnapshot => "machine-pending-delete-snapshot",
+        Act::Clone => "machine-pending-clone",
     })
 }
 
@@ -220,6 +226,10 @@ pub fn info_lines(entry: &Entry, accel: Option<Accel>) -> Vec<FormLine> {
             gigabytes(manifest.memory_mib / MIB_PER_GIB),
         ),
         row("machine-created", date(manifest.created)),
+        row(
+            "machine-snapshot-count",
+            manifest.snapshots.len().to_string(),
+        ),
     ];
     if let Some(accel) = accel {
         lines.push(row(
@@ -248,6 +258,9 @@ pub fn info_lines(entry: &Entry, accel: Option<Accel>) -> Vec<FormLine> {
                 ],
             ),
         ));
+    }
+    if let Some(address) = entry.address {
+        lines.push(row("machine-ip", address.to_string()));
     }
     if let Some(port) = entry.ssh_port() {
         lines.push(row(

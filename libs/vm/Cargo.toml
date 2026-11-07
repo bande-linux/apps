@@ -11,13 +11,14 @@ publish = false
 [dependencies]
 bande-xdg.workspace = true
 fatfs.workspace = true
-rustix = { workspace = true, features = ["event", "fs", "process", "rand"] }
+rustix = { workspace = true, features = ["event", "fs", "net", "process", "rand"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tracing.workspace = true
 rustls.workspace = true
 ureq.workspace = true
-zbus.workspace = true
+zbus = { workspace = true, features = ["p2p"] }
 
 [dev-dependencies]
 serde_json.workspace = true

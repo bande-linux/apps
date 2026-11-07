@@ -1,18 +1,27 @@
+mod clone;
+mod display;
 mod error;
+mod guest_agent;
 mod image;
+mod keycodes;
 mod library;
 mod manifest;
 mod qemu;
 mod qmp;
 mod ready;
 mod seed;
+mod snapshot;
 mod unit;
 
+pub use clone::{CloneKind, NewClone};
+pub use display::{Damage, Display, DisplayEvent, DisplayInput, MouseButton, Scanout, Wheel};
 pub use error::{Error, Result};
+pub use guest_agent::guest_address;
 pub use image::{Algorithm, CloudImage, ImageStore, catalog};
 pub use library::{Library, Machine, NewMachine};
 pub use manifest::{Forward, Manifest};
 pub use qemu::{Accel, Host};
 pub use qmp::{Event, Qmp, RunState};
 pub use seed::CloudInit;
+pub use snapshot::Snapshot;
 pub use unit::{ActiveState, UnitEvents, Units};

@@ -34,6 +34,10 @@ const MENU_CONNECT: &str = "machine-connect";
 const MENU_OPEN: &str = "machine-open";
 const MENU_COPY_SSH: &str = "machine-copy-ssh";
 const MENU_DELETE: &str = "machine-delete";
+const MENU_PAUSE: &str = "machine-pause";
+const MENU_RESUME: &str = "machine-resume";
+const MENU_SNAPSHOT: &str = "machine-take-snapshot";
+const MENU_CLONE: &str = "machine-clone";
 const MENU_CANCEL: &str = "machine-cancel-job";
 const CONFIRM_DELETE: &str = "delete";
 
@@ -223,6 +227,22 @@ impl MachinesPane {
         }
     }
 
+    pub fn single_can(&self, act: Act) -> bool {
+        let [id] = self.selected_ids().try_into().unwrap_or_default();
+        !id.is_empty()
+            && self
+                .fleet
+                .borrow()
+                .entry(&id)
+                .is_some_and(|entry| entry.can(act))
+    }
+
+    pub fn present_for_selected(&mut self, make: fn(String) -> Request) {
+        if let [id] = self.selected_ids().as_slice() {
+            self.requests.push(make(id.clone()));
+        }
+    }
+
     pub fn can_connect(&self) -> bool {
         let fleet = self.fleet.borrow();
         let ids = self.selected_ids();
@@ -357,9 +377,23 @@ impl MachinesPane {
             menu_item("machine-shut-down", MENU_SHUT_DOWN, any(Act::ShutDown)),
             menu_item("machine-force-stop", MENU_FORCE_STOP, any(Act::ForceStop)),
             menu_item("machine-restart", MENU_RESTART, any(Act::Restart)),
+            match any(Act::Resume) {
+                true => menu_item("machine-resume", MENU_RESUME, true),
+                false => menu_item("machine-pause", MENU_PAUSE, any(Act::Pause)),
+            },
             MenuItem::separator(),
             menu_item("machine-connect", MENU_CONNECT, ssh),
             menu_item("machine-open", MENU_OPEN, single),
+            menu_item(
+                "machine-take-snapshot-ellipsis",
+                MENU_SNAPSHOT,
+                single && first.can(Act::TakeSnapshot),
+            ),
+            menu_item(
+                "machine-clone-ellipsis",
+                MENU_CLONE,
+                single && first.can(Act::Clone),
+            ),
             menu_item(
                 "machine-copy-ssh",
                 MENU_COPY_SSH,
@@ -381,6 +415,8 @@ impl MachinesPane {
             MENU_FORCE_STOP => Some(Act::ForceStop),
             MENU_RESTART => Some(Act::Restart),
             MENU_DELETE => Some(Act::Delete),
+            MENU_PAUSE => Some(Act::Pause),
+            MENU_RESUME => Some(Act::Resume),
             _ => None,
         };
         if let Some(act) = act {
@@ -392,6 +428,8 @@ impl MachinesPane {
         match action {
             MENU_CONNECT => self.requests.push(Request::Connect(key)),
             MENU_OPEN => self.requests.push(Request::Open(key)),
+            MENU_SNAPSHOT => self.requests.push(Request::PresentSnapshot(key)),
+            MENU_CLONE => self.requests.push(Request::PresentClone(key)),
             MENU_COPY_SSH => {
                 let command = self.fleet.borrow().entry(&key).and_then(|entry| {
                     let port = entry.ssh_port()?;
@@ -451,8 +489,17 @@ impl MachinesPane {
                     self.fleet.borrow_mut().mark(&id, Act::Delete);
                     self.requests.push(Request::Act(id, Act::Delete));
                 }
-                Intent::Delete(_, false) | Intent::Tab(_) | Intent::Change(_) | Intent::Connect => {
-                }
+                Intent::Delete(_, false)
+                | Intent::Tab(_)
+                | Intent::Change(_)
+                | Intent::Connect
+                | Intent::RetryConsole
+                | Intent::Choice(_)
+                | Intent::Snapshot(_)
+                | Intent::SnapshotTool(_)
+                | Intent::Text(_)
+                | Intent::Port(_)
+                | Intent::Linked(_) => {}
             }
         }
         self.refresh(ui);
