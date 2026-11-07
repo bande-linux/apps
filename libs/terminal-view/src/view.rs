@@ -15,6 +15,8 @@ const INITIAL_GRID: GridSize = GridSize {
     lines: 24,
 };
 
+type InputSink = Box<dyn FnMut(&[u8])>;
+
 pub struct TerminalView {
     id: WidgetId,
     label: String,
@@ -23,7 +25,7 @@ pub struct TerminalView {
     frame: Rect,
     scroll: f32,
     selecting: bool,
-    on_input: Box<dyn FnMut(&[u8])>,
+    on_input: InputSink,
     on_resize: Box<dyn FnMut(GridSize)>,
 }
 
