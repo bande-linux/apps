@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use accesskit::TreeUpdate;
-use bande_app::{Detached, TabDrop, TabDropTarget, TabHost, View};
+use bande_app::{Detached, TabDrop, TabDropTarget, TabHost, View, move_tab};
 use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, Context, Event, FreeLayout, Key, Modifiers, Pointer, PointerButton,
     TEXT_FIELD_HEIGHT, TabAction, TabLabel, TabStrip, TabStripLayout, TabsShown, TextField, Ui,
@@ -1350,18 +1350,7 @@ impl BrowserView {
     }
 
     fn move_tab(&mut self, from: usize, to: usize) {
-        if from >= self.tabs.len() || to >= self.tabs.len() {
-            return;
-        }
-        let active = self.tabs[self.active].id;
-        let tab = self.tabs.remove(from);
-        self.tabs.insert(to, tab);
-        self.active = self
-            .tabs
-            .iter()
-            .position(|tab| tab.id == active)
-            .unwrap_or(to);
-        self.changed = true;
+        self.changed |= move_tab(&mut self.tabs, &mut self.active, from, to);
     }
 
     fn detach(&mut self, window: &mut Window, index: usize, grab: Point) {

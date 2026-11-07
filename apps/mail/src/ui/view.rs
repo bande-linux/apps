@@ -10,7 +10,8 @@ use std::time::{Duration, Instant};
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
     Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
-    Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, shortcut_pressed,
+    Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, past_drag_slop,
+    shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
@@ -67,7 +68,6 @@ const FLAG_COLORS: [&str; 7] = [
     "flag-purple",
     "flag-gray",
 ];
-const DRAG_THRESHOLD: f32 = 6.0;
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -2304,8 +2304,7 @@ impl MailView {
         let Some(drag) = self.drag.as_mut() else {
             return false;
         };
-        let moving =
-            drag.moving || (at.x - drag.from.x).abs() + (at.y - drag.from.y).abs() > DRAG_THRESHOLD;
+        let moving = drag.moving || past_drag_slop(drag.from, at);
         let changed = moving && (drag.at != at || drag.over != over || !drag.moving);
         *drag = Drag {
             at,

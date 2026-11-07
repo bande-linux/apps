@@ -406,9 +406,7 @@ fn read_login(dir: &Path) -> Login {
 }
 
 fn write_login(dir: &Path, login: &Login) -> std::io::Result<()> {
-    let staging = dir.join(format!("{LOGIN_FILE}.new"));
-    fs::write(&staging, serde_json::to_vec_pretty(login)?)?;
-    fs::rename(staging, dir.join(LOGIN_FILE))
+    bande_xdg::replace_file(&dir.join(LOGIN_FILE), serde_json::to_vec_pretty(login)?)
 }
 
 fn spawn(name: &str, work: impl FnOnce() + Send + 'static) {

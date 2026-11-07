@@ -1,7 +1,7 @@
 use bande_design::{Accent, Scheme};
 use bande_toolkit::Point;
 use bande_toolkit::ui::{
-    Event, Key, Menu, MenuItem, Modifiers, Pointer, PointerButton, ScrollSource,
+    Event, Key, Menu, MenuItem, Modifiers, Pointer, PointerButton, ScrollSource, past_drag_slop,
 };
 use jiff::ToSpan;
 use jiff::civil::{DateTime, Time};
@@ -14,7 +14,6 @@ use super::{
 use crate::edit::{Scope, new_event, shifted};
 use crate::store::Found;
 
-const DRAG_THRESHOLD: f32 = 4.0;
 const WHEEL_STEP: f32 = 40.0;
 
 pub const ACTION_TODAY: &str = "today";
@@ -553,9 +552,7 @@ fn pointer_down(view: &mut CalendarView, pointer: &Pointer) -> bool {
 
 fn pointer_move(view: &mut CalendarView, pointer: &Pointer, event: &Event) -> bool {
     let point = pointer.position;
-    let moved_enough = view.press.is_some_and(|press| {
-        (press.x - point.x).abs() + (press.y - point.y).abs() > DRAG_THRESHOLD
-    });
+    let moved_enough = view.press.is_some_and(|press| past_drag_slop(press, point));
     let target = match view.mode {
         Mode::Month => day_at(view, point).map(|day| (day, true)),
         _ => time_at(view, point),

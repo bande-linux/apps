@@ -306,12 +306,7 @@ impl Clock {
             next_id: self.next_id,
         };
         let bytes = serde_json::to_vec_pretty(&saved).map_err(std::io::Error::other)?;
-        if let Some(folder) = file.parent() {
-            std::fs::create_dir_all(folder)?;
-        }
-        let staging = file.with_extension("json.new");
-        std::fs::write(&staging, bytes)?;
-        std::fs::rename(&staging, file)
+        bande_xdg::replace_file(file, bytes)
     }
 
     pub fn new_id(&mut self) -> u64 {

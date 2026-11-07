@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::tty::Shell;
-use bande_app::{Detached, TabDrop, TabDropTarget, TabHost, View};
+use bande_app::{Detached, TabDrop, TabDropTarget, TabHost, View, move_tab};
 use bande_app_settings::{Stored, settings_folder};
 use bande_spring::{Decay, State as SpringState};
 use bande_terminal::{
@@ -332,18 +332,9 @@ impl TerminalWindow {
     }
 
     fn move_tab(&mut self, from: usize, to: usize) {
-        if from >= self.tabs.len() || to >= self.tabs.len() {
-            return;
+        if move_tab(&mut self.tabs, &mut self.active, from, to) {
+            self.save_window();
         }
-        let active = self.tabs[self.active].id;
-        let tab = self.tabs.remove(from);
-        self.tabs.insert(to, tab);
-        self.active = self
-            .tabs
-            .iter()
-            .position(|tab| tab.id == active)
-            .unwrap_or(to);
-        self.save_window();
     }
 
     fn frame_window(&self, window: &mut Window) {

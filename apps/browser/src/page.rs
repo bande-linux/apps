@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use accesskit::{Node, Role};
 use bande_toolkit::ui::{
-    Context, Cursor, Event, Key, PointerButton, ScrollState, Size, Widget, WidgetId,
+    Context, Cursor, Event, Key, PointerButton, ScrollState, Size, Widget, WidgetId, past_drag_slop,
 };
 use bande_toolkit::{Color, Item, Point, Rect, Shape, TextAlign, TextStyle};
 use web_host::Url;
@@ -342,9 +342,7 @@ impl PageView {
                 let Some(pressed) = self.pressed.take() else {
                     return false;
                 };
-                let moved =
-                    (pressed.x - pointer.position.x).abs() + (pressed.y - pointer.position.y).abs();
-                if moved > 4.0 {
+                if past_drag_slop(pressed, pointer.position) {
                     return false;
                 }
                 if self.reload_at(pointer.position) {
