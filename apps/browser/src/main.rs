@@ -16,8 +16,8 @@ use std::rc::Rc;
 use std::sync::LazyLock;
 
 use bande_app::{
-    Cx, Detached, Info, Keys, Kind, Menus, Program, Settings as SettingsWindowInfo, TabCarry,
-    TabDrop, View, WindowId,
+    Cx, Detached, Info, Keys, Kind, Menus, Program, Saved, Settings as SettingsWindowInfo,
+    TabCarry, TabDrop, View, WindowId,
 };
 use bande_app_menu::Entry;
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
@@ -182,6 +182,18 @@ impl Browser {
         restored
     }
 
+    fn ask_search_engine(&mut self, cx: &mut Cx<Self>) {
+        let settings = self.settings.get();
+        if settings.search.is_none()
+            && !settings.search_asked
+            && let Some(window) = cx.focused().or_else(|| cx.windows().next())
+            && let Some((shown, view)) = cx.window(window)
+        {
+            view.ask_search_engine(None);
+            shown.request_redraw();
+        }
+    }
+
     fn save_session(&mut self, cx: &mut Cx<Self>) {
         let Some(file) = &self.session_file else {
             return;
@@ -273,20 +285,8 @@ impl Program for Browser {
         };
         let settings = browser.settings.get();
         let urls = addresses(&arguments, settings);
-        let urls_empty = urls.is_empty();
-        if !urls_empty {
+        if !urls.is_empty() {
             browser.open_urls(cx, urls);
-        } else if settings.launch == Launch::NewWindow || !browser.restore(cx) {
-            browser.open_window(cx, Session::Default, blank());
-        }
-        if urls_empty
-            && settings.search.is_none()
-            && !settings.search_asked
-            && let Some(window) = cx.focused().or_else(|| cx.windows().next())
-            && let Some((shown, view)) = cx.window(window)
-        {
-            view.ask_search_engine(None);
-            shown.request_redraw();
         }
         Ok(browser)
     }
@@ -469,7 +469,28 @@ impl Program for Browser {
     }
 
     fn reopen(&mut self, cx: &mut Cx<Self>) {
-        self.open_window(cx, Session::Default, blank());
+        if self.settings.get().launch == Launch::NewWindow || !self.restore(cx) {
+            self.open_window(cx, Session::Default, blank());
+        }
+        self.ask_search_engine(cx);
+    }
+
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        Saved::of(&session::write(&[cx.view(window)?.saved()?]))
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, saved: Saved) {
+        let windows = saved
+            .read::<String>()
+            .map(|text| session::parse(&text))
+            .unwrap_or_default();
+        for window in windows {
+            self.open_window(cx, Session::Default, window);
+        }
+    }
+
+    fn windows_restored(&mut self, cx: &mut Cx<Self>) {
+        self.ask_search_engine(cx);
     }
 
     fn close_tab(&mut self, cx: &mut Cx<Self>, window: WindowId) -> bool {

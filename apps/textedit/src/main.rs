@@ -2,13 +2,13 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, WindowId};
 use bande_app_menu::{Entry, PRINT, edit_submenu, print_item};
 use bande_inbox::Inbox;
 use bande_textedit::{
     CHOICES, COLORS, DocumentView, FAMILIES, Format, L10N, LineEnding, Loaded, MAX_FILE_BYTES,
-    Message, Opening, Request, Session, Settings, TextEncoding, choose_files, choose_save_path,
-    encoding_name, new_id, now, open, read, read_bounded, spawn,
+    Message, Opening, Record, Request, Session, Settings, TextEncoding, choose_files,
+    choose_save_path, encoding_name, new_id, now, open, read, read_bounded, spawn,
 };
 use bande_toolkit::ui::{Alignment, ListMarker};
 
@@ -57,6 +57,8 @@ fn load(path: &Path, chosen: Option<&'static encoding_rs::Encoding>) -> Result<L
         })
         .and_then(|bytes| open(path, bytes, chosen))
 }
+
+const VERSION_COMMAND: &str = "version:";
 
 impl TextEdit {
     fn find(&self, cx: &Cx<Self>, token: u64) -> Option<WindowId> {
@@ -156,72 +158,81 @@ impl TextEdit {
             return;
         };
         for (id, record) in session.records() {
-            if !record.edited && record.path.as_deref().is_none_or(|path| !path.exists()) {
-                session.forget(&id);
-                continue;
+            if !cx
+                .windows()
+                .any(|window| cx.view(window).is_some_and(|view| view.id == id))
+            {
+                self.open_record(cx, &session, id, record);
             }
-            if record.path.is_none() {
-                let number = record
-                    .title
-                    .rsplit(' ')
-                    .next()
-                    .and_then(|number| number.parse::<u32>().ok())
-                    .unwrap_or(1);
-                self.untitled = self.untitled.max(number);
-            }
-            let settings = Settings {
-                monospace: record.monospace,
-                page: record.page,
-                size: record.size,
-            };
-            let encoding = TextEncoding::named(&record.encoding, record.bom);
-            let format = Format::parse(&record.format).unwrap_or(Format::Plain);
-            let Some((window, token)) = self.open_view(
-                cx,
-                id.clone(),
-                record.title.clone(),
-                record.opened,
-                settings,
-                format,
-            ) else {
-                continue;
-            };
-            if let Some(view) = Self::view(cx, window) {
-                view.start_loading(record.path.clone());
-                view.rich = record.rich;
-                if let Some(encoding) = encoding {
-                    view.encoding = encoding;
-                }
-                if let Some(line_ending) = LineEnding::parse(&record.line_ending) {
-                    view.line_ending = line_ending;
-                }
-            }
-            match (record.edited, record.path) {
-                (true, _) => {
-                    let (outbox, session, id) = (self.inbox.outbox(), session.clone(), id.clone());
-                    let kept = match record.rich {
-                        true => Format::Rtf,
-                        false => Format::Plain,
-                    };
-                    spawn("restore", move || {
-                        let loaded = session
-                            .text(&id)
-                            .map_err(|error| error.to_string())
-                            .and_then(|bytes| read(bytes, kept, Some(encoding_rs::UTF_8)))
-                            .map(|loaded| Loaded {
-                                from_disk: false,
-                                ..loaded
-                            });
-                        outbox.send(Message::Loaded { token, loaded });
-                    });
-                }
-                (false, Some(path)) => {
-                    self.load_into(token, path, encoding.map(|encoding| encoding.encoding));
-                }
-                (false, None) => {}
-            }
-            self.serve(cx, window);
         }
+    }
+
+    fn open_record(&mut self, cx: &mut Cx<Self>, session: &Session, id: String, record: Record) {
+        if !record.edited && record.path.as_deref().is_none_or(|path| !path.exists()) {
+            session.forget(&id);
+            return;
+        }
+        if record.path.is_none() {
+            let number = record
+                .title
+                .rsplit(' ')
+                .next()
+                .and_then(|number| number.parse::<u32>().ok())
+                .unwrap_or(1);
+            self.untitled = self.untitled.max(number);
+        }
+        let settings = Settings {
+            monospace: record.monospace,
+            page: record.page,
+            size: record.size,
+        };
+        let encoding = TextEncoding::named(&record.encoding, record.bom);
+        let format = Format::parse(&record.format).unwrap_or(Format::Plain);
+        let Some((window, token)) = self.open_view(
+            cx,
+            id.clone(),
+            record.title.clone(),
+            record.opened,
+            settings,
+            format,
+        ) else {
+            return;
+        };
+        if let Some(view) = Self::view(cx, window) {
+            view.start_loading(record.path.clone());
+            view.rich = record.rich;
+            if let Some(encoding) = encoding {
+                view.encoding = encoding;
+            }
+            if let Some(line_ending) = LineEnding::parse(&record.line_ending) {
+                view.line_ending = line_ending;
+            }
+        }
+        match (record.edited, record.path) {
+            (true, _) => {
+                let (outbox, session, id) = (self.inbox.outbox(), session.clone(), id.clone());
+                let kept = match record.rich {
+                    true => Format::Rtf,
+                    false => Format::Plain,
+                };
+                spawn("restore", move || {
+                    let loaded = session
+                        .text(&id)
+                        .map_err(|error| error.to_string())
+                        .and_then(|bytes| read(bytes, kept, Some(encoding_rs::UTF_8)))
+                        .map(|loaded| Loaded {
+                            from_disk: false,
+                            ..loaded
+                        });
+                    outbox.send(Message::Loaded { token, loaded });
+                });
+            }
+            (false, Some(path)) => {
+                self.load_into(token, path, encoding.map(|encoding| encoding.encoding));
+            }
+            (false, None) => {}
+        }
+        self.serve(cx, window);
     }
 
     fn serve(&mut self, cx: &mut Cx<Self>, window: WindowId) {
@@ -312,12 +323,37 @@ impl TextEdit {
                 item("save-as", "save-as")
                     .shortcut("Shift+Ctrl+S")
                     .enabled(windowed),
+<<<<<<< HEAD
                 item("revert", "revert").enabled(on_disk && edited),
                 print_item(windowed),
+=======
+                Self::revert_menu(view, on_disk, edited),
+>>>>>>> origin/main
                 Entry::submenu(&L10N.tr("reopen-with-encoding"), reopen)
                     .enabled(on_disk && !edited && text_format),
             ],
         )
+    }
+
+    fn revert_menu(view: Option<&DocumentView>, on_disk: bool, edited: bool) -> Entry {
+        let versions = view.map(DocumentView::versions).unwrap_or_default();
+        let mut entries = vec![item("revert", "revert").enabled(on_disk && edited)];
+        if !versions.is_empty() {
+            entries.push(Entry::separator());
+        }
+        let zone = bande_datetime::local_zone();
+        let formats = bande_datetime::DateFormats::from_env();
+        for version in versions {
+            let label = jiff::Timestamp::from_second(version as i64).map_or_else(
+                |_| version.to_string(),
+                |at| {
+                    let at = at.to_zoned(zone.clone());
+                    format!("{} {}", formats.short_day(&at), formats.clock(&at))
+                },
+            );
+            entries.push(Entry::item(&label, &format!("{VERSION_COMMAND}{version}")));
+        }
+        Entry::submenu(&L10N.tr("revert-to"), entries).enabled(on_disk)
     }
 
     fn format_menu(view: Option<&DocumentView>) -> Entry {
@@ -515,7 +551,12 @@ impl TextEdit {
                 self.load_into(token, path, Some(encoding));
             }
             _ => {
-                if let Some(style) = command.strip_prefix("style:") {
+                if let Some(version) = command
+                    .strip_prefix(VERSION_COMMAND)
+                    .and_then(|version| version.parse().ok())
+                {
+                    view.revert_to(version);
+                } else if let Some(style) = command.strip_prefix("style:") {
                     return view.style(style);
                 } else if let Some(name) = command.strip_prefix("encoding:")
                     && let Some(encoding) = TextEncoding::named(name, false)
@@ -608,15 +649,11 @@ impl Program for TextEdit {
             untitled: 0,
             next_token: 0,
         };
-        program.restore(cx);
         let directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
         for argument in arguments {
             if let Some(path) = path_of(&argument, &directory) {
                 program.open_path(cx, path);
             }
-        }
-        if cx.windows().next().is_none() {
-            program.new_document(cx);
         }
         Ok(program)
     }
@@ -702,6 +739,27 @@ impl Program for TextEdit {
 
     fn reopen(&mut self, cx: &mut Cx<Self>) {
         self.new_document(cx);
+    }
+
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        Saved::of(&cx.view(window)?.id)
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, saved: Saved) {
+        let Some(session) = self.session.clone() else {
+            return;
+        };
+        let Some(wanted) = saved.read::<String>() else {
+            return;
+        };
+        let record = session.records().into_iter().find(|(id, _)| *id == wanted);
+        if let Some((id, record)) = record {
+            self.open_record(cx, &session, id, record);
+        }
+    }
+
+    fn windows_restored(&mut self, cx: &mut Cx<Self>) {
+        self.restore(cx);
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {

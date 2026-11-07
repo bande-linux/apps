@@ -3,7 +3,7 @@ use std::process::ExitCode;
 use std::rc::Rc;
 
 use accesskit::TreeUpdate;
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_calculator::{
     Angle, Base, Engine, Keypad, L10N, Mode, WORD_SIZES, base_name, mode_name, parse_base,
@@ -145,6 +145,7 @@ struct Calculator {
     tape: Option<WindowId>,
     saved: String,
     had_tape: bool,
+    reopen_tape: bool,
     quitting: bool,
 }
 
@@ -346,22 +347,15 @@ impl Program for Calculator {
             .and_then(|file| std::fs::read_to_string(file).ok())
             .is_some_and(|text| restore(&mut engine, &text));
         let saved = save(&engine, tape);
-        let mut calculator = Self {
+        Ok(Self {
             engine: Rc::new(RefCell::new(engine)),
             main: None,
             tape: None,
             saved,
             had_tape: false,
+            reopen_tape: tape,
             quitting: false,
-        };
-        calculator.open_main(cx);
-        if calculator.main.is_none() {
-            return Err(L10N.tr("cannot-open").into());
-        }
-        if tape && let Err(error) = calculator.open_tape(cx) {
-            tracing::warn!("cannot open the paper tape: {error}");
-        }
-        Ok(calculator)
+        })
     }
 
     fn menus(&self, _cx: &Cx<Self>) -> Menus {
@@ -403,6 +397,30 @@ impl Program for Calculator {
     fn reopen(&mut self, cx: &mut Cx<Self>) {
         if self.main.is_none() {
             self.open_main(cx);
+        }
+        if std::mem::take(&mut self.reopen_tape)
+            && let Err(error) = self.open_tape(cx)
+        {
+            tracing::warn!("cannot open the paper tape: {error}");
+        }
+    }
+
+    fn save_window(&self, _cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        (self.main == Some(window) || self.tape == Some(window))
+            .then(|| Saved::of(&(self.tape == Some(window))))?
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, saved: Saved) {
+        self.reopen_tape = false;
+        let opened = match saved.read::<bool>() {
+            Some(true) => self.open_tape(cx).map(|_| ()),
+            _ => {
+                self.open_main(cx);
+                Ok(())
+            }
+        };
+        if let Err(error) = opened {
+            tracing::warn!("cannot open the paper tape: {error}");
         }
     }
 

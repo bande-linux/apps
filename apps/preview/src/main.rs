@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::Entry;
 use bande_inbox::Inbox;
 use bande_preview::{
@@ -260,6 +260,12 @@ fn paths(arguments: &[String], directory: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SavedWindow {
+    paths: Vec<PathBuf>,
+    selected: Option<PathBuf>,
+}
+
 impl Program for Preview {
     type View = Pane;
 
@@ -268,8 +274,10 @@ impl Program for Preview {
             chosen: None,
             info: None,
         };
-        let directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
-        preview.open_window(cx, paths(&arguments, &directory));
+        if !arguments.is_empty() {
+            let directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
+            preview.open_window(cx, paths(&arguments, &directory));
+        }
         Ok(preview)
     }
 
@@ -414,6 +422,37 @@ impl Program for Preview {
 
     fn reopen(&mut self, cx: &mut Cx<Self>) {
         self.open_window(cx, Vec::new());
+    }
+
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        let Pane::Main(view) = cx.view(window)? else {
+            return None;
+        };
+        Saved::of(&SavedWindow {
+            paths: view.paths().to_vec(),
+            selected: view.path().map(Path::to_path_buf),
+        })
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, saved: Saved) {
+        let Some(mut window) = saved.read::<SavedWindow>() else {
+            return;
+        };
+        window.paths.retain(|path| path.exists());
+        if window.paths.is_empty() {
+            return;
+        }
+        let selected = window
+            .paths
+            .iter()
+            .position(|path| Some(path) == window.selected.as_ref());
+        self.open_window(cx, window.paths);
+        if let Some(selected) = selected
+            && let Some(opened) = cx.windows().last()
+            && let Some((_, Pane::Main(view))) = cx.window(opened)
+        {
+            view.select(selected);
+        }
     }
 
     fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, _view: Pane) {

@@ -517,14 +517,12 @@ impl Velox {
 impl Program for Velox {
     type View = Screen;
 
-    fn start(cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
-        let mut velox = Self {
+    fn start(_cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        Ok(Self {
             main: None,
             informer: None,
             hub: None,
-        };
-        velox.show_main(cx);
-        Ok(velox)
+        })
     }
 
     fn menus(&self, cx: &Cx<Self>) -> Menus {

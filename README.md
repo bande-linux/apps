@@ -28,7 +28,7 @@ apt install bande-<name>
 | Archive Utility | `bande-archive` (the desktop maps zip, tar, gzip, bzip2, xz, zstd and 7-Zip files to it, and Files' Compress) |
 
 Every app is a `bande-app` app: like on macOS, it keeps running after its last window closes and
-reopens a window when activated, until Quit (Ctrl+Q). Without a window its menus stay full:
+reopens a window when activated, until Quit (Ctrl+Q). After a log out, restart or crash its windows come back: `start` opens only what its arguments ask for, `reopen` is the default window, `save_window` and `restore_window` carry each window's own state. Without a window its menus stay full:
 items that act on a window's content are disabled, the rest work and open the window they need,
 and the Window menu names the main window (Message Viewer, Calendar, Activity Monitor, Calculator).
 

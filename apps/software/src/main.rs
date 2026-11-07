@@ -109,7 +109,7 @@ fn open_main(cx: &mut Cx<Store>, mut pane: Pane) -> Result<WindowId, bande_toolk
 impl Program for Store {
     type View = Pane;
 
-    fn start(cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+    fn start(_cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let system = zbus::blocking::Connection::system()?;
         let software = Software::new(
             Client::new(&system),
@@ -118,10 +118,9 @@ impl Program for Store {
             Appearance::default().palette(),
             TextSystem::new(),
         )?;
-        let main = open_main(cx, Pane(software))?;
         Ok(Self {
-            main: Some(main),
-            parked: None,
+            main: None,
+            parked: Some(Pane(software)),
         })
     }
 
