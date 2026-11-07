@@ -196,6 +196,9 @@ impl Console {
                     .map_err(|error| error.to_string())?,
             );
         }
+        if !window.supports_dmabuf(dmabuf.fourcc, dmabuf.modifier) {
+            return Err(L10N.tr("machine-console-no-3d"));
+        }
         let Some(surface) = self.surface.as_mut() else {
             return Ok(());
         };

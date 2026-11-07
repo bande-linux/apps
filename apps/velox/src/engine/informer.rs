@@ -22,6 +22,7 @@ const REMOVED: &str = "destroy";
 const IGNORED_PREFIX: &str = "exec_";
 const CONTAINER_ATTRIBUTE: &str = "container";
 const RETRY: Duration = Duration::from_secs(1);
+const LONGEST_RETRY: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -197,6 +198,7 @@ fn run(
     stopped: &AtomicBool,
     out: &Updates,
 ) {
+    let mut retry = RETRY;
     while !stopped.load(Ordering::SeqCst) {
         while recheck.try_recv().is_ok() {}
         match readiness::probe(candidates) {
@@ -205,11 +207,16 @@ fn run(
                 if !out.send(Update::Ready(info)) {
                     return;
                 }
+                let started = std::time::Instant::now();
                 if let Err(error) = follow(&engine, events, stopped, out) {
                     tracing::info!("lost the engine's events: {error}");
                 }
                 shut(events);
-                if recheck.recv_timeout(RETRY) == Err(RecvTimeoutError::Disconnected) {
+                retry = match started.elapsed() > LONGEST_RETRY {
+                    true => RETRY,
+                    false => (retry * 2).min(LONGEST_RETRY),
+                };
+                if recheck.recv_timeout(retry) == Err(RecvTimeoutError::Disconnected) {
                     return;
                 }
             }

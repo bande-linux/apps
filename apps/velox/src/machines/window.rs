@@ -299,9 +299,7 @@ impl MachineWindow {
             })
         };
         self.sync_console();
-        let rebuild = match self.tab {
-            _ => shown != self.shown,
-        };
+        let rebuild = shown != self.shown;
         if rebuild {
             let content = self.content(shown.as_ref());
             if let Some(bar) = self.ui.widget_as::<Bar>(self.bar) {

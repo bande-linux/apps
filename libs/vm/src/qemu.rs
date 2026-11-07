@@ -168,6 +168,7 @@ impl Host {
             &format!("guest={},debug-threads=on", keyval_str(&manifest.name)),
         ]);
         push(&["-uuid", &manifest.id, "-nodefaults", "-no-user-config"]);
+        push(&["-boot", "menu=on,splash-time=0"]);
         let windows = manifest.preset == Preset::Windows;
         let has_shares = !manifest.shares.is_empty();
         let mut machine_options = "virt,gic-version=3,pflash0=firmware,pflash1=vars".to_owned();

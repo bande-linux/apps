@@ -515,10 +515,19 @@ swtpm and Secure Boot firmware for Windows, and gpgv-checked vendor checksums.
   `gpgv` against the vendor keys in `libs/vm/data`. Debian publishes no signature beside
   `latest/SHA512SUMS`, so Debian stays HTTPS-only.
 
-Left from V1: the ≤ 8 s boot. Debian `generic` under KVM reaches SSH about 13 s after the unit starts;
-the guest's own part is 5.5 s, so 7–8 s go to QEMU, AAVMF and GRUB.
-V3 not measured yet: 1080p at 60 fps and a release build's cost (a debug build used about 1.7 % of a core with
-a still guest and the main window open).
+Measured on the mini (KVM, Debian 13 generic, 4 vCPU, 4 GiB):
+- **Boot to SSH: 8.4 s** from the unit's start (firmware 0.7 s, GRUB and kernel load 1.6 s, Linux to
+  login 5.8 s). AAVMF waited 5 s for a boot key until `-boot menu=on,splash-time=0`.
+- **Snapshots:** saving 2.3 GB of dirty memory took 4.6 s, loading it 8.8 s; Suspend took 8.7 s and
+  resuming to SSH 10.2 s with 2.7 GB in use.
+- **3D:** glmark2-es2 (off-screen, DRM) scores 899 with virgl on the M2 GPU against 127 with the guest's
+  llvmpipe, about 7×. Showing the 3D picture needs a compositor that imports the host GPU's dmabufs;
+  the headless lab (lavapipe) cannot, so Velox says so instead of being dropped by the compositor.
+- Not measured: 1080p at 60 fps and a release build's cost (a debug build used about 1.7 % of a core
+  with a still guest and the main window open).
+- **Guest resize:** the guest is offered the window's size as its preferred mode (`SetUIInfo`);
+  GNOME and KDE apply it, Xfce needs `xrandr --auto`. QEMU's own vdagent sends no monitor
+  configuration, so `spice-vdagent` cannot apply it either.
 
 D3 (desktop): the theme icon, with A1; the app ships the same SVG for hicolor. **Kernel: none.** If V0 hits a guest timer, PMU or vGIC
 fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
