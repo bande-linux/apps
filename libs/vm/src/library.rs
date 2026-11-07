@@ -254,11 +254,11 @@ impl Machine {
     }
 
     pub(crate) fn tpm_unit(&self) -> String {
-        format!("velox-vm-{}-tpm.service", self.manifest.id)
+        format!("{UNIT_PREFIX}-{}-tpm.service", self.manifest.id)
     }
 
     pub(crate) fn share_unit(&self, index: usize) -> String {
-        format!("velox-vm-{}-share-{index}.service", self.manifest.id)
+        format!("{UNIT_PREFIX}-{}-share-{index}.service", self.manifest.id)
     }
 
     pub(crate) fn runtime_dir(&self) -> &Path {

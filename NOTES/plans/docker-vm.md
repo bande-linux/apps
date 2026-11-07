@@ -492,12 +492,28 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 
 | # | Repo | What | Done when |
 |---|---|---|---|
-| A6 | apps | `libs/terminal-view` from Terminal (emulator + renderer + keys over a byte stream); embedded exec and serial console | Terminal unchanged; exec and serial work in Velox |
-| V5 | apps | ISO path in the sheet with presets, virtiofs shares and USB in Settings, swtpm + Secure Boot, signed SUMS | a Windows 11 ARM ISO installs with no manual flags |
+| V5 | apps | Left of V5: USB passthrough (`usb-host` through QMP `device_add`), and a Windows 11 ARM install checked end to end | a Windows 11 ARM ISO installs with no manual flags |
 | A7 | apps | Velox extras: Ctrl+K palette, crash notifications (`bande-notify`), optional status item via the tray with the background mode (as Calendar's) | each off by default and measured at 0 wake-ups while idle |
 
 Done and merged: A1–A4, V0, V1, D1 (`SurfaceView`), D2 (`Graph`), V3 and V4. D4 needs no widget of
 its own: `Table::sidebar()` is the shared source list, and Velox, Settings and the file chooser use it.
+
+Also done: A6 (`libs/terminal-view`: Terminal's emulator and renderer with a `TerminalView` widget;
+Velox opens a machine's serial console and a container shell with it) and most of V5: an ISO path
+in the New Virtual Machine sheet with Linux and Windows 11 presets, shared folders over virtiofs,
+swtpm and Secure Boot firmware for Windows, and gpgv-checked vendor checksums.
+- **ISO machines:** blank qcow2 disk first in the boot order, the ISO as a removable USB disk second,
+  so the firmware installs from it and later boots the disk; Settings ▸ Eject drops it. No seed.
+- **Windows 11 preset:** `AAVMF_CODE.ms.fd` with Microsoft keys enrolled in the vars, `ramfb` for
+  the picture (Windows has no virtio-gpu driver), NVMe for the disk, `tpm-tis-device` on swtpm. No
+  network driver during setup (virtio-win is a separate download). Not run: no Windows ISO and no
+  swtpm on the mini.
+- **Helpers:** swtpm and virtiofsd run in their own transient units, started before QEMU and
+  waited for by their socket; they exit with QEMU. A machine with shared folders cannot take
+  snapshots (vhost-user-fs does not migrate).
+- **Checksums:** Ubuntu's `SHA256SUMS.gpg` and Fedora's clearsigned `CHECKSUM` are checked with
+  `gpgv` against the vendor keys in `libs/vm/data`. Debian publishes no signature beside
+  `latest/SHA512SUMS`, so Debian stays HTTPS-only.
 
 Left from V1: the ≤ 8 s boot. Debian `generic` under KVM reaches SSH about 13 s after the unit starts;
 the guest's own part is 5.5 s, so 7–8 s go to QEMU, AAVMF and GRUB.
