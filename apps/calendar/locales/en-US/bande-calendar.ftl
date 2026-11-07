@@ -195,3 +195,4 @@ zone-system = System Time Zone
 snooze = Snooze
 settings-hours-shown = Show:
 settings-hours = { $hours } hours at a time
+default-calendar-name = Calendar

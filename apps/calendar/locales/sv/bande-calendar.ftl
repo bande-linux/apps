@@ -195,3 +195,4 @@ zone-system = Systemets tidszon
 snooze = Snooza
 settings-hours-shown = Visa:
 settings-hours = { $hours } timmar åt gången
+default-calendar-name = Kalender

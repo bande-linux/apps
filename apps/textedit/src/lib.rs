@@ -20,8 +20,8 @@ pub use session::{Record, Session, new_id, now};
 pub use view::{COLORS, DocumentView, FAMILIES, Opening, Request, Settings};
 pub use worker::{Message, spawn};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-textedit.ftl");
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-textedit")));
 
 pub fn encoding_name(encoding: TextEncoding) -> String {
     L10N.tr(&format!(

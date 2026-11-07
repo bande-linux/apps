@@ -419,7 +419,7 @@ impl Library {
                 id: new_uid(),
                 account: LOCAL_ACCOUNT.to_owned(),
                 url: None,
-                name: "Calendar".to_owned(),
+                name: crate::ui::L10N.tr("default-calendar-name"),
                 color: "#E8590C".to_owned(),
                 read_only: false,
                 visible: true,

@@ -11,7 +11,7 @@ name=${3:?usage: new-app.sh <dir> <Id> "<Name>"}
 [ ! -e "apps/$dir" ] || { echo "new-app: apps/$dir exists" >&2; exit 1; }
 cp -r template "apps/$dir"
 target=apps/$dir
-mv "$target/locales/en-US/bande-template.ftl" "$target/locales/en-US/bande-$dir.ftl"
+for language in "$target"/locales/*/; do mv "${language}bande-template.ftl" "${language}bande-$dir.ftl"; done
 for file in "$target"/data/org.bande.Template.*; do
     mv "$file" "${file/org.bande.Template/org.bande.$id}"
 done

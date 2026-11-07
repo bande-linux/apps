@@ -15,8 +15,8 @@ use bande_media::Track;
 use mpris::{Mpris, Remote};
 use pane::Pane;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-player.ftl");
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-player")));
 
 static INFO: Info = Info {
     id: "org.bande.Player",

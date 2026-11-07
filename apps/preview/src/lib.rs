@@ -19,8 +19,8 @@ pub use files::{argument_path, is_image_name};
 pub use info::{InfoPanel, Row, document_rows, file_rows, info_ui, picture_rows};
 pub use view::{PreviewView, Request, SidebarMode, file_name};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-preview.ftl");
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-preview")));
 
 pub fn tr_with(id: &str, args: &[(&str, String)]) -> String {
     L10N.tr_args(

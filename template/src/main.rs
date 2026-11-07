@@ -7,8 +7,8 @@ use bande_l10n::Localizer;
 use bande_toolkit::TextSystem;
 use bande_toolkit::ui::{Axis, Context, Label, Stack, Ui, Widget};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-template.ftl");
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-template")));
 
 static INFO: Info = Info {
     id: "org.bande.Template",

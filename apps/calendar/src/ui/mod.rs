@@ -35,9 +35,8 @@ use bande_design::{Accent, Scheme};
 pub use settings_view::{SETTINGS_SIZE, SettingsView};
 pub use toolbar::TOOLBAR_HEIGHT;
 
-const ENGLISH: &str = include_str!("../../locales/en-US/bande-calendar.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-calendar")));
 
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 const MAX_ZONES: usize = 12;

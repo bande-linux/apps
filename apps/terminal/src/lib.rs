@@ -36,9 +36,8 @@ pub use terminal::{
 };
 pub use theme::{Profile, Theme};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-terminal.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-terminal")));
 
 pub const COLUMNS: usize = 80;
 pub const ROWS: usize = 24;

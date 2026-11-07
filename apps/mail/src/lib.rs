@@ -32,6 +32,5 @@ pub fn keyring_label(email: &str) -> String {
     format!("Mail password for {email}")
 }
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-mail.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-mail")));
