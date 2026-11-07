@@ -202,6 +202,23 @@ impl Preview {
         }
     }
 
+    fn print(cx: &mut Cx<Self>, window: WindowId) {
+        let Some((_, Pane::Main(view))) = cx.window(window) else {
+            return;
+        };
+        let Some(path) = view.path().map(Path::to_path_buf) else {
+            return;
+        };
+        let title = view.title();
+        let document = match view.is_document() {
+            true => Some(bande_app::Document::File(path)),
+            false => bande_app::image_document(path),
+        };
+        if let Some(document) = document {
+            cx.print(&title, document);
+        }
+    }
+
     fn show_in_files(cx: &mut Cx<Self>, window: WindowId) {
         let Some((shown, Pane::Main(view))) = cx.window(window) else {
             return;
@@ -276,6 +293,8 @@ impl Program for Preview {
             item("menu-open", OPEN, Some("Ctrl+O"), true),
             item("menu-show-in-files", SHOW_IN_FILES, None, file),
             item("menu-get-info", GET_INFO, Some("Ctrl+I"), file),
+            Entry::separator(),
+            bande_app_menu::print_item(file),
         ];
         let edit = vec![
             item("menu-copy", COPY, Some("Ctrl+C"), copyable),
@@ -357,6 +376,9 @@ impl Program for Preview {
         };
         if command == SHOW_IN_FILES {
             return Self::show_in_files(cx, window);
+        }
+        if command == bande_app_menu::PRINT {
+            return Self::print(cx, window);
         }
         if let Some((shown, Pane::Main(view))) = cx.window(window) {
             match command {

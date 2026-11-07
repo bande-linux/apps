@@ -1038,6 +1038,11 @@ impl TerminalWindow {
         window.request_redraw();
     }
 
+    pub fn printable_text(&self) -> (String, String) {
+        let title = self.titles().into_iter().next().unwrap_or_default();
+        (title, self.terminal().all_text().trim_end().to_owned())
+    }
+
     pub fn menu_action(&mut self, window: &mut Window, action: &str) -> bool {
         let Some(command) = MenuCommand::parse(action) else {
             return false;

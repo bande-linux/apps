@@ -33,6 +33,8 @@ pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
                 item("menu-add-account", "add-account"),
                 Entry::separator(),
                 selection("menu-find", "find"),
+                Entry::separator(),
+                bande_app_menu::print_item(viewer),
             ],
         ),
         edit_submenu(Vec::new()),

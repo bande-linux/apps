@@ -450,6 +450,29 @@ impl MailView {
         &self.messages
     }
 
+    pub fn printable(&self) -> Option<(String, String)> {
+        let (summary, reading) = self.focused()?;
+        let envelope = &reading.content.envelope;
+        let names = |list: &[crate::message::Address]| {
+            list.iter()
+                .map(crate::message::Address::full)
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let text = format!(
+            "{}\n{}\n{}\n\n{}",
+            envelope.subject,
+            names(&envelope.from),
+            L10N.tr_args("header-to", [("names", names(&envelope.to).into())]),
+            reading.content.text(),
+        );
+        let title = match summary.subject.is_empty() {
+            true => L10N.tr("no-subject"),
+            false => summary.subject.clone(),
+        };
+        Some((title, text))
+    }
+
     pub fn selected(&self) -> Option<MessageId> {
         self.selected
     }

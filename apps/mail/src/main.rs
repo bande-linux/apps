@@ -635,6 +635,14 @@ impl Program for Mail {
         if command == menus::VIEWER {
             return self.show_viewer(cx);
         }
+        if command == bande_app_menu::PRINT {
+            let printable =
+                main_view(cx, self.main, &mut self.parked).and_then(|view| view.printable());
+            if let Some((title, text)) = printable {
+                cx.print(&title, bande_app::text_document(text, false));
+            }
+            return;
+        }
         let handled = match window.and_then(|window| cx.window(window)) {
             Some((_, Pane::Main(view))) => view.menu_action(command),
             Some((_, Pane::Compose(view))) => view.menu_action(command),
