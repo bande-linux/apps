@@ -335,6 +335,16 @@ impl CalendarView {
             });
     }
 
+    pub fn show_event(&mut self, uid: &str) {
+        let day = self.library.calendars.iter().find_map(|calendar| {
+            let object = calendar.objects.get(calendar.find(uid)?)?;
+            Some(object.parsed.as_ref()?.events.first()?.start.date())
+        });
+        if let Some(day) = day {
+            self.go_to(day);
+        }
+    }
+
     pub fn go_to(&mut self, day: Date) {
         self.focus = day;
         self.mini_month = day.first_of_month();
@@ -419,6 +429,37 @@ impl CalendarView {
         if !focused {
             self.press = None;
         }
+    }
+
+    pub fn printable(&self) -> (String, String) {
+        let first = self.focus.first_of_month();
+        let next = first.saturating_add(1.month());
+        let moment = |day: Date| {
+            day.to_zoned(self.zone.clone())
+                .map_or_else(|_| self.now.timestamp(), |zoned| zoned.timestamp())
+        };
+        let mut found = self
+            .library
+            .occurrences(moment(first), moment(next), &self.zone);
+        found.sort_by(|a, b| a.occurrence.start.cmp(&b.occurrence.start));
+        let mut text = String::new();
+        let mut day = None;
+        for one in &found {
+            let start = &one.occurrence.start;
+            if day != Some(start.date()) {
+                day = Some(start.date());
+                text.push_str(&format!("\n{}\n", self.formats.long_date(start)));
+            }
+            let summary = self
+                .library
+                .event(one)
+                .map_or_else(String::new, |event| event.summary.clone());
+            match one.occurrence.all_day {
+                true => text.push_str(&format!("{summary}\n")),
+                false => text.push_str(&format!("{}  {summary}\n", start.strftime("%H:%M"))),
+            }
+        }
+        (self.formats.month_title(first), text)
     }
 
     pub fn title(&self) -> String {

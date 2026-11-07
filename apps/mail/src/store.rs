@@ -68,6 +68,19 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS messages_by_date ON messages (mailbox, date DESC);
 CREATE INDEX IF NOT EXISTS messages_by_thread ON messages (thread);
+CREATE TABLE IF NOT EXISTS search_outbox (
+    change_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message INTEGER NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS search_added AFTER INSERT ON messages BEGIN
+    INSERT INTO search_outbox (message) VALUES (new.id);
+END;
+CREATE TRIGGER IF NOT EXISTS search_changed AFTER UPDATE OF subject, sender_name, text ON messages BEGIN
+    INSERT INTO search_outbox (message) VALUES (new.id);
+END;
+CREATE TRIGGER IF NOT EXISTS search_removed AFTER DELETE ON messages BEGIN
+    INSERT INTO search_outbox (message) VALUES (old.id);
+END;
 CREATE TABLE IF NOT EXISTS rules (
     id INTEGER PRIMARY KEY,
     every INTEGER NOT NULL DEFAULT 1,
@@ -134,6 +147,22 @@ impl Mailbox {
         self.delimiter
             .map_or(0, |delimiter| self.path.matches(delimiter).count())
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchContent {
+    pub subject: String,
+    pub sender_name: String,
+    pub sender_email: String,
+    pub recipients: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchChange {
+    pub change: i64,
+    pub message: MessageId,
+    pub content: Option<SearchContent>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -399,6 +428,49 @@ fn scope_filter(scope: &Scope) -> (&'static str, Box<dyn rusqlite::ToSql>) {
 }
 
 impl Store {
+    pub fn search_changes(&self, limit: usize) -> Result<Vec<SearchChange>> {
+        let mut statement = self.connection.prepare_cached(
+            "SELECT o.change_id, o.message, m.subject, m.sender_name, m.sender_email, \
+             m.recipients, m.text FROM search_outbox o LEFT JOIN messages m ON m.id = o.message \
+             ORDER BY o.change_id LIMIT ?1",
+        )?;
+        statement
+            .query_map(params![limit as i64], |row| {
+                Ok(SearchChange {
+                    change: row.get(0)?,
+                    message: row.get(1)?,
+                    content: match row.get::<_, Option<String>>(2)? {
+                        Some(subject) => Some(SearchContent {
+                            subject,
+                            sender_name: row.get(3)?,
+                            sender_email: row.get(4)?,
+                            recipients: row.get(5)?,
+                            text: row.get(6)?,
+                        }),
+                        None => None,
+                    },
+                })
+            })?
+            .collect::<rusqlite::Result<_>>()
+            .map_err(Into::into)
+    }
+
+    pub fn search_changes_done(&self, last_change: i64) -> Result<()> {
+        self.connection.execute(
+            "DELETE FROM search_outbox WHERE change_id <= ?1",
+            params![last_change],
+        )?;
+        Ok(())
+    }
+
+    pub fn search_offer_everything(&self) -> Result<()> {
+        self.connection.execute(
+            "INSERT INTO search_outbox (message) SELECT id FROM messages",
+            [],
+        )?;
+        Ok(())
+    }
+
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::DirBuilder::new()

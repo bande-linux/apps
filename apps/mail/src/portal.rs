@@ -28,7 +28,7 @@ fn ask(method: &str, title: &str, option: (&str, Value<'_>)) -> zbus::Result<Vec
         DESKTOP_PATH,
         Some(CHOOSER),
         method,
-        &("", title, options),
+        &(bande_app::parent_window(), title, options),
     )?;
     let Some(response) = responses.next() else {
         return Ok(Vec::new());

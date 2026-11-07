@@ -44,7 +44,7 @@ pub fn choose_file(title: &str, choose: Choose) -> zbus::Result<Option<PathBuf>>
         DESKTOP_PATH,
         Some(CHOOSER),
         method,
-        &("", title, options),
+        &(bande_app::parent_window(), title, options),
     )?;
     let Some(response) = responses.next() else {
         return Ok(None);

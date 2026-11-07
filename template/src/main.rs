@@ -44,8 +44,7 @@ fn open_window(cx: &mut Cx<Template>) -> Result<WindowId, bande_toolkit::WindowE
 impl Program for Template {
     type View = Ui;
 
-    fn start(cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
-        open_window(cx)?;
+    fn start(_cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         Ok(Self)
     }
 

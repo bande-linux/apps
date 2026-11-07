@@ -363,11 +363,17 @@ impl Program for ActivityMonitor {
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let mut sampler = Sampler::live();
         let memory = arguments.iter().any(|argument| argument == MEMORY_FLAG);
-        let (main, snapshot) = open_main(cx, &mut sampler, memory)?;
+        let (main, snapshot) = match memory {
+            true => {
+                let (main, snapshot) = open_main(cx, &mut sampler, true)?;
+                (Some(main), snapshot)
+            }
+            false => (None, Snapshot::default()),
+        };
         Ok(Self {
-            main: Some(main),
+            main,
             closed_menus: Vec::new(),
-            sampling: true,
+            sampling: main.is_some(),
             sampler,
             snapshot,
             next_sample: Instant::now() + FIRST_INTERVAL,

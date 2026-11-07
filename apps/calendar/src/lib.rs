@@ -1,5 +1,6 @@
 pub mod alerts;
 pub mod caldav;
+pub mod donate;
 pub mod edit;
 pub mod ical;
 pub mod invite;

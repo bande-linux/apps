@@ -450,6 +450,29 @@ impl MailView {
         &self.messages
     }
 
+    pub fn printable(&self) -> Option<(String, String)> {
+        let (summary, reading) = self.focused()?;
+        let envelope = &reading.content.envelope;
+        let names = |list: &[crate::message::Address]| {
+            list.iter()
+                .map(crate::message::Address::full)
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let text = format!(
+            "{}\n{}\n{}\n\n{}",
+            envelope.subject,
+            names(&envelope.from),
+            L10N.tr_args("header-to", [("names", names(&envelope.to).into())]),
+            reading.content.text(),
+        );
+        let title = match summary.subject.is_empty() {
+            true => L10N.tr("no-subject"),
+            false => summary.subject.clone(),
+        };
+        Some((title, text))
+    }
+
     pub fn selected(&self) -> Option<MessageId> {
         self.selected
     }
@@ -701,6 +724,13 @@ impl MailView {
         self.search = text.to_owned();
         self.scrolls[1] = ScrollState::default();
         self.reload();
+    }
+
+    pub fn show_message(&mut self, id: MessageId) {
+        if let Ok(Some(summary)) = self.store.summary(id) {
+            self.choose_place(Place::Mailbox(summary.mailbox));
+            self.select(id);
+        }
     }
 
     pub fn select(&mut self, id: MessageId) {
@@ -2199,6 +2229,7 @@ impl MailView {
             return;
         };
         self.workers.retain(|worker| worker.account != id);
+        std::thread::spawn(crate::donate::forget_in_search);
         if let Err(error) = self.store.remove_account(id) {
             tracing::warn!("cannot remove {}: {error}", account.email);
         }

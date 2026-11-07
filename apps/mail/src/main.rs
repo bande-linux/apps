@@ -306,6 +306,16 @@ impl Mail {
     }
 
     fn open_argument(&mut self, cx: &mut Cx<Self>, argument: &str) {
+        if let Some(message) = argument
+            .strip_prefix(bande_mail::donate::MESSAGE_ARGUMENT)
+            .and_then(|message| message.parse().ok())
+        {
+            if let Some(view) = main_view(cx, self.main, &mut self.parked) {
+                view.show_message(message);
+            }
+            self.serve_main(cx);
+            return;
+        }
         if let Some(draft) = from_mailto(argument) {
             if let Some(view) = main_view(cx, self.main, &mut self.parked) {
                 view.compose(draft);
@@ -621,16 +631,21 @@ impl Program for Mail {
         let changes = Inbox::new()?;
         listen(changes.outbox());
         view.start();
-        let main = show_main(cx, Box::new(view))?;
+        let (main, parked) = match arguments.is_empty() {
+            true => (None, Some(Box::new(view))),
+            false => (Some(show_main(cx, Box::new(view))?), None),
+        };
         let mut mail = Self {
-            main: Some(main),
-            parked: None,
+            main,
+            parked,
             apps: None,
             picker: Picker::new()?,
             changes,
         };
         mail.open_arguments(cx, arguments);
-        mail.serve(cx, main);
+        if let Some(main) = main {
+            mail.serve(cx, main);
+        }
         for outgoing in left_unsent() {
             let outgoing = match main_view(cx, mail.main, &mut mail.parked) {
                 Some(view) => view.recover(outgoing),
@@ -658,6 +673,14 @@ impl Program for Mail {
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
         if command == menus::VIEWER {
             return self.show_viewer(cx);
+        }
+        if command == bande_app_menu::PRINT {
+            let printable =
+                main_view(cx, self.main, &mut self.parked).and_then(|view| view.printable());
+            if let Some((title, text)) = printable {
+                cx.print(&title, bande_app::text_document(text, false));
+            }
+            return;
         }
         let handled = match window.and_then(|window| cx.window(window)) {
             Some((_, Pane::Main(view))) => view.menu_action(command),
