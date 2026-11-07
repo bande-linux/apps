@@ -11,7 +11,7 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_settings::{Stored, settings_folder};
 use bande_inbox::Inbox;
 use bande_mail::L10N;
-use bande_mail::compose::{Outgoing, from_mailto, keep_unsent, left_unsent};
+use bande_mail::compose::{Draft, Outgoing, from_mailto, keep_unsent, left_unsent};
 use bande_mail::message::Attachment;
 use bande_mail::portal::choose_save_path;
 use bande_mail::settings::{Change, MailSettings, listen};
@@ -29,6 +29,8 @@ use bande_xdg::{Apps, config_dirs, data_dirs, data_home, replace_file};
 
 use crate::picker::{MAX_ATTACHMENT, Picked, Picker};
 
+const ATTACH_FLAG: &str = "--attach";
+const SHARED_FILES: u64 = u64::MAX;
 const APP_ID: &str = "org.bande.Mail";
 const WINDOW_SIZE: (u32, u32) = (1180, 720);
 const NEW_MAIL_SOUND: &str = "message-new-email";
@@ -292,6 +294,17 @@ impl Mail {
             .ok()
     }
 
+    fn open_arguments(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>) {
+        if arguments.first().is_some_and(|flag| flag == ATTACH_FLAG) {
+            let paths = arguments.into_iter().skip(1).map(PathBuf::from).collect();
+            self.picker.read(SHARED_FILES, paths);
+            return;
+        }
+        for argument in arguments {
+            self.open_argument(cx, &argument);
+        }
+    }
+
     fn open_argument(&mut self, cx: &mut Cx<Self>, argument: &str) {
         if let Some(draft) = from_mailto(argument) {
             if let Some(view) = main_view(cx, self.main, &mut self.parked) {
@@ -362,6 +375,19 @@ impl Mail {
                 }
                 Picked::TooLarge(path) => refused.push(path),
             }
+        }
+        if token == SHARED_FILES {
+            if let Some(path) = refused.first() {
+                tracing::warn!("{} is too large to attach", path.display());
+            }
+            if let Some(view) = main_view(cx, self.main, &mut self.parked) {
+                view.compose(Draft {
+                    attachments,
+                    ..Draft::default()
+                });
+            }
+            self.serve_main(cx);
+            return;
         }
         let windows: Vec<WindowId> = cx.windows().collect();
         let Some(window) = windows.into_iter().find(
@@ -603,9 +629,7 @@ impl Program for Mail {
             picker: Picker::new()?,
             changes,
         };
-        for argument in arguments {
-            mail.open_argument(cx, &argument);
-        }
+        mail.open_arguments(cx, arguments);
         mail.serve(cx, main);
         for outgoing in left_unsent() {
             let outgoing = match main_view(cx, mail.main, &mut mail.parked) {
@@ -663,9 +687,7 @@ impl Program for Mail {
     }
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, _directory: &Path) {
-        for argument in arguments {
-            self.open_argument(cx, &argument);
-        }
+        self.open_arguments(cx, arguments);
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {

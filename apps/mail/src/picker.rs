@@ -35,14 +35,23 @@ impl Picker {
     }
 
     pub fn pick(&self, token: u64, title: String) {
+        self.gather(token, move || {
+            choose_files(&title)
+                .inspect_err(|error| tracing::warn!("cannot choose files: {error}"))
+                .unwrap_or_default()
+        });
+    }
+
+    pub fn read(&self, token: u64, paths: Vec<PathBuf>) {
+        self.gather(token, move || paths);
+    }
+
+    fn gather(&self, token: u64, paths: impl FnOnce() -> Vec<PathBuf> + Send + 'static) {
         let (sender, wake) = (self.sender.clone(), Arc::clone(&self.wake));
         let spawned = std::thread::Builder::new()
             .name("attach".to_owned())
             .spawn(move || {
-                let paths = choose_files(&title)
-                    .inspect_err(|error| tracing::warn!("cannot choose files: {error}"))
-                    .unwrap_or_default();
-                let picked = paths
+                let picked = paths()
                     .into_iter()
                     .filter_map(|path| {
                         let size = std::fs::metadata(&path).ok()?.len();
@@ -64,7 +73,7 @@ impl Picker {
                 }
             });
         if let Err(error) = spawned {
-            tracing::warn!("cannot choose files: {error}");
+            tracing::warn!("cannot read attachments: {error}");
         }
     }
 
