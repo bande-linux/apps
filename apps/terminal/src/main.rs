@@ -8,21 +8,20 @@ use std::process::ExitCode;
 use std::rc::Rc;
 
 use bande_app::{
-    Cx, Detached, Info, Keys, Kind, Menus, Program, Settings as SettingsWindowInfo, TabCarry,
-    TabDrop, View, WindowId,
+    Cx, Detached, Info, Keys, Kind, Menus, Program, Saved, Settings as SettingsWindowInfo,
+    TabCarry, TabDrop, View, WindowId,
 };
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_terminal::{
     CLOSE_WINDOW, CloseAsk, Command, GridSize, L10N, MenuCommand, Painter, SETTINGS_SIZE, Session,
-    Settings, Terminal, app_menus, claim, left_behind, settings_view, window_file, windows_folder,
+    Settings, Terminal, app_menus, settings_view,
 };
 use bande_toolkit::Appearance;
 
-use crate::app::{Arguments, Ask, CarriedTab, Opened, TerminalWindow};
+use crate::app::{Arguments, Ask, CarriedTab, Opened, SavedWindow, TerminalWindow};
 use crate::bus::Bus;
 
 const APP_ID: &str = "org.bande.Terminal";
-const PROGRAM: &str = "bande-terminal";
 
 static INFO: Info = Info {
     id: APP_ID,
@@ -43,11 +42,6 @@ fn settings_window(appearance: Appearance) -> Box<dyn View> {
         settings_folder(),
         settings_view,
     ))
-}
-
-fn running(pid: u32) -> bool {
-    std::fs::read_to_string(format!("/proc/{pid}/comm"))
-        .is_ok_and(|name| name.trim_end() == PROGRAM)
 }
 
 struct Terminals {
@@ -72,13 +66,10 @@ impl Terminals {
         painter
     }
 
-    fn next_window(&mut self, saved: bool) -> (u32, Option<PathBuf>) {
+    fn next_serial(&mut self) -> u32 {
         let serial = self.next_serial;
         self.next_serial += 1;
-        let saved_file = windows_folder()
-            .filter(|_| saved)
-            .map(|folder| window_file(&folder, std::process::id(), serial));
-        (serial, saved_file)
+        serial
     }
 
     fn show(
@@ -112,7 +103,8 @@ impl Terminals {
         active: usize,
         mut command: Option<alacritty_terminal::tty::Shell>,
     ) -> Result<WindowId, bande_app::Error> {
-        let (serial, saved_file) = self.next_window(command.is_none());
+        let serial = self.next_serial();
+        let remembered = command.is_none();
         let grid = GridSize {
             columns: self.settings.columns,
             lines: self.settings.rows,
@@ -140,7 +132,7 @@ impl Terminals {
         let opened = Opened {
             sessions,
             active,
-            saved_file,
+            remembered,
         };
         self.show(cx, painter, size, opened, serial)
     }
@@ -150,11 +142,11 @@ impl Terminals {
         cx: &mut Cx<Self>,
         size: (u32, u32),
     ) -> Result<WindowId, bande_app::Error> {
-        let (serial, saved_file) = self.next_window(true);
+        let serial = self.next_serial();
         let opened = Opened {
             sessions: Vec::new(),
             active: 0,
-            saved_file,
+            remembered: true,
         };
         self.show(cx, self.painter(), size, opened, serial)
     }
@@ -189,25 +181,6 @@ impl Terminals {
             .map(|folder| directory.join(folder))
             .or_else(|| self.home.clone());
         self.open_window(cx, vec![folder], 0, arguments.command)
-    }
-
-    fn restore(&mut self, cx: &mut Cx<Self>) -> usize {
-        let Some(folder) = windows_folder() else {
-            return 0;
-        };
-        let mut restored = 0;
-        for file in left_behind(&folder, running) {
-            let mine = window_file(&folder, std::process::id(), self.next_serial);
-            let Some(window) = claim(&file, &mine) else {
-                continue;
-            };
-            let folders = window.tabs.into_iter().map(Some).collect();
-            match self.open_window(cx, folders, window.active, None) {
-                Ok(_) => restored += 1,
-                Err(error) => tracing::warn!("cannot restore a window: {error}"),
-            }
-        }
-        restored
     }
 
     fn serve(&mut self, cx: &mut Cx<Self>, window: WindowId) {
@@ -250,8 +223,7 @@ impl Program for Terminals {
             carry: TabCarry::default(),
             next_serial: 0,
         };
-        let plain = Arguments::parse(arguments.iter().cloned()).is_plain();
-        if !plain || terminals.restore(cx) == 0 {
+        if !arguments.is_empty() {
             let directory = std::env::current_dir().unwrap_or_default();
             terminals.open_arguments(cx, arguments, &directory)?;
         }
@@ -293,6 +265,23 @@ impl Program for Terminals {
     fn reopen(&mut self, cx: &mut Cx<Self>) {
         if let Err(error) = self.open_window(cx, vec![self.home.clone()], 0, None) {
             tracing::warn!("cannot open a window: {error}");
+        }
+    }
+
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        Saved::of(&cx.view(window)?.saved_window()?)
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, saved: Saved) {
+        let Some(window) = saved
+            .read::<SavedWindow>()
+            .filter(|window| !window.tabs.is_empty())
+        else {
+            return;
+        };
+        let folders = window.tabs.into_iter().map(Some).collect();
+        if let Err(error) = self.open_window(cx, folders, window.active, None) {
+            tracing::warn!("cannot reopen a window: {error}");
         }
     }
 

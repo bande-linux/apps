@@ -939,10 +939,11 @@ impl Program for CalendarApp {
         let settings_watch = settings_folder()
             .as_deref()
             .and_then(|folder| SettingsWatch::start(folder, CalendarSettings::FILE));
-        let (main, parked) = match cx.launched_in_background() {
-            true => (None, Some(Pane(view))),
-            false => (Some(show(cx, &title, Pane(view))?), None),
-        };
+        let (main, parked) =
+            match cx.launched_in_background() || (arguments.is_empty() && !new_event) {
+                true => (None, Some(Pane(view))),
+                false => (Some(show(cx, &title, Pane(view))?), None),
+            };
         let mut app = Self {
             main,
             parked,

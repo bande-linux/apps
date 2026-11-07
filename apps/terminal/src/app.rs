@@ -14,8 +14,8 @@ use bande_spring::{Decay, State as SpringState};
 use bande_terminal::{
     Axis, Banner, BannerAction, CellPoint, CloseAsk, Command, Divider, FULL_SCREEN_LEADING,
     GridSize, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, NewTabFolder, Notice,
-    Painter, Pane, STRIP_HEIGHT, SavedWindow, SearchDirection, SelectionKind, Session, Settings,
-    Terminal, TerminalContext, bracketed, dropped_text, encode_key, is_openable, mouse_report,
+    Painter, Pane, STRIP_HEIGHT, SearchDirection, SelectionKind, Session, Settings, Terminal,
+    TerminalContext, bracketed, dropped_text, encode_key, is_openable, mouse_report,
     next_font_size, reports_mouse, shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
 use bande_toolkit::ui::{
@@ -163,7 +163,7 @@ pub struct TerminalWindow {
     cursor: Cursor,
     bus: Rc<Bus>,
     serial: u32,
-    saved: Option<(PathBuf, SavedWindow)>,
+    remembered: bool,
     asks: Vec<Ask>,
     carrying: Rc<Cell<bool>>,
     drop_target: TabDropTarget,
@@ -172,10 +172,16 @@ pub struct TerminalWindow {
     alt_click: Option<(usize, usize)>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SavedWindow {
+    pub tabs: Vec<PathBuf>,
+    pub active: usize,
+}
+
 pub struct Opened {
     pub sessions: Vec<Session>,
     pub active: usize,
-    pub saved_file: Option<PathBuf>,
+    pub remembered: bool,
 }
 
 impl TerminalWindow {
@@ -191,7 +197,7 @@ impl TerminalWindow {
         let Opened {
             sessions,
             active,
-            saved_file,
+            remembered,
         } = opened;
         let mut app = Self {
             active: active.min(sessions.len().saturating_sub(1)),
@@ -225,7 +231,7 @@ impl TerminalWindow {
             cursor: Cursor::Default,
             bus,
             serial,
-            saved: saved_file.map(|file| (file, SavedWindow::default())),
+            remembered,
             asks: Vec::new(),
             carrying,
             drop_target: TabDropTarget::default(),
@@ -331,9 +337,7 @@ impl TerminalWindow {
     }
 
     fn move_tab(&mut self, from: usize, to: usize) {
-        if move_tab(&mut self.tabs, &mut self.active, from, to) {
-            self.save_window();
-        }
+        if move_tab(&mut self.tabs, &mut self.active, from, to) {}
     }
 
     fn frame_window(&self, window: &mut Window) {
@@ -473,37 +477,21 @@ impl TerminalWindow {
             window.set_title(&title);
             self.title = title;
         }
-        self.save_window();
     }
 
-    fn save_window(&mut self) {
-        let Some((file, last)) = &mut self.saved else {
-            return;
-        };
-        let home = self.home.clone();
-        let current = SavedWindow {
+    pub fn saved_window(&self) -> Option<SavedWindow> {
+        self.remembered.then(|| SavedWindow {
             tabs: self
                 .tabs
                 .iter()
-                .filter_map(|tab| tab.focused().working_directory().or_else(|| home.clone()))
+                .filter_map(|tab| {
+                    tab.focused()
+                        .working_directory()
+                        .or_else(|| self.home.clone())
+                })
                 .collect(),
             active: self.active,
-        };
-        if current != *last {
-            match current.save(file) {
-                Ok(()) => *last = current,
-                Err(error) => tracing::warn!("cannot remember the window: {error}"),
-            }
-        }
-    }
-
-    fn forget_window(&mut self) {
-        if let Some((file, _)) = self.saved.take()
-            && let Err(error) = std::fs::remove_file(&file)
-            && error.kind() != std::io::ErrorKind::NotFound
-        {
-            tracing::warn!("cannot forget the window: {error}");
-        }
+        })
     }
 
     fn handle_notices(&mut self, window: &mut Window, tab: usize, notices: Vec<Notice>) {
@@ -856,7 +844,6 @@ impl TerminalWindow {
         }
         let closed = self.tabs.remove(index);
         if self.tabs.is_empty() {
-            self.forget_window();
             return Some(closed);
         }
         if index < self.active || self.active >= self.tabs.len() {
@@ -881,7 +868,6 @@ impl TerminalWindow {
         let layout = self.sync_strip();
         self.strip.hover(&layout, None);
         self.after_tabs_changed(window);
-        self.save_window();
         Some(closed)
     }
 
@@ -1055,7 +1041,6 @@ impl TerminalWindow {
     pub fn close_by_button(&mut self, window: &mut Window) -> bool {
         let busy = self.busy_tabs();
         if !self.asks_before_closing(busy > 0) {
-            self.forget_window();
             return true;
         }
         let message = match busy {
@@ -2271,10 +2256,6 @@ impl Arguments {
             }
         }
         parsed
-    }
-
-    pub fn is_plain(&self) -> bool {
-        self.command.is_none() && self.directory.is_none() && !self.new_window
     }
 }
 
