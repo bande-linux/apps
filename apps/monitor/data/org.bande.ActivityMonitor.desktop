@@ -1,10 +1,14 @@
 [Desktop Entry]
 Type=Application
 Name=Activity Monitor
+Name[sv]=Aktivitetskontroll
 GenericName=System Monitor
+GenericName[sv]=Systemövervakning
 Comment=See which apps use your CPU, memory, disk and network
+Comment[sv]=Se vilka appar som använder processor, minne, disk och nätverk
 Icon=org.bande.ActivityMonitor
 Exec=bande-monitor
 StartupNotify=true
 Categories=System;Monitor;
 Keywords=process;task;cpu;memory;kill;force quit;
+Keywords[sv]=process;uppgift;cpu;minne;avsluta;tvinga avslut;

@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Clock</name>
   <summary>Alarms, timers, a stopwatch and a world clock</summary>
+  <summary xml:lang="sv">Alarm, timers, stoppur och världsklocka</summary>
   <description>
     <p>Alarms that repeat on the days you choose, with a label, a sound and snooze; several timers at once, started from presets or your own length; a stopwatch with laps; and the time in cities around the world.</p>
     <p>Alarms and timers ring with a notification and sound even when Clock's window is closed, and the Clock menu in the menu bar shows the running timers and the next alarm.</p>

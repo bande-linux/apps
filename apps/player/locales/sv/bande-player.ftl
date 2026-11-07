@@ -1,0 +1,17 @@
+app-name = Spelare
+open-title = Öppna media
+open-filter = Ljud och video
+menu-file = Arkiv
+menu-open = Öppna …
+menu-playback = Uppspelning
+menu-play = Spela upp
+menu-pause = Pausa
+menu-next = Nästa
+menu-previous = Föregående
+menu-speed = Hastighet
+menu-audio-track = Ljudspår
+menu-subtitles = Undertexter
+menu-subtitles-off = Av
+menu-loop = Upprepa
+menu-view = Visa
+menu-full-screen = Helskärm

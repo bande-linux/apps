@@ -1,7 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=Browser
+Name[sv]=Webbläsare
 Comment=Browse the web
+Comment[sv]=Surfa på webben
 Icon=org.bande.Browser
 Exec=bande-browser %U
 StartupNotify=true
