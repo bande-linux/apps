@@ -59,6 +59,7 @@ pub enum Act {
     Delete,
     Pause,
     Resume,
+    Suspend,
     TakeSnapshot,
     Revert,
     DeleteSnapshot,
@@ -118,6 +119,7 @@ pub enum Update {
     Unit(String, ActiveState),
     Paused(String, bool),
     Address(String, Option<std::net::Ipv4Addr>),
+    Network(String, bande_vm::GuestNetwork),
     Opened(String),
     IsoChosen(PathBuf),
     FolderChosen(String, PathBuf),
@@ -452,6 +454,14 @@ impl Worker {
             Act::Resume => Qmp::connect(&machine.control_socket())
                 .and_then(|mut qmp| qmp.resume())
                 .map_err(|error| error.to_string()),
+            Act::Suspend => self.until_stopped(&machine, || {
+                let mut suspended = Self::machine(id)?;
+                let mut qmp =
+                    Qmp::connect(&suspended.control_socket()).map_err(|error| error.to_string())?;
+                suspended
+                    .suspend(&mut qmp)
+                    .map_err(|error| error.to_string())
+            }),
             Act::TakeSnapshot | Act::Revert | Act::DeleteSnapshot | Act::Clone => Ok(()),
         }
     }
@@ -734,6 +744,20 @@ impl Backend {
             }
         });
         job
+    }
+
+    pub fn sample_network(&self, ids: Vec<String>) {
+        let worker = self.worker();
+        spawn("velox-vm-network", move || {
+            for id in ids {
+                let Ok(machine) = Worker::machine(&id) else {
+                    continue;
+                };
+                if let Ok(network) = bande_vm::guest_network(&machine.agent_socket()) {
+                    worker.out.send(Update::Network(id, network));
+                }
+            }
+        });
     }
 
     pub fn choose_iso(&self, title: String) {

@@ -36,6 +36,7 @@ const MENU_COPY_SSH: &str = "machine-copy-ssh";
 const MENU_DELETE: &str = "machine-delete";
 const MENU_PAUSE: &str = "machine-pause";
 const MENU_RESUME: &str = "machine-resume";
+const MENU_SUSPEND: &str = "machine-suspend";
 const MENU_SNAPSHOT: &str = "machine-take-snapshot";
 const MENU_CLONE: &str = "machine-clone";
 const MENU_SERIAL: &str = "machine-serial";
@@ -382,6 +383,7 @@ impl MachinesPane {
                 true => menu_item("machine-resume", MENU_RESUME, true),
                 false => menu_item("machine-pause", MENU_PAUSE, any(Act::Pause)),
             },
+            menu_item("machine-suspend", MENU_SUSPEND, any(Act::Suspend)),
             MenuItem::separator(),
             menu_item("machine-connect", MENU_CONNECT, ssh),
             menu_item("machine-open", MENU_OPEN, single),
@@ -419,6 +421,7 @@ impl MachinesPane {
             MENU_DELETE => Some(Act::Delete),
             MENU_PAUSE => Some(Act::Pause),
             MENU_RESUME => Some(Act::Resume),
+            MENU_SUSPEND => Some(Act::Suspend),
             _ => None,
         };
         if let Some(act) = act {

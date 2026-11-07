@@ -208,6 +208,15 @@ impl Hub {
     pub fn tick(&mut self, now: Instant) -> bool {
         match self.sample_at {
             Some(at) if at <= now => {
+                let running: Vec<String> = self
+                    .fleet
+                    .borrow()
+                    .entries
+                    .values()
+                    .filter(|entry| entry.running())
+                    .map(|entry| entry.id().to_owned())
+                    .collect();
+                self.backend.sample_network(running);
                 self.fleet.borrow_mut().sample(now);
                 self.sample_at = Some(now + SAMPLE_INTERVAL);
                 true

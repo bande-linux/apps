@@ -317,7 +317,7 @@ fn private_folder(folder: &Path) -> Result<()> {
     Ok(())
 }
 
-fn random_bytes<const N: usize>() -> Result<[u8; N]> {
+pub(crate) fn random_bytes<const N: usize>() -> Result<[u8; N]> {
     let mut bytes = [0; N];
     let mut filled = 0;
     while filled < N {

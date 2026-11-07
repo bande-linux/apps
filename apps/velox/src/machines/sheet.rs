@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use bande_toolkit::ui::{
-    Alert, Button, Form, FormLine, Label, PopUpButton, RadioGroup, Stepper, TextField, Widget,
+    Alert, Button, Form, FormLine, Label, PopUpButton, RadioGroup, SecureField, Stepper, TextField,
+    Widget,
 };
 use bande_vm::{CloudInit, Forward, Host, Installer, NewMachine, Preset, catalog};
 
@@ -24,7 +25,8 @@ const DEFAULT_DISK_GIB: u64 = 32;
 const DISK_RANGE: (f64, f64) = (8.0, 1024.0);
 const DISK_STEP: f64 = 8.0;
 const NAME_LIMIT: usize = 63;
-const GUEST_AGENT: &str = "qemu-guest-agent";
+const GUEST_TOOLS: [&str; 2] = ["qemu-guest-agent", "spice-vdagent"];
+const FIELD_TEXT: f32 = 13.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
@@ -45,6 +47,7 @@ pub enum Field {
     Key(usize),
     Port(String),
     Preset(usize),
+    Password(String),
 }
 
 pub struct Draft {
@@ -62,6 +65,7 @@ pub struct Draft {
     limits: (u32, u64),
     iso: Option<PathBuf>,
     preset: Preset,
+    password: String,
 }
 
 fn host_limits() -> (u32, u64) {
@@ -162,6 +166,7 @@ impl Draft {
             limits,
             iso: None,
             preset: Preset::Linux,
+            password: String::new(),
         }
     }
 
@@ -214,6 +219,7 @@ impl Draft {
             Field::User(user) => self.user = user,
             Field::Key(key) => self.key = key,
             Field::Port(port) => self.port = port,
+            Field::Password(password) => self.password = password,
             Field::Preset(index) => {
                 self.preset = match index {
                     1 => Preset::Windows,
@@ -417,6 +423,13 @@ impl Draft {
                             field(Field::User),
                         )),
                     ),
+                    FormLine::Row(
+                        L10N.tr("machine-password"),
+                        Box::new(
+                            SecureField::new(&L10N.tr("machine-password-hint"), FIELD_TEXT, |_| {})
+                                .on_edit(field(Field::Password)),
+                        ),
+                    ),
                     FormLine::Row(L10N.tr("machine-ssh-key"), key),
                     FormLine::Row(
                         L10N.tr("machine-ssh-port"),
@@ -507,7 +520,8 @@ impl Draft {
                     hostname: name.clone(),
                     user: user.clone(),
                     ssh_keys: vec![key],
-                    packages: vec![GUEST_AGENT.to_owned()],
+                    packages: GUEST_TOOLS.map(str::to_owned).to_vec(),
+                    password: Some(self.password.clone()).filter(|password| !password.is_empty()),
                 },
             ),
             new: NewMachine {

@@ -76,6 +76,7 @@ pub struct MachineWindow {
     failure: Option<String>,
     hidden: bool,
     snapshot_tools: Option<ToolIds>,
+    graphs: Option<crate::containers::GraphIds>,
     selected_snapshot: Option<String>,
     sheet: Option<Sheet>,
     intents: Intents,
@@ -116,6 +117,7 @@ impl MachineWindow {
             failure: None,
             hidden: false,
             snapshot_tools: None,
+            graphs: None,
             selected_snapshot: None,
             sheet: None,
             intents,
@@ -294,7 +296,6 @@ impl MachineWindow {
         };
         self.sync_console();
         let rebuild = match self.tab {
-            Tab::Info => true,
             _ => shown != self.shown,
         };
         if rebuild {
@@ -305,6 +306,7 @@ impl MachineWindow {
             self.shown = shown;
         }
         self.fill_snapshots();
+        self.fill_graphs();
         let states = [
             (self.start, self.can(Act::Start) || self.can(Act::Resume)),
             (self.stop, self.can(Act::ShutDown)),
@@ -386,6 +388,20 @@ impl MachineWindow {
 
     pub fn has_console(&self) -> bool {
         self.session.is_some()
+    }
+
+    fn fill_graphs(&mut self) {
+        let Some(ids) = self.graphs.filter(|_| self.tab == Tab::Info) else {
+            return;
+        };
+        let graphs = self
+            .fleet
+            .borrow()
+            .entry(&self.id)
+            .map(|entry| entry.history.graphs());
+        if let Some(graphs) = graphs {
+            crate::containers::update_graphs(&mut self.ui, ids, graphs);
+        }
     }
 
     fn fill_snapshots(&mut self) {
@@ -506,6 +522,10 @@ impl MachineWindow {
         self.requests.push(Request::Serial(self.id.clone()));
     }
 
+    pub fn suspend(&mut self) {
+        self.act(Act::Suspend);
+    }
+
     pub fn toggle_pause(&mut self) {
         match self.can(Act::Resume) {
             true => self.act(Act::Resume),
@@ -516,6 +536,7 @@ impl MachineWindow {
     fn content(&mut self, shown: Option<&Shown>) -> Box<dyn Widget> {
         self.slot = None;
         self.snapshot_tools = None;
+        self.graphs = None;
         let Some(shown) = shown else {
             return centered(vec![boxed(
                 Label::new(&L10N.tr("machine-gone")).secondary(),
@@ -534,11 +555,25 @@ impl MachineWindow {
                     Status::Ready(accel) => Some(accel),
                     _ => None,
                 };
-                let lines = fleet
-                    .entry(&self.id)
-                    .map(|entry| present::info_lines(entry, accel))
-                    .unwrap_or_default();
-                boxed(ScrollView::new(Form::new(&Tab::Info.title(), lines)))
+                let Some(entry) = fleet.entry(&self.id) else {
+                    return super::page::blank();
+                };
+                let mut children: Vec<Box<dyn Widget>> = Vec::new();
+                if entry.running() {
+                    let (graphs, ids) = crate::containers::graph_widgets(&entry.history);
+                    self.graphs = Some(ids);
+                    children.push(boxed(Stack::new(Axis::Vertical, 8.0, 16.0, graphs)));
+                }
+                children.push(boxed(Form::new(
+                    &Tab::Info.title(),
+                    present::info_lines(entry, accel),
+                )));
+                boxed(ScrollView::new(Stack::new(
+                    Axis::Vertical,
+                    0.0,
+                    0.0,
+                    children,
+                )))
             }
             Tab::Snapshots => {
                 let table = snapshots::table(&self.intents);

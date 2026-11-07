@@ -16,6 +16,7 @@ pub struct CloudInit {
     pub user: String,
     pub ssh_keys: Vec<String>,
     pub packages: Vec<String>,
+    pub password: Option<String>,
 }
 
 const NEW_MACHINE_ID: &str = "rm -f /etc/machine-id && systemd-machine-id-setup";
@@ -80,13 +81,18 @@ fn write_seed_files(
 
 impl CloudInit {
     pub(crate) fn write_seed(&self, path: &Path, instance_id: &str) -> Result<()> {
+        let password = match &self.password {
+            Some(password) => Some(crate::password::hash_password(password)?),
+            None => None,
+        };
         let user_data = json!({
             "hostname": self.hostname,
             "users": [{
                 "name": self.user,
                 "shell": "/bin/bash",
                 "sudo": "ALL=(ALL) NOPASSWD:ALL",
-                "lock_passwd": true,
+                "lock_passwd": password.is_none(),
+                "hashed_passwd": password,
                 "ssh_authorized_keys": self.ssh_keys,
             }],
             "ssh_pwauth": false,

@@ -185,6 +185,23 @@ fn graph(title: &str, values: &(Vec<Series>, String)) -> Graph {
     graph
 }
 
+pub fn graph_widgets(usage: &Usage) -> (Vec<Box<dyn Widget>>, GraphIds) {
+    let graphs = usage.graphs();
+    let shown = [
+        graph(&L10N.tr("stats-cpu"), &graphs.cpu),
+        graph(&L10N.tr("stats-memory"), &graphs.memory),
+        graph(&L10N.tr("stats-network"), &graphs.network),
+        graph(&L10N.tr("stats-disk"), &graphs.disk),
+    ];
+    let ids = GraphIds {
+        cpu: shown[0].id(),
+        memory: shown[1].id(),
+        network: shown[2].id(),
+        disk: shown[3].id(),
+    };
+    (shown.into_iter().map(boxed).collect(), ids)
+}
+
 pub fn build(
     subject: Subject<'_>,
     usage: Option<&Usage>,
@@ -218,21 +235,10 @@ pub fn build(
             lines.push(boxed(Text::new(container.name(), TextRole::Heading)));
             lines.push(note(&container.status));
             if container.running() {
-                let graphs = usage.cloned().unwrap_or_default().graphs();
-                let shown = [
-                    graph(&L10N.tr("stats-cpu"), &graphs.cpu),
-                    graph(&L10N.tr("stats-memory"), &graphs.memory),
-                    graph(&L10N.tr("stats-network"), &graphs.network),
-                    graph(&L10N.tr("stats-disk"), &graphs.disk),
-                ];
-                ids = Some(GraphIds {
-                    cpu: shown[0].id(),
-                    memory: shown[1].id(),
-                    network: shown[2].id(),
-                    disk: shown[3].id(),
-                });
+                let (shown, graph_ids) = graph_widgets(&usage.cloned().unwrap_or_default());
+                ids = Some(graph_ids);
                 lines.push(section(&L10N.tr("inspector-stats")));
-                lines.extend(shown.into_iter().map(boxed));
+                lines.extend(shown);
             }
             if let Some(inspect) = inspect {
                 lines.extend(container_lines(inspect, intents));

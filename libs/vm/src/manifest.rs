@@ -64,6 +64,10 @@ impl Manifest {
         persist(&file, &staging, path)
     }
 
+    pub fn is_suspended(&self) -> bool {
+        self.resume_from.as_deref() == Some(crate::snapshot::SUSPENDED)
+    }
+
     pub fn ssh_port(&self) -> Option<u16> {
         self.forwards
             .iter()
