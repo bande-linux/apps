@@ -1539,14 +1539,7 @@ impl BrowserView {
         ]
     }
 
-    pub(crate) fn input(&mut self, event: &Event) {
-        if !self.handle_unhandled(&WindowEvent::Input(event.clone())) {
-            self.ui.handle(event);
-        }
-        self.settle();
-    }
-
-    pub(crate) fn paint(&mut self, width: u32, height: u32) -> Scene {
+    fn paint(&mut self, width: u32, height: u32) -> Scene {
         let (w, h) = (width as f32, height as f32);
         self.width = w;
         let sheet = self.sheet(w, h);
