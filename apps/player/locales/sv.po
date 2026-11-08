@@ -1,0 +1,59 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Player"
+msgstr "Spelare"
+
+msgid "Open Media"
+msgstr "Öppna media"
+
+msgid "Audio and video"
+msgstr "Ljud och video"
+
+msgid "Off"
+msgstr "Av"
+
+msgid "Pause"
+msgstr "Pausa"
+
+msgid "Play"
+msgstr "Spela upp"
+
+msgid "Open…"
+msgstr "Öppna …"
+
+msgid "Next"
+msgstr "Nästa"
+
+msgid "Previous"
+msgstr "Föregående"
+
+msgid "Speed"
+msgstr "Hastighet"
+
+msgid "Audio Track"
+msgstr "Ljudspår"
+
+msgid "Subtitles"
+msgstr "Undertexter"
+
+msgid "Loop"
+msgstr "Upprepa"
+
+msgid "Full Screen"
+msgstr "Helskärm"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "Playback"
+msgstr "Uppspelning"
+
+msgid "View"
+msgstr "Visa"

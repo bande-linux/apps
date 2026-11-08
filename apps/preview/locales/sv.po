@@ -1,0 +1,254 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "PNG image"
+msgstr "PNG-bild"
+
+msgid "JPEG image"
+msgstr "JPEG-bild"
+
+msgid "GIF image"
+msgstr "GIF-bild"
+
+msgid "WebP image"
+msgstr "WebP-bild"
+
+msgid "SVG image"
+msgstr "SVG-bild"
+
+msgid "PDF document"
+msgstr "PDF-dokument"
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "Where"
+msgstr "Plats"
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "Created"
+msgstr "Skapad"
+
+msgid "Modified"
+msgstr "Ändrad"
+
+msgid "Kind"
+msgstr "Typ"
+
+msgid "Dimensions"
+msgstr "Mått"
+
+msgid "{width} × {height} pixels"
+msgstr "{width} × {height} pixlar"
+
+msgid "{count}"
+msgstr "{count}"
+
+msgid "{count} (too long to play; showing the first)"
+msgstr "{count} (för lång för att spelas upp, visar den första)"
+
+msgid "Frames"
+msgstr "Bildrutor"
+
+msgid "Pages"
+msgstr "Sidor"
+
+msgid "Page size"
+msgstr "Sidstorlek"
+
+msgid "{width} × {height} points"
+msgstr "{width} × {height} punkter"
+
+msgid "PDF version"
+msgstr "PDF-version"
+
+msgid "Camera"
+msgstr "Kamera"
+
+msgid "Lens"
+msgstr "Objektiv"
+
+msgid "Taken"
+msgstr "Tagen"
+
+msgid "Exposure"
+msgstr "Exponering"
+
+msgid "Aperture"
+msgstr "Bländare"
+
+msgid "ISO"
+msgstr "ISO"
+
+msgid "Focal length"
+msgstr "Brännvidd"
+
+msgid "Title"
+msgstr "Titel"
+
+msgid "Author"
+msgstr "Författare"
+
+msgid "Subject"
+msgstr "Ämne"
+
+msgid "Created with"
+msgstr "Skapad med"
+
+msgid "Produced by"
+msgstr "Producerad av"
+
+msgid "Preview"
+msgstr "Förhandsvisning"
+
+msgid "Open"
+msgstr "Öppna"
+
+msgid "Images and PDF documents"
+msgstr "Bilder och PDF-dokument"
+
+msgid "Info"
+msgstr "Info"
+
+msgid "Open…"
+msgstr "Öppna…"
+
+msgid "Show in Files"
+msgstr "Visa i Filer"
+
+msgid "Get Info"
+msgstr "Visa info"
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Find…"
+msgstr "Sök…"
+
+msgid "Find Next"
+msgstr "Sök nästa"
+
+msgid "Find Previous"
+msgstr "Sök föregående"
+
+msgid "Hide Sidebar"
+msgstr "Dölj sidofält"
+
+msgid "Show Sidebar"
+msgstr "Visa sidofält"
+
+msgid "Stop Slideshow"
+msgstr "Avsluta bildspel"
+
+msgid "Slideshow"
+msgstr "Bildspel"
+
+msgid "Thumbnails"
+msgstr "Miniatyrer"
+
+msgid "Table of Contents"
+msgstr "Innehållsförteckning"
+
+msgid "Actual Size"
+msgstr "Verklig storlek"
+
+msgid "Zoom to Fit"
+msgstr "Anpassa till fönstret"
+
+msgid "Zoom In"
+msgstr "Zooma in"
+
+msgid "Zoom Out"
+msgstr "Zooma ut"
+
+msgid "Play or Pause Animation"
+msgstr "Spela upp eller pausa animation"
+
+msgid "Next"
+msgstr "Nästa"
+
+msgid "Previous"
+msgstr "Föregående"
+
+msgid "Rotate Left"
+msgstr "Rotera åt vänster"
+
+msgid "Rotate Right"
+msgstr "Rotera åt höger"
+
+msgid "Flip Horizontal"
+msgstr "Vänd horisontellt"
+
+msgid "Flip Vertical"
+msgstr "Vänd vertikalt"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "Edit"
+msgstr "Redigera"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "Go"
+msgstr "Gå"
+
+msgid "Tools"
+msgstr "Verktyg"
+
+msgid "Password"
+msgstr "Lösenord"
+
+msgid "The file cannot be read."
+msgstr "Det går inte att läsa filen."
+
+msgid "Preview does not open this kind of file."
+msgstr "Förhandsvisning kan inte öppna den här typen av fil."
+
+msgid "The file is damaged or is not in a format Preview understands."
+msgstr "Filen är skadad eller har ett format som Förhandsvisning inte förstår."
+
+msgid "The file is too large to open."
+msgstr "Filen är för stor för att öppnas."
+
+msgid "The image is too large to open ({width} × {height} pixels)."
+msgstr "Bilden är för stor för att öppnas ({width} × {height} pixlar)."
+
+msgid "Sidebar"
+msgstr "Sidofält"
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "No file is open"
+msgstr "Ingen fil är öppen"
+
+msgid "Open an image or a PDF document with File › Open… or from Files."
+msgstr "Öppna en bild eller ett PDF-dokument med Arkiv › Öppna… eller från Filer."
+
+msgid "{name} (page {page} of {count})"
+msgstr "{name} (sida {page} av {count})"
+
+msgid "“{name}” could not be opened."
+msgstr "Det gick inte att öppna ”{name}”."
+
+msgid "{name}, {width} × {height}"
+msgstr "{name}, {width} × {height}"
+
+msgid "“{name}” is locked."
+msgstr "”{name}” är låst."
+
+msgid "The password is incorrect. Try again."
+msgstr "Lösenordet är fel. Försök igen."
+
+msgid "Enter the document’s password to open it."
+msgstr "Ange dokumentets lösenord för att öppna det."

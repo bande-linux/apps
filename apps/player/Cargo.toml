@@ -56,4 +56,6 @@ assets = [
     ["data/org.bande.Player.desktop", "usr/share/applications/", "644"],
     ["data/org.bande.Player.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Player.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["target/release/l10n/development/bande-media-engine/*", "usr/share/bande/l10n/bande-media-engine/", "644"],
+    ["target/release/l10n/development/bande-player/*", "usr/share/bande/l10n/bande-player/", "644"],
 ]

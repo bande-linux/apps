@@ -18,6 +18,7 @@
 - The repo is one Cargo workspace with one `Cargo.lock`; dependencies, lints and profiles live in the root `Cargo.toml` (`x.workspace = true` in the apps).
 - The `bande-*` crates come from `bande-linux/desktop` as workspace git dependencies, all at the same `rev`. Change the pin only with `ci/bump-desktop.sh [REV]`, which re-locks and runs the gate on every app (`BUMP_NO_GATE=1` re-locks only). `ci/with-desktop.sh <desktop checkout> check --workspace --all-targets` tries a desktop branch on every app before it merges.
 - A toolkit or library change lands in the desktop repo first; the apps pick it up with a bump. Never fork or vendor a desktop crate here.
+- Strings are English keys, `tr!("Open File…")`, `trn!`, `text!`, translated in `locales/<lang>.po` and shipped as catalogs (`en.mo` in the app's package, `bande-<app>-l10n-<lang>` packs): desktop `docs/architecture/localisation.md`. `ci/l10n-tool.sh check|update|pack` runs the desktop's tool at the pinned rev.
 - App shortcuts use Ctrl (`Ctrl+N`, `Shift+Ctrl+N`); Super is reserved for the system.
 
 ## Workflow

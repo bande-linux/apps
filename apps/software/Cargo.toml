@@ -54,4 +54,5 @@ assets = [
     ["data/org.bande.Software.desktop", "usr/share/applications/", "644"],
     ["data/org.bande.Software.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["data/org.bande.Software.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/l10n/development/bande-software/*", "usr/share/bande/l10n/bande-software/", "644"],
 ]

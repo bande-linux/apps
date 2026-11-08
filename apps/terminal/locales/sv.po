@@ -1,0 +1,293 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Terminal"
+msgstr "Terminal"
+
+msgid "{command} failed with exit code {code}"
+msgstr "{command} misslyckades med felkod {code}"
+
+msgid "{command} finished"
+msgstr "{command} är klart"
+
+msgid "Close this tab? {program} is still running in it."
+msgstr "Vill du stänga den här fliken? {program} körs fortfarande i den."
+
+msgid "Close this tab?"
+msgstr "Vill du stänga den här fliken?"
+
+msgid "Close this pane? {program} is still running in it."
+msgstr "Vill du stänga den här rutan? {program} körs fortfarande i den."
+
+msgid "Close this pane?"
+msgstr "Vill du stänga den här rutan?"
+
+msgid "Quit"
+msgstr "Avsluta"
+
+msgid "Paste"
+msgstr "Klistra in"
+
+msgid "Rename"
+msgstr "Byt namn"
+
+msgid "Close"
+msgstr "Stäng"
+
+msgid "Close the other tabs?"
+msgstr "Vill du stänga de andra flikarna?"
+
+msgid "Close the other tabs? A program is still running in one of them."
+msgid_plural "Close the other tabs? Programs are still running in {count} of them."
+msgstr[0] "Vill du stänga de andra flikarna? Ett program körs fortfarande i en av dem."
+msgstr[1] "Vill du stänga de andra flikarna? Program körs fortfarande i {count} av dem."
+
+msgid "Quit Terminal?"
+msgstr "Vill du avsluta Terminal?"
+
+msgid "Quit Terminal? A program is still running in one tab."
+msgid_plural "Quit Terminal? Programs are still running in {count} tabs."
+msgstr[0] "Vill du avsluta Terminal? Ett program körs fortfarande i en flik."
+msgstr[1] "Vill du avsluta Terminal? Program körs fortfarande i {count} flikar."
+
+msgid "Close this window?"
+msgstr "Vill du stänga det här fönstret?"
+
+msgid "Close this window? A program is still running in one tab."
+msgid_plural "Close this window? Programs are still running in {count} tabs."
+msgstr[0] "Vill du stänga det här fönstret? Ett program körs fortfarande i en flik."
+msgstr[1] "Vill du stänga det här fönstret? Program körs fortfarande i {count} flikar."
+
+msgid "Paste {count} lines? The shell may run each line as a command."
+msgstr "Vill du klistra in {count} rader? Skalet kan köra varje rad som ett kommando."
+
+msgid "Tabs"
+msgstr "Flikar"
+
+msgid "New Tab"
+msgstr "Ny flik"
+
+msgid "Find"
+msgstr "Sök"
+
+msgid "Edit Title"
+msgstr "Redigera titel"
+
+msgid "Previous"
+msgstr "Föregående"
+
+msgid "Next"
+msgstr "Nästa"
+
+msgid "Done"
+msgstr "Klar"
+
+msgid "Tab title"
+msgstr "Fliktitel"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Not found"
+msgstr "Hittades inte"
+
+msgid "Terminal Settings"
+msgstr "Inställningar för Terminal"
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Select All"
+msgstr "Markera allt"
+
+msgid "Clear Scrollback"
+msgstr "Rensa historik"
+
+msgid "Bigger"
+msgstr "Större"
+
+msgid "Smaller"
+msgstr "Mindre"
+
+msgid "Default Size"
+msgstr "Standardstorlek"
+
+msgid "Select Command Output"
+msgstr "Markera kommandots utdata"
+
+msgid "New Window"
+msgstr "Nytt fönster"
+
+msgid "Show Next Tab"
+msgstr "Visa nästa flik"
+
+msgid "Show Previous Tab"
+msgstr "Visa föregående flik"
+
+msgid "Find…"
+msgstr "Sök…"
+
+msgid "Find Next"
+msgstr "Sök nästa"
+
+msgid "Split Side by Side"
+msgstr "Dela sida vid sida"
+
+msgid "Split Top and Bottom"
+msgstr "Dela upp och ned"
+
+msgid "Select Next Pane"
+msgstr "Markera nästa ruta"
+
+msgid "Select Previous Pane"
+msgstr "Markera föregående ruta"
+
+msgid "Jump to Previous Command"
+msgstr "Hoppa till föregående kommando"
+
+msgid "Jump to Next Command"
+msgstr "Hoppa till nästa kommando"
+
+msgid "Find Previous"
+msgstr "Sök föregående"
+
+msgid "Open"
+msgstr "Öppna"
+
+msgid "Copy Path"
+msgstr "Kopiera sökväg"
+
+msgid "Show in Files"
+msgstr "Visa i Filer"
+
+msgid "Open Link"
+msgstr "Öppna länk"
+
+msgid "Copy Link"
+msgstr "Kopiera länk"
+
+msgid "Look Up “{word}”"
+msgstr "Slå upp ”{word}”"
+
+msgid "Close Tab"
+msgstr "Stäng flik"
+
+msgid "Close Other Tabs"
+msgstr "Stäng andra flikar"
+
+msgid "Close Window"
+msgstr "Stäng fönster"
+
+msgid "Shell"
+msgstr "Skal"
+
+msgid "Edit"
+msgstr "Redigera"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "Block"
+msgstr "Block"
+
+msgid "Bar"
+msgstr "Stapel"
+
+msgid "Underline"
+msgstr "Understreck"
+
+msgid "Always"
+msgstr "Alltid"
+
+msgid "When a program is running"
+msgstr "När ett program körs"
+
+msgid "Never"
+msgstr "Aldrig"
+
+msgid "The same folder"
+msgstr "Samma mapp"
+
+msgid "Your home folder"
+msgstr "Din hemmapp"
+
+msgid "~/bande $ cargo build --release"
+msgstr "~/bande $ cargo build --release"
+
+msgid "Profile"
+msgstr "Profil"
+
+msgid "Font"
+msgstr "Teckensnitt"
+
+msgid "Text size"
+msgstr "Textstorlek"
+
+msgid "{size} pt"
+msgstr "{size} pt"
+
+msgid "Columns"
+msgstr "Kolumner"
+
+msgid "Rows"
+msgstr "Rader"
+
+msgid "Cursor"
+msgstr "Markör"
+
+msgid "Play the alert sound"
+msgstr "Spela upp varningsljudet"
+
+msgid "Flash the window"
+msgstr "Blinka med fönstret"
+
+msgid "Show a badge in the bar"
+msgstr "Visa en märkning i fältet"
+
+msgid "Notify when long commands finish"
+msgstr "Meddela när långa kommandon är klara"
+
+msgid "Blink the cursor"
+msgstr "Blinka med markören"
+
+msgid "Login shell"
+msgstr "Inloggningsskal"
+
+msgid "New tabs and windows open in"
+msgstr "Nya flikar och fönster öppnas i"
+
+msgid "Ask before closing"
+msgstr "Fråga före stängning"
+
+msgid "Scrollback"
+msgstr "Historik"
+
+msgid "{count} lines"
+msgstr "{count} rader"
+
+msgid "Use Alt as Meta"
+msgstr "Använd Alt som Meta"
+
+msgid "Warn before pasting several lines"
+msgstr "Varna före inklistring av flera rader"
+
+msgid "Appearance"
+msgstr "Utseende"
+
+msgid "Run command"
+msgstr "Kör kommando"
+
+msgid "Keyboard and Paste"
+msgstr "Tangentbord och inklistring"
+
+msgid "Bell"
+msgstr "Signal"
+
+msgid "Notifications"
+msgstr "Notiser"

@@ -1,0 +1,387 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Software"
+msgstr "Programvara"
+
+msgid "Software Settings"
+msgstr "Inställningar för Programvara"
+
+msgid "{name} is installed"
+msgstr "{name} har installerats"
+
+msgid "{name} couldn’t be installed"
+msgstr "Det gick inte att installera {name}"
+
+msgid "Find"
+msgstr "Sök"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "Back"
+msgstr "Tillbaka"
+
+msgid "Discover"
+msgstr "Utforska"
+
+msgctxt "section"
+msgid "Installed"
+msgstr "Installerade"
+
+msgid "Updates"
+msgstr "Uppdateringar"
+
+msgid "Get apps from Flathub"
+msgstr "Hämta appar från Flathub"
+
+msgid "Sources"
+msgstr "Källor"
+
+msgid "Flathub offers apps Debian doesn’t have, and newer versions, packaged by their developers or the community. They install for you only, without a password, run in a sandbox and update with Software Update."
+msgstr "Flathub erbjuder appar som Debian inte har, och nyare versioner, paketerade av utvecklarna eller gemenskapen. De installeras bara för dig, utan lösenord, körs i en sandlåda och uppdateras med Programuppdatering."
+
+msgid "Internet"
+msgstr "Internet"
+
+msgid "Productivity"
+msgstr "Produktivitet"
+
+msgid "Graphics & Photography"
+msgstr "Grafik och foto"
+
+msgid "Music & Video"
+msgstr "Musik och video"
+
+msgid "Games"
+msgstr "Spel"
+
+msgid "Education & Science"
+msgstr "Utbildning och vetenskap"
+
+msgid "Developer Tools"
+msgstr "Utvecklingsverktyg"
+
+msgid "Utilities"
+msgstr "Verktyg"
+
+msgid "System"
+msgstr "System"
+
+msgid "Flathub"
+msgstr "Flathub"
+
+msgid "Uses the network"
+msgstr "Använder nätverket"
+
+msgid "Can read and change all your files and the system’s"
+msgstr "Kan läsa och ändra alla dina filer och systemets"
+
+msgid "Can read and change the files in your home folder"
+msgstr "Kan läsa och ändra filerna i din hemmapp"
+
+msgid "Can read your files"
+msgstr "Kan läsa dina filer"
+
+msgid "Can read and change some of your folders"
+msgstr "Kan läsa och ändra några av dina mappar"
+
+msgid "Can use devices such as cameras, USB devices and game controllers"
+msgstr "Kan använda enheter som kameror, USB-enheter och handkontroller"
+
+msgid "Can play and record sound"
+msgstr "Kan spela upp och spela in ljud"
+
+msgid "Can use Bluetooth"
+msgstr "Kan använda Bluetooth"
+
+msgid "Can print"
+msgstr "Kan skriva ut"
+
+msgid "Can use your SSH keys"
+msgstr "Kan använda dina SSH-nycklar"
+
+msgid "Draws through X11"
+msgstr "Ritar via X11"
+
+msgid "Can talk to every app and service in your session"
+msgstr "Kan kommunicera med alla appar och tjänster i din session"
+
+msgid "Can talk to system services"
+msgstr "Kan kommunicera med systemtjänster"
+
+msgid "Can read and change other apps’ settings"
+msgstr "Kan läsa och ändra andra appars inställningar"
+
+msgid "Debian {suite} ({component})"
+msgstr "Debian {suite} ({component})"
+
+msgid "Updates ({count})"
+msgstr "Uppdateringar ({count})"
+
+msgid "Show"
+msgstr "Visa"
+
+msgid "Debian"
+msgstr "Debian"
+
+msgid "Flatpak · {remote}"
+msgstr "Flatpak · {remote}"
+
+msgid "Waiting for your password…"
+msgstr "Väntar på ditt lösenord…"
+
+msgid "Waiting for another installation…"
+msgstr "Väntar på en annan installation…"
+
+msgid "Downloading…"
+msgstr "Hämtar…"
+
+msgid "Removing…"
+msgstr "Tar bort…"
+
+msgid "Installing…"
+msgstr "Installerar…"
+
+msgid "{status} {percent}%"
+msgstr "{status} {percent} %"
+
+msgid "Couldn’t download {name}. Check your internet connection and try again."
+msgstr "Det gick inte att hämta {name}. Kontrollera internetanslutningen och försök igen."
+
+msgid "Another installation or update is running. Try again when it finishes."
+msgstr "En annan installation eller uppdatering pågår. Försök igen när den är klar."
+
+msgid "There isn’t enough disk space for {name}. Free up some space and try again."
+msgstr "Det finns inte tillräckligt med diskutrymme för {name}. Frigör utrymme och försök igen."
+
+msgid "{name} isn’t in the package lists any more. Check for updates in Software Update to refresh them, then try again."
+msgstr "{name} finns inte längre i paketlistorna. Sök efter uppdateringar i Programuppdatering för att uppdatera dem och försök sedan igen."
+
+msgid "{name} needs packages that can’t be installed right now. Install pending updates in Software Update, then try again."
+msgstr "{name} kräver paket som inte kan installeras just nu. Installera väntande uppdateringar i Programuppdatering och försök sedan igen."
+
+msgid "{name} is part of the system and can’t be removed."
+msgstr "{name} är en del av systemet och kan inte tas bort."
+
+msgid "{name} isn’t signed by a trusted source, so it wasn’t installed."
+msgstr "{name} är inte signerat av en betrodd källa och installerades därför inte."
+
+msgid "Nothing was changed, because no administrator’s password was given. If no password window appeared, log out and back in, then try again."
+msgstr "Inget ändrades, eftersom inget administratörslösenord angavs. Om inget lösenordsfönster visades, logga ut och in igen och försök sedan igen."
+
+msgid "Installing apps needs PackageKit, which isn’t installed."
+msgstr "För att installera appar behövs PackageKit, som inte är installerat."
+
+msgid "This app needs X11, which Bande doesn’t run."
+msgstr "Den här appen kräver X11, som Bande inte kör."
+
+msgid "Couldn’t install {name}."
+msgstr "Det gick inte att installera {name}."
+
+msgid "Couldn’t remove {name}."
+msgstr "Det gick inte att ta bort {name}."
+
+msgid "Search apps"
+msgstr "Sök appar"
+
+msgid "Open"
+msgstr "Öppna"
+
+msgid "Installed"
+msgstr "Installerad"
+
+msgid "Install"
+msgstr "Installera"
+
+msgid "Show {count} More"
+msgstr "Visa {count} till"
+
+msgid "No apps match “{query}”."
+msgstr "Inga appar matchar ”{query}”."
+
+msgid "Results for “{query}”"
+msgstr "Resultat för ”{query}”"
+
+msgid "Categories"
+msgstr "Kategorier"
+
+msgid "New & Updated"
+msgstr "Nytt och uppdaterat"
+
+msgid "Turning off Flathub…"
+msgstr "Slår av Flathub…"
+
+msgid "Turning on Flathub…"
+msgstr "Slår på Flathub…"
+
+msgid "Details"
+msgstr "Detaljer"
+
+msgid "No apps from the catalogue are installed."
+msgstr "Inga appar från katalogen är installerade."
+
+msgid "Your apps and system are up to date."
+msgstr "Dina appar och ditt system är uppdaterade."
+
+msgid "Updates are installed in Settings › Software Update, which also restarts what needs it."
+msgstr "Uppdateringar installeras i Inställningar › Programuppdatering, som också startar om det som behöver det."
+
+msgid "Check for Updates…"
+msgstr "Sök efter uppdateringar…"
+
+msgid "1 update is available."
+msgid_plural "{count} updates are available."
+msgstr[0] "1 uppdatering finns tillgänglig."
+msgstr[1] "{count} uppdateringar finns tillgängliga."
+
+msgid "Update All…"
+msgstr "Uppdatera alla…"
+
+msgid "Apps"
+msgstr "Appar"
+
+msgid "{name} {version} · {source}"
+msgstr "{name} {version} · {source}"
+
+msgid "and {count} more"
+msgstr "och {count} till"
+
+msgid "1 package"
+msgid_plural "All {count} packages"
+msgstr[0] "1 paket"
+msgstr[1] "Alla {count} paket"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Enter an administrator’s password in the dialog to install {name}, or cancel it to stop."
+msgstr "Ange en administratörs lösenord i dialogrutan för att installera {name}, eller avbryt för att sluta."
+
+msgid "Enter an administrator’s password in the dialog to remove {name}, or cancel it to stop."
+msgstr "Ange en administratörs lösenord i dialogrutan för att ta bort {name}, eller avbryt för att sluta."
+
+msgid "Source"
+msgstr "Källa"
+
+msgid "{source} {version}"
+msgstr "{source} {version}"
+
+msgid "a system package from Debian, checked by Debian and updated with the system."
+msgstr "ett systempaket från Debian, granskat av Debian och uppdaterat tillsammans med systemet."
+
+msgid "a sandboxed Flatpak, installed for you only and packaged by its developers or the community."
+msgstr "ett Flatpak i en sandlåda, installerat bara för dig och paketerat av utvecklarna eller gemenskapen."
+
+msgid "{source}: {note}"
+msgstr "{source}: {note}"
+
+msgid "Remove"
+msgstr "Ta bort"
+
+msgid "An update is available."
+msgstr "En uppdatering finns tillgänglig."
+
+msgid "You’ll be asked for an administrator’s password."
+msgstr "Du får frågan om en administratörs lösenord."
+
+msgid "Installed for you only, without a password. It runs in a sandbox with the permissions below."
+msgstr "Installeras bara för dig, utan lösenord. Appen körs i en sandlåda med behörigheterna nedan."
+
+msgid "Remove {name}?"
+msgstr "Vill du ta bort {name}?"
+
+msgid "This also removes {packages}."
+msgstr "Detta tar också bort {packages}."
+
+msgid "Runtimes that no other app uses are removed with it."
+msgstr "Körmiljöer som ingen annan app använder tas bort med den."
+
+msgid "Loading screenshot…"
+msgstr "Läser in skärmbild…"
+
+msgid "Screenshot of {name}"
+msgstr "Skärmbild av {name}"
+
+msgid "Screenshots appear when you’re online."
+msgstr "Skärmbilder visas när du är online."
+
+msgid "The screenshot couldn’t be loaded."
+msgstr "Det gick inte att läsa in skärmbilden."
+
+msgid "Previous"
+msgstr "Föregående"
+
+msgid "Next"
+msgstr "Nästa"
+
+msgid "{index} of {count}"
+msgstr "{index} av {count}"
+
+msgid "Version {version} · {date}"
+msgstr "Version {version} · {date}"
+
+msgid "Version {version}"
+msgstr "Version {version}"
+
+msgid "What’s New"
+msgstr "Nyheter"
+
+msgid "Permissions"
+msgstr "Behörigheter"
+
+msgid "Runs in a sandbox with no access beyond its own files."
+msgstr "Körs i en sandlåda utan åtkomst till något utöver sina egna filer."
+
+msgid "Version"
+msgstr "Version"
+
+msgid "Installed Version"
+msgstr "Installerad version"
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "{size}, and {runtime_size} for the {runtime} runtime"
+msgstr "{size} och {runtime_size} för körmiljön {runtime}"
+
+msgid "{size}, with 1 more package"
+msgid_plural "{size}, with {count} more packages"
+msgstr[0] "{size}, med ytterligare 1 paket"
+msgstr[1] "{size}, med ytterligare {count} paket"
+
+msgid "Download"
+msgstr "Hämtning"
+
+msgid "Category"
+msgstr "Kategori"
+
+msgid "Licence"
+msgstr "Licens"
+
+msgid "Developer"
+msgstr "Utvecklare"
+
+msgid "Developer Website"
+msgstr "Utvecklarens webbplats"
+
+msgid "Website"
+msgstr "Webbplats"
+
+msgid "Information"
+msgstr "Information"
+
+msgid "Loading apps…"
+msgstr "Läser in appar…"
+
+msgid "No app catalogue is installed. Install the appstream package and refresh the package lists in Software Update."
+msgstr "Ingen appkatalog är installerad. Installera paketet appstream och uppdatera paketlistorna i Programuppdatering."
+
+msgid "You’re offline. You can browse apps, but installing them and their screenshots need the internet."
+msgstr "Du är offline. Du kan bläddra bland appar, men för att installera dem och visa skärmbilder behövs internet."

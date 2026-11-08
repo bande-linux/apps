@@ -1,0 +1,20 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Template"
+msgstr "Mall"
+
+msgid "Hello from a Bande app"
+msgstr "Hej från en Bande-app"
+
+msgid "New Window"
+msgstr "Nytt fönster"
+
+msgid "File"
+msgstr "Arkiv"

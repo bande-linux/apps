@@ -89,3 +89,6 @@ inherits = "release"
 lto = false
 codegen-units = 256
 opt-level = 0
+
+[workspace.metadata.l10n]
+development-language = "en"

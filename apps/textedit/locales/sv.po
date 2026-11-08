@@ -1,0 +1,401 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Unicode (UTF-8)"
+msgstr "Unicode (UTF-8)"
+
+msgid "Unicode (UTF-16 Little Endian)"
+msgstr "Unicode (UTF-16 Little Endian)"
+
+msgid "Unicode (UTF-16 Big Endian)"
+msgstr "Unicode (UTF-16 Big Endian)"
+
+msgid "Western (Windows Latin 1)"
+msgstr "Västeuropeisk (Windows Latin 1)"
+
+msgid "Western (ISO Latin 9)"
+msgstr "Västeuropeisk (ISO Latin 9)"
+
+msgid "Western (Mac OS Roman)"
+msgstr "Västeuropeisk (Mac OS Roman)"
+
+msgid "Central European (Windows Latin 2)"
+msgstr "Centraleuropeisk (Windows Latin 2)"
+
+msgid "Central European (ISO Latin 2)"
+msgstr "Centraleuropeisk (ISO Latin 2)"
+
+msgid "Cyrillic (Windows)"
+msgstr "Kyrillisk (Windows)"
+
+msgid "Cyrillic (ISO 8859-5)"
+msgstr "Kyrillisk (ISO 8859-5)"
+
+msgid "Cyrillic (KOI8-R)"
+msgstr "Kyrillisk (KOI8-R)"
+
+msgid "Cyrillic (DOS)"
+msgstr "Kyrillisk (DOS)"
+
+msgid "Greek (Windows)"
+msgstr "Grekisk (Windows)"
+
+msgid "Greek (ISO 8859-7)"
+msgstr "Grekisk (ISO 8859-7)"
+
+msgid "Turkish (Windows Latin 5)"
+msgstr "Turkisk (Windows Latin 5)"
+
+msgid "Japanese (Shift JIS)"
+msgstr "Japansk (Shift JIS)"
+
+msgid "Japanese (EUC)"
+msgstr "Japansk (EUC)"
+
+msgid "Chinese Simplified (GBK)"
+msgstr "Förenklad kinesiska (GBK)"
+
+msgid "Chinese Traditional (Big 5)"
+msgstr "Traditionell kinesiska (Big 5)"
+
+msgid "Korean (EUC)"
+msgstr "Koreansk (EUC)"
+
+msgid "Thai (Windows)"
+msgstr "Thailändsk (Windows)"
+
+msgid "TextEdit"
+msgstr "TextEdit"
+
+msgid "The file is larger than 512 MB."
+msgstr "Filen är större än 512 MB."
+
+msgid "Untitled"
+msgstr "Namnlös"
+
+msgid "Untitled {number}"
+msgstr "Namnlös {number}"
+
+msgid "Save As"
+msgstr "Spara som"
+
+msgid "Open"
+msgstr "Öppna"
+
+msgid "Clear Menu"
+msgstr "Rensa meny"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "New"
+msgstr "Nytt"
+
+msgid "Open…"
+msgstr "Öppna…"
+
+msgid "Open Recent"
+msgstr "Öppna senaste"
+
+msgid "Save"
+msgstr "Spara"
+
+msgid "Save As…"
+msgstr "Spara som…"
+
+msgid "Reopen with Encoding"
+msgstr "Öppna igen med teckenkodning"
+
+msgid "Last Saved"
+msgstr "Senast sparad"
+
+msgid "Revert To"
+msgstr "Återgå till"
+
+msgid "Wrap to Window"
+msgstr "Radbryt vid fönstret"
+
+msgid "Wrap to Page"
+msgstr "Radbryt vid sidan"
+
+msgid "Font"
+msgstr "Typsnitt"
+
+msgid "Monospaced"
+msgstr "Fast breddsteg"
+
+msgid "Proportional"
+msgstr "Proportionell"
+
+msgid "Bigger"
+msgstr "Större"
+
+msgid "Smaller"
+msgstr "Mindre"
+
+msgid "Actual Size"
+msgstr "Verklig storlek"
+
+msgid "Make Rich Text"
+msgstr "Gör till formaterad text"
+
+msgid "Text Encoding"
+msgstr "Teckenkodning"
+
+msgid "Line Endings"
+msgstr "Radslut"
+
+msgid "Format"
+msgstr "Format"
+
+msgid "Increase Indent"
+msgstr "Öka indrag"
+
+msgid "Decrease Indent"
+msgstr "Minska indrag"
+
+msgid "Bold"
+msgstr "Fet"
+
+msgid "Italic"
+msgstr "Kursiv"
+
+msgid "Underline"
+msgstr "Understruken"
+
+msgid "Strikethrough"
+msgstr "Genomstruken"
+
+msgid "Typeface"
+msgstr "Typsnittsfamilj"
+
+msgid "Colour"
+msgstr "Färg"
+
+msgid "Alignment"
+msgstr "Justering"
+
+msgid "List"
+msgstr "Lista"
+
+msgid "Styles"
+msgstr "Stilar"
+
+msgid "Make Plain Text"
+msgstr "Gör till oformaterad text"
+
+msgid "Find…"
+msgstr "Sök…"
+
+msgid "Find and Replace…"
+msgstr "Sök och ersätt…"
+
+msgid "Find Next"
+msgstr "Sök nästa"
+
+msgid "Find Previous"
+msgstr "Sök föregående"
+
+msgid "Use Selection for Find"
+msgstr "Använd markering för sökning"
+
+msgid "Go to Line…"
+msgstr "Gå till rad…"
+
+msgid "System"
+msgstr "System"
+
+msgid "Serif"
+msgstr "Serif"
+
+msgid "Display"
+msgstr "Rubrik"
+
+msgid "Automatic"
+msgstr "Automatisk"
+
+msgid "Red"
+msgstr "Röd"
+
+msgid "Orange"
+msgstr "Orange"
+
+msgid "Green"
+msgstr "Grön"
+
+msgid "Blue"
+msgstr "Blå"
+
+msgid "Purple"
+msgstr "Lila"
+
+msgid "Brown"
+msgstr "Brun"
+
+msgid "Grey"
+msgstr "Grå"
+
+msgid "Align Left"
+msgstr "Vänsterjustera"
+
+msgid "Centre"
+msgstr "Centrera"
+
+msgid "Align Right"
+msgstr "Högerjustera"
+
+msgid "Justify"
+msgstr "Marginaljustera"
+
+msgid "None"
+msgstr "Ingen"
+
+msgid "Bullets"
+msgstr "Punkter"
+
+msgid "Numbers"
+msgstr "Siffror"
+
+msgid "Body"
+msgstr "Brödtext"
+
+msgid "Title"
+msgstr "Titel"
+
+msgid "Heading"
+msgstr "Rubrik"
+
+msgid "Subheading"
+msgstr "Underrubrik"
+
+msgid "{name} — Edited"
+msgstr "{name} — Redigerad"
+
+msgid "Some bytes are not {encoding}"
+msgstr "Vissa byte är inte {encoding}"
+
+msgid "“{name}” could not be opened."
+msgstr "Det gick inte att öppna ”{name}”."
+
+msgid "OK"
+msgstr "OK"
+
+msgid "“{name}” has pictures or tables that TextEdit can’t keep."
+msgstr "”{name}” innehåller bilder eller tabeller som TextEdit inte kan behålla."
+
+msgid "Saving over it would lose them. Save a copy as rich text instead?"
+msgstr "Om du sparar över filen går de förlorade. Vill du spara en kopia som formaterad text i stället?"
+
+msgid "The document can’t be saved as {encoding}."
+msgstr "Dokumentet kan inte sparas som {encoding}."
+
+msgid "It contains characters that this encoding can’t hold. Save it as Unicode (UTF-8) instead?"
+msgstr "Det innehåller tecken som den här teckenkodningen inte kan lagra. Vill du spara det som Unicode (UTF-8) i stället?"
+
+msgid "“{name}” could not be saved."
+msgstr "Det gick inte att spara ”{name}”."
+
+msgid "Do you want to save the changes made to “{name}”?"
+msgstr "Vill du spara ändringarna i ”{name}”?"
+
+msgid "Your changes will be lost if you don’t save them."
+msgstr "Dina ändringar går förlorade om du inte sparar dem."
+
+msgid "Line number"
+msgstr "Radnummer"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Go"
+msgstr "Gå"
+
+msgid "Find"
+msgstr "Sök"
+
+msgid "Match Case"
+msgstr "Matcha versaler och gemener"
+
+msgid "Regular Expression"
+msgstr "Reguljärt uttryck"
+
+msgid "Done"
+msgstr "Klar"
+
+msgid "Replace with"
+msgstr "Ersätt med"
+
+msgid "Replace"
+msgstr "Ersätt"
+
+msgid "Replace All"
+msgstr "Ersätt alla"
+
+msgid "Not a valid regular expression"
+msgstr "Inte ett giltigt reguljärt uttryck"
+
+msgid "Not found"
+msgstr "Hittades inte"
+
+msgid "One replaced"
+msgid_plural "{count} replaced"
+msgstr[0] "En ersatt"
+msgstr[1] "{count} ersatta"
+
+msgid "Convert this document to plain text?"
+msgstr "Vill du konvertera dokumentet till oformaterad text?"
+
+msgid "Its fonts, styles, colours and lists will be lost. The converted document is saved as a new plain text file."
+msgstr "Typsnitt, stilar, färger och listor går förlorade. Det konverterade dokumentet sparas som en ny fil med oformaterad text."
+
+msgid "Opening…"
+msgstr "Öppnar…"
+
+msgid "1 word"
+msgid_plural "{count} words"
+msgstr[0] "1 ord"
+msgstr[1] "{count} ord"
+
+msgid "1 character"
+msgid_plural "{count} characters"
+msgstr[0] "1 tecken"
+msgstr[1] "{count} tecken"
+
+msgid "Rich Text Document"
+msgstr "Dokument med formaterad text"
+
+msgid "Markdown"
+msgstr "Markdown"
+
+msgid "Web Page"
+msgstr "Webbsida"
+
+msgid "Word Document"
+msgstr "Word-dokument"
+
+msgid "OpenDocument Text"
+msgstr "OpenDocument-text"
+
+msgid "LF (macOS and Linux)"
+msgstr "LF (macOS och Linux)"
+
+msgid "CRLF (Windows)"
+msgstr "CRLF (Windows)"
+
+msgid "CR (Classic Mac OS)"
+msgstr "CR (Classic Mac OS)"
+
+msgid "Don’t Save"
+msgstr "Spara inte"
+
+msgid "Save a Copy…"
+msgstr "Spara en kopia…"
+
+msgid "Save as UTF-8"
+msgstr "Spara som UTF-8"

@@ -1,0 +1,1346 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Exited ({code})"
+msgstr "Avslutad ({code})"
+
+msgid "{state}, out of memory"
+msgstr "{state}, slut på minne"
+
+msgid "CONTAINER"
+msgstr "CONTAINER"
+
+msgid "Image"
+msgstr "Image"
+
+msgid "State"
+msgstr "Tillstånd"
+
+msgid "Created"
+msgstr "Skapad"
+
+msgid "Restarts"
+msgstr "Omstarter"
+
+msgid "It keeps restarting. Check its logs."
+msgstr "Den startar om hela tiden. Kontrollera loggarna."
+
+msgid "PROCESS"
+msgstr "PROCESS"
+
+msgid "Command"
+msgstr "Kommando"
+
+msgid "Working Folder"
+msgstr "Arbetsmapp"
+
+msgid "ENVIRONMENT ({count})"
+msgstr "MILJÖ ({count})"
+
+msgid "NETWORK"
+msgstr "NÄTVERK"
+
+msgid "IP Address"
+msgstr "IP-adress"
+
+msgid "No published ports"
+msgstr "Inga publicerade portar"
+
+msgid "MOUNTS ({count})"
+msgstr "MONTERINGAR ({count})"
+
+msgid "read-only"
+msgstr "skrivskyddad"
+
+msgid "LABELS ({count})"
+msgstr "ETIKETTER ({count})"
+
+msgid "1 min"
+msgstr "1 min"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "Memory"
+msgstr "Minne"
+
+msgid "Network"
+msgstr "Nätverk"
+
+msgid "Disk"
+msgstr "Disk"
+
+msgid "No Selection"
+msgstr "Inget markerat"
+
+msgid "{count} Selected"
+msgstr "{count} markerade"
+
+msgid "{running} of {total} running"
+msgstr "{running} av {total} körs"
+
+msgid "Folder"
+msgstr "Mapp"
+
+msgid "STATS"
+msgstr "STATISTIK"
+
+msgid "{name} — Logs"
+msgstr "{name} — Loggar"
+
+msgid "Filter"
+msgstr "Filter"
+
+msgid "Auto-scroll"
+msgstr "Rulla automatiskt"
+
+msgid "Wrap"
+msgstr "Radbryt"
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Clear"
+msgstr "Töm"
+
+msgid "{shown} of {total} lines"
+msgstr "{shown} av {total} rader"
+
+msgid "Start {count} Containers"
+msgstr "Starta {count} containrar"
+
+msgid "Stop {count} Containers"
+msgstr "Stoppa {count} containrar"
+
+msgid "Restart {count} Containers"
+msgstr "Starta om {count} containrar"
+
+msgid "Pause {count} Containers"
+msgstr "Pausa {count} containrar"
+
+msgid "Resume {count} Containers"
+msgstr "Återuppta {count} containrar"
+
+msgid "Kill {count} Containers"
+msgstr "Avbryt {count} containrar tvärt"
+
+msgid "Delete {count} Containers…"
+msgstr "Radera {count} containrar …"
+
+msgid "Start"
+msgstr "Starta"
+
+msgid "Stop"
+msgstr "Stoppa"
+
+msgid "Restart"
+msgstr "Starta om"
+
+msgid "Pause"
+msgstr "Pausa"
+
+msgid "Resume"
+msgstr "Återuppta"
+
+msgid "Kill"
+msgstr "Avbryt tvärt"
+
+msgid "Delete…"
+msgstr "Radera …"
+
+msgid "Show Logs"
+msgstr "Visa loggar"
+
+msgid "Open in Terminal"
+msgstr "Öppna i Terminal"
+
+msgid "Open Shell"
+msgstr "Öppna skal"
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "Container ID"
+msgstr "Container-ID"
+
+msgid "As docker run Command"
+msgstr "Som docker run-kommando"
+
+msgid "Up Project"
+msgstr "Starta projekt"
+
+msgid "Restart Project"
+msgstr "Starta om projekt"
+
+msgid "Down Project…"
+msgstr "Ta ned projekt …"
+
+msgid "Open {url}"
+msgstr "Öppna {url}"
+
+msgid "Cannot start the project “{name}”"
+msgstr "Det gick inte att starta projektet ”{name}”"
+
+msgid "Cannot take down the project “{name}”"
+msgstr "Det gick inte att ta ned projektet ”{name}”"
+
+msgid "Cannot restart the project “{name}”"
+msgstr "Det gick inte att starta om projektet ”{name}”"
+
+msgid "Delete “{name}”?"
+msgstr "Vill du radera ”{name}”?"
+
+msgid "Delete {count} containers?"
+msgstr "Vill du radera {count} containrar?"
+
+msgid "Its changes to the file system are lost. Volumes are kept."
+msgid_plural "Their changes to the file system are lost. Volumes are kept."
+msgstr[0] "Ändringarna i filsystemet går förlorade. Volymer behålls."
+msgstr[1] "Ändringarna i filsystemen går förlorade. Volymer behålls."
+
+msgid "Running containers are stopped first."
+msgstr "Containrar som körs stoppas först."
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Take down “{name}”?"
+msgstr "Vill du ta ned ”{name}”?"
+
+msgid "Its containers and networks are removed. Volumes and images are kept."
+msgstr "Containrar och nätverk tas bort. Volymer och images behålls."
+
+msgid "Down"
+msgstr "Ta ned"
+
+msgid "Hide Inspector"
+msgstr "Dölj inspektör"
+
+msgid "Show Inspector"
+msgstr "Visa inspektör"
+
+msgid "Inspector"
+msgstr "Inspektör"
+
+msgid "Filter containers"
+msgstr "Filtrera containrar"
+
+msgid "No Containers"
+msgstr "Inga containrar"
+
+msgid "Run one with docker run."
+msgstr "Kör en med docker run."
+
+msgid "Cannot start “{name}”"
+msgstr "Det gick inte att starta ”{name}”"
+
+msgid "Cannot stop “{name}”"
+msgstr "Det gick inte att stoppa ”{name}”"
+
+msgid "Cannot restart “{name}”"
+msgstr "Det gick inte att starta om ”{name}”"
+
+msgid "Cannot pause “{name}”"
+msgstr "Det gick inte att pausa ”{name}”"
+
+msgid "Cannot resume “{name}”"
+msgstr "Det gick inte att återuppta ”{name}”"
+
+msgid "Cannot kill “{name}”"
+msgstr "Det gick inte att avbryta ”{name}” tvärt"
+
+msgid "Cannot delete “{name}”"
+msgstr "Det gick inte att radera ”{name}”"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Status"
+msgstr "Status"
+
+msgid "Ports"
+msgstr "Portar"
+
+msgid "Starting…"
+msgstr "Startar …"
+
+msgid "Stopping…"
+msgstr "Stoppar …"
+
+msgid "Restarting…"
+msgstr "Startar om …"
+
+msgid "Pausing…"
+msgstr "Pausar …"
+
+msgid "Resuming…"
+msgstr "Återupptar …"
+
+msgid "Killing…"
+msgstr "Avbryter tvärt …"
+
+msgid "Deleting…"
+msgstr "Raderar …"
+
+msgid "Import Volume"
+msgstr "Importera volym"
+
+msgid "Export Volume"
+msgstr "Exportera volym"
+
+msgid "Downloading"
+msgstr "Hämtar"
+
+msgid "multi"
+msgstr "flera"
+
+msgid "Pull image (e.g. nginx:latest)"
+msgstr "Hämta image (t.ex. nginx:latest)"
+
+msgid "Pull"
+msgstr "Hämta"
+
+msgid "Pulling {reference}… {percent}%"
+msgstr "Hämtar {reference} … {percent} %"
+
+msgid "Pulling {reference}: {status}"
+msgstr "Hämtar {reference}: {status}"
+
+msgid "Remove “{name}”?"
+msgstr "Vill du ta bort ”{name}”?"
+
+msgid "Remove {count} images?"
+msgstr "Vill du ta bort {count} images?"
+
+msgid "An image still used by a container cannot be removed."
+msgstr "En image som fortfarande används av en container kan inte tas bort."
+
+msgid "Remove"
+msgstr "Ta bort"
+
+msgid "Prune Unused Images"
+msgstr "Rensa oanvända images"
+
+msgid "Remove Selected"
+msgstr "Ta bort markerade"
+
+msgid "Run…"
+msgstr "Kör …"
+
+msgid "Filter images"
+msgstr "Filtrera images"
+
+msgid "Repository"
+msgstr "Förråd"
+
+msgid "Tag"
+msgstr "Tagg"
+
+msgid "Arch"
+msgstr "Arkitektur"
+
+msgid "In Use"
+msgstr "Används"
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "Copy Reference"
+msgstr "Kopiera referens"
+
+msgid "Copy Image ID"
+msgstr "Kopiera image-ID"
+
+msgid "Remove…"
+msgstr "Ta bort …"
+
+msgid "Remove {count} Images"
+msgstr "Ta bort {count} images"
+
+msgid "Prune Unused…"
+msgstr "Rensa oanvända …"
+
+msgid "Prune unused images?"
+msgstr "Vill du rensa oanvända images?"
+
+msgid "Removes every image no container uses. This cannot be undone."
+msgstr "Tar bort alla images som ingen container använder. Det går inte att ångra."
+
+msgid "Reclaimed {size}."
+msgstr "{size} har frigjorts."
+
+msgid "Pruned unused images"
+msgstr "Oanvända images har rensats"
+
+msgid "Cannot pull “{name}”"
+msgstr "Det gick inte att hämta ”{name}”"
+
+msgid "Cannot run “{name}”"
+msgstr "Det gick inte att köra ”{name}”"
+
+msgid "Cannot remove every image"
+msgstr "Det gick inte att ta bort alla images"
+
+msgid "Never"
+msgstr "Aldrig"
+
+msgid "Always"
+msgstr "Alltid"
+
+msgid "Unless stopped"
+msgstr "Om den inte stoppats"
+
+msgid "On failure"
+msgstr "Vid fel"
+
+msgctxt "restart policy"
+msgid "Restart"
+msgstr "Omstart"
+
+msgid "Remove when it exits (--rm)"
+msgstr "Ta bort när den avslutas (--rm)"
+
+msgid "nginx:latest"
+msgstr "nginx:latest"
+
+msgid "Optional"
+msgstr "Valfritt"
+
+msgid "8080:80, 5432:5432"
+msgstr "8080:80, 5432:5432"
+
+msgid "Environment"
+msgstr "Miljö"
+
+msgid "KEY=value, OTHER=value"
+msgstr "KEY=value, OTHER=value"
+
+msgid "Volumes"
+msgstr "Volymer"
+
+msgid "data:/var/lib/data"
+msgstr "data:/var/lib/data"
+
+msgid "Run Image"
+msgstr "Kör image"
+
+msgid "Starts detached. The new container appears in Containers."
+msgstr "Startar fristående. Den nya containern visas under Containrar."
+
+msgid "Run"
+msgstr "Kör"
+
+msgid "Velox needs pkexec to ask for an administrator’s password. Install the pkexec package."
+msgstr "Velox behöver pkexec för att fråga efter en administratörs lösenord. Installera paketet pkexec."
+
+msgid "The Velox helper is missing. Reinstall Velox."
+msgstr "Velox hjälpprogram saknas. Installera om Velox."
+
+msgid "The administrator’s password was not given, or this account is not allowed to do this."
+msgstr "Administratörslösenordet angavs inte, eller så får det här kontot inte göra detta."
+
+msgid "The Velox helper refused: {reason}"
+msgstr "Velox hjälpprogram vägrade: {reason}"
+
+msgid "The password prompt was cancelled."
+msgstr "Lösenordsfrågan avbröts."
+
+msgid "Guest display"
+msgstr "Gästens skärm"
+
+msgid "this display cannot show the 3D picture; turn 3D graphics off in Settings"
+msgstr "skärmen kan inte visa 3D-bilden; stäng av 3D-grafik i Inställningar"
+
+msgid "Connecting to the display…"
+msgstr "Ansluter till skärmen …"
+
+msgid "{name} — Display {number}"
+msgstr "{name} — skärm {number}"
+
+msgid "The guest has not turned this display on."
+msgstr "Gästen har inte slagit på den här skärmen."
+
+msgid "The machine has no picture to show."
+msgstr "Datorn har ingen bild att visa."
+
+msgid "Cannot connect a USB device to “{name}”"
+msgstr "Kan inte ansluta en USB-enhet till ”{name}”"
+
+msgid "“{name}” started without 3D graphics"
+msgstr "”{name}” startade utan 3D-grafik"
+
+msgid "The machine did not start with 3D graphics, so Velox started it with the plain display."
+msgstr "Datorn startade inte med 3D-grafik, så Velox startade den med den vanliga skärmen."
+
+msgid "Cannot create “{name}”"
+msgstr "Det gick inte att skapa ”{name}”"
+
+msgid "Cannot shut down “{name}”"
+msgstr "Det gick inte att stänga av ”{name}”"
+
+msgid "Cannot force “{name}” to stop"
+msgstr "Det gick inte att tvinga ”{name}” att stoppa"
+
+msgid "Cannot take a snapshot of “{name}”"
+msgstr "Det går inte att ta en ögonblicksbild av ”{name}”"
+
+msgid "Cannot revert “{name}”"
+msgstr "Det går inte att återställa ”{name}”"
+
+msgid "Cannot delete the snapshot of “{name}”"
+msgstr "Det går inte att radera ögonblicksbilden av ”{name}”"
+
+msgid "Cannot clone “{name}”"
+msgstr "Det går inte att klona ”{name}”"
+
+msgid "Cannot suspend “{name}”"
+msgstr "Det går inte att försätta ”{name}” i vila"
+
+msgid "Choose Disk Image…"
+msgstr "Välj diskavbild …"
+
+msgid "Choose Disc Image…"
+msgstr "Välj skivavbild …"
+
+msgid "Choose a Folder to Share"
+msgstr "Välj en mapp att dela"
+
+msgid "Without KVM, machines run emulated and much slower."
+msgstr "Utan KVM körs maskinerna emulerade och mycket långsammare."
+
+msgid "Use Emulation"
+msgstr "Använd emulering"
+
+msgid "Install virtualization to continue"
+msgstr "Installera virtualisering för att fortsätta"
+
+msgid "Missing: {packages}"
+msgstr "Saknas: {packages}"
+
+msgid "Install QEMU, its firmware and passt"
+msgstr "Installera QEMU, dess firmware och passt"
+
+msgid "No access to KVM"
+msgstr "Ingen åtkomst till KVM"
+
+msgid "Virtual machines run on /dev/kvm. It is open to the person signed in at this computer; over SSH you need the kvm group."
+msgstr "Virtuella maskiner körs på /dev/kvm. Den är öppen för den som är inloggad vid den här datorn. Via SSH behöver du gruppen kvm."
+
+msgid "Add yourself to the kvm group, then log out and back in"
+msgstr "Lägg till dig själv i gruppen kvm och logga sedan ut och in igen"
+
+msgid "Log out and back in to finish"
+msgstr "Logga ut och in igen för att slutföra"
+
+msgid "You joined the kvm group after your session started. Your services keep running after you log out, so restart the computer if logging out isn’t enough."
+msgstr "Du blev medlem i gruppen kvm efter att sessionen startade. Dina tjänster fortsätter köras när du loggar ut, så starta om datorn om det inte räcker att logga ut."
+
+msgid "No systemd user manager"
+msgstr "Ingen systemd-användarhanterare"
+
+msgid "Virtual machines run as systemd user services, and the session has no user manager."
+msgstr "Virtuella maskiner körs som systemd-användartjänster, och sessionen har ingen användarhanterare."
+
+msgid "No Virtual Machines"
+msgstr "Inga virtuella maskiner"
+
+msgid "Make one from a Debian, Ubuntu or Fedora cloud image."
+msgstr "Skapa en från en molnimage för Debian, Ubuntu eller Fedora."
+
+msgid "New Virtual Machine…"
+msgstr "Ny virtuell maskin …"
+
+msgid "Machines"
+msgstr "Maskiner"
+
+msgid "Shut Down"
+msgstr "Stäng av"
+
+msgid "Filter machines"
+msgstr "Filtrera maskiner"
+
+msgid "Its disk, firmware settings and snapshots are deleted. This can’t be undone."
+msgstr "Maskinens disk, firmwareinställningar och ögonblicksbilder raderas. Det går inte att ångra."
+
+msgid "Cancel Download"
+msgstr "Avbryt hämtning"
+
+msgid "Force Stop"
+msgstr "Tvinga stopp"
+
+msgid "Suspend"
+msgstr "Vila"
+
+msgid "Connect via SSH"
+msgstr "Anslut via SSH"
+
+msgid "Show Machine Window"
+msgstr "Visa maskinfönster"
+
+msgid "Serial Console"
+msgstr "Seriekonsol"
+
+msgid "Take Snapshot…"
+msgstr "Ta ögonblicksbild …"
+
+msgid "Clone…"
+msgstr "Klona …"
+
+msgid "Copy SSH Command"
+msgstr "Kopiera SSH-kommando"
+
+msgid "OS"
+msgstr "OS"
+
+msgid "IP / SSH"
+msgstr "IP / SSH"
+
+msgid "CPU / MEM"
+msgstr "CPU / MINNE"
+
+msgid "Shutting Down…"
+msgstr "Stänger av …"
+
+msgid "Saving…"
+msgstr "Sparar …"
+
+msgid "Reverting…"
+msgstr "Återställer …"
+
+msgid "Deleting Snapshot…"
+msgstr "Raderar ögonblicksbild …"
+
+msgid "Cloning…"
+msgstr "Klonar …"
+
+msgid "Suspending…"
+msgstr "Försätter i vila …"
+
+msgid "just started"
+msgstr "nyss startad"
+
+msgid "1 minute"
+msgid_plural "{count} minutes"
+msgstr[0] "1 minut"
+msgstr[1] "{count} minuter"
+
+msgid "1 hour"
+msgid_plural "{count} hours"
+msgstr[0] "1 timme"
+msgstr[1] "{count} timmar"
+
+msgid "1 day"
+msgid_plural "{count} days"
+msgstr[0] "1 dag"
+msgstr[1] "{count} dagar"
+
+msgid "Running · {uptime}"
+msgstr "Körs · {uptime}"
+
+msgid "Running"
+msgstr "Körs"
+
+msgid "Paused"
+msgstr "Pausad"
+
+msgid "Suspended"
+msgstr "Vilar"
+
+msgid "Stopped"
+msgstr "Stoppad"
+
+msgid "Failed"
+msgstr "Misslyckades"
+
+msgid "Downloading… {percent} %"
+msgstr "Hämtar … {percent} %"
+
+msgid "Downloading…"
+msgstr "Hämtar …"
+
+msgid "Creating…"
+msgstr "Skapar …"
+
+msgid "{count} GB"
+msgstr "{count} GB"
+
+msgid "Today"
+msgstr "Idag"
+
+msgid "Yesterday"
+msgid_plural "{count} days ago"
+msgstr[0] "Igår"
+msgstr[1] "För {count} dagar sedan"
+
+msgid "Machine"
+msgstr "Maskin"
+
+msgid "CPUs"
+msgstr "Processorer"
+
+msgid "Snapshots"
+msgstr "Ögonblicksbilder"
+
+msgid "Acceleration"
+msgstr "Acceleration"
+
+msgid "KVM"
+msgstr "KVM"
+
+msgid "Emulated"
+msgstr "Emulerad"
+
+msgid "Used on disk"
+msgstr "Använt på disken"
+
+msgid "Forward"
+msgstr "Vidarebefordran"
+
+msgid "localhost:{host} → {guest}"
+msgstr "localhost:{host} → {guest}"
+
+msgid "IP address"
+msgstr "IP-adress"
+
+msgid "SSH"
+msgstr "SSH"
+
+msgid "Usage"
+msgstr "Användning"
+
+msgid "Windows 11"
+msgstr "Windows 11"
+
+msgid "Linux"
+msgstr "Linux"
+
+msgid "New Virtual Machine"
+msgstr "Ny virtuell maskin"
+
+msgid "Install from a disc image…"
+msgstr "Installera från en skivavbild …"
+
+msgid "Import a disk image…"
+msgstr "Importera en diskavbild …"
+
+msgid "Choose what the machine starts from."
+msgstr "Välj vad maskinen startar från."
+
+msgid "Cloud image"
+msgstr "Molnimage"
+
+msgid "No disk image chosen"
+msgstr "Ingen diskavbild vald"
+
+msgid "No disc image chosen"
+msgstr "Ingen skivavbild vald"
+
+msgid "Disk image"
+msgstr "Diskavbild"
+
+msgid "Disc image"
+msgstr "Skivavbild"
+
+msgid "System"
+msgstr "System"
+
+msgid "Windows 11 needs a TPM: sudo apt install swtpm"
+msgstr "Windows 11 behöver en TPM: sudo apt install swtpm"
+
+msgid "Choose the disk image to import. Velox copies it."
+msgstr "Välj diskavbilden att importera. Velox kopierar den."
+
+msgid "Choose the disc image to install from."
+msgstr "Välj skivavbilden att installera från."
+
+msgid "Choose the machine’s processors, memory and disk."
+msgstr "Välj maskinens processorer, minne och disk."
+
+msgid "No SSH key in ~/.ssh. Make one with ssh-keygen."
+msgstr "Ingen SSH-nyckel i ~/.ssh. Skapa en med ssh-keygen."
+
+msgid "SSH key"
+msgstr "SSH-nyckel"
+
+msgid "Name the machine."
+msgstr "Namnge maskinen."
+
+msgid "Back"
+msgstr "Tillbaka"
+
+msgid "Create"
+msgstr "Skapa"
+
+msgid "User"
+msgstr "Användare"
+
+msgid "Password"
+msgstr "Lösenord"
+
+msgid "SSH port on this computer"
+msgstr "SSH-port på den här datorn"
+
+msgid "Name the machine and choose how you sign in."
+msgstr "Namnge maskinen och välj hur du loggar in."
+
+msgid "Continue"
+msgstr "Fortsätt"
+
+msgid "Use lowercase letters, digits and hyphens for the name."
+msgstr "Använd små bokstäver, siffror och bindestreck i namnet."
+
+msgid "A machine named “{name}” already exists."
+msgstr "Det finns redan en maskin med namnet ”{name}”."
+
+msgid "Use lowercase letters, digits, hyphens and underscores for the user, and not root."
+msgstr "Använd små bokstäver, siffror, bindestreck och understreck i användarnamnet, och inte root."
+
+msgid "Choose a port from 1024 to 65535."
+msgstr "Välj en port mellan 1024 och 65535."
+
+msgid "Port {port} is in use."
+msgstr "Port {port} används redan."
+
+msgid "{name} (current)"
+msgstr "{name} (aktuell)"
+
+msgid "Date"
+msgstr "Datum"
+
+msgid "{name}-copy"
+msgstr "{name}-kopia"
+
+msgid "Snapshot {count}"
+msgstr "Ögonblicksbild {count}"
+
+msgid "Saves the disks and memory of the running machine."
+msgstr "Sparar den körande datorns diskar och minne."
+
+msgid "Saves the disks of the stopped machine."
+msgstr "Sparar den stoppade datorns diskar."
+
+msgid "Snapshot name"
+msgstr "Ögonblicksbildens namn"
+
+msgid "Take Snapshot"
+msgstr "Ta ögonblicksbild"
+
+msgid "Changes since it are lost. The machine starts again from that moment."
+msgstr "Ändringar sedan dess går förlorade. Datorn startar igen från det ögonblicket."
+
+msgid "Changes since it are lost."
+msgstr "Ändringar sedan dess går förlorade."
+
+msgid "Revert to “{name}”?"
+msgstr "Återställa till ”{name}”?"
+
+msgid "Revert"
+msgstr "Återställ"
+
+msgid "The machine itself stays as it is. Disk space is reused by later snapshots."
+msgstr "Själva datorn förblir som den är. Diskutrymmet återanvänds av senare ögonblicksbilder."
+
+msgid "Full copy"
+msgstr "Fullständig kopia"
+
+msgid "Linked, saves space"
+msgstr "Länkad, sparar utrymme"
+
+msgid "The clone gets its own address, identity and disk."
+msgstr "Klonen får egen adress, identitet och disk."
+
+msgid "Clone “{name}”"
+msgstr "Klona ”{name}”"
+
+msgid "Clone"
+msgstr "Klona"
+
+msgid "Console"
+msgstr "Konsol"
+
+msgid "Info"
+msgstr "Info"
+
+msgid "Settings"
+msgstr "Inställningar"
+
+msgid "Shared with this computer"
+msgstr "Delat med den här datorn"
+
+msgid "Bridged to {bridge}"
+msgstr "Bryggat till {bridge}"
+
+msgid "Shut down to change"
+msgstr "Stäng av för att ändra"
+
+msgid "To give the machine its own address on your network, make a network bridge in Network settings."
+msgstr "Skapa en nätverksbrygga i Nätverksinställningar för att ge maskinen en egen adress i ditt nätverk."
+
+msgid "This machine was deleted."
+msgstr "Den här maskinen har raderats."
+
+msgid "{name} — {status}"
+msgstr "{name} — {status}"
+
+msgid "Revert…"
+msgstr "Återställ …"
+
+msgid "Cannot show the display: {reason}"
+msgstr "Det går inte att visa skärmen: {reason}"
+
+msgid "Try Again"
+msgstr "Försök igen"
+
+msgid "Eject"
+msgstr "Mata ut"
+
+msgid "Display"
+msgstr "Skärm"
+
+msgid "3D graphics"
+msgstr "3D-grafik"
+
+msgid "On"
+msgstr "På"
+
+msgid "Off"
+msgstr "Av"
+
+msgid "Needs a graphics card this computer can share, and a Linux guest."
+msgstr "Kräver ett grafikkort som datorn kan dela och ett Linux-system i gästen."
+
+msgid "Delete the snapshots with memory, or resume the machine, to change this."
+msgstr "Radera ögonblicksbilderna med minne, eller återuppta datorn, för att ändra detta."
+
+msgid "Displays"
+msgstr "Skärmar"
+
+msgid "Startup"
+msgstr "Start"
+
+msgid "Start when you log in"
+msgstr "Starta när du loggar in"
+
+msgid "Shared Folders"
+msgstr "Delade mappar"
+
+msgid "In the guest: sudo mount -t virtiofs {tag} /mnt"
+msgstr "I gästen: sudo mount -t virtiofs {tag} /mnt"
+
+msgid "Add Folder…"
+msgstr "Lägg till mapp …"
+
+msgid "Velox"
+msgstr "Velox"
+
+msgid "Velox Settings"
+msgstr "Velox-inställningar"
+
+msgid "USB Devices"
+msgstr "USB-enheter"
+
+msgid "No USB devices"
+msgstr "Inga USB-enheter"
+
+msgid "Send Ctrl+Alt+Delete"
+msgstr "Skicka Ctrl+Alt+Delete"
+
+msgid "Containers"
+msgstr "Containrar"
+
+msgid "Find"
+msgstr "Sök"
+
+msgid "Container"
+msgstr "Container"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "No attached containers"
+msgstr "Inga anslutna containrar"
+
+msgid "backend"
+msgstr "backend"
+
+msgid "Automatic"
+msgstr "Automatiskt"
+
+msgid "New Network"
+msgstr "Nytt nätverk"
+
+msgid "A bridge network on this computer."
+msgstr "Ett bryggnätverk på den här datorn."
+
+msgid "Subnet"
+msgstr "Subnät"
+
+msgid "Filter networks"
+msgstr "Filtrera nätverk"
+
+msgid "Driver"
+msgstr "Drivrutin"
+
+msgid "Copy Name"
+msgstr "Kopiera namn"
+
+msgid "New Network…"
+msgstr "Nytt nätverk …"
+
+msgid "Remove {count} networks?"
+msgstr "Vill du ta bort {count} nätverk?"
+
+msgid "Disconnect its containers first."
+msgstr "Koppla från dess containrar först."
+
+msgid "Cannot remove every network"
+msgstr "Det gick inte att ta bort alla nätverk"
+
+msgid "“{name}” stopped unexpectedly"
+msgstr "”{name}” stoppades oväntat"
+
+msgid "The container exited with code {code}."
+msgstr "Containern avslutades med kod {code}."
+
+msgid "0 KB/s"
+msgstr "0 KB/s"
+
+msgid "{size}/s"
+msgstr "{size}/s"
+
+msgid "· up just now"
+msgstr "· igång nyss"
+
+msgid "{minutes} min"
+msgstr "{minutes} min"
+
+msgid "{hours} h {minutes} min"
+msgstr "{hours} h {minutes} min"
+
+msgid "{days} d {hours} h"
+msgstr "{days} d {hours} h"
+
+msgid "· up {time}"
+msgstr "· igång {time}"
+
+msgid "Docker {version}"
+msgstr "Docker {version}"
+
+msgid "Podman {version}"
+msgstr "Podman {version}"
+
+msgid "1 CPU"
+msgid_plural "{count} CPUs"
+msgstr[0] "1 processor"
+msgstr[1] "{count} processorer"
+
+msgid "{size} GB memory"
+msgstr "{size} GB minne"
+
+msgid "{size} GB disk"
+msgstr "{size} GB disk"
+
+msgid "API {version}"
+msgstr "API {version}"
+
+msgid "rootless"
+msgstr "rootless"
+
+msgid "{engine} running"
+msgstr "{engine} körs"
+
+msgid "Velox {version}"
+msgstr "Velox {version}"
+
+msgid "Reclaim Space…"
+msgstr "Frigör utrymme …"
+
+msgid "Images"
+msgstr "Images"
+
+msgid "Disk Breakdown"
+msgstr "Diskfördelning"
+
+msgid "Disk I/O"
+msgstr "Disk-I/O"
+
+msgid "of {size} GB disk"
+msgstr "av {size} GB disk"
+
+msgid "{size} reclaimable"
+msgstr "{size} kan frigöras"
+
+msgid "of {total} total"
+msgstr "av {total} totalt"
+
+msgid "{size} total"
+msgstr "{size} totalt"
+
+msgid "{size} stored"
+msgstr "{size} lagrat"
+
+msgid "Images {size}"
+msgstr "Images {size}"
+
+msgid "Containers {size}"
+msgstr "Containrar {size}"
+
+msgid "Volumes {size}"
+msgstr "Volymer {size}"
+
+msgid "Build cache {size}"
+msgstr "Byggcache {size}"
+
+msgid "No running containers"
+msgstr "Inga containrar körs"
+
+msgid "Read"
+msgstr "Läs"
+
+msgid "Write"
+msgstr "Skriv"
+
+msgid "In"
+msgstr "In"
+
+msgid "Out"
+msgstr "Ut"
+
+msgid "Reclaimed {size}"
+msgstr "{size} har frigjorts"
+
+msgid "Cannot reclaim space"
+msgstr "Det gick inte att frigöra utrymme"
+
+msgid "≈ {size}"
+msgstr "≈ {size}"
+
+msgid "Stopped containers"
+msgstr "Stoppade containrar"
+
+msgid "Unused images"
+msgstr "Oanvända images"
+
+msgid "Build cache"
+msgstr "Byggcache"
+
+msgid "Unused volumes"
+msgstr "Oanvända volymer"
+
+msgid "Reclaim Space"
+msgstr "Frigör utrymme"
+
+msgid "Removes engine data nothing uses. Volumes hold real data: leave them off unless you are sure."
+msgstr "Tar bort motordata som ingenting använder. Volymer innehåller verkliga data: lämna dem avmarkerade om du inte är säker."
+
+msgid "Reclaim"
+msgstr "Frigör"
+
+msgid "Or Podman (rootless, from Debian)"
+msgstr "Eller Podman (rootless, från Debian)"
+
+msgid "Docker Engine (recommended)"
+msgstr "Docker Engine (rekommenderas)"
+
+msgid "Docker publishes no packages for Debian testing, so these steps use trixie's."
+msgstr "Docker publicerar inga paket för Debian testing, så de här stegen använder paketen från trixie."
+
+msgid "Install a container engine to continue"
+msgstr "Installera en containermotor för att fortsätta"
+
+msgid "Start Docker"
+msgstr "Starta Docker"
+
+msgid "Docker is not running"
+msgstr "Docker körs inte"
+
+msgid "Start Podman"
+msgstr "Starta Podman"
+
+msgid "Podman is not running"
+msgstr "Podman körs inte"
+
+msgid "Add yourself to the docker group, then log out and back in"
+msgstr "Lägg till dig själv i gruppen docker och logga sedan ut och in igen"
+
+msgid "The docker group is root-equivalent."
+msgstr "Gruppen docker har samma behörighet som root."
+
+msgid "No access to Docker"
+msgstr "Ingen åtkomst till Docker"
+
+msgid "Update Docker to continue"
+msgstr "Uppdatera Docker för att fortsätta"
+
+msgid "1 year ago"
+msgid_plural "{count} years ago"
+msgstr[0] "För 1 år sedan"
+msgstr[1] "För {count} år sedan"
+
+msgid "1 month ago"
+msgid_plural "{count} months ago"
+msgstr[0] "För 1 månad sedan"
+msgstr[1] "För {count} månader sedan"
+
+msgid "1 week ago"
+msgid_plural "{count} weeks ago"
+msgstr[0] "För 1 vecka sedan"
+msgstr[1] "För {count} veckor sedan"
+
+msgid "1 day ago"
+msgid_plural "{count} days ago"
+msgstr[0] "För 1 dag sedan"
+msgstr[1] "För {count} dagar sedan"
+
+msgid "1 hour ago"
+msgid_plural "{count} hours ago"
+msgstr[0] "För 1 timme sedan"
+msgstr[1] "För {count} timmar sedan"
+
+msgid "1 minute ago"
+msgid_plural "{count} minutes ago"
+msgstr[0] "För 1 minut sedan"
+msgstr[1] "För {count} minuter sedan"
+
+msgid "Just now"
+msgstr "Nyss"
+
+msgid "Pull Image…"
+msgstr "Hämta image …"
+
+msgid "Run Image…"
+msgstr "Kör image …"
+
+msgid "Action failed"
+msgstr "Åtgärden misslyckades"
+
+msgid "Notifications"
+msgstr "Notiser"
+
+msgid "Notify when a container stops unexpectedly"
+msgstr "Meddela när en container stoppas oväntat"
+
+msgid "{name} — Serial Console"
+msgstr "{name} — Seriekonsol"
+
+msgid "{name} — Shell"
+msgstr "{name} — Skal"
+
+msgid "Cannot connect: {reason}"
+msgstr "Det går inte att ansluta: {reason}"
+
+msgid "The connection closed."
+msgstr "Anslutningen stängdes."
+
+msgid "Overview"
+msgstr "Översikt"
+
+msgid "Networks"
+msgstr "Nätverk"
+
+msgid "{engine} · rootless"
+msgstr "{engine} · rootless"
+
+msgid "Connecting…"
+msgstr "Ansluter …"
+
+msgid "Resources"
+msgstr "Resurser"
+
+msgid "No engine"
+msgstr "Ingen motor"
+
+msgid "Podman, rootless"
+msgstr "Podman, rootless"
+
+msgid "dangling"
+msgstr "fristående"
+
+msgid "1 volume"
+msgid_plural "{count} volumes"
+msgstr[0] "1 volym"
+msgstr[1] "{count} volymer"
+
+msgid "no containers"
+msgstr "inga containrar"
+
+msgid "Volume name"
+msgstr "Volymnamn"
+
+msgid "Creates a volume from {file}."
+msgstr "Skapar en volym från {file}."
+
+msgid "Import"
+msgstr "Importera"
+
+msgid "Prune Unused Volumes"
+msgstr "Rensa oanvända volymer"
+
+msgid "Filter volumes"
+msgstr "Filtrera volymer"
+
+msgid "Used By"
+msgstr "Används av"
+
+msgid "Copy Mountpoint"
+msgstr "Kopiera monteringspunkt"
+
+msgid "Export as tar…"
+msgstr "Exportera som tar …"
+
+msgid "Volume"
+msgstr "Volym"
+
+msgid "Import Volume…"
+msgstr "Importera volym …"
+
+msgid "Prune unused volumes?"
+msgstr "Vill du rensa oanvända volymer?"
+
+msgid "Removes every volume no container uses, with its data. This cannot be undone."
+msgstr "Tar bort alla volymer som ingen container använder, tillsammans med deras data. Det går inte att ångra."
+
+msgid "Remove {count} volumes?"
+msgstr "Vill du ta bort {count} volymer?"
+
+msgid "Its data is deleted. A volume still used by a container cannot be removed."
+msgstr "Dess data raderas. En volym som fortfarande används av en container kan inte tas bort."
+
+msgid "Pruned unused volumes"
+msgstr "Oanvända volymer har rensats"
+
+msgid "Imported into “{name}”"
+msgstr "Importerad till ”{name}”"
+
+msgid "Exported “{name}”"
+msgstr "”{name}” har exporterats"
+
+msgid "Cannot import into “{name}”"
+msgstr "Det gick inte att importera till ”{name}”"
+
+msgid "Cannot export “{name}”"
+msgstr "Det gick inte att exportera ”{name}”"
+
+msgid "Cannot remove every volume"
+msgstr "Det gick inte att ta bort alla volymer"
+
+msgid "Tar archive"
+msgstr "Tar-arkiv"
+
+msgid "Disc images"
+msgstr "Skivavbilder"
+
+msgid "Disk images"
+msgstr "Diskavbilder"

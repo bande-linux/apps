@@ -1,0 +1,311 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Overflow"
+msgstr "Överflöde"
+
+msgid "Not a number"
+msgstr "Inte ett tal"
+
+msgid "Rad"
+msgstr "Rad"
+
+msgid "RPN"
+msgstr "RPN"
+
+msgid "Bit {bit}"
+msgstr "Bit {bit}"
+
+msgid "Calculator"
+msgstr "Kalkylator"
+
+msgid "Result"
+msgstr "Resultat"
+
+msgid "All Clear"
+msgstr "Nollställ allt"
+
+msgid "Clear"
+msgstr "Nollställ"
+
+msgid "enter"
+msgstr "retur"
+
+msgid "Enter"
+msgstr "Retur"
+
+msgid "Equals"
+msgstr "Lika med"
+
+msgid "Add"
+msgstr "Addera"
+
+msgid "Subtract"
+msgstr "Subtrahera"
+
+msgid "Multiply"
+msgstr "Multiplicera"
+
+msgid "Divide"
+msgstr "Dividera"
+
+msgid "Swap X and Y"
+msgstr "Byt plats på X och Y"
+
+msgid "Roll Down"
+msgstr "Rulla nedåt"
+
+msgid "Roll Up"
+msgstr "Rulla uppåt"
+
+msgid "Change Sign"
+msgstr "Byt tecken"
+
+msgid "Percent"
+msgstr "Procent"
+
+msgid "Use Radians"
+msgstr "Använd radianer"
+
+msgid "Deg"
+msgstr "Grad"
+
+msgid "Use Degrees"
+msgstr "Använd grader"
+
+msgid "Memory Clear"
+msgstr "Töm minnet"
+
+msgid "Memory Add"
+msgstr "Addera till minnet"
+
+msgid "Memory Subtract"
+msgstr "Subtrahera från minnet"
+
+msgid "Memory Recall"
+msgstr "Hämta från minnet"
+
+msgid "Second Functions"
+msgstr "Andra funktioner"
+
+msgid "Square"
+msgstr "Kvadrat"
+
+msgid "Cube"
+msgstr "Kub"
+
+msgid "X to the Power of Y"
+msgstr "X upphöjt till Y"
+
+msgid "e to the Power of X"
+msgstr "e upphöjt till X"
+
+msgid "Y to the Power of X"
+msgstr "Y upphöjt till X"
+
+msgid "10 to the Power of X"
+msgstr "10 upphöjt till X"
+
+msgid "2 to the Power of X"
+msgstr "2 upphöjt till X"
+
+msgid "Reciprocal"
+msgstr "Invers"
+
+msgid "Square Root"
+msgstr "Kvadratrot"
+
+msgid "Cube Root"
+msgstr "Kubikrot"
+
+msgid "Y-th Root of X"
+msgstr "Y:te roten ur X"
+
+msgid "Natural Logarithm"
+msgstr "Naturlig logaritm"
+
+msgid "Logarithm to Base Y"
+msgstr "Logaritm med bas Y"
+
+msgid "Logarithm to Base 10"
+msgstr "Logaritm med bas 10"
+
+msgid "Logarithm to Base 2"
+msgstr "Logaritm med bas 2"
+
+msgid "Factorial"
+msgstr "Fakultet"
+
+msgid "Sine"
+msgstr "Sinus"
+
+msgid "Inverse Sine"
+msgstr "Omvänd sinus"
+
+msgid "Cosine"
+msgstr "Cosinus"
+
+msgid "Inverse Cosine"
+msgstr "Omvänd cosinus"
+
+msgid "Tangent"
+msgstr "Tangens"
+
+msgid "Inverse Tangent"
+msgstr "Omvänd tangens"
+
+msgid "Euler's Number"
+msgstr "Eulers tal"
+
+msgid "Exponent"
+msgstr "Exponent"
+
+msgid "Hyperbolic Sine"
+msgstr "Hyperbolisk sinus"
+
+msgid "Inverse Hyperbolic Sine"
+msgstr "Omvänd hyperbolisk sinus"
+
+msgid "Hyperbolic Cosine"
+msgstr "Hyperbolisk cosinus"
+
+msgid "Inverse Hyperbolic Cosine"
+msgstr "Omvänd hyperbolisk cosinus"
+
+msgid "Hyperbolic Tangent"
+msgstr "Hyperbolisk tangens"
+
+msgid "Inverse Hyperbolic Tangent"
+msgstr "Omvänd hyperbolisk tangens"
+
+msgid "Pi"
+msgstr "Pi"
+
+msgid "Random Number"
+msgstr "Slumptal"
+
+msgid "And"
+msgstr "Och"
+
+msgid "Or"
+msgstr "Eller"
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "Nor"
+msgstr "Nor"
+
+msgid "Exclusive Or"
+msgstr "Exklusivt eller"
+
+msgid "Rotate Left"
+msgstr "Rotera åt vänster"
+
+msgid "Shift Left by One"
+msgstr "Skifta vänster ett steg"
+
+msgid "Shift Right by One"
+msgstr "Skifta höger ett steg"
+
+msgid "Rotate Right"
+msgstr "Rotera åt höger"
+
+msgid "Shift X Left by Y"
+msgstr "Skifta X åt vänster med Y"
+
+msgid "Shift X Right by Y"
+msgstr "Skifta X åt höger med Y"
+
+msgid "Two's Complement"
+msgstr "Tvåkomplement"
+
+msgid "Flip Bytes"
+msgstr "Vänd byte"
+
+msgid "Flip Words"
+msgstr "Vänd ord"
+
+msgid "One's Complement"
+msgstr "Ettkomplement"
+
+msgid "FF"
+msgstr "FF"
+
+msgid "Double Zero"
+msgstr "Dubbel nolla"
+
+msgid "HEX"
+msgstr "HEX"
+
+msgid "DEC"
+msgstr "DEC"
+
+msgid "OCT"
+msgstr "OKT"
+
+msgid "BIN"
+msgstr "BIN"
+
+msgid "Esc"
+msgstr "Esc"
+
+msgid "Backspace"
+msgstr "Backspace"
+
+msgid "Paper Tape"
+msgstr "Pappersremsa"
+
+msgid "Calculations appear here"
+msgstr "Beräkningar visas här"
+
+msgid "Basic"
+msgstr "Grundläggande"
+
+msgid "Scientific"
+msgstr "Vetenskaplig"
+
+msgid "Programmer"
+msgstr "Programmerare"
+
+msgid "RPN Mode"
+msgstr "RPN-läge"
+
+msgid "Show Thousands Separators"
+msgstr "Visa tusentalsavgränsare"
+
+msgid "Degrees"
+msgstr "Grader"
+
+msgid "Radians"
+msgstr "Radianer"
+
+msgid "Hexadecimal"
+msgstr "Hexadecimal"
+
+msgid "Decimal"
+msgstr "Decimal"
+
+msgid "Octal"
+msgstr "Oktal"
+
+msgid "Binary"
+msgstr "Binär"
+
+msgid "Word Size"
+msgstr "Ordstorlek"
+
+msgid "{bits}-bit"
+msgstr "{bits} bitar"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "Clear Tape"
+msgstr "Töm pappersremsa"

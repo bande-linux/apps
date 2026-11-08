@@ -1,0 +1,541 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "{count} byte"
+msgid_plural "{count} bytes"
+msgstr[0] "{count} byte"
+msgstr[1] "{count} byte"
+
+msgid "{value} KB"
+msgstr "{value} KB"
+
+msgid "{value} MB"
+msgstr "{value} MB"
+
+msgid "{value} GB"
+msgstr "{value} GB"
+
+msgid "{value} TB"
+msgstr "{value} TB"
+
+msgid "{size}/s"
+msgstr "{size}/s"
+
+msgid "Running"
+msgstr "Körs"
+
+msgid "Sleeping"
+msgstr "Sover"
+
+msgid "Waiting for the disk"
+msgstr "Väntar på disken"
+
+msgid "Ended, waiting for its parent"
+msgstr "Avslutad, väntar på sin förälder"
+
+msgid "Stopped"
+msgstr "Stoppad"
+
+msgid "Idle"
+msgstr "Inaktiv"
+
+msgid "Unknown"
+msgstr "Okänt"
+
+msgid "{protocol} {local} (listening)"
+msgstr "{protocol} {local} (lyssnar)"
+
+msgid "Info"
+msgstr "Info"
+
+msgid "Threads"
+msgstr "Trådar"
+
+msgid "Open Files"
+msgstr "Öppna filer"
+
+msgid "Memory Map"
+msgstr "Minneskarta"
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "Value"
+msgstr "Värde"
+
+msgid "TID"
+msgstr "TID"
+
+msgid "State"
+msgstr "Tillstånd"
+
+msgid "Waiting In"
+msgstr "Väntar i"
+
+msgid "CPU Time"
+msgstr "CPU-tid"
+
+msgid "FD"
+msgstr "FD"
+
+msgid "Path"
+msgstr "Sökväg"
+
+msgid "Address"
+msgstr "Adress"
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "Access"
+msgstr "Åtkomst"
+
+msgid "Mapping"
+msgstr "Mappning"
+
+msgid "{name} ({pid})"
+msgstr "{name} ({pid})"
+
+msgid "Show"
+msgstr "Visa"
+
+msgid "Ended"
+msgstr "Avslutad"
+
+msgid "PID"
+msgstr "PID"
+
+msgid "Parent"
+msgstr "Förälder"
+
+msgid "Children"
+msgstr "Barn"
+
+msgid "Process"
+msgstr "Process"
+
+msgid "User"
+msgstr "Användare"
+
+msgid "Unit"
+msgstr "Enhet"
+
+msgid "Preventing Sleep"
+msgstr "Förhindrar vila"
+
+msgid "Command"
+msgstr "Kommando"
+
+msgid "Executable"
+msgstr "Körbar fil"
+
+msgid "% CPU"
+msgstr "% CPU"
+
+msgid "Resident"
+msgstr "Residentärt"
+
+msgid "Memory"
+msgstr "Minne"
+
+msgid "Virtual Memory"
+msgstr "Virtuellt minne"
+
+msgid "Running For"
+msgstr "Har körts i"
+
+msgid "Bytes Read"
+msgstr "Lästa byte"
+
+msgid "Bytes Written"
+msgstr "Skrivna byte"
+
+msgid "Parent and Children"
+msgstr "Förälder och barn"
+
+msgid "Resources"
+msgstr "Resurser"
+
+msgid "Statistics"
+msgstr "Statistik"
+
+msgid "Page Faults"
+msgstr "Sidfel"
+
+msgid "Page Faults from Disk"
+msgstr "Sidfel från disk"
+
+msgid "Context Switches"
+msgstr "Kontextbyten"
+
+msgid "Preempted"
+msgstr "Avbruten"
+
+msgid "Read Calls"
+msgstr "Läsanrop"
+
+msgid "Write Calls"
+msgstr "Skrivanrop"
+
+msgid "Only its owner or an administrator can see this."
+msgstr "Bara ägaren eller en administratör kan se detta."
+
+msgid "Activity Monitor"
+msgstr "Aktivitetskontroll"
+
+msgid "Hangup (SIGHUP)"
+msgstr "Lägg på (SIGHUP)"
+
+msgid "Interrupt (SIGINT)"
+msgstr "Avbryt (SIGINT)"
+
+msgid "Pause (SIGSTOP)"
+msgstr "Pausa (SIGSTOP)"
+
+msgid "Continue (SIGCONT)"
+msgstr "Fortsätt (SIGCONT)"
+
+msgid "User 1 (SIGUSR1)"
+msgstr "Användare 1 (SIGUSR1)"
+
+msgid "User 2 (SIGUSR2)"
+msgstr "Användare 2 (SIGUSR2)"
+
+msgid "{signal}…"
+msgstr "{signal} …"
+
+msgid "Force Quit…"
+msgstr "Tvinga avslut …"
+
+msgid "Quit…"
+msgstr "Avsluta …"
+
+msgid "Inspect"
+msgstr "Granska"
+
+msgid "Show in Files"
+msgstr "Visa i Filer"
+
+msgid "Send Signal to Process"
+msgstr "Skicka signal till process"
+
+msgid "Copy Name"
+msgstr "Kopiera namn"
+
+msgid "Copy PID"
+msgstr "Kopiera PID"
+
+msgid "Update Frequency"
+msgstr "Uppdateringsfrekvens"
+
+msgid "Show CPU Cores"
+msgstr "Visa CPU-kärnor"
+
+msgid "Quit Process…"
+msgstr "Avsluta process …"
+
+msgid "Force Quit Process…"
+msgstr "Tvinga processen att avsluta …"
+
+msgid "Find"
+msgstr "Sök"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "Energy"
+msgstr "Energi"
+
+msgid "Disk"
+msgstr "Disk"
+
+msgid "Network"
+msgstr "Nätverk"
+
+msgid "GPU"
+msgstr "GPU"
+
+msgid "Compressed"
+msgstr "Komprimerat"
+
+msgid "Read/s"
+msgstr "Läst/s"
+
+msgid "Written/s"
+msgstr "Skrivet/s"
+
+msgid "Received/s"
+msgstr "Mottaget/s"
+
+msgid "Sent/s"
+msgstr "Skickat/s"
+
+msgid "Bytes Received"
+msgstr "Mottagna byte"
+
+msgid "Bytes Sent"
+msgstr "Skickade byte"
+
+msgid "% GPU"
+msgstr "% GPU"
+
+msgid "GPU Time"
+msgstr "GPU-tid"
+
+msgid "GPU Memory"
+msgstr "GPU-minne"
+
+msgid "Energy Impact"
+msgstr "Energipåverkan"
+
+msgid "Wake-ups/s"
+msgstr "Väckningar/s"
+
+msgid "Yes"
+msgstr "Ja"
+
+msgid "No"
+msgstr "Nej"
+
+msgid "Very Often ({seconds} sec)"
+msgstr "Mycket ofta ({seconds} s)"
+
+msgid "Often ({seconds} sec)"
+msgstr "Ofta ({seconds} s)"
+
+msgid "Normally ({seconds} sec)"
+msgstr "Normalt ({seconds} s)"
+
+msgid "All Processes"
+msgstr "Alla processer"
+
+msgid "All Processes, Hierarchically"
+msgstr "Alla processer, hierarkiskt"
+
+msgid "My Processes"
+msgstr "Mina processer"
+
+msgid "System Processes"
+msgstr "Systemprocesser"
+
+msgid "Active Processes"
+msgstr "Aktiva processer"
+
+msgid "Apps"
+msgstr "Appar"
+
+msgid "Selected Processes"
+msgstr "Markerade processer"
+
+msgid "Kernel"
+msgstr "Kärna"
+
+msgid "CPU Load"
+msgstr "CPU-belastning"
+
+msgid "Memory Pressure"
+msgstr "Minnestryck"
+
+msgid "12 hr"
+msgstr "12 tim"
+
+msgid "Battery (last 12 hours)"
+msgstr "Batteri (senaste 12 timmarna)"
+
+msgid "Data Read and Written"
+msgstr "Data läst och skriven"
+
+msgid "Data Received and Sent"
+msgstr "Data mottagen och skickad"
+
+msgid "GPU Usage"
+msgstr "GPU-användning"
+
+msgid "{minutes} min"
+msgstr "{minutes} min"
+
+msgid "CPU {total} %, user {user} %, system {system} %"
+msgstr "CPU {total} %, användare {user} %, system {system} %"
+
+msgid "normal"
+msgstr "normalt"
+
+msgid "elevated"
+msgstr "förhöjt"
+
+msgid "critical"
+msgstr "kritiskt"
+
+msgid "Memory pressure {level}, {used} % used"
+msgstr "Minnestryck {level}, {used} % används"
+
+msgid "Battery {charge} %, energy impact {impact}"
+msgstr "Batteri {charge} %, energipåverkan {impact}"
+
+msgid "Energy impact {impact}"
+msgstr "Energipåverkan {impact}"
+
+msgid "Disk read {read}, written {written}"
+msgstr "Disk läst {read}, skriven {written}"
+
+msgid "Network received {received}, sent {sent}"
+msgstr "Nätverk mottaget {received}, skickat {sent}"
+
+msgid "GPU {used} %"
+msgstr "GPU {used} %"
+
+msgid "System"
+msgstr "System"
+
+msgid "Processes"
+msgstr "Processer"
+
+msgid "Physical Memory"
+msgstr "Fysiskt minne"
+
+msgid "Memory Used"
+msgstr "Minne som används"
+
+msgid "Cached Files"
+msgstr "Cachade filer"
+
+msgid "Swap Used"
+msgstr "Använd växlingsfil"
+
+msgid "App Memory"
+msgstr "Programminne"
+
+msgid "Wired Memory"
+msgstr "Fast minne"
+
+msgid "Data Read/s"
+msgstr "Data läst/s"
+
+msgid "Data Written/s"
+msgstr "Data skriven/s"
+
+msgid "Reads/s"
+msgstr "Läsningar/s"
+
+msgid "Writes/s"
+msgstr "Skrivningar/s"
+
+msgid "Data Read"
+msgstr "Data läst"
+
+msgid "Data Written"
+msgstr "Data skriven"
+
+msgid "Data Received/s"
+msgstr "Data mottagen/s"
+
+msgid "Data Sent/s"
+msgstr "Data skickad/s"
+
+msgid "Data Received"
+msgstr "Data mottagen"
+
+msgid "Data Sent"
+msgstr "Data skickad"
+
+msgid "Processes Using the GPU"
+msgstr "Processer som använder GPU:n"
+
+msgid "Time Remaining"
+msgstr "Återstående tid"
+
+msgid "Time Until Full"
+msgstr "Tid till full laddning"
+
+msgid "Remaining Charge"
+msgstr "Återstående laddning"
+
+msgid "Time on Battery"
+msgstr "Tid på batteri"
+
+msgid "{name} (Not Responding)"
+msgstr "{name} (svarar inte)"
+
+msgid "Inspect Process"
+msgstr "Granska process"
+
+msgid "Clear Search"
+msgstr "Rensa sökning"
+
+msgid "Performance"
+msgstr "Prestanda"
+
+msgid "Efficiency"
+msgstr "Effektivitet"
+
+msgid "Core {number}"
+msgstr "Kärna {number}"
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "Search {filter}"
+msgstr "Sök {filter}"
+
+msgid "No processes match “{text}”"
+msgstr "Inga processer matchar ”{text}”"
+
+msgid "Quit Process"
+msgstr "Avsluta process"
+
+msgid "Do you want to force quit “{name}”?"
+msgid_plural "Do you want to force quit the {count} selected items?"
+msgstr[0] "Vill du tvinga ”{name}” att avsluta?"
+msgstr[1] "Vill du tvinga de {count} markerade objekten att avsluta?"
+
+msgid "Any unsaved changes are lost."
+msgstr "Osparade ändringar går förlorade."
+
+msgid "Force Quit"
+msgstr "Tvinga avslut"
+
+msgid "Do you want to quit “{name}”?"
+msgid_plural "Do you want to quit the {count} selected items?"
+msgstr[0] "Vill du avsluta ”{name}”?"
+msgstr[1] "Vill du avsluta de {count} markerade objekten?"
+
+msgid "Quit asks it to close. Force Quit ends it at once, and any unsaved changes are lost."
+msgstr "Avsluta ber processen att stänga sig. Tvinga avslut stoppar den direkt, och osparade ändringar går förlorade."
+
+msgid "Quit"
+msgstr "Avsluta"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Do you want to send {signal} to “{name}”?"
+msgid_plural "Do you want to send {signal} to the {count} selected items?"
+msgstr[0] "Vill du skicka {signal} till ”{name}”?"
+msgstr[1] "Vill du skicka {signal} till de {count} markerade objekten?"
+
+msgid "A paused process does nothing until it gets Continue. Pausing a part of the desktop can freeze the screen."
+msgstr "En pausad process gör ingenting förrän den får Fortsätt. Om du pausar en del av skrivbordet kan skärmen frysa."
+
+msgid "A process that doesn’t handle this signal ends at once, and any unsaved changes are lost."
+msgstr "En process som inte hanterar den här signalen avslutas direkt, och osparade ändringar går förlorade."
+
+msgid "Send"
+msgstr "Skicka"
+
+msgid "“{name}” belongs to another user."
+msgstr "”{name}” tillhör en annan användare."
+
+msgid "Only its owner or an administrator can quit it."
+msgstr "Bara ägaren eller en administratör kan avsluta den."
+
+msgid "OK"
+msgstr "OK"

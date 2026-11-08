@@ -1,0 +1,125 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Archive Utility"
+msgstr "Arkivverktyg"
+
+msgid "Archive Utility Settings"
+msgstr "Inställningar för Arkivverktyg"
+
+msgid "Archive Utility could not start: {error}"
+msgstr "Arkivverktyg kunde inte starta: {error}"
+
+msgid "Archives"
+msgstr "Arkiv"
+
+msgid "Choose an archive to expand"
+msgstr "Välj ett arkiv att packa upp"
+
+msgid "Expand Archive…"
+msgstr "Packa upp arkiv…"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "Password"
+msgstr "Lösenord"
+
+msgid "Enter a password to expand “{name}”"
+msgstr "Ange ett lösenord för att packa upp ”{name}”"
+
+msgid "The password is incorrect. Try again."
+msgstr "Lösenordet är fel. Försök igen."
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Expand"
+msgstr "Packa upp"
+
+msgid "Archives you open and items you compress from Files appear here while they are worked on."
+msgstr "Arkiv du öppnar och objekt du komprimerar från Filer visas här medan de bearbetas."
+
+msgid "Stop"
+msgstr "Stoppa"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Choose Folder…"
+msgstr "Välj mapp…"
+
+msgid "ZIP archive"
+msgstr "ZIP-arkiv"
+
+msgid "Compressed tar archive ({suffix})"
+msgstr "Komprimerat tar-arkiv ({suffix})"
+
+msgid "Archive format"
+msgstr "Arkivformat"
+
+msgid "Expanding"
+msgstr "Uppackning"
+
+msgid "Save expanded files"
+msgstr "Spara uppackade filer"
+
+msgid "Next to the archive"
+msgstr "Bredvid arkivet"
+
+msgid "After expanding"
+msgstr "Efter uppackning"
+
+msgid "Leave the archive alone"
+msgstr "Lämna arkivet orört"
+
+msgid "Move the archive to the Trash"
+msgstr "Flytta arkivet till papperskorgen"
+
+msgid "Reveal expanded items in Files"
+msgstr "Visa uppackade objekt i Filer"
+
+msgid "Archiving"
+msgstr "Arkivering"
+
+msgid "Save archive"
+msgstr "Spara arkiv"
+
+msgid "Next to the files"
+msgstr "Bredvid filerna"
+
+msgid "After archiving"
+msgstr "Efter arkivering"
+
+msgid "Leave the files alone"
+msgstr "Lämna filerna orörda"
+
+msgid "Move the files to the Trash"
+msgstr "Flytta filerna till papperskorgen"
+
+msgid "Reveal archive in Files"
+msgstr "Visa arkivet i Filer"
+
+msgid "{size} more free space is needed."
+msgstr "{size} mer ledigt utrymme behövs."
+
+msgid "Expanding “{name}”"
+msgstr "Packar upp ”{name}”"
+
+msgid "Compressing “{name}”"
+msgstr "Komprimerar ”{name}”"
+
+msgid "Unable to expand “{name}”"
+msgstr "Det gick inte att packa upp ”{name}”"
+
+msgid "Unable to compress “{name}”"
+msgstr "Det gick inte att komprimera ”{name}”"
+
+msgid "{done} of {total}"
+msgstr "{done} av {total}"

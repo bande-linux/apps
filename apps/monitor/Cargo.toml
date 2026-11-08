@@ -38,4 +38,5 @@ assets = [
     ["data/org.bande.ActivityMonitor.desktop", "usr/share/applications/", "644"],
     ["data/org.bande.ActivityMonitor.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.ActivityMonitor.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["target/release/l10n/development/bande-monitor/*", "usr/share/bande/l10n/bande-monitor/", "644"],
 ]

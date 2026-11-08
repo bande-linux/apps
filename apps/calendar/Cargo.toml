@@ -55,4 +55,5 @@ assets = [
     ["data/org.bande.CalendarAgent.desktop", "etc/xdg/autostart/", "644"],
     ["data/org.bande.Calendar.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Calendar.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["target/release/l10n/development/bande-calendar/*", "usr/share/bande/l10n/bande-calendar/", "644"],
 ]

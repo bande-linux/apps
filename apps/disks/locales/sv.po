@@ -1,0 +1,500 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Linux (ext4)"
+msgstr "Linux (ext4)"
+
+msgid "Linux (ext4, Encrypted)"
+msgstr "Linux (ext4, krypterad)"
+
+msgid "ExFAT"
+msgstr "ExFAT"
+
+msgid "MS-DOS (FAT32)"
+msgstr "MS-DOS (FAT32)"
+
+msgid "Windows NT (NTFS)"
+msgstr "Windows NT (NTFS)"
+
+msgid "The volume has errors that First Aid couldn’t repair. Back up its data and erase it."
+msgstr "Volymen har fel som Första hjälpen inte kunde reparera. Säkerhetskopiera dess data och radera den."
+
+msgid "The operation was stopped."
+msgstr "Åtgärden stoppades."
+
+msgid "The image is too big."
+msgstr "Avbildningen är för stor."
+
+msgid "Disk Images"
+msgstr "Skivavbildningar"
+
+msgid "Save Image"
+msgstr "Spara avbildning"
+
+msgid "Choose an Image"
+msgstr "Välj en avbildning"
+
+msgid "Open Disk Image"
+msgstr "Öppna skivavbildning"
+
+msgid "Disk Utility"
+msgstr "Skivverktyg"
+
+msgid "Mount"
+msgstr "Montera"
+
+msgid "Open Disk Image…"
+msgstr "Öppna skivavbildning …"
+
+msgid "Image from Selection…"
+msgstr "Avbildning från markering …"
+
+msgid "First Aid…"
+msgstr "Första hjälpen …"
+
+msgid "Add Partition…"
+msgstr "Lägg till partition …"
+
+msgid "Delete Partition…"
+msgstr "Radera partition …"
+
+msgid "Resize Partition…"
+msgstr "Ändra storlek på partition …"
+
+msgid "Erase…"
+msgstr "Radera …"
+
+msgid "Restore…"
+msgstr "Återställ …"
+
+msgid "Rename…"
+msgstr "Byt namn …"
+
+msgid "Eject"
+msgstr "Mata ut"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "macOS"
+msgstr "macOS"
+
+msgid "Apple system"
+msgstr "Apple-system"
+
+msgid "Untitled"
+msgstr "Namnlös"
+
+msgid "USB"
+msgstr "USB"
+
+msgid "Secure Digital"
+msgstr "Secure Digital"
+
+msgid "FireWire"
+msgstr "FireWire"
+
+msgid "Apple Fabric"
+msgstr "Apple Fabric"
+
+msgid "PCI Express"
+msgstr "PCI Express"
+
+msgid "ATAPI"
+msgstr "ATAPI"
+
+msgid "SATA"
+msgstr "SATA"
+
+msgid "Unknown"
+msgstr "Okänd"
+
+msgid "Disk Image"
+msgstr "Skivavbildning"
+
+msgid "{name} ({device}, {size})"
+msgstr "{name} ({device}, {size})"
+
+msgid "Linux ({kind})"
+msgstr "Linux ({kind})"
+
+msgid "MS-DOS (FAT)"
+msgstr "MS-DOS (FAT)"
+
+msgid "APFS"
+msgstr "APFS"
+
+msgid "Mac OS Extended"
+msgstr "Mac OS Extended"
+
+msgid "Encrypted (LUKS)"
+msgstr "Krypterad (LUKS)"
+
+msgid "Linux Swap"
+msgstr "Linux-växlingsutrymme"
+
+msgid "ISO 9660"
+msgstr "ISO 9660"
+
+msgid "Not formatted"
+msgstr "Inte formaterad"
+
+msgid "{kind}, Encrypted"
+msgstr "{kind}, krypterad"
+
+msgid "Internal"
+msgstr "Intern"
+
+msgid "External"
+msgstr "Extern"
+
+msgid "Disk Utility is still working."
+msgstr "Skivverktyg arbetar fortfarande."
+
+msgid "Wait until the operation finishes before quitting."
+msgstr "Vänta tills åtgärden är klar innan du avslutar."
+
+msgid "Couldn’t mount the volume."
+msgstr "Det gick inte att montera volymen."
+
+msgid "This may take a while. Don’t disconnect the disk."
+msgstr "Det här kan ta en stund. Koppla inte från skivan."
+
+msgid "Stop"
+msgstr "Stoppa"
+
+msgid "Done"
+msgstr "Klar"
+
+msgid "The volume had errors that were repaired."
+msgstr "Volymen hade fel som har reparerats."
+
+msgid "The volume appears to be OK."
+msgstr "Volymen verkar vara i ordning."
+
+msgid "First Aid process has completed."
+msgstr "Första hjälpen är klar."
+
+msgid "Creating an image of {name}…"
+msgstr "Skapar en avbildning av {name} …"
+
+msgid "Image created."
+msgstr "Avbildningen har skapats."
+
+msgid "The image was saved to {file}."
+msgstr "Avbildningen sparades i {file}."
+
+msgid "Couldn’t create the image."
+msgstr "Det gick inte att skapa avbildningen."
+
+msgid "Couldn’t open the disk image."
+msgstr "Det gick inte att öppna skivavbildningen."
+
+msgid "{image} doesn’t fit on {target}."
+msgstr "{image} ryms inte på {target}."
+
+msgid "Restore {name}?"
+msgstr "Återställa {name}?"
+
+msgid "Restoring {target} from {image} ({image_size}) replaces all data stored on it. You can’t undo this action."
+msgstr "Om du återställer {target} från {image} ({image_size}) ersätts alla data på den. Du kan inte ångra det här."
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Restore"
+msgstr "Återställ"
+
+msgid "This partition is on the disk this computer started up from."
+msgstr "Den här partitionen finns på skivan som datorn startade från."
+
+msgid "Unmount"
+msgstr "Avmontera"
+
+msgid "Couldn’t unmount the volume."
+msgstr "Det gick inte att avmontera volymen."
+
+msgid "Couldn’t eject the disk."
+msgstr "Det gick inte att mata ut skivan."
+
+msgid "Unlock {name}"
+msgstr "Lås upp {name}"
+
+msgid "Password"
+msgstr "Lösenord"
+
+msgid "Enter the password to unlock this volume."
+msgstr "Ange lösenordet för att låsa upp den här volymen."
+
+msgid "Unlock"
+msgstr "Lås upp"
+
+msgid "Format"
+msgstr "Format"
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "Erase {name}?"
+msgstr "Radera {name}?"
+
+msgid "Erasing {target} will permanently delete all data stored on it. You can’t undo this action."
+msgstr "Om du raderar {target} raderas alla data på den permanent. Du kan inte ångra det här."
+
+msgid "GUID Partition Map"
+msgstr "GUID-partitionsschema"
+
+msgid "Master Boot Record"
+msgstr "Master Boot Record"
+
+msgid "Scheme"
+msgstr "Schema"
+
+msgid "Erase"
+msgstr "Radera"
+
+msgid "Add a Partition to {name}"
+msgstr "Lägg till en partition på {name}"
+
+msgid "{free} of free space is available."
+msgstr "{free} ledigt utrymme finns tillgängligt."
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "Add"
+msgstr "Lägg till"
+
+msgid "Delete {name}?"
+msgstr "Radera {name}?"
+
+msgid "Deleting the partition {target} deletes all data stored on it. You can’t undo this action."
+msgstr "Om du raderar partitionen {target} raderas alla data på den. Du kan inte ångra det här."
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "Resize {name}"
+msgstr "Ändra storlek på {name}"
+
+msgid "Choose a new size for {target}, up to {largest}."
+msgstr "Välj en ny storlek för {target}, upp till {largest}."
+
+msgid "Resize"
+msgstr "Ändra storlek"
+
+msgid "Run First Aid on {name}?"
+msgstr "Köra Första hjälpen på {name}?"
+
+msgid "First Aid checks the volume for errors and repairs them. The volume is unmounted while it runs and mounted again afterwards."
+msgstr "Första hjälpen söker efter fel på volymen och reparerar dem. Volymen avmonteras medan det pågår och monteras igen efteråt."
+
+msgid "First Aid checks the volume for errors and repairs them."
+msgstr "Första hjälpen söker efter fel på volymen och reparerar dem."
+
+msgid "Run"
+msgstr "Kör"
+
+msgid "Rename {name}"
+msgstr "Byt namn på {name}"
+
+msgid "Rename"
+msgstr "Byt namn"
+
+msgid "Verify"
+msgstr "Bekräfta"
+
+msgid "Choose a Password"
+msgstr "Välj ett lösenord"
+
+msgid "Enter a password to encrypt the volume. You need it every time you open the volume, and nobody can read its data without it."
+msgstr "Ange ett lösenord för att kryptera volymen. Du behöver det varje gång du öppnar volymen, och ingen kan läsa dess data utan det."
+
+msgid "Choose"
+msgstr "Välj"
+
+msgid "Erasing {name}…"
+msgstr "Raderar {name} …"
+
+msgid "Erase process is complete."
+msgstr "Raderingen är klar."
+
+msgid "Click Done to continue."
+msgstr "Klicka på Klar för att fortsätta."
+
+msgid "Erase process has failed."
+msgstr "Raderingen misslyckades."
+
+msgid "Adding {name}…"
+msgstr "Lägger till {name} …"
+
+msgid "Partition process is complete."
+msgstr "Partitioneringen är klar."
+
+msgid "Couldn’t change the partitions."
+msgstr "Det gick inte att ändra partitionerna."
+
+msgid "The password can’t be empty."
+msgstr "Lösenordet får inte vara tomt."
+
+msgid "The passwords don’t match. Enter the same password in both fields."
+msgstr "Lösenorden stämmer inte överens. Ange samma lösenord i båda fälten."
+
+msgid "Enter a size of at least 16 MB and at most {largest}."
+msgstr "Ange en storlek på minst 16 MB och högst {largest}."
+
+msgid "Deleting the partition…"
+msgstr "Raderar partitionen …"
+
+msgid "This format can’t grow."
+msgstr "Det här formatet kan inte bli större."
+
+msgid "This format can’t shrink."
+msgstr "Det här formatet kan inte bli mindre."
+
+msgid "Resizing {name}…"
+msgstr "Ändrar storlek på {name} …"
+
+msgid "Checking the file system…"
+msgstr "Kontrollerar filsystemet …"
+
+msgid "First Aid process has failed."
+msgstr "Första hjälpen misslyckades."
+
+msgid "Couldn’t rename the volume."
+msgstr "Det gick inte att byta namn på volymen."
+
+msgid "Couldn’t unlock the volume."
+msgstr "Det gick inte att låsa upp volymen."
+
+msgid "Restoring {name}…"
+msgstr "Återställer {name} …"
+
+msgid "Restore process is complete."
+msgstr "Återställningen är klar."
+
+msgid "Restore process has failed."
+msgstr "Återställningen misslyckades."
+
+msgid "No Partition Map"
+msgstr "Inget partitionsschema"
+
+msgid "Disk Image • {file}"
+msgstr "Skivavbildning • {file}"
+
+msgid "{connection} {location} Physical Disk • {scheme}"
+msgstr "Fysisk skiva, {connection} {location} • {scheme}"
+
+msgid "Free"
+msgstr "Ledigt"
+
+msgid "Failing"
+msgstr "Felar"
+
+msgid "Verified"
+msgstr "Verifierad"
+
+msgid "Not Supported"
+msgstr "Stöds inte"
+
+msgid "Location:"
+msgstr "Plats:"
+
+msgid "Capacity:"
+msgstr "Kapacitet:"
+
+msgid "Connection:"
+msgstr "Anslutning:"
+
+msgid "Child count:"
+msgstr "Antal underordnade:"
+
+msgid "Partition Map:"
+msgstr "Partitionsschema:"
+
+msgid "S.M.A.R.T. status:"
+msgstr "S.M.A.R.T.-status:"
+
+msgid "Device:"
+msgstr "Enhet:"
+
+msgid "Type:"
+msgstr "Typ:"
+
+msgid "Solid state"
+msgstr "Halvledarlagring"
+
+msgid "Disk"
+msgstr "Skiva"
+
+msgid "Model:"
+msgstr "Modell:"
+
+msgid "Serial:"
+msgstr "Serienummer:"
+
+msgid "Temperature:"
+msgstr "Temperatur:"
+
+msgid "Power-on hours:"
+msgstr "Drifttimmar:"
+
+msgid "Access:"
+msgstr "Åtkomst:"
+
+msgid "Apple system (read-only)"
+msgstr "Apple-system (skrivskyddad)"
+
+msgid "Startup disk (read-only)"
+msgstr "Startskiva (skrivskyddad)"
+
+msgid "{location} Physical Volume • {format}"
+msgstr "Fysisk volym, {location} • {format}"
+
+msgid "Used"
+msgstr "Använt"
+
+msgid "Locked"
+msgstr "Låst"
+
+msgid "Not Mounted"
+msgstr "Inte monterad"
+
+msgid "Mount Point:"
+msgstr "Monteringspunkt:"
+
+msgid "Format:"
+msgstr "Format:"
+
+msgid "Available:"
+msgstr "Tillgängligt:"
+
+msgid "UUID:"
+msgstr "UUID:"
+
+msgid "macOS (read-only)"
+msgstr "macOS (skrivskyddad)"
+
+msgid "In use (read-only)"
+msgstr "Används (skrivskyddad)"
+
+msgid "+"
+msgstr "+"
+
+msgid "−"
+msgstr "−"
+
+msgid "First Aid"
+msgstr "Första hjälpen"
+
+msgid "Partition"
+msgstr "Partitionera"
+
+msgid "No disks found."
+msgstr "Inga skivor hittades."

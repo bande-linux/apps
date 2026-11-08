@@ -1,0 +1,674 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Mail"
+msgstr "E-post"
+
+msgid "Settings"
+msgstr "Inställningar"
+
+msgid "Save Attachment"
+msgstr "Spara bilaga"
+
+msgid "The attachment couldn’t be saved: {error}"
+msgstr "Det gick inte att spara bilagan: {error}"
+
+msgid "{name} is larger than {limit} and was not attached."
+msgstr "{name} är större än {limit} och bifogades inte."
+
+msgid "Attach Files"
+msgstr "Bifoga filer"
+
+msgid "Message Viewer"
+msgstr "Meddelandevisare"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "New Message"
+msgstr "Nytt meddelande"
+
+msgid "Add Account…"
+msgstr "Lägg till konto …"
+
+msgid "Find"
+msgstr "Sök"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "Descending"
+msgstr "Fallande"
+
+msgid "Ascending"
+msgstr "Stigande"
+
+msgid "Bcc Address Field"
+msgstr "Fält för hemlig kopia"
+
+msgid "Mailbox"
+msgstr "Brevlåda"
+
+msgid "Get Mail"
+msgstr "Hämta e-post"
+
+msgid "Mark All as Read"
+msgstr "Markera alla som lästa"
+
+msgid "New Mailbox…"
+msgstr "Ny brevlåda …"
+
+msgid "Message"
+msgstr "Meddelande"
+
+msgid "Send"
+msgstr "Skicka"
+
+msgid "Reply"
+msgstr "Svara"
+
+msgid "Reply All"
+msgstr "Svara alla"
+
+msgid "Forward"
+msgstr "Vidarebefordra"
+
+msgid "Mark as Read or Unread"
+msgstr "Markera som läst eller oläst"
+
+msgid "Flag or Unflag"
+msgstr "Flagga eller ta bort flagga"
+
+msgid "Flag"
+msgstr "Flagga"
+
+msgid "Apply Rules"
+msgstr "Tillämpa regler"
+
+msgid "Archive"
+msgstr "Arkivera"
+
+msgid "Move to Junk"
+msgstr "Flytta till skräppost"
+
+msgid "Move To"
+msgstr "Flytta till"
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "Sort by Date"
+msgstr "Sortera efter datum"
+
+msgid "Sort by From"
+msgstr "Sortera efter avsändare"
+
+msgid "Sort by Subject"
+msgstr "Sortera efter ämne"
+
+msgid "Sort by Size"
+msgstr "Sortera efter storlek"
+
+msgid "Sort by Unread"
+msgstr "Sortera efter olästa"
+
+msgid "To:"
+msgstr "Till:"
+
+msgid "Cc:"
+msgstr "Kopia:"
+
+msgid "Bcc:"
+msgstr "Hemlig kopia:"
+
+msgid "Subject:"
+msgstr "Ämne:"
+
+msgid "From:"
+msgstr "Från:"
+
+msgid "Write your message"
+msgstr "Skriv ditt meddelande"
+
+msgid "Add at least one recipient."
+msgstr "Lägg till minst en mottagare."
+
+msgid "“{text}” is not a valid address."
+msgstr "”{text}” är inte en giltig adress."
+
+msgid "This message can’t be sent"
+msgstr "Det här meddelandet kan inte skickas"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "The message was not sent"
+msgstr "Meddelandet skickades inte"
+
+msgid "Yesterday"
+msgstr "Igår"
+
+msgid "No Subject"
+msgstr "Inget ämne"
+
+msgid "{count} messages"
+msgstr "{count} meddelanden"
+
+msgid "Offline"
+msgstr "Offline"
+
+msgid "No Messages"
+msgstr "Inga meddelanden"
+
+msgid "No Results"
+msgstr "Inga resultat"
+
+msgid "No Sender"
+msgstr "Ingen avsändare"
+
+msgid "No Message Selected"
+msgstr "Inget meddelande markerat"
+
+msgid "{count} Messages Selected"
+msgstr "{count} meddelanden markerade"
+
+msgid "To: {names}"
+msgstr "Till: {names}"
+
+msgid "Cc: {names}"
+msgstr "Kopia: {names}"
+
+msgid "Hide Quoted Text"
+msgstr "Dölj citerad text"
+
+msgid "Show Quoted Text"
+msgstr "Visa citerad text"
+
+msgid "Downloading the message…"
+msgstr "Hämtar meddelandet …"
+
+msgid "Remote content in this message was not loaded, to protect your privacy."
+msgstr "Externt innehåll i det här meddelandet laddades inte, för att skydda din integritet."
+
+msgid "Load Remote Content"
+msgstr "Ladda externt innehåll"
+
+msgid "Loading remote content…"
+msgstr "Laddar externt innehåll …"
+
+msgid "General"
+msgstr "Allmänt"
+
+msgid "Accounts"
+msgstr "Konton"
+
+msgid "Viewing"
+msgstr "Visning"
+
+msgid "Composing"
+msgstr "Skrivande"
+
+msgid "Rules"
+msgstr "Regler"
+
+msgid "TLS"
+msgstr "TLS"
+
+msgid "STARTTLS"
+msgstr "STARTTLS"
+
+msgid "None (this computer only)"
+msgstr "Ingen (endast den här datorn)"
+
+msgid "Security"
+msgstr "Säkerhet"
+
+msgid "From"
+msgstr "Från"
+
+msgid "To or Cc"
+msgstr "Till eller kopia"
+
+msgid "Subject"
+msgstr "Ämne"
+
+msgid "New Messages"
+msgstr "Nya meddelanden"
+
+msgid "Show notifications"
+msgstr "Visa notiser"
+
+msgid "Play a sound"
+msgstr "Spela upp ett ljud"
+
+msgid "Default Email Reader"
+msgstr "Standardprogram för e-post"
+
+msgid "To open email links in Mail, choose it in Settings → Default Apps."
+msgstr "Om du vill öppna e-postlänkar i E-post väljer du det i Inställningar → Standardappar."
+
+msgid "None"
+msgstr "Ingen"
+
+msgid "1 line"
+msgid_plural "{lines} lines"
+msgstr[0] "1 rad"
+msgstr[1] "{lines} rader"
+
+msgid "Preview"
+msgstr "Förhandsvisning"
+
+msgid "Message List"
+msgstr "Meddelandelista"
+
+msgid "Organize by conversation"
+msgstr "Ordna efter konversation"
+
+msgid "Messages"
+msgstr "Meddelanden"
+
+msgid "Show plain text when a message has it"
+msgstr "Visa oformaterad text när meddelandet har sådan"
+
+msgid "Use a fixed-width font for plain text"
+msgstr "Använd ett teckensnitt med fast breddsteg för oformaterad text"
+
+msgid "Privacy"
+msgstr "Integritet"
+
+msgid "Load remote content in messages"
+msgstr "Ladda externt innehåll i meddelanden"
+
+msgid "Remote pictures can tell the sender when and where you read a message. When this is off, a message shows Load Remote Content instead, and Mail remembers the senders you load it for."
+msgstr "Externa bilder kan visa för avsändaren när och var du läser ett meddelande. När det här är av visar meddelandet Ladda externt innehåll i stället, och E-post kommer ihåg de avsändare du laddar det för."
+
+msgid "Remote content loads for one sender"
+msgid_plural "Remote content loads for {count} senders"
+msgstr[0] "Externt innehåll laddas för en avsändare"
+msgstr[1] "Externt innehåll laddas för {count} avsändare"
+
+msgid "Forget"
+msgstr "Glöm"
+
+msgid "Flag the message"
+msgstr "Flagga meddelandet"
+
+msgid "Mark as read"
+msgstr "Markera som läst"
+
+msgid "Move to {mailbox} ({account})"
+msgstr "Flytta till {mailbox} ({account})"
+
+msgid "No rules yet."
+msgstr "Inga regler ännu."
+
+msgid "and"
+msgstr "och"
+
+msgid "or"
+msgstr "eller"
+
+msgid "{field} contains “{pattern}”"
+msgstr "{field} innehåller ”{pattern}”"
+
+msgid "{conditions}: {action}"
+msgstr "{conditions}: {action}"
+
+msgid "Edit"
+msgstr "Redigera"
+
+msgid "Remove"
+msgstr "Ta bort"
+
+msgid "Edit Rule"
+msgstr "Redigera regel"
+
+msgid "New Rule"
+msgstr "Ny regel"
+
+msgid "Match"
+msgstr "Matcha"
+
+msgid "Any condition"
+msgstr "Något villkor"
+
+msgid "All conditions"
+msgstr "Alla villkor"
+
+msgid "If"
+msgstr "Om"
+
+msgid "And if"
+msgstr "Och om"
+
+msgid "Or if"
+msgstr "Eller om"
+
+msgid "contains"
+msgstr "innehåller"
+
+msgid "Add Condition"
+msgstr "Lägg till villkor"
+
+msgid "Remove Condition"
+msgstr "Ta bort villkor"
+
+msgid "Then"
+msgstr "Då"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Save Rule"
+msgstr "Spara regel"
+
+msgid "Add Rule"
+msgstr "Lägg till regel"
+
+msgid "Rules act on new unread mail in the Inbox while Mail is open, in this order. Message → Apply Rules runs them on the messages you choose."
+msgstr "Regler tillämpas på nya olästa meddelanden i inkorgen medan E-post är öppet, i den här ordningen. Meddelande → Tillämpa regler kör dem på de meddelanden du väljer."
+
+msgid "Account of the selected mailbox"
+msgstr "Kontot för den markerade brevlådan"
+
+msgid "Send new messages from"
+msgstr "Skicka nya meddelanden från"
+
+msgid "Addressing"
+msgstr "Adressering"
+
+msgid "Responding"
+msgstr "Svar"
+
+msgid "Quote the original message"
+msgstr "Citera originalmeddelandet"
+
+msgid "Each account’s signature is set in Accounts."
+msgstr "Varje kontos signatur anges under Konton."
+
+msgid "No accounts are set up."
+msgstr "Inga konton är tillagda."
+
+msgid "Account"
+msgstr "Konto"
+
+msgid "Remove…"
+msgstr "Ta bort …"
+
+msgid "Ann Lee"
+msgstr "Anna Lind"
+
+msgid "No signature"
+msgstr "Ingen signatur"
+
+msgid "Save"
+msgstr "Spara"
+
+msgid "Account Information"
+msgstr "Kontoinformation"
+
+msgid "Use this account"
+msgstr "Använd det här kontot"
+
+msgid "Email address"
+msgstr "E-postadress"
+
+msgid "Full name"
+msgstr "Fullständigt namn"
+
+msgid "Signature"
+msgstr "Signatur"
+
+msgid "Server Settings"
+msgstr "Serverinställningar"
+
+msgid "User name"
+msgstr "Användarnamn"
+
+msgid "Same as the email address"
+msgstr "Samma som e-postadressen"
+
+msgid "Incoming server (IMAP)"
+msgstr "Inkommande server (IMAP)"
+
+msgid "imap.example.com"
+msgstr "imap.example.com"
+
+msgid "Port"
+msgstr "Port"
+
+msgid "Outgoing server (SMTP)"
+msgstr "Utgående server (SMTP)"
+
+msgid "smtp.example.com"
+msgstr "smtp.example.com"
+
+msgid "Enter both server names."
+msgstr "Ange båda servernamnen."
+
+msgid "Checking the account…"
+msgstr "Kontrollerar kontot …"
+
+msgid "The server settings were saved."
+msgstr "Serverinställningarna har sparats."
+
+msgid "The user name or password is incorrect."
+msgstr "Användarnamnet eller lösenordet är felaktigt."
+
+msgid "Mail could not reach the servers: {reason}"
+msgstr "E-post kunde inte nå servrarna: {reason}"
+
+msgid "Remove {email}?"
+msgstr "Ta bort {email}?"
+
+msgid "Mail forgets this account, its saved password and the copy of its mail on this computer. The mail on the server stays."
+msgstr "E-post glömmer det här kontot, dess sparade lösenord och kopian av dess e-post på den här datorn. E-posten på servern finns kvar."
+
+msgid "Name:"
+msgstr "Namn:"
+
+msgid "Email Address:"
+msgstr "E-postadress:"
+
+msgid "Password:"
+msgstr "Lösenord:"
+
+msgid "Incoming (IMAP):"
+msgstr "Inkommande (IMAP):"
+
+msgid "Port:"
+msgstr "Port:"
+
+msgid "Outgoing (SMTP):"
+msgstr "Utgående (SMTP):"
+
+msgid "User Name:"
+msgstr "Användarnamn:"
+
+msgid "name@example.com"
+msgstr "namn@example.com"
+
+msgid "Required"
+msgstr "Obligatoriskt"
+
+msgid "Sign In"
+msgstr "Logga in"
+
+msgid "Add a Mail Account"
+msgstr "Lägg till ett e-postkonto"
+
+msgid "Enter your name, email address and password. Mail finds the servers for you."
+msgstr "Ange ditt namn, din e-postadress och ditt lösenord. E-post hittar servrarna åt dig."
+
+msgid "Mail could not sign in by itself. Check the server settings."
+msgstr "E-post kunde inte logga in automatiskt. Kontrollera serverinställningarna."
+
+msgid "Enter Your Password"
+msgstr "Ange ditt lösenord"
+
+msgid "The server did not accept the password for {email}."
+msgstr "Servern godtog inte lösenordet för {email}."
+
+msgid "Inbox"
+msgstr "Inkorg"
+
+msgid "Drafts"
+msgstr "Utkast"
+
+msgid "Sent"
+msgstr "Skickat"
+
+msgctxt "mailbox"
+msgid "Archive"
+msgstr "Arkiv"
+
+msgid "Junk"
+msgstr "Skräppost"
+
+msgid "Trash"
+msgstr "Papperskorg"
+
+msgid "All Mail"
+msgstr "All e-post"
+
+msgid "Flagged"
+msgstr "Flaggade"
+
+msgid "Mailboxes"
+msgstr "Brevlådor"
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "Red"
+msgstr "Röd"
+
+msgid "Orange"
+msgstr "Orange"
+
+msgid "Yellow"
+msgstr "Gul"
+
+msgid "Green"
+msgstr "Grön"
+
+msgid "Blue"
+msgstr "Blå"
+
+msgid "Purple"
+msgstr "Lila"
+
+msgid "Gray"
+msgstr "Grå"
+
+msgid "A Message Could Not Be Put Back"
+msgid_plural "{count} Messages Could Not Be Put Back"
+msgstr[0] "Ett meddelande kunde inte läggas tillbaka"
+msgstr[1] "{count} meddelanden kunde inte läggas tillbaka"
+
+msgid "Mail did not find it in {mailbox} on the server. It may have been moved or deleted there."
+msgstr "E-post hittade det inte i {mailbox} på servern. Det kan ha flyttats eller raderats där."
+
+msgid "On {date}, {name} wrote:"
+msgstr "Den {date} skrev {name}:"
+
+msgid ""
+"Begin forwarded message:\n"
+"\n"
+"From: {from}\n"
+"Subject: {subject}\n"
+"Date: {date}\n"
+"To: {to}"
+msgstr ""
+"Vidarebefordrat meddelande:\n"
+"\n"
+"Från: {from}\n"
+"Ämne: {subject}\n"
+"Datum: {date}\n"
+"Till: {to}"
+
+msgid "No account sends from this address any more."
+msgstr "Inget konto skickar längre från den här adressen."
+
+msgid "A Message Is Waiting to Be Sent"
+msgid_plural "{count} Messages Are Waiting to Be Sent"
+msgstr[0] "Ett meddelande väntar på att skickas"
+msgstr[1] "{count} meddelanden väntar på att skickas"
+
+msgid "{email} is turned off. Mail sends what is waiting when you turn the account on again in Settings → Accounts. If you quit Mail first, it opens again as an unsent message."
+msgstr "{email} är avstängt. E-post skickar det som väntar när du slår på kontot igen i Inställningar → Konton. Om du avslutar E-post först öppnas det igen som ett oskickat meddelande."
+
+msgid "The mailbox could not be changed"
+msgstr "Brevlådan kunde inte ändras"
+
+msgid "{count} new messages"
+msgstr "{count} nya meddelanden"
+
+msgid "Enter your name and email address."
+msgstr "Ange ditt namn och din e-postadress."
+
+msgid "Enter your password."
+msgstr "Ange ditt lösenord."
+
+msgid "This account is already set up."
+msgstr "Det här kontot är redan tillagt."
+
+msgid "Open Attachment"
+msgstr "Öppna bilaga"
+
+msgid "Save Attachment…"
+msgstr "Spara bilaga …"
+
+msgid "Save to Downloads Folder"
+msgstr "Spara i mappen Hämtningar"
+
+msgid "Rename Mailbox…"
+msgstr "Byt namn på brevlåda …"
+
+msgid "Delete Mailbox…"
+msgstr "Radera brevlåda …"
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "New Mailbox"
+msgstr "Ny brevlåda"
+
+msgid "Rename “{name}”"
+msgstr "Byt namn på ”{name}”"
+
+msgid "Delete “{name}”?"
+msgstr "Radera ”{name}”?"
+
+msgid "The mailbox and every message in it are deleted from the server."
+msgstr "Brevlådan och alla meddelanden i den raderas från servern."
+
+msgid "Mark as Unread"
+msgstr "Markera som oläst"
+
+msgid "Mark as Read"
+msgstr "Markera som läst"
+
+msgid "Unflag"
+msgstr "Ta bort flagga"
+
+msgid "Google needs an app password for Mail: turn on 2-Step Verification, then create one at myaccount.google.com/apppasswords."
+msgstr "Google kräver ett applösenord för E-post: aktivera tvåstegsverifiering och skapa sedan ett på myaccount.google.com/apppasswords."
+
+msgid "Outlook.com and Microsoft 365 may refuse passwords from mail apps; Mail cannot sign in with Microsoft yet."
+msgstr "Outlook.com och Microsoft 365 kan neka lösenord från e-postappar. E-post kan inte logga in med Microsoft ännu."
+
+msgid "iCloud needs an app-specific password: create one at account.apple.com under Sign-In and Security."
+msgstr "iCloud kräver ett appspecifikt lösenord: skapa ett på account.apple.com under Inloggning och säkerhet."
+
+msgid "Yahoo and AOL need an app password: create one in your account's security settings."
+msgstr "Yahoo och AOL kräver ett applösenord: skapa ett i kontots säkerhetsinställningar."
+
+msgid "Fastmail needs an app password: create one in Settings → Privacy & Security."
+msgstr "Fastmail kräver ett applösenord: skapa ett i Inställningar → Integritet och säkerhet."

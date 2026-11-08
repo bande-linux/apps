@@ -35,4 +35,5 @@ assets = [
     ["data/org.bande.Calculator.desktop", "usr/share/applications/", "644"],
     ["data/org.bande.Calculator.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Calculator.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["target/release/l10n/development/bande-calculator/*", "usr/share/bande/l10n/bande-calculator/", "644"],
 ]

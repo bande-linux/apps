@@ -1,0 +1,44 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Datum"
+msgstr "Datum"
+
+msgid "Paper"
+msgstr "Papper"
+
+msgid "Ink"
+msgstr "Bläck"
+
+msgid "Midnight"
+msgstr "Midnatt"
+
+msgid "High Contrast"
+msgstr "Hög kontrast"
+
+msgid "Solarized Light"
+msgstr "Solarized Light"
+
+msgid "Solarized Dark"
+msgstr "Solarized Dark"
+
+msgid "Dracula"
+msgstr "Dracula"
+
+msgid "Nord"
+msgstr "Nord"
+
+msgid "Gruvbox"
+msgstr "Gruvbox"
+
+msgid "Tokyo Night"
+msgstr "Tokyo Night"
+
+msgid "Catppuccin Mocha"
+msgstr "Catppuccin Mocha"

@@ -1,0 +1,191 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Clock"
+msgstr "Klocka"
+
+msgid "Timer Done"
+msgstr "Timern är klar"
+
+msgid "Stop Stopwatch"
+msgstr "Stoppa stoppur"
+
+msgid "Start Stopwatch"
+msgstr "Starta stoppur"
+
+msgid "Lap"
+msgstr "Varv"
+
+msgid "Reset"
+msgstr "Nollställ"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "New Alarm…"
+msgstr "Nytt alarm…"
+
+msgid "New Timer…"
+msgstr "Ny timer…"
+
+msgid "Add City…"
+msgstr "Lägg till stad…"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "Snooze"
+msgstr "Snooza"
+
+msgid "Stop"
+msgstr "Stoppa"
+
+msgid "Repeat"
+msgstr "Upprepa"
+
+msgid "Alarms"
+msgstr "Alarm"
+
+msgid "Timers"
+msgstr "Timers"
+
+msgid "Stopwatch"
+msgstr "Stoppur"
+
+msgid "World Clock"
+msgstr "Världsklocka"
+
+msgid "Add"
+msgstr "Lägg till"
+
+msgid "{count} h"
+msgstr "{count} h"
+
+msgid "{count} min"
+msgstr "{count} min"
+
+msgid "{count} s"
+msgstr "{count} s"
+
+msgid "Alarm"
+msgstr "Alarm"
+
+msgid "Weekdays"
+msgstr "Vardagar"
+
+msgid "Weekends"
+msgstr "Helger"
+
+msgid "Every Day"
+msgstr "Varje dag"
+
+msgid "Mallet"
+msgstr "Klubba"
+
+msgid "Knock"
+msgstr "Knack"
+
+msgid "Low"
+msgstr "Låg"
+
+msgid "Tick"
+msgstr "Tick"
+
+msgid "Yesterday"
+msgstr "Igår"
+
+msgid "Today"
+msgstr "Idag"
+
+msgid "Tomorrow"
+msgstr "Imorgon"
+
+msgid "{day}, {difference}"
+msgstr "{day}, {difference}"
+
+msgid "Label"
+msgstr "Etikett"
+
+msgid "Sound"
+msgstr "Ljud"
+
+msgid "Time"
+msgstr "Tid"
+
+msgid "Hour"
+msgstr "Timme"
+
+msgid "Minute"
+msgstr "Minut"
+
+msgid "New Alarm"
+msgstr "Nytt alarm"
+
+msgid "Edit Alarm"
+msgstr "Redigera alarm"
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Save"
+msgstr "Spara"
+
+msgid "Second"
+msgstr "Sekund"
+
+msgid "New Timer"
+msgstr "Ny timer"
+
+msgid "Start"
+msgstr "Starta"
+
+msgid "Search Cities"
+msgstr "Sök städer"
+
+msgid "City"
+msgstr "Stad"
+
+msgid "Country"
+msgstr "Land"
+
+msgid "Add City"
+msgstr "Lägg till stad"
+
+msgid "No Alarms"
+msgstr "Inga alarm"
+
+msgid "snoozed until {time}"
+msgstr "snoozat till {time}"
+
+msgid "Edit…"
+msgstr "Redigera…"
+
+msgid "No Timers"
+msgstr "Inga timers"
+
+msgid "Pause"
+msgstr "Pausa"
+
+msgid "Resume"
+msgstr "Fortsätt"
+
+msgid "Lap {number}"
+msgstr "Varv {number}"
+
+msgid "No Cities"
+msgstr "Inga städer"
+
+msgid "night"
+msgstr "natt"
+
+msgid "Remove"
+msgstr "Ta bort"
