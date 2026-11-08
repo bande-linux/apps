@@ -39,6 +39,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "misc"
 depends = "$auto, fonts-jetbrains-mono, fonts-inter, fonts-manrope"
+recommends = "bande-files, bande-sound"
 provides = "x-terminal-emulator"
 maintainer-scripts = "debian/"
 extended-description = """\
