@@ -240,7 +240,8 @@ impl Banner {
             let mut model = changed.borrow_mut();
             model.query = text.to_owned();
             model.actions.push(BannerAction::QueryChanged);
-        });
+        })
+        .without_text_checking();
         let focus = field.id();
         let children = vec![
             Box::new(field) as Box<dyn Widget>,
@@ -263,7 +264,8 @@ impl Banner {
         let changed = model.clone();
         let field = TextField::new(&L10N.tr("title-placeholder"), title, move |text| {
             changed.borrow_mut().query = text.to_owned();
-        });
+        })
+        .without_text_checking();
         let focus = field.id();
         let children = vec![
             Box::new(field) as Box<dyn Widget>,

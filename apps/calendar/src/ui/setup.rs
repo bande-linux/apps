@@ -112,9 +112,12 @@ impl Setup {
             ROW,
         ));
         let send = sender(signals);
-        let user = panel.add(TextField::new("jane@example.com", "", move |text| {
-            send(Signal::SetupUser(text.to_owned()))
-        }));
+        let user = panel.add(
+            TextField::new("jane@example.com", "", move |text| {
+                send(Signal::SetupUser(text.to_owned()))
+            })
+            .without_text_checking(),
+        );
         panel.line(Line::new(
             Some(&L10N.tr("account-user")),
             vec![(user, Width::Fill)],
@@ -131,11 +134,12 @@ impl Setup {
             ROW,
         ));
         let send = sender(signals);
-        let server = panel.add(TextField::new(
-            &L10N.tr("account-server-placeholder"),
-            "",
-            move |text| send(Signal::SetupServer(text.to_owned())),
-        ));
+        let server = panel.add(
+            TextField::new(&L10N.tr("account-server-placeholder"), "", move |text| {
+                send(Signal::SetupServer(text.to_owned()))
+            })
+            .without_text_checking(),
+        );
         panel.line(Line::new(
             Some(&L10N.tr("account-server")),
             vec![(server, Width::Fill)],

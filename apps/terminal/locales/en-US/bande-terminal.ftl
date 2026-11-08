@@ -115,3 +115,4 @@ settings-alt-as-meta = Use Alt as Meta
 settings-paste-warning = Warn before pasting several lines
 settings-scrollback = Scrollback
 settings-lines = { $count } lines
+menu-look-up = Look Up “{ $word }”

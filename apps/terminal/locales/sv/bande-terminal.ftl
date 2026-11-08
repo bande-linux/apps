@@ -115,3 +115,4 @@ settings-alt-as-meta = Använd Alt som Meta
 settings-paste-warning = Varna före inklistring av flera rader
 settings-scrollback = Historik
 settings-lines = { $count } rader
+menu-look-up = Slå upp ”{ $word }”

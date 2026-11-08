@@ -726,7 +726,8 @@ impl DocumentView {
         let (typed, chosen) = (Rc::clone(&self.signals), Rc::clone(&self.signals));
         let field = TextField::new(&L10N.tr("line-placeholder"), "", move |text| {
             typed.borrow_mut().push(Signal::Line(text.to_owned()));
-        });
+        })
+        .without_text_checking();
         self.ui.present_sheet(
             Alert::new(&L10N.tr("go-to-line"), "", move |action| {
                 chosen.borrow_mut().push(Signal::Choice(action.to_owned()));

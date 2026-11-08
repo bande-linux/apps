@@ -15,7 +15,7 @@ use bande_terminal::{
     Axis, Banner, BannerAction, CellPoint, CloseAsk, Command, Divider, FULL_SCREEN_LEADING,
     GridSize, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, NewTabFolder, Notice,
     Painter, Pane, STRIP_HEIGHT, SearchDirection, SelectionKind, Session, Settings, Terminal,
-    TerminalContext, bracketed, dropped_text, encode_key, is_openable, mouse_report,
+    TerminalContext, bracketed, dropped_text, encode_key, is_openable, look_up_text, mouse_report,
     next_font_size, reports_mouse, shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
 use bande_toolkit::ui::{
@@ -1085,6 +1085,11 @@ impl TerminalWindow {
                 }
             }
             MenuCommand::Reveal(path) => self.show_in_files(window, &path),
+            MenuCommand::LookUp => {
+                if let Some(text) = look_up_text(self.terminal().selected_text()) {
+                    window.look_up(text);
+                }
+            }
             MenuCommand::CloseTab(id) => {
                 if let Some(index) = self.tabs.iter().position(|tab| tab.id == id) {
                     self.request_close_tab(window, index);
@@ -1118,6 +1123,7 @@ impl TerminalWindow {
         let context = TerminalContext {
             link: link.map(|link| link.uri),
             has_selection: self.terminal().selected_text().is_some(),
+            look_up: look_up_text(self.terminal().selected_text()),
             knows_directory: self.session().working_directory().is_some(),
             tab: self.tab().id,
         };
