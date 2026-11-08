@@ -3,12 +3,13 @@ use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::Entry;
-use bande_app_settings::{SettingsWindow, settings_folder};
+use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_l10n::{Text, text, tr};
 use bande_toolkit::{
     Appearance, DragAction, DragEvent, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window,
@@ -18,9 +19,10 @@ use bande_velox::{
     Act, ContainerRequest, DisplayWindow, Effect, Endpoint, Failure, Hub, Informer, LogsTarget,
     LogsView, MACHINE_WINDOW_SIZE, MachineRequest, MachineWindow, Place, Places, RemoteHost,
     Request, SETTINGS_SIZE, SIDEBAR_WIDTH, Section, ShellLink, ShellTarget, ShellWindow,
-    TERMINAL_APP_ID, Target, Tunnel, Update, VeloxSettings, VeloxView, Work, context_endpoint,
-    contexts, create_context, current_context, load_hosts, notify_crash, remove_context,
-    rename_context, save_hosts, settings_form, tunnel_socket, use_context,
+    TERMINAL_APP_ID, Target, Tray, TrayAction, Tunnel, Update, VeloxSettings, VeloxView, Work,
+    context_endpoint, contexts, create_context, current_context, engine_connected, engine_missing,
+    load_hosts, notify_crash, remove_context, rename_context, save_hosts, settings_form,
+    tunnel_socket, use_context,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
@@ -32,6 +34,7 @@ const RUNNING_ID: &str = match option_env!("VELOX_TEST_APP_ID") {
 const WINDOW_SIZE: (u32, u32) = (920, 560);
 const LOGS_SIZE: (u32, u32) = (760, 480);
 const FIND: &str = "find";
+const PALETTE: &str = "command-palette";
 const SHOW_MAIN: &str = "show-main";
 const SHOW_LOGS: &str = "show-logs:";
 const SHOW_MACHINE: &str = "show-machine:";
@@ -109,6 +112,7 @@ impl Pane {
                     self.logs.extend(self.work.serve(request, token));
                 }
                 Request::EngineLogs(target) => self.logs.push(target),
+                Request::Engine(lifecycle) => self.informer.control(lifecycle),
                 request => self.places.push(request),
             }
         }
@@ -116,26 +120,16 @@ impl Pane {
 
     fn open_link(&mut self, window: &mut Window, link: &str) {
         let token = window.activation_token(RUNNING_ID).ok();
-        let entry = self
+        let apps = self
             .apps
-            .get_or_insert_with(|| Apps::load(data_dirs(), &config_dirs()))
-            .default_for("x-scheme-handler/https")
-            .cloned();
-        match entry {
-            Some(entry) => {
-                if let Err(error) =
-                    bande_xdg::launch_with_arguments(&entry, &[link.to_owned()], token.as_deref())
-                {
-                    tracing::warn!("cannot open {link}: {error}");
-                }
-            }
-            None => tracing::warn!("no app opens web links"),
-        }
+            .get_or_insert_with(|| Apps::load(data_dirs(), &config_dirs()));
+        open_web_link(apps, link, token.as_deref());
     }
 
     fn command(&mut self, window: &mut Window, command: &str) -> bool {
         match command {
             FIND => self.view.focus_filter(),
+            PALETTE => self.view.open_palette(),
             NEW_MACHINE => {
                 self.view.show(Section::Machines);
                 let (machines, ui) = self.view.machines();
@@ -406,6 +400,27 @@ impl View for Screen {
     }
 }
 
+fn open_web_link(apps: &Apps, link: &str, token: Option<&str>) {
+    match apps.default_for("x-scheme-handler/https") {
+        Some(entry) => {
+            if let Err(error) = bande_xdg::launch_with_arguments(entry, &[link.to_owned()], token) {
+                tracing::warn!("cannot open {link}: {error}");
+            }
+        }
+        None => tracing::warn!("no app opens web links"),
+    }
+}
+
+static LEAVING: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Source {
+    Informer,
+    Hub,
+    Settings,
+    Tray,
+}
+
 struct Velox {
     main: Option<WindowId>,
     informer: Option<Rc<Informer>>,
@@ -414,9 +429,73 @@ struct Velox {
     place: Place,
     hosts: Vec<RemoteHost>,
     tunnel: Option<Tunnel>,
+    settings: VeloxSettings,
+    settings_watch: Option<SettingsWatch>,
+    tray: Option<Tray>,
 }
 
 impl Velox {
+    fn source_kinds(&self) -> Vec<Source> {
+        [
+            (self.informer.is_some(), Source::Informer),
+            (self.hub.is_some(), Source::Hub),
+            (self.settings_watch.is_some(), Source::Settings),
+            (self.tray.is_some(), Source::Tray),
+        ]
+        .into_iter()
+        .filter_map(|(present, source)| present.then_some(source))
+        .collect()
+    }
+
+    fn follow_settings(&mut self, cx: &mut Cx<Self>) {
+        self.settings = VeloxSettings::current();
+        match (self.settings.status_item, self.tray.is_some()) {
+            (true, false) => {
+                self.tray = cx
+                    .session()
+                    .cloned()
+                    .and_then(|session| Tray::start(session, APP_ID));
+                if self.informer.is_none() {
+                    self.hosts = load_hosts();
+                    match self.open_engine() {
+                        Ok(informer) => self.informer = Some(informer),
+                        Err(error) => tracing::warn!("cannot follow the engine: {error}"),
+                    }
+                }
+            }
+            (false, true) => {
+                self.tray = None;
+                if cx.windows().next().is_none() {
+                    self.informer = None;
+                    self.tunnel = None;
+                }
+            }
+            _ => {}
+        }
+        cx.refresh_menus();
+    }
+
+    fn serve_tray(&mut self, cx: &mut Cx<Self>) {
+        let actions = self
+            .tray
+            .as_mut()
+            .map(Tray::take_actions)
+            .unwrap_or_default();
+        for action in actions {
+            match action {
+                TrayAction::Show => self.show_main(cx),
+                TrayAction::Settings => cx.open_settings(),
+                TrayAction::Quit => {
+                    LEAVING.store(true, Ordering::Relaxed);
+                    cx.quit();
+                }
+                TrayAction::Open(link) => {
+                    open_web_link(&Apps::load(data_dirs(), &config_dirs()), &link, None);
+                }
+            }
+        }
+    }
+
     fn places(&self) -> Places {
         Places {
             hosts: self.hosts.clone(),
@@ -932,8 +1011,8 @@ impl Velox {
 impl Program for Velox {
     type View = Screen;
 
-    fn start(_cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
-        Ok(Self {
+    fn start(cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        let mut velox = Self {
             main: None,
             informer: None,
             hub: None,
@@ -941,7 +1020,14 @@ impl Program for Velox {
             place: Place::Local,
             hosts: Vec::new(),
             tunnel: None,
-        })
+            settings: VeloxSettings::default(),
+            settings_watch: settings_folder()
+                .as_deref()
+                .and_then(|folder| SettingsWatch::start(folder, VeloxSettings::FILE)),
+            tray: None,
+        };
+        velox.follow_settings(cx);
+        Ok(velox)
     }
 
     fn menus(&self, cx: &Cx<Self>) -> Menus {
@@ -961,6 +1047,13 @@ impl Program for Velox {
             .collect();
         sections.push(Entry::separator());
         sections.push(Entry::item(&tr!("Find"), FIND).shortcut("Ctrl+F"));
+        if self.settings.command_palette {
+            sections.push(
+                Entry::item(&tr!("Command Palette…"), PALETTE)
+                    .shortcut("Ctrl+K")
+                    .enabled(ready),
+            );
+        }
         sections.extend(view.map(VeloxView::view_entries).unwrap_or_default());
         let pane = view.and_then(VeloxView::resource_menu).unwrap_or_else(|| {
             Entry::submenu(
@@ -1113,8 +1206,10 @@ impl Program for Velox {
             _ => {}
         }
         if cx.windows().next().is_none() {
-            self.informer = None;
             self.hub = None;
+            if self.tray.is_none() {
+                self.informer = None;
+            }
         } else {
             self.update_sampling(cx);
         }
@@ -1133,6 +1228,8 @@ impl Program for Velox {
             .iter()
             .map(|informer| informer.fd())
             .chain(self.hub.iter().map(Hub::fd))
+            .chain(self.settings_watch.iter().map(SettingsWatch::fd))
+            .chain(self.tray.iter().map(Tray::fd))
             .collect()
     }
 
@@ -1148,14 +1245,28 @@ impl Program for Velox {
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
-        let informer = match (index, &self.informer) {
-            (0, Some(informer)) => Some(Rc::clone(informer)),
-            _ => None,
+        let informer = match self.source_kinds().get(index) {
+            Some(Source::Informer) => self.informer.clone(),
+            Some(Source::Hub) => {
+                if self.hub.as_ref().is_some_and(Hub::drain) {
+                    self.machines_changed(cx);
+                }
+                return;
+            }
+            Some(Source::Settings) => {
+                if self
+                    .settings_watch
+                    .as_mut()
+                    .is_some_and(SettingsWatch::drain)
+                {
+                    self.follow_settings(cx);
+                }
+                return;
+            }
+            Some(Source::Tray) => return self.serve_tray(cx),
+            None => return,
         };
         let Some(informer) = informer else {
-            if self.hub.as_ref().is_some_and(Hub::drain) {
-                self.machines_changed(cx);
-            }
             return;
         };
         let (crashes, updates): (Vec<Update>, Vec<Update>) = informer
@@ -1168,6 +1279,28 @@ impl Program for Velox {
                     notify_crash(RUNNING_ID, &name, code);
                 }
             }
+        }
+        let host = match &self.place {
+            Place::Host(id) => self
+                .hosts
+                .iter()
+                .find(|host| host.id == *id)
+                .map(|host| host.name.clone()),
+            Place::Local => None,
+        };
+        let mut tray = false;
+        for update in &updates {
+            match update {
+                Update::Ready(info) => engine_connected(info, host.as_deref()),
+                Update::Blocked(readiness) => engine_missing(&format!("{readiness:?}")),
+                _ => {}
+            }
+            if let Some(shown) = self.tray.as_mut() {
+                tray |= shown.apply(update);
+            }
+        }
+        if tray && let Some(shown) = &self.tray {
+            shown.refresh();
         }
         let windows: Vec<WindowId> = cx.windows().collect();
         for update in &updates {
@@ -1202,6 +1335,10 @@ impl Program for Velox {
 
     fn deadline(&self) -> Option<Instant> {
         self.hub.as_ref().and_then(Hub::deadline)
+    }
+
+    fn runs_in_background() -> bool {
+        !LEAVING.load(Ordering::Relaxed) && VeloxSettings::current().status_item
     }
 
     fn tick(&mut self, cx: &mut Cx<Self>, now: Instant) {

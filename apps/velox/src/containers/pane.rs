@@ -214,6 +214,7 @@ pub struct Containers {
     main: Option<Main>,
     tools: Option<Tools>,
     inspector: bool,
+    revealing: Option<String>,
     inspected: Option<Box<Inspect>>,
     subject: Option<Vec<String>>,
     graphs: Option<GraphIds>,
@@ -242,6 +243,7 @@ impl Containers {
             main: None,
             tools: None,
             inspector: false,
+            revealing: None,
             inspected: None,
             subject: None,
             graphs: None,
@@ -451,6 +453,16 @@ impl Containers {
             }
         }
         !intents.is_empty()
+    }
+
+    pub fn run_on(&mut self, ui: &mut Ui, command: &str, id: &str) {
+        self.run(ui, command, &[id.to_owned()]);
+    }
+
+    pub fn reveal(&mut self, id: &str) {
+        self.selected = vec![id.to_owned()];
+        self.subject = None;
+        self.revealing = Some(id.to_owned());
     }
 
     pub fn command(&mut self, ui: &mut Ui, command: &str) -> bool {
@@ -800,6 +812,12 @@ impl Containers {
         if let Some(table) = ui.widget_as::<Table>(table) {
             table.set_rows(listing.rows);
             table.set_expanded_rows(listing.expanded);
+            if let Some(id) = self.revealing.take() {
+                table.select(&[id]);
+                if let Some(row) = table.selected_rows().first() {
+                    table.scroll_to_row(*row);
+                }
+            }
         }
         if let Some(links) = ui.widget_as::<PortLinks>(links) {
             links.set_ports(listing.ports);

@@ -14,6 +14,7 @@ use bande_watch::{Changes, FolderWatch};
 
 use super::client::{Container, Engine, EngineInfo, Event};
 use super::jobs::{self, Task};
+use super::lifecycle::{Controlled, Lifecycle};
 use super::places::Failure;
 use super::resources::{DiskUsage, Image, Network, Pulling, Sample, Volume};
 use super::socket;
@@ -66,6 +67,7 @@ pub enum Update {
         name: String,
         code: i64,
     },
+    Controlled(Controlled),
 }
 
 #[derive(Clone)]
@@ -376,6 +378,20 @@ impl Informer {
             if let Err(error) = spawned {
                 tracing::warn!("cannot reach the engine: {error}");
             }
+        }
+    }
+
+    pub fn control(&self, lifecycle: Lifecycle) {
+        let out = self.sender.clone();
+        let recheck = self.recheck.clone();
+        let spawned = std::thread::Builder::new()
+            .name("velox-engine".to_owned())
+            .spawn(move || {
+                out.send(Update::Controlled(lifecycle.run()));
+                let _ = recheck.send(());
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot reach systemd: {error}");
         }
     }
 

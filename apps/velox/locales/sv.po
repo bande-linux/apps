@@ -976,6 +976,9 @@ msgstr "Containrar"
 msgid "Find"
 msgstr "Sök"
 
+msgid "Command Palette…"
+msgstr "Kommandopalett…"
+
 msgid "Container"
 msgstr "Container"
 
@@ -1252,11 +1255,35 @@ msgstr "Kör image …"
 msgid "Action failed"
 msgstr "Åtgärden misslyckades"
 
+msgid "Launch Velox at login"
+msgstr "Starta Velox vid inloggning"
+
+msgid "Copy Diagnostics"
+msgstr "Kopiera diagnostik"
+
+msgid "Copies versions, the engine's state and the end of its log, for a bug report"
+msgstr "Kopierar versioner, motorns tillstånd och slutet av dess logg, till en felrapport"
+
 msgid "Notifications"
 msgstr "Notiser"
 
 msgid "Notify when a container stops unexpectedly"
 msgstr "Meddela när en container stoppas oväntat"
+
+msgid "Quick Access"
+msgstr "Snabbåtkomst"
+
+msgid "Command palette (Ctrl+K)"
+msgstr "Kommandopalett (Ctrl+K)"
+
+msgid "Status item in the Taskbar"
+msgstr "Statussymbol i Aktivitetsfältet"
+
+msgid "About"
+msgstr "Om"
+
+msgid "Diagnostics"
+msgstr "Diagnostik"
 
 msgid "{name} — Serial Console"
 msgstr "{name} — Seriekonsol"
@@ -1270,6 +1297,21 @@ msgstr "Det går inte att ansluta: {reason}"
 msgid "The connection closed."
 msgstr "Anslutningen stängdes."
 
+msgid "No engine"
+msgstr "Ingen motor"
+
+msgid "Open localhost:{port}"
+msgstr "Öppna localhost:{port}"
+
+msgid "Open Velox"
+msgstr "Öppna Velox"
+
+msgid "Settings…"
+msgstr "Inställningar…"
+
+msgid "Quit Velox"
+msgstr "Avsluta Velox"
+
 msgid "Overview"
 msgstr "Översikt"
 
@@ -1281,6 +1323,21 @@ msgstr "{engine} · rootless"
 
 msgid "Connecting…"
 msgstr "Ansluter …"
+
+msgid "Shell"
+msgstr "Skal"
+
+msgid "Logs"
+msgstr "Loggar"
+
+msgid "Copy Path"
+msgstr "Kopiera sökväg"
+
+msgid "Cannot start the engine"
+msgstr "Det gick inte att starta motorn"
+
+msgid "Cannot stop the engine"
+msgstr "Det gick inte att stoppa motorn"
 
 msgid "“{name}” already exists"
 msgstr "”{name}” finns redan"
@@ -1294,14 +1351,26 @@ msgstr "Resurser"
 msgid "Engine Logs"
 msgstr "Motorloggar"
 
-msgid "No engine"
-msgstr "Ingen motor"
+msgid "Starting {engine}…"
+msgstr "Startar {engine}…"
+
+msgid "Stopping {engine}…"
+msgstr "Stoppar {engine}…"
+
+msgid "Start {engine}"
+msgstr "Starta {engine}"
+
+msgid "Stop {engine}"
+msgstr "Stoppa {engine}"
 
 msgid "Podman, rootless"
 msgstr "Podman, rootless"
 
 msgid "Show This Computer"
 msgstr "Visa den här datorn"
+
+msgid "Search containers, images, volumes…"
+msgstr "Sök containrar, images, volymer…"
 
 msgid "This Computer"
 msgstr "Den här datorn"

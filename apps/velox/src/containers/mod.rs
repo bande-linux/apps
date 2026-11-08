@@ -15,6 +15,7 @@ pub(crate) use inspector::{
     GraphIds, WIDTH as INSPECTOR_WIDTH, graph_widgets, panel, update as update_graphs,
 };
 pub use logs::{LogsTarget, LogsView};
+pub(crate) use menu::{LOGS, OPEN_URL, SHELL};
 pub use pane::Containers;
 pub(crate) use stats::Usage as UsageHistory;
 pub(crate) use widgets::Split;

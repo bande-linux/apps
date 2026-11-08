@@ -14,6 +14,7 @@ const TOOL_GAP: f32 = 4.0;
 const SEARCH_GAP: f32 = 12.0;
 const SEARCH_WIDTH: f32 = 200.0;
 const DOT: f32 = 8.0;
+const PILL_BUTTON: f32 = 28.0;
 const DOT_GAP: f32 = 8.0;
 const CODE_PADDING: f32 = Spacing::M as f32;
 const SYMBOL_PIXELS: u32 = 32;
@@ -192,6 +193,7 @@ pub struct Pill {
     text: String,
     light: Light,
     paragraph: Option<Paragraph>,
+    button: Vec<Box<dyn Widget>>,
     frame: Rect,
 }
 
@@ -202,8 +204,25 @@ impl Pill {
             text: text.to_owned(),
             light,
             paragraph: None,
+            button: Vec::new(),
             frame: Rect::default(),
         }
+    }
+
+    pub fn with_button(self, button: Box<dyn Widget>) -> Self {
+        Self {
+            button: vec![button],
+            ..self
+        }
+    }
+
+    fn button_frame(&self) -> Rect {
+        Rect::new(
+            self.frame.x + self.frame.width - PILL_BUTTON,
+            self.frame.y + ((self.frame.height - PILL_BUTTON) / 2.0).round(),
+            PILL_BUTTON,
+            PILL_BUTTON,
+        )
     }
 }
 
@@ -214,7 +233,14 @@ impl Widget for Pill {
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
         let style = TextStyle::role(TextRole::Callout, cx.palette.ink2);
-        let width = (available.width - 2.0 * DOT_GAP - DOT).max(0.0);
+        let button = match self.button.is_empty() {
+            true => 0.0,
+            false => PILL_BUTTON,
+        };
+        let width = (available.width - 2.0 * DOT_GAP - DOT - button).max(0.0);
+        for button in &mut self.button {
+            button.measure(cx, Size::new(PILL_BUTTON, PILL_BUTTON));
+        }
         self.paragraph = Some(
             cx.text
                 .paragraph(&self.text, style, Some(width), TextAlign::Start),
@@ -222,15 +248,30 @@ impl Widget for Pill {
         available
     }
 
-    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+    fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
+        let button = self.button_frame();
+        for child in &mut self.button {
+            child.place(cx, button);
+        }
     }
 
     fn frame(&self) -> Rect {
         self.frame
     }
 
+    fn children(&self) -> &[Box<dyn Widget>] {
+        &self.button
+    }
+
+    fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+        &mut self.button
+    }
+
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        for button in &self.button {
+            button.paint(cx, items);
+        }
         let palette = &cx.palette;
         let middle = self.frame.y + self.frame.height / 2.0;
         let dot = Rect::new(self.frame.x + DOT_GAP, middle - DOT / 2.0, DOT, DOT);

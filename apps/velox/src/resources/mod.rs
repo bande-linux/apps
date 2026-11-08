@@ -238,6 +238,14 @@ impl Resources {
         }
     }
 
+    pub fn images(&self) -> &[Image] {
+        &self.store.images
+    }
+
+    pub fn volumes(&self) -> &[Volume] {
+        &self.store.volumes
+    }
+
     pub fn count(&self, section: Section) -> Option<usize> {
         match section {
             Section::Images => Some(self.store.images.len()),

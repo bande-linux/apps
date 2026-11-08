@@ -1,4 +1,5 @@
 mod not_ready;
+mod palette;
 mod places;
 mod widgets;
 
@@ -7,7 +8,9 @@ use std::rc::Rc;
 
 use bande_app_menu::Entry;
 use bande_l10n::{text, tr};
-use bande_toolkit::ui::{Cell, Column, Context, Heading, Label, Row, Table, Ui, Widget, WidgetId};
+use bande_toolkit::ui::{
+    Button, Cell, Column, Context, Heading, Label, Row, Table, Ui, Widget, WidgetId,
+};
 use bande_toolkit::{Appearance, Header, Image, Palette, SHEET_INSET, TextSystem};
 
 pub use self::places::{Place, Places};
@@ -15,7 +18,9 @@ pub use self::widgets::SIDEBAR_WIDTH;
 pub(crate) use self::widgets::{Centered, Code, Ends, Root, dot, symbol};
 use self::widgets::{Light, Pill};
 use crate::containers::{self, Containers};
-use crate::engine::{Action, Engine, EngineInfo, Flavor, RemoteHost, Task, Update};
+use crate::engine::{
+    Action, Controlled, Engine, EngineInfo, Flavor, Lifecycle, RemoteHost, Task, Update,
+};
 use crate::machines::{Hub, MACHINES_KEY, MACHINES_SYMBOL, MachinesPane};
 use crate::readiness::Readiness;
 use crate::resources::Resources;
@@ -29,6 +34,8 @@ const COUNT_WIDTH: f32 = 60.0;
 const ENGINE_LOGS: &str = "engine-logs";
 const LOGS_SYMBOL: &str = include_str!("../../data/symbols/logs.svg");
 const ADD_SYMBOL: &str = include_str!("../../data/symbols/add.svg");
+const START_SYMBOL: &str = include_str!("../../data/symbols/start.svg");
+const STOP_SYMBOL: &str = include_str!("../../data/symbols/stop.svg");
 const IMAGE_ARCHIVES: [&str; 4] = [".tar", ".tar.gz", ".tgz", ".tar.zst"];
 const TITLE_INSET: f32 = 16.0;
 
@@ -115,6 +122,7 @@ pub enum Request {
     DeleteWorkspace(String),
     Reconnect,
     EngineLogs(crate::containers::LogsTarget),
+    Engine(Lifecycle),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,6 +141,8 @@ enum Intent {
     RenameWorkspace(String, String),
     DeleteWorkspace(String),
     CopySsh(String),
+    Palette(palette::Choice),
+    Engine(Lifecycle),
     AddHost(RemoteHost),
     RemoveHost(String),
     CreateWorkspace(String, String),
@@ -179,6 +189,7 @@ pub struct VeloxView {
     hidden: bool,
     stats_round: std::collections::HashSet<String>,
     add_symbol: Option<Image>,
+    controlling: Option<Lifecycle>,
 }
 
 fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
@@ -193,7 +204,7 @@ fn short_version(version: &str) -> &str {
     }
 }
 
-fn engine_name(info: &EngineInfo) -> String {
+pub(crate) fn engine_name(info: &EngineInfo) -> String {
     let flavor = match info.flavor {
         Flavor::Docker => text!("Docker {version}"),
         Flavor::Podman => text!("Podman {version}"),
@@ -270,6 +281,7 @@ impl VeloxView {
             hidden: false,
             stats_round: std::collections::HashSet::new(),
             add_symbol: symbol(ADD_SYMBOL, palette.ink2),
+            controlling: None,
         };
         view.refresh();
         view
@@ -459,6 +471,85 @@ impl VeloxView {
         }
     }
 
+    pub fn open_palette(&mut self) {
+        if self.ui.has_sheet() || !self.ready() {
+            return;
+        }
+        let hits = self.palette_hits();
+        let intents = Rc::clone(&self.intents);
+        self.ui
+            .present_dialog(palette::CommandPalette::new(hits, move |choice| {
+                push(&intents, Intent::Palette(choice));
+            }));
+    }
+
+    fn palette_hits(&self) -> Vec<palette::Hit> {
+        let run = |label: String, command: &str, id: &str| {
+            (
+                label,
+                palette::Choice::Run(command.to_owned(), id.to_owned()),
+            )
+        };
+        let list = self.containers.list();
+        let mut containers: Vec<&crate::engine::Container> = list.values().collect();
+        containers.sort_by_key(|container| (!container.running(), container.name().to_lowercase()));
+        let mut hits: Vec<palette::Hit> = containers
+            .into_iter()
+            .map(|container| {
+                let id = container.id.as_str();
+                let mut actions = Vec::new();
+                match container.running() {
+                    true => {
+                        actions.extend(container.published_ports().first().map(|port| {
+                            run(
+                                format!(":{port}"),
+                                &format!("{}{port}", containers::OPEN_URL),
+                                id,
+                            )
+                        }));
+                        actions.push(run(tr!("Shell"), containers::SHELL, id));
+                        actions.push(run(tr!("Stop"), "container-stop", id));
+                    }
+                    false => actions.push(run(tr!("Start"), "container-start", id)),
+                }
+                actions.push(run(tr!("Logs"), containers::LOGS, id));
+                palette::Hit {
+                    group: palette::Group::Containers,
+                    title: container.name().to_owned(),
+                    running: Some(container.running()),
+                    primary: palette::Choice::Reveal(id.to_owned()),
+                    actions,
+                }
+            })
+            .collect();
+        let copy = |group, title: String, label: String, text: String| palette::Hit {
+            group,
+            title,
+            running: None,
+            primary: palette::Choice::Copy(text.clone()),
+            actions: vec![(label, palette::Choice::Copy(text))],
+        };
+        hits.extend(self.resources.images().iter().flat_map(|image| {
+            image.tags().into_iter().map(|tag| {
+                copy(
+                    palette::Group::Images,
+                    tag.to_owned(),
+                    tr!("Copy Reference"),
+                    tag.to_owned(),
+                )
+            })
+        }));
+        hits.extend(self.resources.volumes().iter().map(|volume| {
+            copy(
+                palette::Group::Volumes,
+                volume.name.clone(),
+                tr!("Copy Path"),
+                volume.mountpoint.clone(),
+            )
+        }));
+        hits
+    }
+
     pub fn focus_filter(&mut self) {
         if self.section == Section::Machines {
             return self.machines.focus_filter(&mut self.ui);
@@ -569,6 +660,16 @@ impl VeloxView {
                 self.containers.set_engine(Some(info.clone()));
                 self.connection = Connection::Ready(info);
             }
+            Update::Controlled(controlled) => {
+                let lifecycle = self.controlling.take();
+                if let (Controlled::Failed(message), Some(lifecycle)) = (controlled, lifecycle) {
+                    let title = match lifecycle.start {
+                        true => tr!("Cannot start the engine"),
+                        false => tr!("Cannot stop the engine"),
+                    };
+                    crate::resources::tell(&mut self.ui, &title, &message);
+                }
+            }
             update => self.containers.apply(&mut self.ui, update),
         }
         self.refresh();
@@ -648,6 +749,18 @@ impl VeloxView {
                 Intent::DeleteWorkspace(name) => {
                     self.requests.push(Request::DeleteWorkspace(name.clone()));
                 }
+                Intent::Engine(lifecycle) => {
+                    self.controlling = Some(*lifecycle);
+                    self.requests.push(Request::Engine(*lifecycle));
+                }
+                Intent::Palette(palette::Choice::Reveal(id)) => {
+                    self.section = Section::Containers;
+                    self.containers.reveal(id);
+                }
+                Intent::Palette(palette::Choice::Run(command, id)) => {
+                    self.containers.run_on(&mut self.ui, command, id);
+                }
+                Intent::Palette(palette::Choice::Copy(text)) => self.ui.context().copy(text),
                 Intent::CopySsh(id) => {
                     let command = self
                         .places
@@ -747,11 +860,62 @@ impl VeloxView {
         (rows, headings)
     }
 
-    fn pill(&self) -> Pill {
+    fn lifecycle(&self) -> Option<Lifecycle> {
+        if self.places.borrow().is_remote() {
+            return None;
+        }
         match &self.connection {
+            Connection::Ready(info) if info.started.is_some() => Some(Lifecycle {
+                flavor: info.flavor,
+                user: info.rootless,
+                start: false,
+            }),
+            Connection::Blocked(Readiness::NotRunning(flavor)) => Some(Lifecycle {
+                flavor: *flavor,
+                user: *flavor == Flavor::Podman,
+                start: true,
+            }),
+            _ => None,
+        }
+    }
+
+    fn pill(&self) -> Pill {
+        let flavor = |flavor| match flavor {
+            Flavor::Docker => "Docker",
+            Flavor::Podman => "Podman",
+        };
+        if let Some(lifecycle) = self.controlling {
+            let text = match lifecycle.start {
+                true => tr!("Starting {engine}…", engine = flavor(lifecycle.flavor)),
+                false => tr!("Stopping {engine}…", engine = flavor(lifecycle.flavor)),
+            };
+            return Pill::new(&text, Light::Waiting);
+        }
+        let pill = match &self.connection {
             Connection::Connecting => Pill::new(&tr!("Connecting…"), Light::Waiting),
             Connection::Blocked(_) => Pill::new(&tr!("No engine"), Light::Off),
             Connection::Ready(info) => Pill::new(&engine_name(info), Light::On),
+        };
+        let Some(lifecycle) = self.lifecycle() else {
+            return pill;
+        };
+        let (svg, label) = match lifecycle.start {
+            true => (
+                START_SYMBOL,
+                tr!("Start {engine}", engine = flavor(lifecycle.flavor)),
+            ),
+            false => (
+                STOP_SYMBOL,
+                tr!("Stop {engine}", engine = flavor(lifecycle.flavor)),
+            ),
+        };
+        let intents = Rc::clone(&self.intents);
+        let click = move || push(&intents, Intent::Engine(lifecycle));
+        match symbol(svg, self.palette.ink) {
+            Some(image) => {
+                pill.with_button(boxed(Button::symbol(image, &label, click).tooltip(&label)))
+            }
+            None => pill,
         }
     }
 
