@@ -1,5 +1,6 @@
 mod backend;
 mod console;
+mod display;
 mod fleet;
 mod page;
 mod pane;
@@ -17,6 +18,7 @@ use std::time::{Duration, Instant};
 
 pub use self::backend::Act;
 use self::backend::{Backend, Change, Plan, SnapshotOp};
+pub use self::display::DisplayWindow;
 pub use self::fleet::{Fleet, Notice};
 pub use self::pane::{INSPECTOR_COMMAND, MACHINES_KEY, MachinesPane};
 use self::sheet::Field;

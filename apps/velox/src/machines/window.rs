@@ -173,6 +173,19 @@ impl MachineWindow {
         self.tab == Tab::Info
     }
 
+    pub fn displays(&self) -> (String, u32) {
+        let fleet = self.fleet.borrow();
+        let Some(entry) = fleet.entry(&self.id) else {
+            return (String::new(), 0);
+        };
+        let manifest = &entry.listed.manifest;
+        let shown = match entry.running() && manifest.preset != bande_vm::Preset::Windows {
+            true => manifest.displays.clamp(1, bande_vm::MAX_DISPLAYS),
+            false => 0,
+        };
+        (entry.name().to_owned(), shown)
+    }
+
     pub fn title(&self) -> String {
         let fleet = self.fleet.borrow();
         let Some(entry) = fleet.entry(&self.id) else {
@@ -790,6 +803,34 @@ impl MachineWindow {
             L10N.tr("machine-graphics-3d"),
             boxed(Stack::new(Axis::Vertical, 2.0, 0.0, column)),
         ));
+        let displays = manifest.displays.clamp(1, bande_vm::MAX_DISPLAYS);
+        let windows = manifest.preset == bande_vm::Preset::Windows;
+        lines.push(match (windows, has_memory) {
+            (true, _) => FormLine::Row(L10N.tr("machine-displays"), boxed(Label::new("1"))),
+            (false, true) => FormLine::Row(
+                L10N.tr("machine-displays"),
+                boxed(Stack::new(
+                    Axis::Vertical,
+                    2.0,
+                    0.0,
+                    vec![
+                        boxed(Label::new(&displays.to_string())),
+                        boxed(Label::new(&L10N.tr("machine-graphics-3d-snapshots")).secondary()),
+                    ],
+                )),
+            ),
+            (false, false) => lockable(
+                "machine-displays",
+                displays.to_string(),
+                boxed(Stepper::new(
+                    &L10N.tr("machine-displays"),
+                    f64::from(displays),
+                    (1.0, f64::from(bande_vm::MAX_DISPLAYS)),
+                    1.0,
+                    change(|value| Change::Displays(value as u32)),
+                )),
+            ),
+        });
         lines.push(FormLine::Heading(L10N.tr("machine-section-startup")));
         let login_intents = Rc::clone(&self.intents);
         lines.push(FormLine::Row(

@@ -19,8 +19,8 @@ use bande_l10n::Localizer;
 pub use containers::{LogsTarget, LogsView, Request as ContainerRequest, Work};
 pub use engine::{Action, Informer, Update};
 pub use machines::{
-    Act, Effect, Hub, INSPECTOR_COMMAND as MACHINE_INSPECTOR, MACHINE_WINDOW_SIZE, MachineWindow,
-    MachinesPane, Notice, Request as MachineRequest,
+    Act, DisplayWindow, Effect, Hub, INSPECTOR_COMMAND as MACHINE_INSPECTOR, MACHINE_WINDOW_SIZE,
+    MachineWindow, MachinesPane, Notice, Request as MachineRequest,
 };
 pub use notify::notify_crash;
 pub use readiness::Readiness;

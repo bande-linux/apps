@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 use std::rc::Rc;
@@ -11,9 +12,10 @@ use bande_toolkit::{
     Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use bande_velox::{
-    Act, ContainerRequest, Effect, Hub, Informer, L10N, LogsTarget, LogsView, MACHINE_WINDOW_SIZE,
-    MachineRequest, MachineWindow, Request, SETTINGS_SIZE, SIDEBAR_WIDTH, Section, ShellLink,
-    ShellTarget, ShellWindow, Update, VeloxSettings, VeloxView, Work, notify_crash, settings_form,
+    Act, ContainerRequest, DisplayWindow, Effect, Hub, Informer, L10N, LogsTarget, LogsView,
+    MACHINE_WINDOW_SIZE, MachineRequest, MachineWindow, Request, SETTINGS_SIZE, SIDEBAR_WIDTH,
+    Section, ShellLink, ShellTarget, ShellWindow, Update, VeloxSettings, VeloxView, Work,
+    notify_crash, settings_form,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
@@ -48,6 +50,7 @@ const MACHINE_SUSPEND: &str = "machine-suspend";
 const SHOW_SHELL: &str = "show-shell:";
 const SHELL_SIZE: (u32, u32) = (760, 480);
 const MACHINE_WINDOW_TAG: &str = "machine";
+const DISPLAY_WINDOW_TAG: &str = "display";
 
 static INFO: Info = Info {
     id: RUNNING_ID,
@@ -261,6 +264,7 @@ enum Screen {
     Main(Box<Pane>),
     Logs(Box<LogsView>),
     Machine(Box<MachineWindow>),
+    Display(Box<DisplayWindow>),
     Shell(Box<ShellWindow>),
 }
 
@@ -270,6 +274,7 @@ impl Screen {
             Self::Main(pane) => pane.as_mut(),
             Self::Logs(logs) => logs.as_mut(),
             Self::Machine(machine) => machine.as_mut(),
+            Self::Display(display) => display.as_mut(),
             Self::Shell(shell) => shell.as_mut(),
         }
     }
@@ -279,6 +284,7 @@ impl Screen {
             Self::Main(pane) => pane.as_ref(),
             Self::Logs(logs) => logs.as_ref(),
             Self::Machine(machine) => machine.as_ref(),
+            Self::Display(display) => display.as_ref(),
             Self::Shell(shell) => shell.as_ref(),
         }
     }
@@ -287,7 +293,7 @@ impl Screen {
         match self {
             Self::Main(pane) => pane.view.machines().0.take_requests(),
             Self::Machine(machine) => machine.take_requests(),
-            Self::Logs(_) | Self::Shell(_) => Vec::new(),
+            Self::Logs(_) | Self::Display(_) | Self::Shell(_) => Vec::new(),
         }
     }
 
@@ -295,7 +301,7 @@ impl Screen {
         match self {
             Self::Main(pane) => pane.view.machines_changed(),
             Self::Machine(machine) => machine.refresh(),
-            Self::Logs(_) | Self::Shell(_) => return false,
+            Self::Logs(_) | Self::Display(_) | Self::Shell(_) => return false,
         }
         true
     }
@@ -304,7 +310,7 @@ impl Screen {
         match self {
             Self::Main(pane) => pane.view.present_notice(title, message),
             Self::Machine(machine) => machine.present_notice(title, message),
-            Self::Logs(_) | Self::Shell(_) => {}
+            Self::Logs(_) | Self::Display(_) | Self::Shell(_) => {}
         }
     }
 
@@ -314,7 +320,7 @@ impl Screen {
                 matches!(pane.view.section(), Section::Machines | Section::Overview)
             }
             Self::Machine(machine) => machine.wants_stats(),
-            Self::Logs(_) | Self::Shell(_) => false,
+            Self::Logs(_) | Self::Display(_) | Self::Shell(_) => false,
         }
     }
 }
@@ -373,6 +379,7 @@ struct Velox {
     main: Option<WindowId>,
     informer: Option<Rc<Informer>>,
     hub: Option<Hub>,
+    dismissed: HashSet<(String, u32)>,
 }
 
 impl Velox {
@@ -408,6 +415,7 @@ impl Velox {
         if let Err(error) = opened {
             tracing::warn!("cannot open the machine's window: {error}");
         }
+        self.sync_displays(cx);
     }
 
     fn with_machine(&self, cx: &mut Cx<Self>, id: &str, act: impl FnOnce(&mut MachineWindow)) {
@@ -512,8 +520,62 @@ impl Velox {
                 window.request_redraw();
             }
         }
+        self.sync_displays(cx);
         self.update_sampling(cx);
         cx.refresh_menus();
+    }
+
+    fn wanted_displays(cx: &Cx<Self>) -> Vec<(String, u32, String)> {
+        cx.windows()
+            .filter_map(|window| match cx.view(window) {
+                Some(Screen::Machine(machine)) => Some(machine),
+                _ => None,
+            })
+            .flat_map(|machine| {
+                let (name, count) = machine.displays();
+                let id = machine.machine().to_owned();
+                (1..count).map(move |display| (id.clone(), display, name.clone()))
+            })
+            .collect()
+    }
+
+    fn sync_displays(&mut self, cx: &mut Cx<Self>) {
+        let wanted = Self::wanted_displays(cx);
+        let is_wanted =
+            |id: &str, display: u32| wanted.iter().any(|(w, d, _)| w == id && *d == display);
+        self.dismissed
+            .retain(|(id, display)| is_wanted(id, *display));
+        let shown: Vec<(WindowId, String, u32)> = cx
+            .windows()
+            .filter_map(|window| match cx.view(window) {
+                Some(Screen::Display(display)) => {
+                    Some((window, display.machine().to_owned(), display.display()))
+                }
+                _ => None,
+            })
+            .collect();
+        for (window, id, display) in &shown {
+            if !is_wanted(id, *display) {
+                cx.close(*window);
+            }
+        }
+        for (id, index, name) in &wanted {
+            let open = shown.iter().any(|(_, w, d)| w == id && d == index);
+            if open || self.dismissed.contains(&(id.clone(), *index)) {
+                continue;
+            }
+            let opened = cx.open(
+                Kind::Secondary(DISPLAY_WINDOW_TAG),
+                name,
+                MACHINE_WINDOW_SIZE,
+                |appearance| {
+                    Screen::Display(Box::new(DisplayWindow::new(id, *index, name, appearance)))
+                },
+            );
+            if let Err(error) = opened {
+                tracing::warn!("cannot open display {}: {error}", index + 1);
+            }
+        }
     }
 
     fn update_sampling(&mut self, cx: &Cx<Self>) {
@@ -668,6 +730,7 @@ impl Program for Velox {
             main: None,
             informer: None,
             hub: None,
+            dismissed: HashSet::new(),
         })
     }
 
@@ -818,9 +881,17 @@ impl Program for Velox {
         self.show_main(cx);
     }
 
-    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, _view: Screen) {
+    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, view: Screen) {
         if self.main == Some(window) {
             self.main = None;
+        }
+        match view {
+            Screen::Display(display) => {
+                self.dismissed
+                    .insert((display.machine().to_owned(), display.display()));
+            }
+            Screen::Machine(_) => self.sync_displays(cx),
+            _ => {}
         }
         if cx.windows().next().is_none() {
             self.informer = None;

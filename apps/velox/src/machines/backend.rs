@@ -92,6 +92,7 @@ pub enum Change {
     SshPort(u16),
     Eject,
     Graphics3d(bool),
+    Displays(u32),
     StartAtLogin(bool),
     AddShare(PathBuf),
     RemoveShare(String),
@@ -508,6 +509,7 @@ impl Worker {
             Change::Memory(memory) => manifest.memory_mib = memory,
             Change::Eject => manifest.installer = None,
             Change::Graphics3d(on) => manifest.graphics_3d = on,
+            Change::Displays(count) => manifest.displays = count.clamp(1, bande_vm::MAX_DISPLAYS),
             Change::StartAtLogin(_) => {}
             Change::AddShare(path) => {
                 let tag = share_tag(&path, &manifest.shares);
