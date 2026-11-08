@@ -47,6 +47,7 @@ const MACHINE_CLONE: &str = "machine-clone";
 const MACHINE_OPEN: &str = "machine-open-console";
 const MACHINE_SERIAL: &str = "machine-serial";
 const MACHINE_SUSPEND: &str = "machine-suspend";
+const MACHINE_USB: &str = "machine-usb:";
 const SHOW_SHELL: &str = "show-shell:";
 const SHELL_SIZE: (u32, u32) = (760, 480);
 const MACHINE_WINDOW_TAG: &str = "machine";
@@ -613,6 +614,30 @@ impl Velox {
         let item = |key: &str, command: &str, act: Act| {
             Entry::item(&L10N.tr(key), command).enabled(can(act))
         };
+        let subject = match screen {
+            Some(Screen::Main(pane)) => pane.view.machines_ref().single_selected(),
+            Some(Screen::Machine(machine)) => Some(machine.machine().to_owned()),
+            _ => None,
+        };
+        let usb = subject.as_deref().and_then(|id| {
+            let choices = self.hub.as_ref()?.usb_choices(id)?;
+            Some(
+                choices
+                    .into_iter()
+                    .map(|(key, name, on)| {
+                        Entry::item(&name, &format!("{MACHINE_USB}{id}/{key}")).radio(on)
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        });
+        let usb = match usb {
+            Some(items) if !items.is_empty() => Entry::submenu(&L10N.tr("machine-usb"), items),
+            Some(_) => Entry::submenu(
+                &L10N.tr("machine-usb"),
+                vec![Entry::item(&L10N.tr("machine-usb-none"), "").enabled(false)],
+            ),
+            None => Entry::item(&L10N.tr("machine-usb"), "").enabled(false),
+        };
         let (pause_key, pause_act) = match can(Act::Resume) {
             true => ("machine-resume", Act::Resume),
             false => ("machine-pause", Act::Pause),
@@ -635,6 +660,7 @@ impl Velox {
                     .enabled(can(Act::ShutDown) || can(Act::Resume)),
                 Entry::item(&L10N.tr("machine-send-ctrl-alt-delete"), MACHINE_SEND_KEYS)
                     .enabled(has_console),
+                usb,
                 Entry::separator(),
                 Entry::item(&L10N.tr("machine-take-snapshot-ellipsis"), MACHINE_SNAPSHOT)
                     .shortcut("Shift+Ctrl+S")
@@ -797,6 +823,15 @@ impl Program for Velox {
     }
 
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
+        if let Some((id, key)) = command
+            .strip_prefix(MACHINE_USB)
+            .and_then(|rest| rest.split_once('/'))
+        {
+            if let Some(hub) = self.hub.as_mut() {
+                hub.serve(MachineRequest::Usb(id.to_owned(), key.to_owned()));
+            }
+            return;
+        }
         if let Some(id) = command.strip_prefix(SHOW_MACHINE) {
             if let Some(window) = self.machine_window(cx, id) {
                 cx.raise(window, None);

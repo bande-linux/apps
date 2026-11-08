@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>Bande</vendor>
+  <action id="org.bande.velox.usb-device">
+    <description>Connect a USB device to a virtual machine</description>
+    <description xml:lang="sv">Ansluta en USB-enhet till en virtuell maskin</description>
+    <message>Velox wants to give a USB device to a virtual machine.</message>
+    <message xml:lang="sv">Velox vill ge en USB-enhet till en virtuell maskin.</message>
+    <icon_name>org.bande.Velox</icon_name>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/bande-velox/velox-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">usb</annotate>
+  </action>
+  <action id="org.bande.velox.bridge">
+    <description>Connect a virtual machine to the local network</description>
+    <description xml:lang="sv">Ansluta en virtuell maskin till det lokala nätverket</description>
+    <message>Velox wants to put a virtual machine on your network with its own address.</message>
+    <message xml:lang="sv">Velox vill ansluta en virtuell maskin till ditt nätverk med en egen adress.</message>
+    <icon_name>org.bande.Velox</icon_name>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/bande-velox/velox-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">tap</annotate>
+  </action>
+</policyconfig>

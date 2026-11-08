@@ -6,7 +6,8 @@ use bande_xdg::find_executable;
 use serde_json::{Value, json};
 
 use crate::library::Machine;
-use crate::manifest::{MAX_DISPLAYS, Preset};
+use crate::manifest::{MAX_DISPLAYS, Network, Preset};
+use crate::passthrough::tap_name;
 use crate::{Error, Result};
 
 const FIRMWARE_CODE: &str = "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd";
@@ -207,13 +208,17 @@ impl Host {
             push(&["-blockdev", &format("seed", "raw", true)]);
             push(&["-device", "virtio-blk-pci,drive=seed"]);
         }
-        push(&[
-            "-netdev",
-            &format!(
+        let netdev = match &manifest.network {
+            Network::Shared => format!(
                 "stream,id=net,server=off,addr.type=unix,addr.path={}",
                 keyval(&machine.passt_socket())?
             ),
-        ]);
+            Network::Bridged(_) => format!(
+                "tap,id=net,ifname={},script=no,downscript=no",
+                tap_name(&manifest.id)
+            ),
+        };
+        push(&["-netdev", &netdev]);
         push(&[
             "-device",
             &format!("virtio-net-pci,netdev=net,mac={}", manifest.mac),

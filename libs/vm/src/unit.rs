@@ -8,7 +8,8 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 use zbus::{MatchRule, names::ErrorName};
 
 use crate::library::Machine;
-use crate::manifest::Preset;
+use crate::manifest::{Network, Preset};
+use crate::passthrough::{prepare_tap, tap_name};
 use crate::qemu::{Host, utf8};
 use crate::qmp::Qmp;
 use crate::ready::CreationWatch;
@@ -97,8 +98,6 @@ impl Units {
             ),
             ("Type", Value::from("exec")),
             ("ExecStart", exec(host.qemu_command(machine)?)),
-            ("Requires", Value::from(vec![network.clone()])),
-            ("After", Value::from(vec![network.clone()])),
             ("CollectMode", Value::from("inactive-or-failed")),
             ("NoNewPrivileges", Value::from(true)),
             ("MemoryMax", Value::from(host.memory_max(machine))),
@@ -107,17 +106,24 @@ impl Units {
                 Value::from(u64::from(manifest.cpus) * 1_000_000),
             ),
         ];
+        let mut properties = properties;
+        let auxiliary = match &manifest.network {
+            Network::Shared => {
+                properties.push(("Requires", Value::from(vec![network.clone()])));
+                properties.push(("After", Value::from(vec![network.clone()])));
+                vec![(network.as_str(), network_properties)]
+            }
+            Network::Bridged(bridge) => {
+                prepare_tap(&tap_name(&manifest.id), bridge)?;
+                Vec::new()
+            }
+        };
         let watch = CreationWatch::new(machine.runtime_dir())?;
         let helpers = self.start_helpers(host, machine, &watch)?;
         let started = self.run_job(
             &unit,
             "StartTransientUnit",
-            &(
-                &unit,
-                "fail",
-                properties,
-                vec![(&network, network_properties)],
-            ),
+            &(&unit, "fail", properties, auxiliary),
         );
         if let Err(error) = started {
             for helper in helpers {
@@ -337,7 +343,7 @@ impl Units {
         Ok(())
     }
 
-    fn main_pid(&self, unit: &str) -> Result<i32> {
+    pub fn main_pid(&self, unit: &str) -> Result<i32> {
         let path: OwnedObjectPath = self
             .bus
             .call_method(Some(SYSTEMD), SYSTEMD_PATH, Some(MANAGER), "GetUnit", &unit)?

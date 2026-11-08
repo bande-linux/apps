@@ -105,15 +105,22 @@ fn state_dot(palette: &Palette, entry: &Entry) -> Cell {
     Cell::new(entry.name()).icon(icon)
 }
 
-pub fn short_ssh(user: &str, port: u16) -> String {
+pub fn short_ssh(user: &str, host: &str, port: u16) -> String {
+    let port = match port {
+        22 => String::new(),
+        port => format!("-p {port} "),
+    };
     match user.is_empty() {
-        true => format!("ssh -p {port} localhost"),
-        false => format!("ssh -p {port} {user}@localhost"),
+        true => format!("ssh {port}{host}"),
+        false => format!("ssh {port}{user}@{host}"),
     }
 }
 
 pub fn address(entry: &Entry) -> Option<String> {
-    entry.ssh_port().map(|port| format!("localhost:{port}"))
+    entry.ssh_target().map(|(host, port)| match port {
+        22 => host,
+        port => format!("{host}:{port}"),
+    })
 }
 
 fn usage(entry: &Entry) -> Cell {
@@ -264,10 +271,10 @@ pub fn info_lines(entry: &Entry, accel: Option<Accel>) -> Vec<FormLine> {
     if let Some(address) = entry.address {
         lines.push(row("machine-ip", address.to_string()));
     }
-    if let Some(port) = entry.ssh_port() {
+    if let Some((host, port)) = entry.ssh_target() {
         lines.push(row(
             "machine-ssh",
-            short_ssh(&entry.listed.login.user, port),
+            short_ssh(&entry.listed.login.user, &host, port),
         ));
     }
     if let Some(usage) = entry.usage {

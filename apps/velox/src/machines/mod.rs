@@ -81,6 +81,7 @@ pub enum Request {
     ChooseIso(bool),
     ChooseFolder(String),
     Serial(String),
+    Usb(String, String),
 }
 
 pub enum Effect {
@@ -130,6 +131,25 @@ impl Hub {
 
     pub fn take_windows_to_open(&self) -> Vec<String> {
         std::mem::take(&mut self.fleet.borrow_mut().to_open)
+    }
+
+    pub fn usb_choices(&self, id: &str) -> Option<Vec<(String, String, bool)>> {
+        let fleet = self.fleet.borrow();
+        if !fleet.entry(id)?.running() {
+            return None;
+        }
+        let attached = fleet.usb.get(id);
+        Some(
+            fleet
+                .usb_devices
+                .iter()
+                .map(|device| {
+                    let key = device.key();
+                    let on = attached.is_some_and(|keys| keys.contains(&key));
+                    (key, device.name.clone(), on)
+                })
+                .collect(),
+        )
     }
 
     pub fn take_notices(&self) -> Vec<Notice> {
@@ -198,6 +218,7 @@ impl Hub {
             }
             Request::Emulate => self.backend.emulate(),
             Request::Change(id, change) => self.backend.change(id, change),
+            Request::Usb(id, key) => self.backend.usb(id, key),
         }
         None
     }

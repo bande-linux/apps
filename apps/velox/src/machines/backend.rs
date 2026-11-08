@@ -13,7 +13,7 @@ use std::time::{Duration, SystemTime};
 
 use bande_vm::{
     ActiveState, CloudImage, CloudInit, Forward, Host, ImageStore, Installer, Library, Machine,
-    Manifest, NewClone, NewMachine, Qmp, Share, Units,
+    Manifest, Network, NewClone, NewMachine, Qmp, Share, Units, UsbDevice,
 };
 use bande_watch::{Changes, FolderWatch};
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,7 @@ use super::readiness::{self, Blocker};
 const LOGIN_FILE: &str = "velox.json";
 const SSH_PORT: u16 = 22;
 const READINESS_FOLDERS: [&str; 2] = ["/var/lib/dpkg", "/etc"];
+const USB_NODES: &str = "/dev/bus/usb";
 const PAUSED: &str = "STOP";
 const RESUMED: &str = "RESUME";
 const SHARE_TAG_LIMIT: usize = 30;
@@ -93,6 +94,7 @@ pub enum Change {
     Eject,
     Graphics3d(bool),
     Displays(u32),
+    Network(Network),
     StartAtLogin(bool),
     AddShare(PathBuf),
     RemoveShare(String),
@@ -137,6 +139,9 @@ pub enum Update {
         act: Act,
         message: String,
     },
+    UsbDevices(Vec<UsbDevice>),
+    Usb(String, Vec<String>),
+    UsbFailed(String, String),
 }
 
 #[derive(Clone)]
@@ -154,6 +159,7 @@ impl Out {
 enum Recheck {
     Probe,
     Relist,
+    Usb,
 }
 
 #[derive(Default)]
@@ -292,6 +298,74 @@ impl Worker {
         self.out.send(Update::Listed(listed));
     }
 
+    fn report_usb(&self, id: &str, control: PathBuf) {
+        let worker = self.clone();
+        let id = id.to_owned();
+        spawn("velox-vm-usb", move || {
+            if let Ok(attached) = Qmp::connect(&control).and_then(|mut qmp| qmp.attached_usb()) {
+                worker.out.send(Update::Usb(id, attached));
+            }
+        });
+    }
+
+    fn usb_changed(&self) {
+        let devices = bande_vm::usb_devices();
+        let present: HashSet<String> = devices.iter().map(UsbDevice::key).collect();
+        self.out.send(Update::UsbDevices(devices));
+        let Ok(library) = Library::open() else {
+            return;
+        };
+        let running: Vec<String> = lock(&self.shared.monitors).keys().cloned().collect();
+        for id in running {
+            let control = library.control_socket(&id);
+            let Ok(mut qmp) = Qmp::connect(&control) else {
+                continue;
+            };
+            let Ok(attached) = qmp.attached_usb() else {
+                continue;
+            };
+            let gone: Vec<&String> = attached
+                .iter()
+                .filter(|key| !present.contains(*key))
+                .collect();
+            if gone.is_empty() {
+                continue;
+            }
+            for key in gone {
+                if let Err(error) = qmp.detach_usb(key) {
+                    tracing::warn!("cannot remove the unplugged USB device {key}: {error}");
+                }
+            }
+            if let Ok(attached) = qmp.attached_usb() {
+                self.out.send(Update::Usb(id, attached));
+            }
+        }
+    }
+
+    fn usb(&self, id: &str, key: &str) -> Result<(), String> {
+        let text = |error: bande_vm::Error| error.to_string();
+        let machine = Self::machine(id)?;
+        let units = self.units().ok_or("virtualization is not ready")?;
+        let mut qmp = Qmp::connect(&machine.control_socket()).map_err(text)?;
+        let attached = qmp.attached_usb().map_err(text)?;
+        if attached.iter().any(|attached| attached == key) {
+            qmp.detach_usb(key).map_err(text)?;
+        } else {
+            let device = bande_vm::usb_devices()
+                .into_iter()
+                .find(|device| device.key() == key)
+                .ok_or("the USB device is gone")?;
+            let pid = units.main_pid(&machine.unit()).map_err(text)?;
+            match qmp.attach_usb(pid, &device) {
+                Ok(()) | Err(bande_vm::Error::Cancelled) => {}
+                Err(error) => return Err(text(error)),
+            }
+        }
+        let attached = qmp.attached_usb().map_err(text)?;
+        self.out.send(Update::Usb(id.to_owned(), attached));
+        Ok(())
+    }
+
     fn watch(&self, machine: &Machine, qmp: Option<Qmp>) {
         let id = machine.manifest.id.clone();
         let unit = machine.unit();
@@ -326,6 +400,7 @@ impl Worker {
             return;
         };
         lock(&self.shared.monitors).insert(id.clone(), handle);
+        self.report_usb(&id, machine.control_socket());
         let worker = self.clone();
         let agent = machine.agent_socket();
         self.look_up_address(&id, agent.clone());
@@ -471,6 +546,12 @@ impl Worker {
                 if let Err(error) = units.remove_autostart(&machine) {
                     tracing::warn!("cannot remove the login start: {error}");
                 }
+                if let Network::Bridged(_) = &machine.manifest.network
+                    && let Err(error) =
+                        bande_vm::release_tap(&bande_vm::tap_name(&machine.manifest.id))
+                {
+                    tracing::warn!("cannot remove the machine's bridge port: {error}");
+                }
                 Self::library()?
                     .delete(&host, machine)
                     .map_err(|error| error.to_string())
@@ -509,6 +590,15 @@ impl Worker {
             Change::Memory(memory) => manifest.memory_mib = memory,
             Change::Eject => manifest.installer = None,
             Change::Graphics3d(on) => manifest.graphics_3d = on,
+            Change::Network(network) => {
+                if let Network::Bridged(_) = &manifest.network
+                    && manifest.network != network
+                    && let Err(error) = bande_vm::release_tap(&bande_vm::tap_name(&manifest.id))
+                {
+                    tracing::warn!("cannot remove the machine's bridge port: {error}");
+                }
+                manifest.network = network;
+            }
             Change::Displays(count) => manifest.displays = count.clamp(1, bande_vm::MAX_DISPLAYS),
             Change::StartAtLogin(_) => {}
             Change::AddShare(path) => {
@@ -656,15 +746,28 @@ impl Backend {
             let relist = paths
                 .iter()
                 .any(|path| library.as_deref().is_some_and(|vms| path.starts_with(vms)));
-            let _ = notify.send(match relist {
-                true => Recheck::Relist,
-                false => Recheck::Probe,
+            let usb = paths.iter().any(|path| path.starts_with(USB_NODES));
+            let _ = notify.send(match (relist, usb) {
+                (true, _) => Recheck::Relist,
+                (false, true) => Recheck::Usb,
+                (false, false) => Recheck::Probe,
             });
         })
         .inspect_err(|error| tracing::warn!("cannot watch for virtualization: {error}"))
         .ok();
         if let Some(watch) = &watch {
-            for folder in READINESS_FOLDERS.iter().map(PathBuf::from).chain(vms) {
+            let buses = fs::read_dir(USB_NODES)
+                .into_iter()
+                .flatten()
+                .filter_map(Result::ok)
+                .map(|entry| entry.path());
+            let usb = std::iter::once(PathBuf::from(USB_NODES)).chain(buses);
+            for folder in READINESS_FOLDERS
+                .iter()
+                .map(PathBuf::from)
+                .chain(vms)
+                .chain(usb)
+            {
                 if let Err(error) = watch.watch(&folder) {
                     tracing::debug!("cannot watch {}: {error}", folder.display());
                 }
@@ -679,6 +782,7 @@ impl Backend {
             .name("velox-machines".to_owned())
             .spawn(move || {
                 worker.probe();
+                worker.usb_changed();
                 while let Ok(recheck) = rechecks.recv() {
                     if worker.shared.stopped.load(Ordering::SeqCst) {
                         return;
@@ -686,6 +790,7 @@ impl Backend {
                     match recheck {
                         Recheck::Probe => worker.probe(),
                         Recheck::Relist => worker.relist(),
+                        Recheck::Usb => worker.usb_changed(),
                     }
                 }
             })?;
@@ -739,6 +844,15 @@ impl Backend {
             }
             worker.out.send(Update::Settled(id));
             let _ = worker.recheck.send(Recheck::Relist);
+        });
+    }
+
+    pub fn usb(&self, id: String, key: String) {
+        let worker = self.worker();
+        spawn("velox-vm-usb", move || {
+            if let Err(message) = worker.usb(&id, &key) {
+                worker.out.send(Update::UsbFailed(id, message));
+            }
         });
     }
 

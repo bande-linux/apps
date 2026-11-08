@@ -6,8 +6,8 @@ use std::time::Instant;
 use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_toolkit::ui::{
-    Axis, Button, Context, Form, FormLine, Label, ScrollView, SegmentedControl, Stack, Stepper,
-    Table, TextField, Toggle, Ui, Widget, WidgetId,
+    Axis, Button, Context, Form, FormLine, Label, PopUpButton, ScrollView, SegmentedControl, Stack,
+    Stepper, Table, TextField, Toggle, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
     Appearance, FrameRegions, HEADER_LEADING, Header, Palette, Rect, Scene, TextSystem,
@@ -169,6 +169,61 @@ impl MachineWindow {
         std::mem::take(&mut self.requests)
     }
 
+    fn network_row(&self, network: &bande_vm::Network, locked: bool) -> FormLine {
+        let mut bridges = bande_vm::bridges();
+        if let bande_vm::Network::Bridged(bridge) = network
+            && !bridges.contains(bridge)
+        {
+            bridges.push(bridge.clone());
+        }
+        let label = |choice: Option<&String>| match choice {
+            None => L10N.tr("machine-network-shared"),
+            Some(bridge) => L10N.tr_args(
+                "machine-network-bridged",
+                [("bridge", bridge.clone().into())],
+            ),
+        };
+        let current = match network {
+            bande_vm::Network::Shared => 0,
+            bande_vm::Network::Bridged(bridge) => bridges
+                .iter()
+                .position(|known| known == bridge)
+                .map_or(0, |index| index + 1),
+        };
+        let mut choices = vec![label(None)];
+        choices.extend(bridges.iter().map(|bridge| label(Some(bridge))));
+        let hint = match (locked, bridges.is_empty()) {
+            (true, _) => Some("machine-shut-down-to-change"),
+            (false, true) => Some("machine-network-no-bridge"),
+            (false, false) => None,
+        };
+        let control: Box<dyn Widget> = match locked {
+            true => boxed(Label::new(&choices[current])),
+            false => {
+                let intents = Rc::clone(&self.intents);
+                boxed(PopUpButton::new(
+                    &L10N.tr("machine-network"),
+                    &choices,
+                    current,
+                    move |index| {
+                        let network =
+                            match index.checked_sub(1).and_then(|index| bridges.get(index)) {
+                                Some(bridge) => bande_vm::Network::Bridged(bridge.clone()),
+                                None => bande_vm::Network::Shared,
+                            };
+                        push(&intents, Intent::Change(Change::Network(network)));
+                    },
+                ))
+            }
+        };
+        let mut column = vec![control];
+        column.extend(hint.map(|key| boxed(Label::new(&L10N.tr(key)).secondary())));
+        FormLine::Row(
+            L10N.tr("machine-network"),
+            boxed(Stack::new(Axis::Vertical, 2.0, 0.0, column)),
+        )
+    }
+
     pub fn wants_stats(&self) -> bool {
         self.tab == Tab::Info
     }
@@ -216,7 +271,7 @@ impl MachineWindow {
         self.fleet
             .borrow()
             .entry(&self.id)
-            .is_some_and(|entry| entry.running() && entry.ssh_port().is_some())
+            .is_some_and(|entry| entry.running() && entry.ssh_target().is_some())
     }
 
     pub fn act(&mut self, act: Act) {
@@ -731,6 +786,7 @@ impl MachineWindow {
                 boxed(Label::new(&gigabytes(manifest.disk_gib as f64))),
             ),
             FormLine::Heading(L10N.tr("machine-section-network")),
+            self.network_row(&manifest.network, locked),
             lockable(
                 "machine-ssh-port",
                 port.map_or_else(|| "—".to_owned(), |port| port.to_string()),
@@ -753,6 +809,9 @@ impl MachineWindow {
                 )),
             ),
         ];
+        if let bande_vm::Network::Bridged(_) = manifest.network {
+            lines.pop();
+        }
         if let Some(iso) = &manifest.installer {
             let intents = Rc::clone(&self.intents);
             let name = std::path::Path::new(iso)

@@ -1207,6 +1207,7 @@ dependencies = [
  "bande-xdg",
  "httparse",
  "jiff",
+ "libc",
  "rustix",
  "serde",
  "serde_json",
@@ -1222,6 +1223,7 @@ version = "0.1.0"
 dependencies = [
  "bande-xdg",
  "fatfs",
+ "libc",
  "rustix",
  "rustls",
  "serde",
