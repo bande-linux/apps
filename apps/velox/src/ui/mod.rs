@@ -26,6 +26,8 @@ const IMAGES_SYMBOL: &str = include_str!("../../data/symbols/images.svg");
 const VOLUMES_SYMBOL: &str = include_str!("../../data/symbols/volumes.svg");
 const NETWORKS_SYMBOL: &str = include_str!("../../data/symbols/networks.svg");
 const COUNT_WIDTH: f32 = 60.0;
+const ENGINE_LOGS: &str = "engine-logs";
+const LOGS_SYMBOL: &str = include_str!("../../data/symbols/logs.svg");
 const IMAGE_ARCHIVES: [&str; 4] = [".tar", ".tar.gz", ".tgz", ".tar.zst"];
 const TITLE_INSET: f32 = 16.0;
 
@@ -108,6 +110,7 @@ pub enum Request {
     RemoveHost(String),
     CreateWorkspace(String, String),
     Reconnect,
+    EngineLogs(crate::containers::LogsTarget),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -462,6 +465,24 @@ impl VeloxView {
         self.refresh();
     }
 
+    fn engine_logs(&self) -> Option<crate::containers::LogsTarget> {
+        let Connection::Ready(info) = &self.connection else {
+            return None;
+        };
+        if self.places.borrow().is_remote() || info.started.is_none() {
+            return None;
+        }
+        let (name, unit) = match info.flavor {
+            Flavor::Docker => ("Docker", "docker.service"),
+            Flavor::Podman => ("Podman", "podman.service"),
+        };
+        Some(crate::containers::LogsTarget::Engine {
+            name: name.to_owned(),
+            user: info.rootless,
+            unit: unit.to_owned(),
+        })
+    }
+
     pub fn local_socket(&self) -> Option<std::path::PathBuf> {
         match (&self.connection, self.places.borrow().is_remote()) {
             (Connection::Ready(info), false) => Some(info.socket.clone()),
@@ -561,6 +582,10 @@ impl VeloxView {
                         self.requests.push(Request::Place(place));
                     } else if let Some(name) = key.strip_prefix(places::CONTEXT_PREFIX) {
                         self.requests.push(Request::UseContext(name.to_owned()));
+                    } else if key == ENGINE_LOGS
+                        && let Some(target) = self.engine_logs()
+                    {
+                        self.requests.push(Request::EngineLogs(target));
                     }
                 }
                 Intent::AddHostSheet => places::add_host_sheet(&mut self.ui, &self.intents),
@@ -635,6 +660,22 @@ impl VeloxView {
         let running = ready.then(|| running.to_string());
         rows.extend(self.places.borrow().rows(&self.palette, running));
         rows.extend(self.machines.sidebar_rows(&self.palette));
+        if self.engine_logs().is_some() {
+            rows.extend([
+                Row::new(
+                    "system-heading",
+                    vec![Cell::new(tr!("System")).muted().label()],
+                ),
+                Row::new(
+                    ENGINE_LOGS,
+                    vec![
+                        Cell::new(tr!("Engine Logs"))
+                            .icon(symbol(LOGS_SYMBOL, self.palette.accent)),
+                        Cell::new(""),
+                    ],
+                ),
+            ]);
+        }
         rows
     }
 

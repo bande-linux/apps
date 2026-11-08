@@ -26,9 +26,9 @@ below. Screenshots of each view sit next to the macOS ones in each stage's repor
 | 14 | Command palette (Ctrl+K) | Search containers, images, volumes; inline start/stop/logs/shell/ports | None | Build it, with its Settings switch, off by default |
 | 15 | Menu-bar panel | Engine state, running containers with ports and stop buttons, CPU/RAM line, Dashboard/Settings/Quit | None | A tray item through the desktop's StatusNotifierItem host, with its Settings switch, off by default |
 | 16 | Engine lifecycle | Start/Stop/Resume, Resource Saver | Shows setup steps when no engine | Owner (2026-11-08): use the user's own rights first: no prompt for rootless Podman or for a member of the docker group; start and stop the unit when systemd allows it. Only when that is denied, ask through systemd's polkit prompt |
-| 17 | Engine Logs | Guest console, filter, auto-scroll, count | None | The engine unit's journal (system `docker.service` or the user's `podman.service`), with the same controls; explains when the journal isn't readable |
+| 17 | Engine Logs | — | Done: System → Engine Logs follows the engine unit's journal (`journalctl [--user] -u docker/podman.service`) in the logs window; hidden for remote engines | — |
 | 18 | Settings | Launch at login, crash notifications, updates, Docker context, about/diagnostics, CPU/memory/disk/swap, Resource Saver, file sharing | Crash notifications | Launch at login (XDG autostart), Copy Diagnostics. Engine resources, Resource Saver, file sharing, updates and contexts belong to macOS Velox's own engine and apt; left out |
-| 19 | Notifications | "Container crashed", 137 noted as possibly OOM | Done; 137 has no note | Add the OOM wording |
+| 19 | Notifications | — | Done, 137 named as possibly out of memory | — |
 | 20 | Onboarding | Three-step sheet | The not-ready page with setup steps | Keep Bande's page |
 | 21 | Packaging | — | No list of the programs and files the apps run or read | Port the desktop's `ci/runtime-deps` and its check to the apps repo, as its own task |
 

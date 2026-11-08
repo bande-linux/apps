@@ -1027,6 +1027,9 @@ msgstr "Det gick inte att ta bort alla nätverk"
 msgid "“{name}” stopped unexpectedly"
 msgstr "”{name}” stoppades oväntat"
 
+msgid "The container was killed (code {code}), possibly because it ran out of memory."
+msgstr "Containern dödades (kod {code}), kanske för att minnet tog slut."
+
 msgid "The container exited with code {code}."
 msgstr "Containern avslutades med kod {code}."
 
@@ -1281,6 +1284,9 @@ msgstr "Ansluter …"
 
 msgid "Resources"
 msgstr "Resurser"
+
+msgid "Engine Logs"
+msgstr "Motorloggar"
 
 msgid "No engine"
 msgstr "Ingen motor"

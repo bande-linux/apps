@@ -4,6 +4,7 @@ use bande_l10n::tr;
 use zbus::blocking::Connection;
 use zbus::zvariant::Value;
 
+const KILLED: i64 = 137;
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
 const DEFAULT_TIMEOUT: i32 = -1;
@@ -34,8 +35,14 @@ fn send(app_id: &str, title: &str, body: &str) -> zbus::Result<()> {
 }
 
 pub fn notify_crash(app_id: &'static str, name: &str, code: i64) {
-    let title = tr!("“{name}” stopped unexpectedly", name = name.to_owned());
-    let body = tr!("The container exited with code {code}.", code = code);
+    let title = tr!("“{name}” stopped unexpectedly", name = name);
+    let body = match code {
+        KILLED => tr!(
+            "The container was killed (code {code}), possibly because it ran out of memory.",
+            code = code
+        ),
+        _ => tr!("The container exited with code {code}.", code = code),
+    };
     let sent = std::thread::Builder::new()
         .name("crash notice".to_owned())
         .spawn(move || {
