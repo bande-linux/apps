@@ -18,7 +18,6 @@ apt install bande-<name>
 | Activity Monitor | `bande-monitor` |
 | Mail | `bande-mail` |
 | Calendar | `bande-calendar` |
-| Browser | `bande-browser` (the engine is `bande-linux/web`, pinned by `ci/bump-web.sh`) |
 | Velox | `bande-velox` (containers of Docker Engine or Podman, and virtual machines on QEMU) |
 | Calculator | `bande-calculator` (Basic, Scientific and Programmer, paper tape, RPN) |
 | Player | `bande-player` (audio and video files; the default player of both; decoding runs in the `bande-media-engine` child process, the only part linking GStreamer) |
@@ -54,7 +53,6 @@ and the Window menu names the main window (Message Viewer, Calendar, Activity Mo
 | `ci/new-app.sh <dir> <Id> "<Name>"` | a new app in `apps/<dir>` from the template |
 | `ci/release-all.sh` | raises every app's patch version and prints the tags that release them, for a bump that changes `bande-app` behaviour |
 | `ci/bump-desktop.sh [REV]` | pins every app to one `bande-linux/desktop` commit (default: main) and runs the gate |
-| `ci/bump-web.sh [REV]` | pins Browser to one `bande-linux/web` commit (default: main) and runs its gate |
 | `ci/with-desktop.sh <desktop> <cargo args>` | runs cargo on the workspace against a desktop checkout instead of the pin |
 
 ## Adding an app

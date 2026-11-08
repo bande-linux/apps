@@ -68,11 +68,6 @@ bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "5c1f25d
 bande-watch = { git = "https://github.com/bande-linux/desktop", rev = "5c1f25de69db5a5fbff6bd06760b670675f8f358" }
 bande-volumes = { git = "https://github.com/bande-linux/desktop", rev = "5c1f25de69db5a5fbff6bd06760b670675f8f358" }
 bande-xdg = { git = "https://github.com/bande-linux/desktop", rev = "5c1f25de69db5a5fbff6bd06760b670675f8f358" }
-web-host = { git = "https://github.com/bande-linux/web", rev = "2ac098e493299c60a421af600479d6aefe75502b" }
-web-netd = { git = "https://github.com/bande-linux/web", rev = "2ac098e493299c60a421af600479d6aefe75502b" }
-web-paint = { git = "https://github.com/bande-linux/web", rev = "2ac098e493299c60a421af600479d6aefe75502b" }
-web-renderer = { git = "https://github.com/bande-linux/web", rev = "2ac098e493299c60a421af600479d6aefe75502b" }
-
 
 [workspace.lints.clippy]
 unwrap_used = "deny"
