@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::{Duration, UNIX_EPOCH};
 
-use bande_l10n::{Text, text, tr};
+use bande_l10n::{text, tr};
 use bande_toolkit::ui::{
     Alert, Button, Cell, Column, Form, FormLine, PopUpButton, Row, Table, TextField, Widget,
     WidgetId,

@@ -39,7 +39,7 @@ pub fn battery_reader(system: Connection) -> impl FnMut() -> Option<Option<Batte
             read_at = Some(Instant::now());
         }
         Some(Some(BatteryReport {
-            battery: battery(&system),
+            battery: battery(&system).into_present(),
             history: history.clone(),
             now: unix_now(),
         }))
