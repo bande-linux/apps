@@ -119,6 +119,14 @@ const COPY_LINK: &str = "copy-link:";
 const CLOSE_TAB: &str = "close-tab:";
 const CLOSE_OTHER_TABS: &str = "close-other-tabs:";
 const SHOW_IN_FILES: &str = "show-in-files";
+const LOOK_UP: &str = "look-up";
+const LOOK_UP_LONGEST: usize = 100;
+
+pub fn look_up_text(selection: Option<String>) -> Option<String> {
+    let text = selection?.trim().to_owned();
+    (text.chars().any(char::is_alphanumeric) && text.chars().count() <= LOOK_UP_LONGEST)
+        .then_some(text)
+}
 pub const CLOSE_WINDOW: &str = "close-window";
 const REVEAL: &str = "reveal:";
 
@@ -128,6 +136,7 @@ pub enum MenuCommand {
     OpenLink(String),
     CopyLink(String),
     ShowInFiles,
+    LookUp,
     Reveal(PathBuf),
     CloseTab(u32),
     CloseOtherTabs(u32),
@@ -144,6 +153,7 @@ impl MenuCommand {
             Self::OpenLink(uri) => format!("{OPEN_LINK}{uri}"),
             Self::CopyLink(uri) => format!("{COPY_LINK}{uri}"),
             Self::ShowInFiles => SHOW_IN_FILES.to_owned(),
+            Self::LookUp => LOOK_UP.to_owned(),
             Self::Reveal(path) => format!("{REVEAL}{}", path.display()),
             Self::CloseTab(id) => format!("{CLOSE_TAB}{id}"),
             Self::CloseOtherTabs(id) => format!("{CLOSE_OTHER_TABS}{id}"),
@@ -156,6 +166,9 @@ impl MenuCommand {
         }
         if action == SHOW_IN_FILES {
             return Some(Self::ShowInFiles);
+        }
+        if action == LOOK_UP {
+            return Some(Self::LookUp);
         }
         let tab = |rest: &str| rest.parse().ok();
         if let Some(uri) = action.strip_prefix(OPEN_LINK) {
@@ -198,6 +211,7 @@ fn item(message: &str, command: MenuCommand) -> MenuItem {
 pub struct TerminalContext {
     pub link: Option<String>,
     pub has_selection: bool,
+    pub look_up: Option<String>,
     pub knows_directory: bool,
     pub tab: u32,
 }
@@ -220,6 +234,13 @@ pub fn terminal_menu(context: &TerminalContext) -> Menu {
             ]),
         }
         items.push(MenuItem::separator());
+    }
+    if let Some(word) = &context.look_up {
+        let title = L10N.tr_args("menu-look-up", [("word", word.as_str().into())]);
+        items.extend([
+            MenuItem::new(&title, &MenuCommand::LookUp.action()),
+            MenuItem::separator(),
+        ]);
     }
     items.extend([
         command_item(Command::Copy).enabled(context.has_selection),

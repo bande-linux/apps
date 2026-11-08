@@ -321,7 +321,8 @@ impl BrowserView {
         let address = host.insert_in_header(
             TextField::new(&placeholder, "", move |text| {
                 typed.borrow_mut().push(Signal::Typed(text.to_owned()));
-            }),
+            })
+            .without_text_checking(),
             Rect::default(),
         );
         let reload = host.insert_in_header(reload_button(&signals, false), Rect::default());

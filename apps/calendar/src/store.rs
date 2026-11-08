@@ -1,6 +1,5 @@
 use std::cell::RefCell;
-use std::io::{Read, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use jiff::Timestamp;
@@ -286,29 +285,6 @@ pub fn new_uid() -> String {
     )
 }
 
-fn write_atomically(file: &Path, text: &str) -> std::io::Result<()> {
-    if let Some(parent) = file.parent() {
-        std::fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(parent)?;
-    }
-    let staging = file.with_extension(format!("{}.new", std::process::id()));
-    let mut staged = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(&staging)?;
-    staged.write_all(text.as_bytes())?;
-    staged.sync_all()?;
-    std::fs::rename(&staging, file)?;
-    match file.parent() {
-        Some(folder) => std::fs::File::open(folder)?.sync_all(),
-        None => Ok(()),
-    }
-}
-
 fn read_or_set_aside<T: serde::de::DeserializeOwned>(file: &Path) -> Option<T> {
     let text = std::fs::read_to_string(file).ok()?;
     match serde_json::from_str(&text) {
@@ -438,7 +414,7 @@ impl Library {
         };
         let written = serde_json::to_string_pretty(&self.accounts)
             .map_err(std::io::Error::other)
-            .and_then(|text| write_atomically(&dir.join(ACCOUNTS_FILE), &text));
+            .and_then(|text| bande_xdg::replace_private_file(&dir.join(ACCOUNTS_FILE), &text));
         if let Err(error) = written {
             tracing::warn!("cannot save the accounts: {error}");
         }
@@ -452,7 +428,7 @@ impl Library {
         let file = calendar_file(dir, &calendar.info.id);
         let written = serde_json::to_string(calendar)
             .map_err(std::io::Error::other)
-            .and_then(|text| write_atomically(&file, &text));
+            .and_then(|text| bande_xdg::replace_private_file(&file, &text));
         if let Err(error) = written {
             tracing::warn!("cannot save {}: {error}", calendar.info.name);
         }

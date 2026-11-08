@@ -89,9 +89,12 @@ impl Custom {
         let on_weekday = [by_weekday && frequency == 2, by_weekday && frequency == 3];
         let mut panel = Panel::new(Some(&L10N.tr("custom-title")), WIDTH, LABEL_WIDTH).sheet();
         let send = sender(signals);
-        let count = panel.add(TextField::new("1", &interval, move |text| {
-            send(Signal::CustomInterval(text.to_owned()))
-        }));
+        let count = panel.add(
+            TextField::new("1", &interval, move |text| {
+                send(Signal::CustomInterval(text.to_owned()))
+            })
+            .without_text_checking(),
+        );
         let units: Vec<String> = [
             "custom-days",
             "custom-weeks",

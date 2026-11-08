@@ -19,7 +19,7 @@ use bande_toolkit::{
 use crate::L10N;
 use crate::document::{Content, Format, Loaded, encode, read};
 use crate::encoding::{LineEnding, TextEncoding};
-use crate::file::{MAX_FILE_BYTES, read_bounded, write_atomically};
+use crate::file::{MAX_FILE_BYTES, read_bounded};
 use crate::find::{self, Query};
 use crate::formats::{heading, markdown, rtf};
 use crate::session::seconds_now;
@@ -600,7 +600,7 @@ impl DocumentView {
                     {
                         tracing::warn!("cannot keep the old version: {error}");
                     }
-                    write_atomically(&path, &bytes)
+                    bande_xdg::replace_file(&path, &bytes)
                         .map_err(|error| WriteError::Io(error.to_string()))
                 });
             outbox.send(Message::Written {
@@ -742,7 +742,8 @@ impl DocumentView {
         let (typed, chosen) = (Rc::clone(&self.signals), Rc::clone(&self.signals));
         let field = TextField::new(&L10N.tr("line-placeholder"), "", move |text| {
             typed.borrow_mut().push(Signal::Line(text.to_owned()));
-        });
+        })
+        .without_text_checking();
         self.ui.present_sheet(
             Alert::new(&L10N.tr("go-to-line"), "", move |action| {
                 chosen.borrow_mut().push(Signal::Choice(action.to_owned()));

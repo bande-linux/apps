@@ -159,6 +159,7 @@ fn text_field(state: &Shared, field: Field) -> TextField {
     TextField::new(&field.placeholder(), &value, move |text| {
         shared.borrow_mut().set(field, text);
     })
+    .without_text_checking()
 }
 
 impl AccountSheet {

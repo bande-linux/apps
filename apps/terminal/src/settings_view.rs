@@ -257,7 +257,8 @@ fn form(settings: &SharedSettings, fonts: &[String]) -> Form {
         &L10N.tr("settings-shell-placeholder"),
         &current.shell,
         move |text| shared.borrow_mut().shell = text.to_owned(),
-    );
+    )
+    .without_text_checking();
     let folder = pop_up(
         settings,
         &L10N.tr("settings-new-tabs"),
