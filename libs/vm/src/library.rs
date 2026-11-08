@@ -43,6 +43,7 @@ pub struct NewMachine {
 pub struct Installer {
     pub iso: PathBuf,
     pub preset: Preset,
+    pub import: bool,
 }
 
 pub struct Machine {
@@ -172,13 +173,19 @@ impl Library {
             current_snapshot: None,
             resume_from: None,
             preset: installer.preset,
-            installer: Some(utf8(&installer.iso)?.to_owned()),
+            installer: match installer.import {
+                true => None,
+                false => Some(utf8(&installer.iso)?.to_owned()),
+            },
             shares: Vec::new(),
             graphics_3d: false,
         });
         fs::create_dir_all(&machine.dir)?;
-        let made = host
-            .create_blank(&machine.disk(), new.disk_gib)
+        let disk = match installer.import {
+            true => host.import_disk(&installer.iso, &machine.disk(), new.disk_gib),
+            false => host.create_blank(&machine.disk(), new.disk_gib),
+        };
+        let made = disk
             .and_then(|()| host.create_vars_for(&machine.vars(), installer.preset))
             .and_then(|()| machine.save());
         if let Err(error) = made {

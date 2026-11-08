@@ -362,6 +362,18 @@ impl Host {
         .map(drop)
     }
 
+    pub(crate) fn import_disk(&self, source: &Path, disk: &Path, size_gib: u64) -> Result<()> {
+        self.qemu_img(&["convert", "-q", "-O", "qcow2", utf8(source)?, utf8(disk)?])?;
+        let size = self.image_info(disk)?["virtual-size"]
+            .as_u64()
+            .unwrap_or_default();
+        let wanted = size_gib * 1024 * MIB;
+        if wanted > size {
+            self.qemu_img(&["resize", "-q", utf8(disk)?, &format!("{size_gib}G")])?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn create_blank(&self, disk: &Path, size_gib: u64) -> Result<()> {
         self.qemu_img(&[
             "create",

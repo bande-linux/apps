@@ -104,6 +104,25 @@ pub fn choose_iso(title: &str) -> zbus::Result<Option<PathBuf>> {
     )
 }
 
+pub fn choose_disk(title: &str) -> zbus::Result<Option<PathBuf>> {
+    ask(
+        "OpenFile",
+        title,
+        Some(Filter {
+            label: L10N.tr("filter-disk"),
+            patterns: vec![
+                (0, "*.qcow2"),
+                (0, "*.vmdk"),
+                (0, "*.vdi"),
+                (0, "*.vhdx"),
+                (0, "*.img"),
+                (0, "*.raw"),
+            ],
+        }),
+        ("multiple", Value::from(false)),
+    )
+}
+
 pub fn choose_folder(title: &str) -> zbus::Result<Option<PathBuf>> {
     ask("OpenFile", title, None, ("directory", Value::from(true)))
 }

@@ -510,7 +510,7 @@ impl MachinesPane {
                 | Intent::Graphics3d(_)
                 | Intent::AddShare
                 | Intent::RemoveShare(_) => {}
-                Intent::ChooseIso => self.requests.push(Request::ChooseIso),
+                Intent::ChooseIso(disk) => self.requests.push(Request::ChooseIso(disk)),
             }
         }
         self.refresh(ui);

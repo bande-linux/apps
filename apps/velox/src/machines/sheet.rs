@@ -171,7 +171,11 @@ impl Draft {
     }
 
     fn installs_from_iso(&self) -> bool {
-        self.image == catalog().len()
+        self.image >= catalog().len()
+    }
+
+    fn imports_disk(&self) -> bool {
+        self.image == catalog().len() + 1
     }
 
     pub fn set_iso(&mut self, path: PathBuf) {
@@ -273,8 +277,10 @@ impl Draft {
         let alert = match self.step {
             Step::Image => {
                 let iso = L10N.tr("machine-image-iso");
+                let import = L10N.tr("machine-image-import");
                 let mut names: Vec<&str> = catalog().iter().map(|image| image.os).collect();
                 names.push(&iso);
+                names.push(&import);
                 new("machine-step-image").accessory(RadioGroup::new(
                     &L10N.tr("machine-image"),
                     &names,
@@ -284,12 +290,18 @@ impl Draft {
             }
             Step::Installer => {
                 let chooser = Rc::clone(intents);
+                let disk = self.imports_disk();
                 let presets = [
                     L10N.tr("machine-preset-linux"),
                     L10N.tr("machine-preset-windows"),
                 ];
                 let chosen = self.iso.as_ref().map_or_else(
-                    || L10N.tr("machine-iso-none"),
+                    || {
+                        L10N.tr(match disk {
+                            true => "machine-disk-none",
+                            false => "machine-iso-none",
+                        })
+                    },
                     |path| {
                         path.file_name()
                             .map(|name| name.to_string_lossy().into_owned())
@@ -298,14 +310,21 @@ impl Draft {
                 );
                 let mut lines = vec![
                     FormLine::Row(
-                        L10N.tr("machine-iso"),
+                        L10N.tr(match disk {
+                            true => "machine-disk",
+                            false => "machine-iso",
+                        }),
                         Box::new(Label::new(&chosen)) as Box<dyn Widget>,
                     ),
                     FormLine::Row(
                         String::new(),
-                        Box::new(Button::new(&L10N.tr("machine-iso-choose"), move || {
-                            push(&chooser, Intent::ChooseIso)
-                        })),
+                        Box::new(Button::new(
+                            &L10N.tr(match disk {
+                                true => "machine-disk-choose",
+                                false => "machine-iso-choose",
+                            }),
+                            move || push(&chooser, Intent::ChooseIso(disk)),
+                        )),
                     ),
                     FormLine::Row(
                         L10N.tr("machine-preset"),
@@ -323,8 +342,11 @@ impl Draft {
                         Box::new(Label::new(&L10N.tr("machine-windows-needs-swtpm")).secondary()),
                     ));
                 }
-                new("machine-step-installer")
-                    .accessory(Form::new(&L10N.tr("machine-step-installer"), lines))
+                new(match disk {
+                    true => "machine-step-import",
+                    false => "machine-step-installer",
+                })
+                .accessory(Form::new(&L10N.tr("machine-step-installer"), lines))
             }
             Step::Resources => {
                 let gigabytes =
@@ -476,6 +498,7 @@ impl Draft {
                 source: Source::Iso(Installer {
                     iso,
                     preset: self.preset,
+                    import: self.imports_disk(),
                 }),
                 new: NewMachine {
                     name,

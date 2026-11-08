@@ -50,7 +50,7 @@ enum Intent {
     Text(String),
     Port(String),
     Linked(bool),
-    ChooseIso,
+    ChooseIso(bool),
     Eject,
     Graphics3d(bool),
     AddShare,
@@ -75,7 +75,7 @@ pub enum Request {
     Clone(String, bande_vm::NewClone),
     PresentClone(String),
     PresentSnapshot(String),
-    ChooseIso,
+    ChooseIso(bool),
     ChooseFolder(String),
     Serial(String),
 }
@@ -182,7 +182,13 @@ impl Hub {
             }
             Request::PresentClone(id) => return Some(Effect::PresentClone(id)),
             Request::PresentSnapshot(id) => return Some(Effect::PresentSnapshot(id)),
-            Request::ChooseIso => self.backend.choose_iso(L10N.tr("machine-iso-choose")),
+            Request::ChooseIso(disk) => self.backend.choose_iso(
+                L10N.tr(match disk {
+                    true => "machine-disk-choose",
+                    false => "machine-iso-choose",
+                }),
+                disk,
+            ),
             Request::ChooseFolder(id) => {
                 self.backend
                     .choose_folder(id, L10N.tr("machine-share-choose"));
