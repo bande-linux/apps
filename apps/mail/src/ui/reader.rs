@@ -1,14 +1,9 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
-use bande_toolkit::{
-    Color, Image, Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle,
-    TextSystem,
-};
-use jiff::Timestamp;
-use jiff::tz::TimeZone;
 
-use crate::L10N;
+use bande_l10n::{text, tr};
+
 use crate::html::{Block, BlockKind, Document};
 use crate::message::{Address, Content};
 use crate::picture::{Picture, decode};
@@ -16,6 +11,12 @@ use crate::settings::MailSettings;
 use crate::store::{MessageId, Summary};
 use crate::ui::format::{full_date, initials, list_date};
 use crate::ui::symbols::{Symbol, Symbols};
+use bande_toolkit::{
+    Color, Image, Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle,
+    TextSystem,
+};
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 
 const MARGIN: f32 = 28.0;
 const AVATAR: f32 = 40.0;
@@ -271,7 +272,7 @@ fn avatar(writer: &mut Writer<'_>, shown: &str, frame: Rect) {
 
 fn sender_name(sender: &Address) -> String {
     match sender.shown() {
-        "" => L10N.tr("no-sender"),
+        "" => tr!("No Sender"),
         shown => shown.to_owned(),
     }
 }
@@ -326,11 +327,14 @@ fn header(writer: &mut Writer<'_>, entry: &Entry, reading: &Reading, many: bool,
         name_width,
     );
     writer.y += writer.put(name, text_x) + LINE_GAP;
-    for (label, addresses) in [("header-to", &envelope.to), ("header-cc", &envelope.cc)] {
+    for (label, addresses) in [
+        (text!("To: {names}"), &envelope.to),
+        (text!("Cc: {names}"), &envelope.cc),
+    ] {
         if addresses.is_empty() {
             continue;
         }
-        let line = L10N.tr_args(label, [("names", names(addresses).into())]);
+        let line = label.tr_args(&[("names", &names(addresses) as &dyn std::fmt::Display)]);
         let paragraph = writer.paragraph(
             &line,
             TextStyle::role(TextRole::Callout, palette.ink2),
@@ -340,7 +344,7 @@ fn header(writer: &mut Writer<'_>, entry: &Entry, reading: &Reading, many: bool,
     }
     writer.y = writer.y.max(top + AVATAR) + SECTION_GAP / 2.0;
     let subject = match envelope.subject.as_str() {
-        "" => L10N.tr("no-subject"),
+        "" => tr!("No Subject"),
         subject => subject.to_owned(),
     };
     let subject = writer.paragraph(
@@ -603,9 +607,9 @@ fn body(writer: &mut Writer<'_>, id: MessageId, reading: &Reading, quotes: bool)
     while index < blocks.len() {
         if let Some(run) = runs.iter().find(|run| run.start == index) {
             match quotes {
-                true => quote_toggle(writer, id, &L10N.tr("hide-quoted-text")),
+                true => quote_toggle(writer, id, &tr!("Hide Quoted Text")),
                 false => {
-                    quote_toggle(writer, id, &L10N.tr("show-quoted-text"));
+                    quote_toggle(writer, id, &tr!("Show Quoted Text"));
                     index = run.end;
                     continue;
                 }
@@ -680,15 +684,15 @@ fn expanded(
     let id = entry.summary.id;
     header(writer, entry, reading, many, zone);
     if !reading.downloaded {
-        banner(writer, &L10N.tr("downloading-message"), None);
+        banner(writer, &tr!("Downloading the message…"), None);
     } else if reading.document.remote_images > 0 {
         match reading.remote {
             Remote::Blocked => banner(
                 writer,
-                &L10N.tr("remote-content-blocked"),
-                Some((&L10N.tr("load-remote-content"), Target::LoadRemote(id))),
+                &tr!("Remote content in this message was not loaded, to protect your privacy."),
+                Some((&tr!("Load Remote Content"), Target::LoadRemote(id))),
             ),
-            Remote::Loading => banner(writer, &L10N.tr("remote-content-loading"), None),
+            Remote::Loading => banner(writer, &tr!("Loading remote content…"), None),
             Remote::Loaded => {}
         }
     }

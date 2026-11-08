@@ -1,25 +1,26 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use bande_toolkit::ui::{Alert, CheckState, Checkbox, PopUpButton, TextField, Ui};
 
-use crate::L10N;
+use bande_l10n::{Text, text, tr};
+
 use crate::engine::{Restart, RunSpec, Task};
 use crate::resources::{Act, Acts, Field, Fields, push};
+use bande_toolkit::ui::{Alert, CheckState, Checkbox, PopUpButton, TextField, Ui};
 
 type Spec = Rc<RefCell<RunSpec>>;
 
 fn field(
     spec: &Spec,
-    label: &str,
-    placeholder: &str,
+    label: Text,
+    placeholder: Text,
     text: &str,
     set: fn(&mut RunSpec, &str),
 ) -> Field {
     let spec = Rc::clone(spec);
     Field::new(
-        &L10N.tr(label),
-        TextField::new(&L10N.tr(placeholder), text, move |text| {
+        &label.tr(),
+        TextField::new(&placeholder.tr(), text, move |text| {
             set(&mut spec.borrow_mut(), text);
         }),
     )
@@ -37,72 +38,79 @@ pub fn sheet(ui: &mut Ui, acts: &Acts, image: &str) {
     }));
     let restarts: Vec<String> = Restart::ALL
         .iter()
-        .map(|restart| {
-            L10N.tr(match restart {
-                Restart::No => "restart-no",
-                Restart::Always => "restart-always",
-                Restart::UnlessStopped => "restart-unless-stopped",
-                Restart::OnFailure => "restart-on-failure",
-            })
+        .map(|restart| match restart {
+            Restart::No => tr!("Never"),
+            Restart::Always => tr!("Always"),
+            Restart::UnlessStopped => tr!("Unless stopped"),
+            Restart::OnFailure => tr!("On failure"),
         })
         .collect();
     let chosen = Rc::clone(&spec);
-    let restart = PopUpButton::new(&L10N.tr("run-restart"), &restarts, 0, move |index| {
-        if let Some(restart) = Restart::ALL.get(index) {
-            chosen.borrow_mut().restart = *restart;
-        }
-    });
+    let restart = PopUpButton::new(
+        &tr!(context = "restart policy", "Restart"),
+        &restarts,
+        0,
+        move |index| {
+            if let Some(restart) = Restart::ALL.get(index) {
+                chosen.borrow_mut().restart = *restart;
+            }
+        },
+    );
     let removed = Rc::clone(&spec);
-    let remove = Checkbox::new(&L10N.tr("run-remove"), CheckState::Off, move |on| {
-        removed.borrow_mut().remove = on;
-    });
+    let remove = Checkbox::new(
+        &tr!("Remove when it exits (--rm)"),
+        CheckState::Off,
+        move |on| {
+            removed.borrow_mut().remove = on;
+        },
+    );
     let fields = Fields::new(vec![
         field(
             &spec,
-            "run-image-label",
-            "run-image-placeholder",
+            text!("Image"),
+            text!("nginx:latest"),
             image,
             |spec, text| {
                 text.trim().clone_into(&mut spec.image);
             },
         ),
+        field(&spec, text!("Name"), text!("Optional"), "", |spec, text| {
+            text.clone_into(&mut spec.name);
+        }),
         field(
             &spec,
-            "run-name",
-            "run-name-placeholder",
-            "",
-            |spec, text| {
-                text.clone_into(&mut spec.name);
-            },
-        ),
-        field(
-            &spec,
-            "run-ports",
-            "run-ports-placeholder",
+            text!("Ports"),
+            text!("8080:80, 5432:5432"),
             "",
             |spec, text| {
                 text.clone_into(&mut spec.ports);
             },
         ),
-        field(&spec, "run-env", "run-env-placeholder", "", |spec, text| {
-            text.clone_into(&mut spec.env);
-        }),
         field(
             &spec,
-            "run-volumes",
-            "run-volumes-placeholder",
+            text!("Environment"),
+            text!("KEY=value, OTHER=value"),
+            "",
+            |spec, text| {
+                text.clone_into(&mut spec.env);
+            },
+        ),
+        field(
+            &spec,
+            text!("Volumes"),
+            text!("data:/var/lib/data"),
             "",
             |spec, text| {
                 text.clone_into(&mut spec.volumes);
             },
         ),
-        Field::new(&L10N.tr("run-restart"), restart),
+        Field::new(&tr!(context = "restart policy", "Restart"), restart),
         Field::new("", remove),
     ]);
     let acts = Rc::clone(acts);
     let alert = Alert::new(
-        &L10N.tr("run-title"),
-        &L10N.tr("run-message"),
+        &tr!("Run Image"),
+        &tr!("Starts detached. The new container appears in Containers."),
         move |choice| {
             let spec = spec.borrow().clone();
             if choice == "run" && !spec.image.is_empty() {
@@ -111,7 +119,7 @@ pub fn sheet(ui: &mut Ui, acts: &Acts, image: &str) {
         },
     )
     .accessory(fields)
-    .primary(&L10N.tr("run"), "run")
-    .cancel(&L10N.tr("button-cancel"), "cancel");
+    .primary(&tr!("Run"), "run")
+    .cancel(&tr!("Cancel"), "cancel");
     ui.present_sheet(alert);
 }

@@ -1,11 +1,10 @@
 use std::path::{Path, PathBuf};
 
+use bande_l10n::{Text, text, tr};
 use bande_app_settings::{Shared, Stored, flag, pairs, settings_folder};
 use bande_fs::Format;
 use bande_toolkit::ui::{Context, Form, FormLine, PopUpButton, ScrollView, Toggle, Ui, Widget};
 use bande_toolkit::{Appearance, TextSystem};
-
-use crate::L10N;
 
 pub const SETTINGS_SIZE: (u32, u32) = (560, 420);
 
@@ -130,9 +129,8 @@ fn choose_folder(field: Field) {
             let Some(folder) = settings_folder() else {
                 return;
             };
-            let chosen = zbus::blocking::Connection::session().and_then(|session| {
-                bande_app::choose_file(&session, &L10N.tr("choose-folder"), None)
-            });
+            let chosen = zbus::blocking::Connection::session()
+                .and_then(|session| bande_app::choose_file(&session, &tr!("Choose Folder…"), None));
             match chosen {
                 Ok(Some(path)) => {
                     let mut settings = ArchiveSettings::load(&folder);
@@ -150,20 +148,20 @@ fn choose_folder(field: Field) {
     }
 }
 
-fn folder_choice(settings: &Shared<ArchiveSettings>, same: &str, field: Field) -> Box<dyn Widget> {
+fn folder_choice(settings: &Shared<ArchiveSettings>, same: Text, field: Field) -> Box<dyn Widget> {
     let current = field(&mut settings.borrow_mut()).clone();
-    let mut choices = vec![L10N.tr(same)];
+    let mut choices = vec![same.tr()];
     choices.extend(current.as_deref().map(|folder| {
         folder
             .file_name()
             .map_or_else(|| folder.to_string_lossy(), |name| name.to_string_lossy())
             .into_owned()
     }));
-    choices.push(L10N.tr("choose-folder"));
+    choices.push(tr!("Choose Folder…"));
     let other = choices.len() - 1;
     let shared = settings.clone();
     Box::new(PopUpButton::new(
-        &L10N.tr(same),
+        &same.tr(),
         &choices,
         usize::from(current.is_some()),
         move |index| match index {
@@ -176,10 +174,10 @@ fn folder_choice(settings: &Shared<ArchiveSettings>, same: &str, field: Field) -
 
 fn after_choice(
     settings: &Shared<ArchiveSettings>,
-    labels: [&str; 2],
+    labels: [String; 2],
     field: fn(&mut ArchiveSettings) -> &mut After,
 ) -> Box<dyn Widget> {
-    let choices = labels.map(|label| L10N.tr(label));
+    let choices = labels;
     let selected = usize::from(*field(&mut settings.borrow_mut()) == After::Trash);
     let shared = settings.clone();
     Box::new(PopUpButton::new(
@@ -197,20 +195,20 @@ fn after_choice(
 
 fn reveal_toggle(
     settings: &Shared<ArchiveSettings>,
-    label: &str,
+    label: Text,
     field: fn(&mut ArchiveSettings) -> &mut bool,
 ) -> Box<dyn Widget> {
     let shared = settings.clone();
     let on = *field(&mut settings.borrow_mut());
-    Box::new(Toggle::new(&L10N.tr(label), on, move |on| {
+    Box::new(Toggle::new(&label.tr(), on, move |on| {
         *field(&mut shared.borrow_mut()) = on;
     }))
 }
 
 fn format_choice(settings: &Shared<ArchiveSettings>) -> Box<dyn Widget> {
     let choices = Format::CREATED.map(|format| match format {
-        Format::Zip => L10N.tr("format-zip"),
-        other => L10N.tr_args("format-tar", [("suffix", other.suffix().into())]),
+        Format::Zip => tr!("ZIP archive"),
+        other => tr!("Compressed tar archive ({suffix})", suffix = other.suffix()),
     });
     let selected = Format::CREATED
         .iter()
@@ -218,7 +216,7 @@ fn format_choice(settings: &Shared<ArchiveSettings>) -> Box<dyn Widget> {
         .unwrap_or_default();
     let shared = settings.clone();
     Box::new(PopUpButton::new(
-        &L10N.tr("settings-format"),
+        &tr!("Archive format"),
         &choices,
         selected,
         move |index| {
@@ -231,44 +229,56 @@ fn format_choice(settings: &Shared<ArchiveSettings>) -> Box<dyn Widget> {
 
 pub fn settings_form(appearance: Appearance, settings: &Shared<ArchiveSettings>) -> Ui {
     let form = Form::new(
-        &L10N.tr("settings-title"),
+        &tr!("Archive Utility Settings"),
         vec![
-            FormLine::Heading(L10N.tr("settings-expanding")),
+            FormLine::Heading(tr!("Expanding")),
             FormLine::Row(
-                L10N.tr("settings-expand-into"),
-                folder_choice(settings, "same-folder-archive", |settings| {
+                tr!("Save expanded files"),
+                folder_choice(settings, text!("Next to the archive"), |settings| {
                     &mut settings.expand_into
                 }),
             ),
             FormLine::Row(
-                L10N.tr("settings-after-expanding"),
-                after_choice(settings, ["keep-archive", "trash-archive"], |settings| {
-                    &mut settings.after_expanding
-                }),
+                tr!("After expanding"),
+                after_choice(
+                    settings,
+                    [
+                        tr!("Leave the archive alone"),
+                        tr!("Move the archive to the Trash"),
+                    ],
+                    |settings| &mut settings.after_expanding,
+                ),
             ),
             FormLine::Row(
-                L10N.tr("settings-reveal-expanded"),
-                reveal_toggle(settings, "settings-reveal-expanded", |settings| {
-                    &mut settings.reveal_expanded
-                }),
+                tr!("Reveal expanded items in Files"),
+                reveal_toggle(
+                    settings,
+                    text!("Reveal expanded items in Files"),
+                    |settings| &mut settings.reveal_expanded,
+                ),
             ),
-            FormLine::Heading(L10N.tr("settings-archiving")),
+            FormLine::Heading(tr!("Archiving")),
             FormLine::Row(
-                L10N.tr("settings-archive-into"),
-                folder_choice(settings, "same-folder-files", |settings| {
+                tr!("Save archive"),
+                folder_choice(settings, text!("Next to the files"), |settings| {
                     &mut settings.archive_into
                 }),
             ),
-            FormLine::Row(L10N.tr("settings-format"), format_choice(settings)),
+            FormLine::Row(tr!("Archive format"), format_choice(settings)),
             FormLine::Row(
-                L10N.tr("settings-after-archiving"),
-                after_choice(settings, ["keep-files", "trash-files"], |settings| {
-                    &mut settings.after_archiving
-                }),
+                tr!("After archiving"),
+                after_choice(
+                    settings,
+                    [
+                        tr!("Leave the files alone"),
+                        tr!("Move the files to the Trash"),
+                    ],
+                    |settings| &mut settings.after_archiving,
+                ),
             ),
             FormLine::Row(
-                L10N.tr("settings-reveal-archive"),
-                reveal_toggle(settings, "settings-reveal-archive", |settings| {
+                tr!("Reveal archive in Files"),
+                reveal_toggle(settings, text!("Reveal archive in Files"), |settings| {
                     &mut settings.reveal_archive
                 }),
             ),

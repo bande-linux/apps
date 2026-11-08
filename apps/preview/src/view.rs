@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use bande_l10n::{text, tr};
 use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_inbox::Inbox;
@@ -24,7 +25,7 @@ use crate::loader::{Loader, Opened};
 use crate::pdf::contents::Contents;
 use crate::pdf::document::{Fit, PdfView};
 use crate::sidebar::{SIDEBAR_WIDTH, Sidebar, Thumb};
-use crate::{L10N, tr_with};
+use crate::tr_with;
 use bande_content::pdf::protocol::{Opened as PdfOpened, Render, Use};
 use bande_content::pdf::session::{Change, Phase, Session};
 use bande_content::{Decoded, Failure};
@@ -85,7 +86,7 @@ fn symbol(svg: &str, label: &str, signals: &Signals, signal: Signal) -> Button {
 
 fn password_field(signals: &Signals) -> SecureField {
     let signals = Rc::clone(signals);
-    SecureField::new(&L10N.tr("password"), PASSWORD_FONT, move |secret| {
+    SecureField::new(&tr!("Password"), PASSWORD_FONT, move |secret| {
         signals
             .borrow_mut()
             .push(Signal::Password(secret.to_owned()))
@@ -126,12 +127,12 @@ pub struct PreviewView {
 
 fn failure_text(failure: &Failure) -> String {
     match failure {
-        Failure::Unreadable => L10N.tr("failure-unreadable"),
-        Failure::NotSupported => L10N.tr("failure-not-supported"),
-        Failure::Damaged => L10N.tr("failure-damaged"),
-        Failure::FileTooLarge => L10N.tr("failure-file-too-large"),
+        Failure::Unreadable => tr!("The file cannot be read."),
+        Failure::NotSupported => tr!("Preview does not open this kind of file."),
+        Failure::Damaged => tr!("The file is damaged or is not in a format Preview understands."),
+        Failure::FileTooLarge => tr!("The file is too large to open."),
         Failure::TooLarge { width, height } => tr_with(
-            "failure-too-large",
+            text!("The image is too large to open ({width} × {height} pixels)."),
             &[("width", width.to_string()), ("height", height.to_string())],
         ),
     }
@@ -148,29 +149,21 @@ impl PreviewView {
         let signals: Signals = Rc::default();
         let mut host = FreeLayout::new();
         let sidebar_button = host.insert_in_header(
-            symbol(
-                SIDEBAR_SYMBOL,
-                &L10N.tr("toggle-sidebar"),
-                &signals,
-                Signal::Sidebar,
-            ),
+            symbol(SIDEBAR_SYMBOL, &tr!("Sidebar"), &signals, Signal::Sidebar),
             Rect::default(),
         );
         let tools = [
-            (INFO_SYMBOL, "get-info", Signal::Info),
-            (ZOOM_OUT_SYMBOL, "zoom-out", Signal::ZoomOut),
-            (ZOOM_IN_SYMBOL, "zoom-in", Signal::ZoomIn),
-            (ROTATE_SYMBOL, "rotate-left", Signal::RotateLeft),
+            (INFO_SYMBOL, text!("Get Info"), Signal::Info),
+            (ZOOM_OUT_SYMBOL, text!("Zoom Out"), Signal::ZoomOut),
+            (ZOOM_IN_SYMBOL, text!("Zoom In"), Signal::ZoomIn),
+            (ROTATE_SYMBOL, text!("Rotate Left"), Signal::RotateLeft),
         ]
         .map(|(svg, label, signal)| {
-            host.insert_in_header(
-                symbol(svg, &L10N.tr(label), &signals, signal),
-                Rect::default(),
-            )
+            host.insert_in_header(symbol(svg, &label.tr(), &signals, signal), Rect::default())
         });
         let searched = Rc::clone(&signals);
         let search = host.insert_in_header(
-            SearchField::new(&L10N.tr("search-placeholder"), "", move |text| {
+            SearchField::new(&tr!("Search"), "", move |text| {
                 searched.borrow_mut().push(Signal::Search(text.to_owned()))
             }),
             Rect::default(),
@@ -221,7 +214,10 @@ impl PreviewView {
         view.fill_sidebar();
         view.load_current();
         if view.paths.is_empty() {
-            let (title, detail) = (L10N.tr("empty-title"), L10N.tr("empty-detail"));
+            let (title, detail) = (
+                tr!("No file is open"),
+                tr!("Open an image or a PDF document with File › Open… or from Files."),
+            );
             view.with_canvas(|canvas| canvas.show_message(&title, &detail));
         }
         view.ui.set_focus(canvas);
@@ -241,15 +237,12 @@ impl PreviewView {
     }
 
     pub fn title(&self) -> String {
-        let name = self
-            .path()
-            .map(file_name)
-            .unwrap_or_else(|| L10N.tr("app-name"));
+        let name = self.path().map(file_name).unwrap_or_else(|| tr!("Preview"));
         match self.pdf_view().filter(|_| self.is_document()) {
             Some(pdf) if pdf.page_count() > 1 => {
                 let (page, count) = pdf.page_label();
                 tr_with(
-                    "document-title",
+                    text!("{name} (page {page} of {count})"),
                     &[
                         ("name", name),
                         ("page", page.to_string()),
@@ -371,7 +364,7 @@ impl PreviewView {
 
     fn show_failure(&mut self, name: String, failure: &Failure) {
         let detail = failure_text(failure);
-        let title = tr_with("cannot-open", &[("name", name)]);
+        let title = tr_with(text!("“{name}” could not be opened."), &[("name", name)]);
         self.with_canvas(|canvas| canvas.show_message(&title, &detail));
     }
 
@@ -388,7 +381,7 @@ impl PreviewView {
         match loaded.result {
             Ok(Opened::Image(decoded)) => {
                 let label = tr_with(
-                    "image-label",
+                    text!("{name}, {width} × {height}"),
                     &[
                         ("name", name),
                         ("width", decoded.width.to_string()),
@@ -492,12 +485,12 @@ impl PreviewView {
             Some(Phase::Locked { retry: true })
         );
         let name = self.path().map(file_name).unwrap_or_default();
-        let title = tr_with("locked", &[("name", name)]);
-        let detail = L10N.tr(if retry {
-            "locked-wrong"
+        let title = tr_with(text!("“{name}” is locked."), &[("name", name)]);
+        let detail = if retry {
+            tr!("The password is incorrect. Try again.")
         } else {
-            "locked-detail"
-        });
+            tr!("Enter the document’s password to open it.")
+        };
         self.with_canvas(|canvas| canvas.show_message(&title, &detail));
         let field = password_field(&self.signals);
         let replaced = self

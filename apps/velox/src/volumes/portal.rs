@@ -2,10 +2,9 @@ use std::collections::HashMap;
 use std::hash::{BuildHasher, RandomState};
 use std::path::PathBuf;
 
+use bande_l10n::tr;
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
-
-use crate::L10N;
 
 const DESKTOP: &str = "org.freedesktop.portal.Desktop";
 const DESKTOP_PATH: &str = "/org/freedesktop/portal/desktop";
@@ -69,7 +68,7 @@ fn ask(
 
 fn tar_filter() -> Filter<'static> {
     Filter {
-        label: L10N.tr("filter-tar"),
+        label: tr!("Tar archive"),
         patterns: vec![(0, "*.tar"), (0, "*.tar.gz"), (1, "application/x-tar")],
     }
 }
@@ -97,7 +96,7 @@ pub fn choose_iso(title: &str) -> zbus::Result<Option<PathBuf>> {
         "OpenFile",
         title,
         Some(Filter {
-            label: L10N.tr("filter-iso"),
+            label: tr!("Disc images"),
             patterns: vec![(0, "*.iso"), (1, "application/x-iso9660-image")],
         }),
         ("multiple", Value::from(false)),
@@ -109,7 +108,7 @@ pub fn choose_disk(title: &str) -> zbus::Result<Option<PathBuf>> {
         "OpenFile",
         title,
         Some(Filter {
-            label: L10N.tr("filter-disk"),
+            label: tr!("Disk images"),
             patterns: vec![
                 (0, "*.qcow2"),
                 (0, "*.vmdk"),

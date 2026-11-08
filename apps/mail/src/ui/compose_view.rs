@@ -4,6 +4,14 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
+
+use bande_l10n::{Text, text, tr};
+
+use crate::compose::{Draft, Original, Outgoing, keep_unsent, unsent_folder};
+use crate::message::{Address, Attachment, parse_addresses};
+use crate::store::Account;
+use crate::ui::symbols::Symbol;
+use crate::ui::view::{SHORTCUTS, TOOLBAR_HEIGHT};
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
     Alert, BUTTON_HEIGHT, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Label,
@@ -14,13 +22,6 @@ use bande_toolkit::{
     Appearance, HEADER_LEADING, Header, Image, Item, Palette, Point, Radius, Rect, Scene, Shape,
     TextAlign, TextRole, TextStyle, TextSystem,
 };
-
-use crate::L10N;
-use crate::compose::{Draft, Original, Outgoing, keep_unsent, unsent_folder};
-use crate::message::{Address, Attachment, parse_addresses};
-use crate::store::Account;
-use crate::ui::symbols::Symbol;
-use crate::ui::view::{SHORTCUTS, TOOLBAR_HEIGHT};
 
 static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
 
@@ -92,14 +93,14 @@ fn joined(addresses: &[Address]) -> String {
         .join(", ")
 }
 
-fn rows(from: bool, bcc: bool) -> Vec<&'static str> {
-    let mut rows = vec!["compose-to", "compose-cc"];
+fn rows(from: bool, bcc: bool) -> Vec<Text> {
+    let mut rows = vec![text!("To:"), text!("Cc:")];
     if bcc {
-        rows.push("compose-bcc");
+        rows.push(text!("Bcc:"));
     }
-    rows.push("compose-subject");
+    rows.push(text!("Subject:"));
     if from {
-        rows.push("compose-from");
+        rows.push(text!("From:"));
     }
     rows
 }
@@ -133,16 +134,16 @@ impl ComposeView {
         let send_signal = Rc::clone(&signals);
         let click = move || send_signal.borrow_mut().push(Signal::Send);
         let send_button = match Image::from_svg(Symbol::Sent.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
-            Some(image) => Button::symbol(image, &L10N.tr("compose-send"), click),
-            None => Button::new(&L10N.tr("compose-send"), click),
+            Some(image) => Button::symbol(image, &tr!("Send"), click),
+            None => Button::new(&tr!("Send"), click),
         };
         let send = host.insert(send_button, Rect::default());
         let attach_signal = Rc::clone(&signals);
         let click = move || attach_signal.borrow_mut().push(Signal::Attach);
         let attach_button =
             match Image::from_svg(Symbol::Attachment.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
-                Some(image) => Button::symbol(image, &L10N.tr("compose-attach"), click),
-                None => Button::new(&L10N.tr("compose-attach"), click),
+                Some(image) => Button::symbol(image, &tr!("Attach Files"), click),
+                None => Button::new(&tr!("Attach Files"), click),
             };
         let attach = host.insert(attach_button, Rect::default());
         let field = |text: &str| TextField::new("", text, |_| {}).borderless(FIELD_FONT);
@@ -165,14 +166,14 @@ impl ComposeView {
                 .collect::<Vec<_>>();
             let chosen = Rc::clone(&signals);
             host.insert(
-                PopUpButton::new(&L10N.tr("compose-from"), &choices, sender, move |index| {
+                PopUpButton::new(&tr!("From:"), &choices, sender, move |index| {
                     chosen.borrow_mut().push(Signal::From(index));
                 }),
                 Rect::default(),
             )
         });
         let body = host.insert(
-            TextView::new(&L10N.tr("compose-placeholder"), &draft.body, |_| {}).borderless(),
+            TextView::new(&tr!("Write your message"), &draft.body, |_| {}).borderless(),
             Rect::default(),
         );
         let mut view = Self {
@@ -223,7 +224,7 @@ impl ComposeView {
             .map(TextField::text)
             .unwrap_or_default();
         match subject.trim() {
-            "" => L10N.tr("compose-title"),
+            "" => tr!("New Message"),
             subject => subject.to_owned(),
         }
     }
@@ -348,7 +349,7 @@ impl ComposeView {
         let mut y = TOOLBAR_HEIGHT;
         for label in rows(self.from.is_some(), self.bcc_shown) {
             let paragraph = self.ui.context().text.paragraph(
-                &L10N.tr(label),
+                &label.tr(),
                 TextStyle::role(TextRole::Body, palette.ink3),
                 Some(LABEL_WIDTH - 8.0),
                 TextAlign::End,
@@ -468,15 +469,15 @@ impl ComposeView {
         let typed = self.field_text(self.to);
         if draft.to.is_empty() && draft.cc.is_empty() {
             let message = match typed.trim().is_empty() {
-                true => L10N.tr("compose-no-recipients"),
-                false => L10N.tr_args("compose-bad-recipients", [("text", typed.into())]),
+                true => tr!("Add at least one recipient."),
+                false => tr!("“{text}” is not a valid address.", text = typed),
             };
             let signals = Rc::clone(&self.signals);
             self.ui.present_sheet(
-                Alert::new(&L10N.tr("compose-cannot-send"), &message, move |_| {
+                Alert::new(&tr!("This message can’t be sent"), &message, move |_| {
                     signals.borrow_mut().push(Signal::Dismissed);
                 })
-                .primary(&L10N.tr("button-ok"), "ok"),
+                .primary(&tr!("OK"), "ok"),
             );
             return;
         }
@@ -487,10 +488,10 @@ impl ComposeView {
     pub fn show_error(&mut self, error: &str) {
         let signals = Rc::clone(&self.signals);
         self.ui.present_sheet(
-            Alert::new(&L10N.tr("compose-not-sent"), error, move |_| {
+            Alert::new(&tr!("The message was not sent"), error, move |_| {
                 signals.borrow_mut().push(Signal::Dismissed);
             })
-            .primary(&L10N.tr("button-ok"), "ok"),
+            .primary(&tr!("OK"), "ok"),
         );
     }
 

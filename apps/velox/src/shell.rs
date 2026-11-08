@@ -8,14 +8,15 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Instant;
 
+
+use bande_l10n::tr;
+
+use crate::engine::Engine;
 use accesskit::TreeUpdate;
 use bande_app::{Keys, View};
 use bande_terminal_view::{GridSize, TerminalView};
 use bande_toolkit::ui::{Context, Ui, Widget, WidgetId};
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
-
-use crate::L10N;
-use crate::engine::Engine;
 
 const READ_CHUNK: usize = 65536;
 const SHELLS: [&str; 3] = ["/bin/bash", "/bin/ash", "/bin/sh"];
@@ -45,10 +46,10 @@ impl ShellTarget {
     pub fn title(&self) -> String {
         match self {
             Self::Serial { name, .. } => {
-                L10N.tr_args("shell-serial-title", [("name", name.clone().into())])
+                tr!("{name} — Serial Console", name = name.clone())
             }
             Self::Exec { name, .. } => {
-                L10N.tr_args("shell-exec-title", [("name", name.clone().into())])
+                tr!("{name} — Shell", name = name.clone())
             }
         }
     }
@@ -235,8 +236,8 @@ impl ShellWindow {
         *self.writer.borrow_mut() = None;
         self.finished = true;
         let text = match reason {
-            Some(reason) => L10N.tr_args("shell-cannot-connect", [("reason", reason.into())]),
-            None => L10N.tr("shell-closed"),
+            Some(reason) => tr!("Cannot connect: {reason}", reason = reason),
+            None => tr!("The connection closed."),
         };
         self.feed(format!("\r\n{text}\r\n").as_bytes());
     }

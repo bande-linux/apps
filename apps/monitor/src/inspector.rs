@@ -2,16 +2,9 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use accesskit::{ActionRequest, TreeUpdate};
-use bande_toolkit::ui::{
-    Button, Cell, Column, Cursor, Event, Key, Row, SEGMENTED_HEIGHT, SegmentedControl, Table,
-    WidgetId,
-};
-use bande_toolkit::{
-    Appearance, HEADER_LEADING, Header, Palette, Rect, SHEET_INSET, Scene, TextSystem,
-};
 
-use crate::L10N;
+use bande_l10n::{Text, text, tr};
+
 use crate::format::{format_bytes, format_cpu_time, format_percent};
 use crate::inspect::{Details, read_details, state_name};
 use crate::list::{List, Signal, sender};
@@ -19,6 +12,14 @@ use crate::model::StopTarget;
 use crate::sampler::{Process, Snapshot};
 use crate::view::{
     ALERT_ICON, FORCE_QUIT, Icons, QUIT, Request, Screen, answer_stop, stop_alert, stop_button,
+};
+use accesskit::{ActionRequest, TreeUpdate};
+use bande_toolkit::ui::{
+    Button, Cell, Column, Cursor, Event, Key, Row, SEGMENTED_HEIGHT, SegmentedControl, Table,
+    WidgetId,
+};
+use bande_toolkit::{
+    Appearance, HEADER_LEADING, Header, Palette, Rect, SHEET_INSET, Scene, TextSystem,
 };
 
 pub const INSPECTOR_SIZE: (u32, u32) = (680, 520);
@@ -59,12 +60,12 @@ impl Section {
     ];
 
     fn title(self) -> String {
-        L10N.tr(match self {
-            Section::Info => "inspector-info",
-            Section::Threads => "inspector-threads",
-            Section::Files => "inspector-files",
-            Section::Memory => "inspector-memory",
-        })
+        match self {
+            Section::Info => tr!("Info"),
+            Section::Threads => tr!("Threads"),
+            Section::Files => tr!("Open Files"),
+            Section::Memory => tr!("Memory Map"),
+        }
     }
 
     fn table(self) -> Table {
@@ -75,28 +76,28 @@ impl Section {
     }
 
     fn columns(self) -> Vec<Column> {
-        let column = |message: &str, width: f32| Column::new(&L10N.tr(message), width);
+        let column = |message: Text, width: f32| Column::new(&message.tr(), width);
         match self {
             Section::Info => vec![
-                column("column-name", LABEL_WIDTH).unsortable(),
-                column("inspector-value", 200.0).unsortable().flexible(),
+                column(text!("Name"), LABEL_WIDTH).unsortable(),
+                column(text!("Value"), 200.0).unsortable().flexible(),
             ],
             Section::Threads => vec![
-                column("inspector-tid", 72.0).numeric(),
-                column("column-name", 200.0).flexible(),
-                column("inspector-state", 140.0),
-                column("inspector-waiting-in", 180.0),
-                column("column-cpu-time", 96.0).numeric(),
+                column(text!("TID"), 72.0).numeric(),
+                column(text!("Name"), 200.0).flexible(),
+                column(text!("State"), 140.0),
+                column(text!("Waiting In"), 180.0),
+                column(text!("CPU Time"), 96.0).numeric(),
             ],
             Section::Files => vec![
-                column("inspector-fd", 56.0).numeric(),
-                column("inspector-path", 300.0).flexible(),
+                column(text!("FD"), 56.0).numeric(),
+                column(text!("Path"), 300.0).flexible(),
             ],
             Section::Memory => vec![
-                column("inspector-address", 220.0),
-                column("inspector-size", 88.0).numeric(),
-                column("inspector-permissions", 64.0),
-                column("inspector-mapping", 200.0).flexible(),
+                column(text!("Address"), 220.0),
+                column(text!("Size"), 88.0).numeric(),
+                column(text!("Access"), 64.0),
+                column(text!("Mapping"), 200.0).flexible(),
             ],
         }
     }
@@ -131,10 +132,7 @@ pub struct InspectorView {
 }
 
 fn named(pid: u32, name: &str) -> String {
-    L10N.tr_args(
-        "inspector-process",
-        [("name", name.to_owned().into()), ("pid", pid.into())],
-    )
+    tr!("{name} ({pid})", name = name.to_owned(), pid = pid)
 }
 
 impl InspectorView {
@@ -153,7 +151,7 @@ impl InspectorView {
         let send = sender(list.signals());
         let titles = Section::ALL.map(Section::title);
         let sections = list.insert_in_header(
-            SegmentedControl::new(&L10N.tr("tab-label"), &titles, Some(0), move |index| {
+            SegmentedControl::new(&tr!("Show"), &titles, Some(0), move |index| {
                 send(Signal::Tab(index))
             })
             .fill_equally(),
@@ -217,42 +215,39 @@ impl InspectorView {
     }
 
     fn info_rows(&self) -> Vec<Row> {
-        let row = |key: &str, label: &str, value: String| {
+        let row = |key: &str, label: Text, value: String| {
             Row::new(
                 key,
-                vec![
-                    Cell::new(L10N.tr(label)).muted(),
-                    Cell::new(value).tabular(),
-                ],
+                vec![Cell::new(label.tr()).muted(), Cell::new(value).tabular()],
             )
         };
-        let section = |key: &str, title: &str, children: Vec<Row>| {
+        let section = |key: &str, title: Text, children: Vec<Row>| {
             Row::new(
                 format!("{SECTION}{key}"),
-                vec![Cell::new(L10N.tr(title)).label(), Cell::new("")],
+                vec![Cell::new(title.tr()).label(), Cell::new("")],
             )
             .children(children)
         };
         let state = match &self.process {
             Some(_) => state_name(self.details.state),
-            None => L10N.tr("state-ended"),
+            None => tr!("Ended"),
         };
         let mut process_rows = vec![
-            row("name", "column-name", self.name.clone()),
-            row("pid", "column-pid", self.pid.to_string()),
-            row("state", "inspector-state", state),
+            row("name", text!("Name"), self.name.clone()),
+            row("pid", text!("PID"), self.pid.to_string()),
+            row("state", text!("State"), state),
         ];
         let mut family = Vec::new();
         if let Some((pid, name)) = &self.family.parent {
             family.push(row(
                 &format!("{PARENT}{pid}"),
-                "inspector-parent",
+                text!("Parent"),
                 named(*pid, name),
             ));
         }
         for (index, (pid, name)) in self.family.children.iter().enumerate() {
             let label = match index {
-                0 => L10N.tr("inspector-children"),
+                0 => tr!("Children"),
                 _ => String::new(),
             };
             family.push(Row::new(
@@ -264,120 +259,108 @@ impl InspectorView {
             ));
         }
         let Some(process) = &self.process else {
-            return vec![section(
-                "process",
-                "inspector-section-process",
-                process_rows,
-            )];
+            return vec![section("process", text!("Process"), process_rows)];
         };
         let identity = &process.identity;
-        process_rows.push(row("user", "column-user", identity.user.clone()));
+        process_rows.push(row("user", text!("User"), identity.user.clone()));
         if let Some(unit) = &identity.unit {
-            process_rows.push(row("unit", "inspector-unit", unit.clone()));
+            process_rows.push(row("unit", text!("Unit"), unit.clone()));
         }
         if let Some(reason) = &process.preventing_sleep {
-            process_rows.push(row("sleep", "inspector-preventing-sleep", reason.clone()));
+            process_rows.push(row("sleep", text!("Preventing Sleep"), reason.clone()));
         }
-        let mut command = vec![row(
-            "command",
-            "inspector-command",
-            identity.command.join(" "),
-        )];
+        let mut command = vec![row("command", text!("Command"), identity.command.join(" "))];
         if let Some(executable) = &identity.executable {
             command.push(row(
                 EXECUTABLE,
-                "inspector-executable",
+                text!("Executable"),
                 executable.display().to_string(),
             ));
         }
         let mut resources = vec![
             row(
                 "cpu",
-                "column-cpu",
+                text!("% CPU"),
                 format_percent(f64::from(process.cpu_percent)),
             ),
             row(
                 "cpu-time",
-                "column-cpu-time",
+                text!("CPU Time"),
                 format_cpu_time(process.cpu_seconds),
             ),
-            row("threads", "column-threads", process.threads.to_string()),
+            row("threads", text!("Threads"), process.threads.to_string()),
             row(
                 "resident",
-                "column-resident",
+                text!("Resident"),
                 format_bytes(process.resident),
             ),
         ];
         if let Some(footprint) = process.footprint {
-            resources.push(row("memory", "column-memory", format_bytes(footprint)));
+            resources.push(row("memory", text!("Memory"), format_bytes(footprint)));
         }
         if let Some(size) = self.details.virtual_size {
-            resources.push(row("virtual", "inspector-virtual", format_bytes(size)));
+            resources.push(row("virtual", text!("Virtual Memory"), format_bytes(size)));
         }
         if let Some(seconds) = self.details.running_seconds {
             resources.push(row(
                 "running",
-                "inspector-running",
+                text!("Running For"),
                 format_cpu_time(seconds),
             ));
         }
         if let Some(disk) = &process.disk {
             resources.push(row(
                 "read",
-                "column-read-total",
+                text!("Bytes Read"),
                 format_bytes(disk.read_total),
             ));
             resources.push(row(
                 "written",
-                "column-written-total",
+                text!("Bytes Written"),
                 format_bytes(disk.written_total),
             ));
         }
-        let mut sections = vec![section(
-            "process",
-            "inspector-section-process",
-            process_rows,
-        )];
+        let mut sections = vec![section("process", text!("Process"), process_rows)];
         if !family.is_empty() {
-            sections.push(section("family", "inspector-section-family", family));
+            sections.push(section("family", text!("Parent and Children"), family));
         }
-        sections.push(section("command", "inspector-section-command", command));
-        sections.push(section(
-            "resources",
-            "inspector-section-resources",
-            resources,
-        ));
+        sections.push(section("command", text!("Command"), command));
+        sections.push(section("resources", text!("Resources"), resources));
         let statistics = self.details.statistics;
         let count =
             |value: Option<u64>| value.map_or(MISSING.to_owned(), |value| value.to_string());
         sections.push(section(
             "statistics",
-            "inspector-section-statistics",
+            text!("Statistics"),
             vec![
                 row(
                     "faults",
-                    "inspector-faults",
+                    text!("Page Faults"),
                     statistics.minor_faults.to_string(),
                 ),
                 row(
                     "major-faults",
-                    "inspector-major-faults",
+                    text!("Page Faults from Disk"),
                     statistics.major_faults.to_string(),
                 ),
-                row("switches", "inspector-switches", count(statistics.switches)),
+                row(
+                    "switches",
+                    text!("Context Switches"),
+                    count(statistics.switches),
+                ),
                 row(
                     "involuntary-switches",
-                    "inspector-involuntary-switches",
+                    text!("Preempted"),
                     count(statistics.involuntary_switches),
                 ),
                 row(
                     "read-calls",
-                    "inspector-read-calls",
+                    text!("Read Calls"),
                     count(statistics.read_calls),
                 ),
                 row(
                     "write-calls",
-                    "inspector-write-calls",
+                    text!("Write Calls"),
                     count(statistics.write_calls),
                 ),
             ],
@@ -424,7 +407,7 @@ impl InspectorView {
                 "unavailable",
                 vec![
                     Cell::new(""),
-                    Cell::new(L10N.tr("inspector-not-permitted")).muted(),
+                    Cell::new(tr!("Only its owner or an administrator can see this.")).muted(),
                 ],
             )]
         };

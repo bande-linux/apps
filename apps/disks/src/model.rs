@@ -1,12 +1,11 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use bande_l10n::{text, tr};
 use bande_volumes::udisks::{
     ATA, BLOCK, DRIVE, ENCRYPTED, FILESYSTEM, LOOP, NVME, Objects, PARTITION, PARTITION_TABLE,
     SWAPSPACE,
 };
-
-use crate::L10N;
 
 const MIB: u64 = 1 << 20;
 const SMALLEST_FREE: u64 = 4 * MIB;
@@ -148,9 +147,9 @@ fn volume(objects: &Objects, block: &str, apple_drive: bool) -> Volume {
     .into_iter()
     .find(|name| !name.is_empty());
     let name = match apple {
-        Some(Apple::MacOs) => L10N.tr("volume-macos"),
-        Some(Apple::System) => name.unwrap_or_else(|| L10N.tr("volume-apple-system")),
-        None => name.unwrap_or_else(|| L10N.tr("volume-untitled")),
+        Some(Apple::MacOs) => tr!("macOS"),
+        Some(Apple::System) => name.unwrap_or_else(|| tr!("Apple system")),
+        None => name.unwrap_or_else(|| tr!("Untitled")),
     };
     Volume {
         path: block.to_owned(),
@@ -198,16 +197,16 @@ fn smart(objects: &Objects, drive: &str) -> Option<Smart> {
 
 fn connection(objects: &Objects, drive: &str, apple_drive: bool) -> String {
     let key = match objects.text(drive, DRIVE, "ConnectionBus").as_str() {
-        "usb" => "connection-usb",
-        "sdio" => "connection-sd",
-        "ieee1394" => "connection-firewire",
-        _ if apple_drive => "connection-apple-fabric",
-        _ if objects.has(drive, NVME) => "connection-pci",
-        _ if objects.flag(drive, DRIVE, "Optical") => "connection-optical",
-        _ if objects.has(drive, ATA) => "connection-sata",
-        _ => "connection-unknown",
+        "usb" => text!("USB"),
+        "sdio" => text!("Secure Digital"),
+        "ieee1394" => text!("FireWire"),
+        _ if apple_drive => text!("Apple Fabric"),
+        _ if objects.has(drive, NVME) => text!("PCI Express"),
+        _ if objects.flag(drive, DRIVE, "Optical") => text!("ATAPI"),
+        _ if objects.has(drive, ATA) => text!("SATA"),
+        _ => text!("Unknown"),
     };
-    L10N.tr(key)
+    key.tr()
 }
 
 fn free_regions(size: u64, volumes: &[Volume], objects: &Objects) -> Vec<(u64, u64)> {
@@ -309,7 +308,7 @@ fn disk(objects: &Objects, block: &str) -> Option<Disk> {
         group,
         serial: objects.text(&drive, DRIVE, "Serial"),
         connection: match &image {
-            Some(_) => L10N.tr("connection-image"),
+            Some(_) => tr!("Disk Image"),
             None => connection(objects, &drive, apple),
         },
         scheme,

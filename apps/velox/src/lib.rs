@@ -12,10 +12,6 @@ mod shell;
 mod ui;
 pub(crate) mod volumes;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
 pub use containers::{LogsTarget, LogsView, Request as ContainerRequest, Work};
 pub use engine::{Action, Informer, Update};
 pub use machines::{
@@ -30,6 +26,3 @@ pub use shell::{ShellLink, ShellTarget, ShellWindow};
 pub use ui::{Request, SIDEBAR_WIDTH, Section, VeloxView};
 
 pub const TERMINAL_APP_ID: &str = "org.bande.Terminal";
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-velox")));

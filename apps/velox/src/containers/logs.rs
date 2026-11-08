@@ -9,6 +9,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use bande_l10n::tr;
 use accesskit::{Node, Role, TreeUpdate};
 use bande_app::View;
 use bande_toolkit::ui::{
@@ -25,7 +26,6 @@ use super::ansi::{self, Pen};
 use super::compose::Compose;
 use super::log_text::LogText;
 use super::widgets::Text;
-use crate::L10N;
 use crate::engine::{Container, Engine};
 
 const TOOLBAR: f32 = WINDOW_HEADER_HEIGHT as f32;
@@ -59,7 +59,7 @@ impl LogsTarget {
             Self::Container { name, .. } => name,
             Self::Project(compose) => &compose.project,
         };
-        L10N.tr_args("logs-title", [("name", name.as_str().into())])
+        tr!("{name} — Logs", name = name.as_str())
     }
 }
 
@@ -311,23 +311,23 @@ impl LogsView {
             footer: footer.id(),
         };
         let tools: Vec<Box<dyn Widget>> = vec![
-            Box::new(SearchField::new(&L10N.tr("logs-filter"), "", move |text| {
+            Box::new(SearchField::new(&tr!("Filter"), "", move |text| {
                 filter.borrow_mut().push(Intent::Filter(text.to_owned()));
             })),
             Box::new(Checkbox::new(
-                &L10N.tr("logs-follow"),
+                &tr!("Auto-scroll"),
                 CheckState::On,
                 push(Intent::Follow),
             )),
             Box::new(Checkbox::new(
-                &L10N.tr("logs-wrap"),
+                &tr!("Wrap"),
                 CheckState::On,
                 push(Intent::Wrap),
             )),
-            Box::new(Button::new(&L10N.tr("logs-copy"), move || {
+            Box::new(Button::new(&tr!("Copy"), move || {
                 copy.borrow_mut().push(Intent::Copy);
             })),
-            Box::new(Button::new(&L10N.tr("logs-clear"), move || {
+            Box::new(Button::new(&tr!("Clear"), move || {
                 clear.borrow_mut().push(Intent::Clear);
             })),
         ];
@@ -417,10 +417,7 @@ impl LogsView {
             .widget_ref::<LogText>(self.parts.text)
             .map(LogText::counts)
             .unwrap_or_default();
-        let line = L10N.tr_args(
-            "logs-count",
-            [("shown", shown.into()), ("total", total.into())],
-        );
+        let line = tr!("{shown} of {total} lines", shown = shown, total = total);
         if let Some(footer) = self.ui.widget_as::<Text>(self.parts.footer) {
             footer.set_text(&line);
         }

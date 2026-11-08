@@ -3,13 +3,13 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
 
+use bande_l10n::{text, tr};
 use bande_vm::{Accel, ActiveState, Network, UsbDevice};
 
 const SSH_PORT: u16 = 22;
 
 use super::backend::{Act, Listed, Phase, Update};
 use super::readiness::Blocker;
-use crate::L10N;
 use crate::containers::UsageHistory;
 use crate::engine::Sample;
 
@@ -356,7 +356,7 @@ impl Fleet {
                     .map_or_else(|| id.clone(), |entry| entry.name().to_owned());
                 self.notices.push(Notice {
                     id: Some(id),
-                    title: L10N.tr_args("machine-usb-failed", [("name", name.into())]),
+                    title: tr!("Cannot connect a USB device to “{name}”", name = name),
                     message,
                 });
             }
@@ -399,8 +399,8 @@ impl Fleet {
                     .map_or_else(|| id.clone(), |entry| entry.name().to_owned());
                 self.notices.push(Notice {
                     id: Some(id),
-                    title: L10N.tr_args("machine-without-3d", [("name", name.into())]),
-                    message: L10N.tr("machine-without-3d-message"),
+                    title: tr!("“{name}” started without 3D graphics", name = name),
+                    message: tr!("The machine did not start with 3D graphics, so Velox started it with the plain display."),
                 });
             }
             Update::Network(id, network) => {
@@ -433,7 +433,7 @@ impl Fleet {
                 {
                     self.notices.push(Notice {
                         id: None,
-                        title: L10N.tr_args("machine-cannot-create", [("name", entry.name.into())]),
+                        title: tr!("Cannot create “{name}”", name = entry.name),
                         message,
                     });
                 }
@@ -444,22 +444,22 @@ impl Fleet {
                     .get(&id)
                     .map_or_else(|| id.clone(), |entry| entry.name().to_owned());
                 let title = match act {
-                    Act::Start => "machine-cannot-start",
-                    Act::ShutDown => "machine-cannot-shut-down",
-                    Act::ForceStop => "machine-cannot-force-stop",
-                    Act::Restart => "machine-cannot-restart",
-                    Act::Delete => "machine-cannot-delete",
-                    Act::Pause => "machine-cannot-pause",
-                    Act::Resume => "machine-cannot-resume",
-                    Act::TakeSnapshot => "machine-cannot-take-snapshot",
-                    Act::Revert => "machine-cannot-revert",
-                    Act::DeleteSnapshot => "machine-cannot-delete-snapshot",
-                    Act::Clone => "machine-cannot-clone",
-                    Act::Suspend => "machine-cannot-suspend",
+                    Act::Start => text!("Cannot start “{name}”"),
+                    Act::ShutDown => text!("Cannot shut down “{name}”"),
+                    Act::ForceStop => text!("Cannot force “{name}” to stop"),
+                    Act::Restart => text!("Cannot restart “{name}”"),
+                    Act::Delete => text!("Cannot delete “{name}”"),
+                    Act::Pause => text!("Cannot pause “{name}”"),
+                    Act::Resume => text!("Cannot resume “{name}”"),
+                    Act::TakeSnapshot => text!("Cannot take a snapshot of “{name}”"),
+                    Act::Revert => text!("Cannot revert “{name}”"),
+                    Act::DeleteSnapshot => text!("Cannot delete the snapshot of “{name}”"),
+                    Act::Clone => text!("Cannot clone “{name}”"),
+                    Act::Suspend => text!("Cannot suspend “{name}”"),
                 };
                 self.notices.push(Notice {
                     id: Some(id),
-                    title: L10N.tr_args(title, [("name", name.into())]),
+                    title: title.tr_args(&[("name", &name as &dyn std::fmt::Display)]),
                     message,
                 });
             }

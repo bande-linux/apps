@@ -1,7 +1,8 @@
-use bande_toolkit::ui::{Event, Key, Modifiers};
 
-use crate::L10N;
+use bande_l10n::{Text, text, tr};
+
 use crate::engine::{Angle, Base, Binary, Constant, Engine, Input, Memory, Mode, Unary};
+use bande_toolkit::ui::{Event, Key, Modifiers};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tone {
@@ -35,10 +36,6 @@ struct Builder<'a> {
     engine: &'a Engine,
 }
 
-fn text(message: &str) -> String {
-    L10N.tr(message)
-}
-
 impl Builder<'_> {
     fn key(&self, input: Input, label: &str, binding: Binding) -> KeySpec {
         let tone = match input {
@@ -59,9 +56,9 @@ impl Builder<'_> {
         }
     }
 
-    fn named(&self, input: Input, label: &str, message: &str, binding: Binding) -> KeySpec {
+    fn named(&self, input: Input, label: &str, message: Text, binding: Binding) -> KeySpec {
         KeySpec {
-            name: text(message),
+            name: message.tr(),
             ..self.key(input, label, binding)
         }
     }
@@ -86,8 +83,8 @@ impl Builder<'_> {
 
     fn clear(&self) -> KeySpec {
         let (label, message) = match self.engine.clears_all() {
-            true => ("AC", "key-all-clear"),
-            false => ("C", "key-clear"),
+            true => ("AC", text!("All Clear")),
+            false => ("C", text!("Clear")),
         };
         self.named(Input::Clear, label, message, Binding::Named(Key::Escape))
     }
@@ -96,20 +93,20 @@ impl Builder<'_> {
         match self.engine.rpn {
             true => self.named(
                 Input::Equals,
-                &text("key-enter-label"),
-                "key-enter",
+                &tr!("enter"),
+                text!("Enter"),
                 Binding::Named(Key::Enter),
             ),
-            false => self.named(Input::Equals, "=", "key-equals", Binding::Character('=')),
+            false => self.named(Input::Equals, "=", text!("Equals"), Binding::Character('=')),
         }
     }
 
     fn operator(&self, operator: Binary) -> KeySpec {
         let (message, binding) = match operator {
-            Binary::Add => ("key-add", '+'),
-            Binary::Subtract => ("key-subtract", '-'),
-            Binary::Multiply => ("key-multiply", '*'),
-            _ => ("key-divide", '/'),
+            Binary::Add => (text!("Add"), '+'),
+            Binary::Subtract => (text!("Subtract"), '-'),
+            Binary::Multiply => (text!("Multiply"), '*'),
+            _ => (text!("Divide"), '/'),
         };
         self.named(
             Input::Binary(operator),
@@ -121,7 +118,12 @@ impl Builder<'_> {
 
     fn open(&self) -> KeySpec {
         match self.engine.rpn {
-            true => self.named(Input::Swap, "x⇄y", "key-swap", Binding::Character('(')),
+            true => self.named(
+                Input::Swap,
+                "x⇄y",
+                text!("Swap X and Y"),
+                Binding::Character('('),
+            ),
             false => self.key(Input::Open, "(", Binding::Character('(')),
         }
     }
@@ -134,15 +136,20 @@ impl Builder<'_> {
             (true, false) => self.named(
                 Input::RollDown,
                 "R↓",
-                "key-roll-down",
+                text!("Roll Down"),
                 Binding::Character(')'),
             ),
-            (true, true) => self.named(Input::RollUp, "R↑", "key-roll-up", Binding::Character(')')),
+            (true, true) => self.named(
+                Input::RollUp,
+                "R↑",
+                text!("Roll Up"),
+                Binding::Character(')'),
+            ),
             (false, _) => self.key(Input::Close, ")", Binding::Character(')')),
         }
     }
 
-    fn unary(&self, function: Unary, label: &str, message: &str, binding: char) -> KeySpec {
+    fn unary(&self, function: Unary, label: &str, message: Text, binding: char) -> KeySpec {
         self.named(
             Input::Unary(function),
             label,
@@ -159,8 +166,8 @@ impl Builder<'_> {
         vec![
             vec![
                 self.clear(),
-                self.unary(Unary::Negate, "±", "key-negate", 'n'),
-                self.unary(Unary::Percent, "%", "key-percent", '%'),
+                self.unary(Unary::Negate, "±", text!("Change Sign"), 'n'),
+                self.unary(Unary::Percent, "%", text!("Percent"), '%'),
                 self.operator(Binary::Divide),
             ],
             vec![
@@ -190,16 +197,16 @@ impl Builder<'_> {
     }
 
     fn scientific_rows(&self) -> Vec<Vec<KeySpec>> {
-        let function = |function, label: &str, message: &str, binding| {
+        let function = |function, label: &str, message: Text, binding| {
             self.unary(function, label, message, binding)
         };
-        let paired = |plain: (Unary, &str, &str), second: (Unary, &str, &str), binding| {
+        let paired = |plain: (Unary, &str, Text), second: (Unary, &str, Text), binding| {
             self.second(
                 function(plain.0, plain.1, plain.2, binding),
                 function(second.0, second.1, second.2, binding),
             )
         };
-        let binary = |operator: Binary, label: &str, message: &str, binding| {
+        let binary = |operator: Binary, label: &str, message: Text, binding| {
             self.named(
                 Input::Binary(operator),
                 label,
@@ -210,18 +217,18 @@ impl Builder<'_> {
         let angle = match self.engine.angle {
             Angle::Degrees => self.named(
                 Input::ToggleAngle,
-                &text("key-radians-label"),
-                "key-radians",
+                &tr!("Rad"),
+                text!("Use Radians"),
                 Binding::Character('d'),
             ),
             Angle::Radians => self.named(
                 Input::ToggleAngle,
-                &text("key-degrees-label"),
-                "key-degrees",
+                &tr!("Deg"),
+                text!("Use Degrees"),
                 Binding::Character('d'),
             ),
         };
-        let memory = |memory, label: &str, message: &str, binding| {
+        let memory = |memory, label: &str, message: Text, binding| {
             self.named(
                 Input::Memory(memory),
                 label,
@@ -229,7 +236,7 @@ impl Builder<'_> {
                 Binding::Character(binding),
             )
         };
-        let constant = |constant, label: &str, message: &str, binding| {
+        let constant = |constant, label: &str, message: Text, binding| {
             self.named(
                 Input::Constant(constant),
                 label,
@@ -241,85 +248,90 @@ impl Builder<'_> {
             vec![
                 self.open(),
                 self.close(),
-                memory(Memory::Clear, "mc", "key-memory-clear", 'z'),
-                memory(Memory::Add, "m+", "key-memory-add", 'm'),
-                memory(Memory::Subtract, "m−", "key-memory-subtract", 'M'),
-                memory(Memory::Recall, "mr", "key-memory-recall", 'r'),
+                memory(Memory::Clear, "mc", text!("Memory Clear"), 'z'),
+                memory(Memory::Add, "m+", text!("Memory Add"), 'm'),
+                memory(Memory::Subtract, "m−", text!("Memory Subtract"), 'M'),
+                memory(Memory::Recall, "mr", text!("Memory Recall"), 'r'),
             ],
             vec![
-                self.named(Input::Second, "2ⁿᵈ", "key-second", Binding::Character('`')),
-                function(Unary::Square, "x²", "key-square", '@'),
-                function(Unary::Cube, "x³", "key-cube", '#'),
-                binary(Binary::Power, "xʸ", "key-power", '^'),
+                self.named(
+                    Input::Second,
+                    "2ⁿᵈ",
+                    text!("Second Functions"),
+                    Binding::Character('`'),
+                ),
+                function(Unary::Square, "x²", text!("Square"), '@'),
+                function(Unary::Cube, "x³", text!("Cube"), '#'),
+                binary(Binary::Power, "xʸ", text!("X to the Power of Y"), '^'),
                 self.second(
-                    function(Unary::Exp, "eˣ", "key-exp", 'x'),
-                    binary(Binary::PowerOf, "yˣ", "key-power-of", 'x'),
+                    function(Unary::Exp, "eˣ", text!("e to the Power of X"), 'x'),
+                    binary(Binary::PowerOf, "yˣ", text!("Y to the Power of X"), 'x'),
                 ),
                 paired(
-                    (Unary::TenPower, "10ˣ", "key-ten-power"),
-                    (Unary::TwoPower, "2ˣ", "key-two-power"),
+                    (Unary::TenPower, "10ˣ", text!("10 to the Power of X")),
+                    (Unary::TwoPower, "2ˣ", text!("2 to the Power of X")),
                     'X',
                 ),
             ],
             vec![
-                function(Unary::Reciprocal, "¹⁄ₓ", "key-reciprocal", 'i'),
-                function(Unary::SquareRoot, "²√x", "key-square-root", 'v'),
-                function(Unary::CubeRoot, "³√x", "key-cube-root", 'V'),
-                binary(Binary::Root, "ʸ√x", "key-root", 'y'),
+                function(Unary::Reciprocal, "¹⁄ₓ", text!("Reciprocal"), 'i'),
+                function(Unary::SquareRoot, "²√x", text!("Square Root"), 'v'),
+                function(Unary::CubeRoot, "³√x", text!("Cube Root"), 'V'),
+                binary(Binary::Root, "ʸ√x", text!("Y-th Root of X"), 'y'),
                 self.second(
-                    function(Unary::Ln, "ln", "key-ln", 'l'),
-                    binary(Binary::Log, "logᵧ", "key-log", 'l'),
+                    function(Unary::Ln, "ln", text!("Natural Logarithm"), 'l'),
+                    binary(Binary::Log, "logᵧ", text!("Logarithm to Base Y"), 'l'),
                 ),
                 paired(
-                    (Unary::Log10, "log₁₀", "key-log10"),
-                    (Unary::Log2, "log₂", "key-log2"),
+                    (Unary::Log10, "log₁₀", text!("Logarithm to Base 10")),
+                    (Unary::Log2, "log₂", text!("Logarithm to Base 2")),
                     'L',
                 ),
             ],
             vec![
-                function(Unary::Factorial, "x!", "key-factorial", '!'),
+                function(Unary::Factorial, "x!", text!("Factorial"), '!'),
                 paired(
-                    (Unary::Sin, "sin", "key-sin"),
-                    (Unary::Asin, "sin⁻¹", "key-asin"),
+                    (Unary::Sin, "sin", text!("Sine")),
+                    (Unary::Asin, "sin⁻¹", text!("Inverse Sine")),
                     's',
                 ),
                 paired(
-                    (Unary::Cos, "cos", "key-cos"),
-                    (Unary::Acos, "cos⁻¹", "key-acos"),
+                    (Unary::Cos, "cos", text!("Cosine")),
+                    (Unary::Acos, "cos⁻¹", text!("Inverse Cosine")),
                     'c',
                 ),
                 paired(
-                    (Unary::Tan, "tan", "key-tan"),
-                    (Unary::Atan, "tan⁻¹", "key-atan"),
+                    (Unary::Tan, "tan", text!("Tangent")),
+                    (Unary::Atan, "tan⁻¹", text!("Inverse Tangent")),
                     't',
                 ),
-                constant(Constant::E, "e", "key-e", 'e'),
+                constant(Constant::E, "e", text!("Euler's Number"), 'e'),
                 self.named(
                     Input::Exponent,
                     "EE",
-                    "key-exponent",
+                    text!("Exponent"),
                     Binding::Character('E'),
                 ),
             ],
             vec![
                 angle,
                 paired(
-                    (Unary::Sinh, "sinh", "key-sinh"),
-                    (Unary::Asinh, "sinh⁻¹", "key-asinh"),
+                    (Unary::Sinh, "sinh", text!("Hyperbolic Sine")),
+                    (Unary::Asinh, "sinh⁻¹", text!("Inverse Hyperbolic Sine")),
                     'S',
                 ),
                 paired(
-                    (Unary::Cosh, "cosh", "key-cosh"),
-                    (Unary::Acosh, "cosh⁻¹", "key-acosh"),
+                    (Unary::Cosh, "cosh", text!("Hyperbolic Cosine")),
+                    (Unary::Acosh, "cosh⁻¹", text!("Inverse Hyperbolic Cosine")),
                     'C',
                 ),
                 paired(
-                    (Unary::Tanh, "tanh", "key-tanh"),
-                    (Unary::Atanh, "tanh⁻¹", "key-atanh"),
+                    (Unary::Tanh, "tanh", text!("Hyperbolic Tangent")),
+                    (Unary::Atanh, "tanh⁻¹", text!("Inverse Hyperbolic Tangent")),
                     'T',
                 ),
-                constant(Constant::Pi, "π", "key-pi", 'p'),
-                constant(Constant::Random, "Rand", "key-random", '?'),
+                constant(Constant::Pi, "π", text!("Pi"), 'p'),
+                constant(Constant::Random, "Rand", text!("Random Number"), '?'),
             ],
         ];
         for (row, basic) in rows.iter_mut().zip(self.basic_rows()) {
@@ -329,10 +341,10 @@ impl Builder<'_> {
     }
 
     fn programmer_rows(&self) -> Vec<Vec<KeySpec>> {
-        let function = |function, label: &str, message: &str, binding| {
+        let function = |function, label: &str, message: Text, binding| {
             self.unary(function, label, message, binding)
         };
-        let binary = |operator: Binary, message: &str, binding| {
+        let binary = |operator: Binary, message: Text, binding| {
             self.named(
                 Input::Binary(operator),
                 operator.symbol(),
@@ -346,8 +358,8 @@ impl Builder<'_> {
         };
         vec![
             vec![
-                binary(Binary::And, "key-and", '&'),
-                binary(Binary::Or, "key-or", '|'),
+                binary(Binary::And, text!("And"), '&'),
+                binary(Binary::Or, text!("Or"), '|'),
                 self.digit(13),
                 self.digit(14),
                 self.digit(15),
@@ -355,67 +367,62 @@ impl Builder<'_> {
                 self.named(
                     Input::Backspace,
                     "⌫",
-                    "key-backspace",
+                    text!("Delete"),
                     Binding::Named(Key::Backspace),
                 ),
             ],
             vec![
-                binary(Binary::Nor, "key-nor", 'N'),
-                binary(Binary::Xor, "key-xor", '^'),
+                binary(Binary::Nor, text!("Nor"), 'N'),
+                binary(Binary::Xor, text!("Exclusive Or"), '^'),
                 self.digit(10),
                 self.digit(11),
                 self.digit(12),
-                function(Unary::RotateLeft, "RoL", "key-rotate-left", '{'),
+                function(Unary::RotateLeft, "RoL", text!("Rotate Left"), '{'),
                 self.operator(Binary::Divide),
             ],
             vec![
-                function(Unary::ShiftLeftOne, "<<", "key-shift-left-one", '['),
-                function(Unary::ShiftRightOne, ">>", "key-shift-right-one", ']'),
+                function(Unary::ShiftLeftOne, "<<", text!("Shift Left by One"), '['),
+                function(Unary::ShiftRightOne, ">>", text!("Shift Right by One"), ']'),
                 self.digit(7),
                 self.digit(8),
                 self.digit(9),
-                function(Unary::RotateRight, "RoR", "key-rotate-right", '}'),
+                function(Unary::RotateRight, "RoR", text!("Rotate Right"), '}'),
                 self.operator(Binary::Multiply),
             ],
             vec![
                 self.named(
                     Input::Binary(Binary::ShiftLeft),
                     "X<<Y",
-                    "key-shift-left",
+                    text!("Shift X Left by Y"),
                     Binding::Character('<'),
                 ),
                 self.named(
                     Input::Binary(Binary::ShiftRight),
                     "X>>Y",
-                    "key-shift-right",
+                    text!("Shift X Right by Y"),
                     Binding::Character('>'),
                 ),
                 self.digit(4),
                 self.digit(5),
                 self.digit(6),
-                function(Unary::TwosComplement, "2's", "key-twos-complement", 'n'),
+                function(Unary::TwosComplement, "2's", text!("Two's Complement"), 'n'),
                 self.operator(Binary::Subtract),
             ],
             vec![
-                function(Unary::ByteFlip, "flip₈", "key-byte-flip", 'u'),
-                function(Unary::WordFlip, "flip₁₆", "key-word-flip", 'U'),
+                function(Unary::ByteFlip, "flip₈", text!("Flip Bytes"), 'u'),
+                function(Unary::WordFlip, "flip₁₆", text!("Flip Words"), 'U'),
                 self.digit(1),
                 self.digit(2),
                 self.digit(3),
-                function(Unary::OnesComplement, "1's", "key-ones-complement", '~'),
+                function(Unary::OnesComplement, "1's", text!("One's Complement"), '~'),
                 self.operator(Binary::Add),
             ],
             vec![
-                self.named(
-                    Input::DoubleF,
-                    "FF",
-                    "key-double-f",
-                    Binding::Character('g'),
-                ),
+                self.named(Input::DoubleF, "FF", text!("FF"), Binding::Character('g')),
                 self.named(
                     Input::DoubleZero,
                     "00",
-                    "key-double-zero",
+                    text!("Double Zero"),
                     Binding::Character('G'),
                 ),
                 self.digit(0),
@@ -487,20 +494,20 @@ pub fn typed(engine: &Engine, layout: &Layout, event: &Event) -> Option<Input> {
 }
 
 pub fn base_label(base: Base) -> String {
-    text(match base {
-        Base::Hexadecimal => "base-hexadecimal-short",
-        Base::Decimal => "base-decimal-short",
-        Base::Octal => "base-octal-short",
-        Base::Binary => "base-binary-short",
-    })
+    match base {
+        Base::Hexadecimal => tr!("HEX"),
+        Base::Decimal => tr!("DEC"),
+        Base::Octal => tr!("OCT"),
+        Base::Binary => tr!("BIN"),
+    }
 }
 
 pub fn binding_label(binding: Binding) -> String {
     match binding {
         Binding::Character(character) => character.to_string(),
-        Binding::Named(Key::Enter) => text("binding-enter"),
-        Binding::Named(Key::Escape) => text("binding-escape"),
-        Binding::Named(Key::Backspace) => text("binding-backspace"),
+        Binding::Named(Key::Enter) => tr!("Enter"),
+        Binding::Named(Key::Escape) => tr!("Esc"),
+        Binding::Named(Key::Backspace) => tr!("Backspace"),
         Binding::Named(_) => String::new(),
     }
 }

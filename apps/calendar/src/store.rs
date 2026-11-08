@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use bande_l10n::tr;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use serde::{Deserialize, Serialize};
@@ -395,7 +396,7 @@ impl Library {
                 id: new_uid(),
                 account: LOCAL_ACCOUNT.to_owned(),
                 url: None,
-                name: crate::ui::L10N.tr("default-calendar-name"),
+                name: tr!("Calendar"),
                 color: "#E8590C".to_owned(),
                 read_only: false,
                 visible: true,

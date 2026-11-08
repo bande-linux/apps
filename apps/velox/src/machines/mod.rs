@@ -17,13 +17,16 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 pub use self::backend::Act;
+
+
+use bande_l10n::tr;
+
 use self::backend::{Backend, Change, Plan, SnapshotOp};
 pub use self::display::DisplayWindow;
 pub use self::fleet::{Fleet, Notice};
 pub use self::pane::{INSPECTOR_COMMAND, MACHINES_KEY, MachinesPane};
 use self::sheet::Field;
 pub use self::window::{MACHINE_WINDOW_SIZE, MachineWindow};
-use crate::L10N;
 
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(2);
 pub(crate) const MACHINES_SYMBOL: &str = include_str!("symbols/machines.svg");
@@ -206,15 +209,15 @@ impl Hub {
             Request::PresentClone(id) => return Some(Effect::PresentClone(id)),
             Request::PresentSnapshot(id) => return Some(Effect::PresentSnapshot(id)),
             Request::ChooseIso(disk) => self.backend.choose_iso(
-                L10N.tr(match disk {
-                    true => "machine-disk-choose",
-                    false => "machine-iso-choose",
-                }),
+                match disk {
+                    true => tr!("Choose Disk Image…"),
+                    false => tr!("Choose Disc Image…"),
+                },
                 disk,
             ),
             Request::ChooseFolder(id) => {
                 self.backend
-                    .choose_folder(id, L10N.tr("machine-share-choose"));
+                    .choose_folder(id, tr!("Choose a Folder to Share"));
             }
             Request::Emulate => self.backend.emulate(),
             Request::Change(id, change) => self.backend.change(id, change),

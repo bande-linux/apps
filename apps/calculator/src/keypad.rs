@@ -2,13 +2,14 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+
+use bande_l10n::tr;
+
+use crate::engine::{Angle, Base, Engine, Input, Mode, WORD_SIZES};
+use crate::keys::{self, KeySpec, Tone, binding_label};
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
 use bande_toolkit::ui::{Context, Event, Key, Parts, PointerButton, Size, Widget, WidgetId};
 use bande_toolkit::{Color, Item, Paint, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
-
-use crate::L10N;
-use crate::engine::{Angle, Base, Engine, Input, Mode, WORD_SIZES};
-use crate::keys::{self, KeySpec, Tone, binding_label};
 
 const FLASH: Duration = Duration::from_millis(120);
 const GAP: f32 = 1.0;
@@ -182,8 +183,8 @@ impl Keypad {
             _ => (display.y, inner.y + inner.height),
         };
         self.display = match engine.error() {
-            Some(crate::decimal::Failure::Overflow) => L10N.tr("display-overflow"),
-            Some(crate::decimal::Failure::Undefined) => L10N.tr("display-not-a-number"),
+            Some(crate::decimal::Failure::Overflow) => tr!("Overflow"),
+            Some(crate::decimal::Failure::Undefined) => tr!("Not a number"),
             None => engine.display(),
         };
         let value = fitted(
@@ -223,13 +224,13 @@ impl Keypad {
         }
         let mut badges = Vec::new();
         if engine.mode == Mode::Scientific && engine.angle == Angle::Radians {
-            badges.push(L10N.tr("badge-radians"));
+            badges.push(tr!("Rad"));
         }
         if engine.has_memory() && engine.mode != Mode::Programmer {
             badges.push("M".to_owned());
         }
         if engine.rpn {
-            badges.push(L10N.tr("badge-rpn"));
+            badges.push(tr!("RPN"));
         }
         if !badges.is_empty() && engine.mode != Mode::Programmer {
             let paragraph = cx.text.paragraph(
@@ -417,7 +418,7 @@ impl Keypad {
                     placed.push(Placed {
                         target: Target::Bit(bit),
                         rect,
-                        label: L10N.tr_args("bit", [("bit", bit.to_string().into())]),
+                        label: tr!("Bit {bit}", bit = bit.to_string()),
                         toggled: Some(set),
                     });
                 }
@@ -470,7 +471,7 @@ impl Widget for Keypad {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Group);
-        node.set_label(L10N.tr("app-name"));
+        node.set_label(tr!("Calculator"));
         node
     }
 
@@ -538,7 +539,7 @@ impl Widget for Keypad {
             y1: f64::from(rect.y + rect.height),
         };
         let mut display = Node::new(Role::Label);
-        display.set_label(L10N.tr("display"));
+        display.set_label(tr!("Result"));
         display.set_value(self.display.replace('−', "-"));
         let mut nodes = vec![(self.id.part(0), display)];
         for (index, placed) in self.placed.iter().enumerate() {

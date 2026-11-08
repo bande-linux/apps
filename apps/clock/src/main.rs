@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use bande_l10n::{Text, text, tr};
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, WindowId};
 use bande_app_menu::Entry;
 use bande_clock::bus::{Bus, Summary, Waker};
@@ -11,7 +12,7 @@ use bande_clock::model::{Clock, SNOOZE, TimerState, boot_now, state_file};
 use bande_clock::notice::{
     Notice, Notices, OPEN, REPEAT, Ring, SNOOZE as SNOOZE_ACTION, Subject, sound_name,
 };
-use bande_clock::ui::{Change, ClockView, L10N, Page, alarm_name, clock_time, timer_name};
+use bande_clock::ui::{Change, ClockView, Page, alarm_name, clock_time, timer_name};
 use bande_datetime::DateFormats;
 use bande_inbox::{Inbox, Outbox};
 use bande_toolkit::Appearance;
@@ -30,7 +31,7 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Clock"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -81,23 +82,18 @@ fn follow_zone(zones: Outbox<String>) {
     }
 }
 
-fn entry(label: &str, action: &str) -> Entry {
-    Entry::item(&L10N.tr(label), action)
+fn entry(label: Text, action: &str) -> Entry {
+    Entry::item(&label.tr(), action)
 }
 
 fn show(
     cx: &mut Cx<ClockApp>,
     mut view: ClockView,
 ) -> Result<WindowId, bande_toolkit::WindowError> {
-    cx.open(
-        Kind::Main,
-        &L10N.tr("app-name"),
-        WINDOW_SIZE,
-        |appearance| {
-            bande_app::View::set_appearance(&mut view, appearance);
-            view
-        },
-    )
+    cx.open(Kind::Main, &tr!("Clock"), WINDOW_SIZE, |appearance| {
+        bande_app::View::set_appearance(&mut view, appearance);
+        view
+    })
 }
 
 fn asked(arguments: &[String]) -> Option<&'static str> {
@@ -207,7 +203,7 @@ impl ClockApp {
             })
             .chain(timers.into_iter().map(|timer| Ring {
                 subject: Subject::Timer(timer.id),
-                title: L10N.tr("timer-done"),
+                title: tr!("Timer Done"),
                 body: timer_name(&timer),
                 sound: timer.sound.clone(),
                 snooze: false,
@@ -398,12 +394,12 @@ impl Program for ClockApp {
         let stopwatch = &self.clock.stopwatch;
         let running = stopwatch.started.is_some();
         let toggle = match running {
-            true => "stop-stopwatch",
-            false => "start-stopwatch",
+            true => text!("Stop Stopwatch"),
+            false => text!("Start Stopwatch"),
         };
         let lap = match running || stopwatch.banked.is_zero() {
-            true => "lap",
-            false => "reset",
+            true => text!("Lap"),
+            false => text!("Reset"),
         };
         let view_menu = pages
             .chain([
@@ -415,11 +411,11 @@ impl Program for ClockApp {
         Menus {
             menus: vec![
                 Entry::submenu(
-                    &L10N.tr("menu-file"),
+                    &tr!("File"),
                     [
-                        ("new-alarm-menu", "new-alarm", Page::Alarms),
-                        ("new-timer-menu", "new-timer", Page::Timers),
-                        ("add-city-menu", "add-city", Page::World),
+                        (text!("New Alarm…"), "new-alarm", Page::Alarms),
+                        (text!("New Timer…"), "new-timer", Page::Timers),
+                        (text!("Add City…"), "add-city", Page::World),
                     ]
                     .into_iter()
                     .map(|(message, command, creates)| match creates == page {
@@ -428,9 +424,9 @@ impl Program for ClockApp {
                     })
                     .collect(),
                 ),
-                Entry::submenu(&L10N.tr("menu-view"), view_menu),
+                Entry::submenu(&tr!("View"), view_menu),
             ],
-            window: vec![entry("app-name", SHOW_CLOCK)],
+            window: vec![entry(text!("Clock"), SHOW_CLOCK)],
         }
     }
 

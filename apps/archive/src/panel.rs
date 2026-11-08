@@ -1,13 +1,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use bande_l10n::tr;
 use bande_toolkit::ui::{
     Alert, Axis, Button, Context, Event, Key, Label, Modifiers, ProgressBar, ScrollView,
     SecureField, Stack, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, TextSystem};
-
-use crate::L10N;
 
 pub const PANEL_SIZE: (u32, u32) = (460, 240);
 pub const PROMPT_SIZE: (u32, u32) = (420, 200);
@@ -81,17 +80,20 @@ impl Panel {
     pub fn password(appearance: Appearance, name: &str, wrong: bool) -> Self {
         let mut panel = Self::progress(appearance);
         let intents = panel.intents.clone();
-        let field = SecureField::new(&L10N.tr("password"), FIELD_FONT, move |secret| {
+        let field = SecureField::new(&tr!("Password"), FIELD_FONT, move |secret| {
             intents
                 .borrow_mut()
                 .push(Intent::Password(Some(secret.to_owned())));
         });
         panel.field = Some(field.id());
-        let mut widgets = vec![boxed(Label::heading(
-            &L10N.tr_args("password-title", [("name", name.to_owned().into())]),
-        ))];
+        let mut widgets = vec![boxed(Label::heading(&tr!(
+            "Enter a password to expand “{name}”",
+            name = name.to_owned()
+        )))];
         if wrong {
-            widgets.push(boxed(Label::new(&L10N.tr("password-wrong")).secondary()));
+            widgets.push(boxed(
+                Label::new(&tr!("The password is incorrect. Try again.")).secondary(),
+            ));
         }
         widgets.push(boxed(field));
         widgets.push(boxed(
@@ -101,15 +103,11 @@ impl Panel {
                 0.0,
                 vec![
                     boxed(
-                        Button::new(
-                            &L10N.tr("cancel"),
-                            push(&panel.intents, Intent::Password(None)),
-                        )
-                        .cancel(),
+                        Button::new(&tr!("Cancel"), push(&panel.intents, Intent::Password(None)))
+                            .cancel(),
                     ),
                     boxed(
-                        Button::new(&L10N.tr("expand"), push(&panel.intents, Intent::Submit))
-                            .primary(),
+                        Button::new(&tr!("Expand"), push(&panel.intents, Intent::Submit)).primary(),
                     ),
                 ],
             )
@@ -155,17 +153,14 @@ impl Panel {
         }
         self.shown.clear();
         let widgets = match rows {
-            [] => vec![boxed(Label::new(&L10N.tr("idle")).secondary())],
+            [] => vec![boxed(Label::new(&tr!("Archives you open and items you compress from Files appear here while they are worked on.")).secondary())],
             rows => rows.iter().map(|row| self.row(row)).collect(),
         };
         self.set_page(page(widgets));
     }
 
     fn row(&mut self, row: &Row) -> Box<dyn Widget> {
-        let stop = Button::new(
-            &L10N.tr("stop"),
-            push(&self.intents, Intent::Cancel(row.id)),
-        );
+        let stop = Button::new(&tr!("Stop"), push(&self.intents, Intent::Cancel(row.id)));
         let bar = ProgressBar::new(&row.title, row.fraction);
         let detail = Stack::new(Axis::Vertical, 0.0, 0.0, vec![Self::detail(row)]);
         self.shown.push(Shown {
@@ -196,7 +191,7 @@ impl Panel {
         let alert = Alert::new(title, message, move |_| {
             intents.borrow_mut().push(Intent::Dismiss);
         })
-        .primary(&L10N.tr("ok"), "ok");
+        .primary(&tr!("OK"), "ok");
         self.ui.present_dialog(alert);
     }
 

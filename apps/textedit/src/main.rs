@@ -2,13 +2,14 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use bande_l10n::{Text, text, tr};
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, WindowId};
 use bande_app_menu::{Entry, PRINT, edit_submenu, print_item};
 use bande_inbox::Inbox;
 use bande_textedit::{
-    CHOICES, COLORS, DocumentView, FAMILIES, Format, L10N, LineEnding, Loaded, MAX_FILE_BYTES,
-    Message, Opening, Record, Request, Session, Settings, TextEncoding, choose_files,
-    choose_save_path, encoding_name, new_id, now, open, read, read_bounded, spawn,
+    CHOICES, COLORS, DocumentView, FAMILIES, Format, LineEnding, Loaded, MAX_FILE_BYTES, Message,
+    Opening, Record, Request, Session, Settings, TextEncoding, choose_files, choose_save_path,
+    encoding_name, new_id, now, open, read, read_bounded, spawn,
 };
 use bande_toolkit::ui::{Alignment, ListMarker};
 
@@ -21,7 +22,7 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("TextEdit"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -34,8 +35,8 @@ struct TextEdit {
     next_token: u64,
 }
 
-fn item(label: &str, action: &str) -> Entry {
-    Entry::item(&L10N.tr(label), action)
+fn item(label: Text, action: &str) -> Entry {
+    Entry::item(&label.tr(), action)
 }
 
 fn path_of(argument: &str, directory: &Path) -> Option<PathBuf> {
@@ -52,7 +53,7 @@ fn path_of(argument: &str, directory: &Path) -> Option<PathBuf> {
 fn load(path: &Path, chosen: Option<&'static encoding_rs::Encoding>) -> Result<Loaded, String> {
     read_bounded(path, MAX_FILE_BYTES)
         .map_err(|error| match error.kind() {
-            std::io::ErrorKind::FileTooLarge => L10N.tr("too-large"),
+            std::io::ErrorKind::FileTooLarge => tr!("The file is larger than 512 MB."),
             _ => error.to_string(),
         })
         .and_then(|bytes| open(path, bytes, chosen))
@@ -107,8 +108,8 @@ impl TextEdit {
     fn next_untitled(&mut self) -> String {
         self.untitled += 1;
         match self.untitled {
-            1 => L10N.tr("untitled"),
-            number => L10N.tr_args("untitled-numbered", [("number", number.into())]),
+            1 => tr!("Untitled"),
+            number => tr!("Untitled {number}", number = number),
         }
     }
 
@@ -272,7 +273,7 @@ impl TextEdit {
         };
         let (token, name) = (view.token, view.name());
         let outbox = self.inbox.outbox();
-        let title = L10N.tr("save-as-title");
+        let title = tr!("Save As");
         spawn("save as", move || {
             let path = choose_save_path(&title, &name)
                 .inspect_err(|error| tracing::warn!("cannot choose where to save: {error}"))
@@ -284,7 +285,7 @@ impl TextEdit {
 
     fn ask_open(&self) {
         let outbox = self.inbox.outbox();
-        let title = L10N.tr("open-title");
+        let title = tr!("Open");
         spawn("choose", move || {
             let paths = choose_files(&title)
                 .inspect_err(|error| tracing::warn!("cannot choose files: {error}"))
@@ -305,7 +306,7 @@ impl TextEdit {
             .map(|(index, path)| Entry::item(&path.to_string_lossy(), &format!("recent:{index}")))
             .chain([
                 Entry::separator(),
-                item("clear-recent", "clear-recent").enabled(!self.recent.is_empty()),
+                item(text!("Clear Menu"), "clear-recent").enabled(!self.recent.is_empty()),
             ])
             .collect();
         let reopen = CHOICES
@@ -321,19 +322,21 @@ impl TextEdit {
             })
             .collect();
         Entry::submenu(
-            &L10N.tr("menu-file"),
+            &tr!("File"),
             vec![
-                item("new", "new").shortcut("Ctrl+N"),
-                item("open", "open").shortcut("Ctrl+O"),
-                Entry::submenu(&L10N.tr("open-recent"), recent),
+                item(text!("New"), "new").shortcut("Ctrl+N"),
+                item(text!("Open…"), "open").shortcut("Ctrl+O"),
+                Entry::submenu(&tr!("Open Recent"), recent),
                 Entry::separator(),
-                item("save", "save").shortcut("Ctrl+S").enabled(windowed),
-                item("save-as", "save-as")
+                item(text!("Save"), "save")
+                    .shortcut("Ctrl+S")
+                    .enabled(windowed),
+                item(text!("Save As…"), "save-as")
                     .shortcut("Shift+Ctrl+S")
                     .enabled(windowed),
                 Self::revert_menu(view, on_disk, edited),
                 print_item(windowed),
-                Entry::submenu(&L10N.tr("reopen-with-encoding"), reopen)
+                Entry::submenu(&tr!("Reopen with Encoding"), reopen)
                     .enabled(on_disk && !edited && text_format),
             ],
         )
@@ -341,7 +344,7 @@ impl TextEdit {
 
     fn revert_menu(view: Option<&DocumentView>, on_disk: bool, edited: bool) -> Entry {
         let versions = view.map(DocumentView::versions).unwrap_or_default();
-        let mut entries = vec![item("revert", "revert").enabled(on_disk && edited)];
+        let mut entries = vec![item(text!("Last Saved"), "revert").enabled(on_disk && edited)];
         if !versions.is_empty() {
             entries.push(Entry::separator());
         }
@@ -357,7 +360,7 @@ impl TextEdit {
             );
             entries.push(Entry::item(&label, &format!("{VERSION_COMMAND}{version}")));
         }
-        Entry::submenu(&L10N.tr("revert-to"), entries).enabled(on_disk)
+        Entry::submenu(&tr!("Revert To"), entries).enabled(on_disk)
     }
 
     fn format_menu(view: Option<&DocumentView>) -> Entry {
@@ -382,8 +385,8 @@ impl TextEdit {
         let endings = LineEnding::ALL
             .into_iter()
             .map(|line_ending| {
-                item(
-                    &format!("line-ending-{}", line_ending.name()),
+                Entry::item(
+                    &bande_textedit::line_ending_title(line_ending.name()),
                     &format!("line-ending:{}", line_ending.name()),
                 )
                 .radio(ending == Some(line_ending))
@@ -392,37 +395,37 @@ impl TextEdit {
         let rich = view.is_some_and(|view| view.rich);
         let text_format = view.is_none_or(|view| view.format.is_text());
         let wrapping = [
-            item("wrap-window", "wrap-window").radio(windowed && !page),
-            item("wrap-page", "wrap-page").radio(windowed && page),
+            item(text!("Wrap to Window"), "wrap-window").radio(windowed && !page),
+            item(text!("Wrap to Page"), "wrap-page").radio(windowed && page),
         ];
         let mut entries = match rich {
             true => Self::rich_entries(view),
             false => vec![
                 Entry::submenu(
-                    &L10N.tr("menu-font"),
+                    &tr!("Font"),
                     vec![
-                        item("font-monospace", "font-monospace").radio(windowed && monospace),
-                        item("font-proportional", "font-proportional")
+                        item(text!("Monospaced"), "font-monospace").radio(windowed && monospace),
+                        item(text!("Proportional"), "font-proportional")
                             .radio(windowed && !monospace),
                         Entry::separator(),
-                        item("bigger", "bigger").shortcut("Ctrl+="),
-                        item("smaller", "smaller").shortcut("Ctrl+-"),
-                        item("actual-size", "actual-size").shortcut("Ctrl+0"),
+                        item(text!("Bigger"), "bigger").shortcut("Ctrl+="),
+                        item(text!("Smaller"), "smaller").shortcut("Ctrl+-"),
+                        item(text!("Actual Size"), "actual-size").shortcut("Ctrl+0"),
                     ],
                 ),
                 Entry::separator(),
-                item("make-rich", "make-rich"),
+                item(text!("Make Rich Text"), "make-rich"),
             ],
         };
         entries.push(Entry::separator());
         entries.extend(wrapping);
         if text_format {
             entries.push(Entry::separator());
-            entries.push(Entry::submenu(&L10N.tr("text-encoding"), encodings));
-            entries.push(Entry::submenu(&L10N.tr("line-endings"), endings));
+            entries.push(Entry::submenu(&tr!("Text Encoding"), encodings));
+            entries.push(Entry::submenu(&tr!("Line Endings"), endings));
         }
         Entry::submenu(
-            &L10N.tr("menu-format"),
+            &tr!("Format"),
             entries
                 .into_iter()
                 .map(|entry| entry.enabled(windowed))
@@ -435,7 +438,7 @@ impl TextEdit {
         let families = FAMILIES
             .iter()
             .map(|(key, family)| {
-                item(&format!("family-{key}"), &format!("style:family:{key}"))
+                Entry::item(&style_title("family", key), &format!("style:family:{key}"))
                     .radio(attributes.family.as_deref() == *family)
             })
             .collect();
@@ -445,7 +448,7 @@ impl TextEdit {
                 let current = attributes.color.map(|color| {
                     u32::from(color.r) << 16 | u32::from(color.g) << 8 | u32::from(color.b)
                 });
-                item(&format!("color-{key}"), &format!("style:color:{key}"))
+                Entry::item(&style_title("color", key), &format!("style:color:{key}"))
                     .radio(current == *color)
             })
             .collect();
@@ -457,7 +460,7 @@ impl TextEdit {
         ]
         .into_iter()
         .map(|(key, alignment)| {
-            item(&format!("align-{key}"), &format!("style:align:{key}"))
+            Entry::item(&style_title("align", key), &format!("style:align:{key}"))
                 .radio(paragraph.alignment == alignment)
         })
         .collect();
@@ -468,49 +471,51 @@ impl TextEdit {
         ]
         .into_iter()
         .map(|(key, list)| {
-            item(&format!("list-{key}"), &format!("style:list:{key}")).radio(paragraph.list == list)
+            Entry::item(&style_title("list", key), &format!("style:list:{key}"))
+                .radio(paragraph.list == list)
         })
         .chain([
             Entry::separator(),
-            item("indent", "style:indent"),
-            item("outdent", "style:outdent"),
+            item(text!("Increase Indent"), "style:indent"),
+            item(text!("Decrease Indent"), "style:outdent"),
         ])
         .collect();
         let headings = (0..=3)
             .map(|level| {
-                item(
-                    &format!("heading-{level}"),
+                Entry::item(
+                    &style_title("heading", &level.to_string()),
                     &format!("style:heading:{level}"),
                 )
             })
             .collect();
         vec![
             Entry::submenu(
-                &L10N.tr("menu-font"),
+                &tr!("Font"),
                 vec![
-                    item("bold", "style:bold")
+                    item(text!("Bold"), "style:bold")
                         .shortcut("Ctrl+B")
                         .radio(attributes.bold),
-                    item("italic", "style:italic")
+                    item(text!("Italic"), "style:italic")
                         .shortcut("Ctrl+I")
                         .radio(attributes.italic),
-                    item("underline", "style:underline")
+                    item(text!("Underline"), "style:underline")
                         .shortcut("Ctrl+U")
                         .radio(attributes.underline),
-                    item("strikethrough", "style:strikethrough").radio(attributes.strikethrough),
+                    item(text!("Strikethrough"), "style:strikethrough")
+                        .radio(attributes.strikethrough),
                     Entry::separator(),
-                    item("bigger", "style:bigger").shortcut("Ctrl+="),
-                    item("smaller", "style:smaller").shortcut("Ctrl+-"),
+                    item(text!("Bigger"), "style:bigger").shortcut("Ctrl+="),
+                    item(text!("Smaller"), "style:smaller").shortcut("Ctrl+-"),
                     Entry::separator(),
-                    Entry::submenu(&L10N.tr("menu-family"), families),
-                    Entry::submenu(&L10N.tr("menu-color"), colors),
+                    Entry::submenu(&tr!("Typeface"), families),
+                    Entry::submenu(&tr!("Colour"), colors),
                 ],
             ),
-            Entry::submenu(&L10N.tr("menu-text"), alignments),
-            Entry::submenu(&L10N.tr("menu-list"), lists),
-            Entry::submenu(&L10N.tr("menu-styles"), headings),
+            Entry::submenu(&tr!("Alignment"), alignments),
+            Entry::submenu(&tr!("List"), lists),
+            Entry::submenu(&tr!("Styles"), headings),
             Entry::separator(),
-            item("make-plain", "make-plain"),
+            item(text!("Make Plain Text"), "make-plain"),
         ]
     }
 
@@ -668,19 +673,21 @@ impl Program for TextEdit {
         let view = cx.focused().and_then(|window| cx.view(window));
         let windowed = view.is_some();
         let find = vec![
-            item("find", "find").shortcut("Ctrl+F").enabled(windowed),
-            item("find-replace", "find-replace")
+            item(text!("Find…"), "find")
+                .shortcut("Ctrl+F")
+                .enabled(windowed),
+            item(text!("Find and Replace…"), "find-replace")
                 .shortcut("Ctrl+H")
                 .enabled(windowed),
-            item("find-next", "find-next")
+            item(text!("Find Next"), "find-next")
                 .shortcut("Ctrl+G")
                 .enabled(windowed),
-            item("find-previous", "find-previous")
+            item(text!("Find Previous"), "find-previous")
                 .shortcut("Shift+Ctrl+G")
                 .enabled(windowed),
-            item("use-selection", "use-selection").enabled(windowed),
+            item(text!("Use Selection for Find"), "use-selection").enabled(windowed),
             Entry::separator(),
-            item("go-to-line", "go-to-line")
+            item(text!("Go to Line…"), "go-to-line")
                 .shortcut("Ctrl+L")
                 .enabled(windowed),
         ];
@@ -811,4 +818,33 @@ impl Program for TextEdit {
 
 fn main() -> ExitCode {
     bande_app::run::<TextEdit>(&INFO)
+}
+
+fn style_title(group: &str, key: &str) -> String {
+    match (group, key) {
+        ("family", "default") => tr!("System"),
+        ("family", "serif") => tr!("Serif"),
+        ("family", "display") => tr!("Display"),
+        ("family", "monospace") => tr!("Monospaced"),
+        ("color", "default") => tr!("Automatic"),
+        ("color", "red") => tr!("Red"),
+        ("color", "orange") => tr!("Orange"),
+        ("color", "green") => tr!("Green"),
+        ("color", "blue") => tr!("Blue"),
+        ("color", "purple") => tr!("Purple"),
+        ("color", "brown") => tr!("Brown"),
+        ("color", "gray") => tr!("Grey"),
+        ("align", "start") => tr!("Align Left"),
+        ("align", "center") => tr!("Centre"),
+        ("align", "end") => tr!("Align Right"),
+        ("align", "justify") => tr!("Justify"),
+        ("list", "none") => tr!("None"),
+        ("list", "bullet") => tr!("Bullets"),
+        ("list", "number") => tr!("Numbers"),
+        ("heading", "0") => tr!("Body"),
+        ("heading", "1") => tr!("Title"),
+        ("heading", "2") => tr!("Heading"),
+        ("heading", "3") => tr!("Subheading"),
+        (_, other) => other.to_owned(),
+    }
 }

@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
+use bande_l10n::tr;
 use zbus::blocking::Connection;
 use zbus::zvariant::Value;
-
-use crate::L10N;
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
@@ -21,7 +20,7 @@ fn send(app_id: &str, title: &str, body: &str) -> zbus::Result<()> {
         Some(NOTIFICATIONS),
         "Notify",
         &(
-            L10N.tr("app-name"),
+            tr!("Velox"),
             0u32,
             app_id,
             title,
@@ -35,8 +34,8 @@ fn send(app_id: &str, title: &str, body: &str) -> zbus::Result<()> {
 }
 
 pub fn notify_crash(app_id: &'static str, name: &str, code: i64) {
-    let title = L10N.tr_args("crash-title", [("name", name.to_owned().into())]);
-    let body = L10N.tr_args("crash-body", [("code", code.into())]);
+    let title = tr!("“{name}” stopped unexpectedly", name = name.to_owned());
+    let body = tr!("The container exited with code {code}.", code = code);
     let sent = std::thread::Builder::new()
         .name("crash notice".to_owned())
         .spawn(move || {

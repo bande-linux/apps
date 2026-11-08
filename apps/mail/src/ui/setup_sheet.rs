@@ -1,6 +1,11 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+
+use bande_l10n::tr;
+
+use crate::discover::Settings;
+use crate::net::{Security, Server, is_loopback};
 use accesskit::{Node, Role};
 use bande_toolkit::ui::{
     Button, Context, SPINNER_SIZE, SecureField, Size, Spinner, TextField, Widget, WidgetId,
@@ -9,10 +14,6 @@ use bande_toolkit::{
     ControlSize, Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle,
 };
 use zeroize::Zeroizing;
-
-use crate::L10N;
-use crate::discover::Settings;
-use crate::net::{Security, Server, is_loopback};
 
 const WIDTH: f32 = 480.0;
 const PADDING: f32 = 24.0;
@@ -44,27 +45,27 @@ pub enum Field {
 
 impl Field {
     fn label(self) -> String {
-        L10N.tr(match self {
-            Self::Name => "field-name",
-            Self::Email => "field-email",
-            Self::Password => "field-password",
-            Self::Incoming => "field-incoming",
-            Self::IncomingPort | Self::OutgoingPort => "field-port",
-            Self::Outgoing => "field-outgoing",
-            Self::User => "field-user",
-        })
+        match self {
+            Self::Name => tr!("Name:"),
+            Self::Email => tr!("Email Address:"),
+            Self::Password => tr!("Password:"),
+            Self::Incoming => tr!("Incoming (IMAP):"),
+            Self::IncomingPort | Self::OutgoingPort => tr!("Port:"),
+            Self::Outgoing => tr!("Outgoing (SMTP):"),
+            Self::User => tr!("User Name:"),
+        }
     }
 
     fn placeholder(self) -> String {
-        L10N.tr(match self {
-            Self::Name => "placeholder-name",
-            Self::Email => "placeholder-email",
-            Self::Password => "placeholder-password",
-            Self::Incoming => "placeholder-incoming",
-            Self::Outgoing => "placeholder-outgoing",
-            Self::IncomingPort | Self::OutgoingPort => "placeholder-port",
-            Self::User => "placeholder-user",
-        })
+        match self {
+            Self::Name => tr!("Ann Lee"),
+            Self::Email => tr!("name@example.com"),
+            Self::Password => tr!("Required"),
+            Self::Incoming => tr!("imap.example.com"),
+            Self::Outgoing => tr!("smtp.example.com"),
+            Self::IncomingPort | Self::OutgoingPort => tr!("Port"),
+            Self::User => tr!("Same as the email address"),
+        }
     }
 }
 
@@ -197,19 +198,19 @@ impl AccountSheet {
         }
         let cancel = Rc::clone(&state);
         children.push(Box::new(
-            Button::new(&L10N.tr("button-cancel"), move || {
+            Button::new(&tr!("Cancel"), move || {
                 cancel.borrow_mut().action = Some(Action::Cancel);
             })
             .cancel(),
         ));
         let sign_in = Rc::clone(&state);
         children.push(Box::new(
-            Button::new(&L10N.tr("button-sign-in"), move || {
+            Button::new(&tr!("Sign In"), move || {
                 sign_in.borrow_mut().action = Some(Action::SignIn);
             })
             .primary(),
         ));
-        children.push(Box::new(Spinner::new(&L10N.tr("checking-account"))));
+        children.push(Box::new(Spinner::new(&tr!("Checking the account…"))));
         Self {
             id: WidgetId::next(),
             state,
@@ -280,11 +281,20 @@ impl Widget for AccountSheet {
         let width = WIDTH.min(available.width);
         let text_width = width - (PADDING + ICON_SIZE + ICON_GAP) - PADDING;
         let (title, message) = match &self.mode {
-            Mode::Add => (L10N.tr("setup-title"), L10N.tr("setup-message")),
-            Mode::Manual => (L10N.tr("setup-title"), L10N.tr("setup-manual-message")),
+            Mode::Add => (
+                tr!("Add a Mail Account"),
+                tr!("Enter your name, email address and password. Mail finds the servers for you."),
+            ),
+            Mode::Manual => (
+                tr!("Add a Mail Account"),
+                tr!("Mail could not sign in by itself. Check the server settings."),
+            ),
             Mode::Password(email) => (
-                L10N.tr("password-title"),
-                L10N.tr_args("password-message", [("email", email.clone().into())]),
+                tr!("Enter Your Password"),
+                tr!(
+                    "The server did not accept the password for {email}.",
+                    email = email.clone()
+                ),
             ),
         };
         self.title = Some(cx.text.paragraph(
@@ -491,7 +501,7 @@ impl Widget for AccountSheet {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Dialog);
-        node.set_label(L10N.tr("setup-title"));
+        node.set_label(tr!("Add a Mail Account"));
         node.set_modal();
         node
     }

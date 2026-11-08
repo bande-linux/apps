@@ -1,7 +1,6 @@
+use bande_l10n::tr;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-
-use crate::L10N;
 
 pub fn list_date(seconds: i64, now: Timestamp, zone: &TimeZone) -> String {
     let Ok(time) = Timestamp::from_second(seconds) else {
@@ -13,7 +12,7 @@ pub fn list_date(seconds: i64, now: Timestamp, zone: &TimeZone) -> String {
         return time.strftime("%H:%M").to_string();
     }
     if today.yesterday().is_ok_and(|yesterday| yesterday == day) {
-        return L10N.tr("date-yesterday");
+        return tr!("Yesterday");
     }
     let days = (today - day).get_days();
     if (0..7).contains(&days) {

@@ -1,20 +1,16 @@
 use std::process::ExitCode;
-use std::sync::LazyLock;
 
+use bande_l10n::tr;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
 use bande_app_menu::Entry;
-use bande_l10n::Localizer;
 use bande_toolkit::TextSystem;
 use bande_toolkit::ui::{Axis, Context, Label, Stack, Ui, Widget};
-
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-template")));
 
 static INFO: Info = Info {
     id: "org.bande.Template",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Template"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -25,20 +21,15 @@ const WINDOW_SIZE: (u32, u32) = (480, 320);
 struct Template;
 
 fn open_window(cx: &mut Cx<Template>) -> Result<WindowId, bande_toolkit::WindowError> {
-    cx.open(
-        Kind::Main,
-        &L10N.tr("app-name"),
-        WINDOW_SIZE,
-        |appearance| {
-            let hello: Box<dyn Widget> = Box::new(Label::new(&L10N.tr("hello")));
-            let mut ui = Ui::new(
-                Box::new(Stack::new(Axis::Vertical, 0.0, 24.0, vec![hello])),
-                Context::new(TextSystem::new(), appearance.palette()),
-            );
-            ui.set_appearance(appearance);
-            ui
-        },
-    )
+    cx.open(Kind::Main, &tr!("Template"), WINDOW_SIZE, |appearance| {
+        let hello: Box<dyn Widget> = Box::new(Label::new(&tr!("Hello from a Bande app")));
+        let mut ui = Ui::new(
+            Box::new(Stack::new(Axis::Vertical, 0.0, 24.0, vec![hello])),
+            Context::new(TextSystem::new(), appearance.palette()),
+        );
+        ui.set_appearance(appearance);
+        ui
+    })
 }
 
 impl Program for Template {
@@ -49,9 +40,9 @@ impl Program for Template {
     }
 
     fn menus(&self, _cx: &Cx<Self>) -> Menus {
-        let new_window = Entry::item(&L10N.tr("new-window"), NEW_WINDOW).shortcut("Ctrl+N");
+        let new_window = Entry::item(&tr!("New Window"), NEW_WINDOW).shortcut("Ctrl+N");
         Menus {
-            menus: vec![Entry::submenu(&L10N.tr("menu-file"), vec![new_window])],
+            menus: vec![Entry::submenu(&tr!("File"), vec![new_window])],
             window: Vec::new(),
         }
     }

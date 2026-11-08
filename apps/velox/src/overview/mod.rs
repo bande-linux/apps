@@ -6,13 +6,13 @@ use std::rc::Rc;
 
 use std::time::{Duration, Instant, SystemTime};
 
+use bande_l10n::{Text, text, tr, trn};
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{
     Alert, Axis, CheckState, Checkbox, ScrollView, Stack, Ui, Widget, WidgetId,
 };
 
 use self::cards::{Breakdown, Card, EngineCard, EngineText, Grid, Live, Part, Plot, Readout, Tone};
-use crate::L10N;
 use crate::engine::{EngineInfo, Flavor, Reclaim, Sample, Task};
 use crate::machines::Fleet;
 use crate::resources::{
@@ -78,8 +78,8 @@ fn rate(now: &Sample, before: Option<&Sample>, value: fn(&Sample) -> u64) -> f64
 
 fn speed(bytes: f64) -> String {
     match bytes < 1.0 {
-        true => L10N.tr("idle-rate"),
-        false => L10N.tr_args("per-second", [("size", size(bytes as u64).into())]),
+        true => tr!("0 KB/s"),
+        false => tr!("{size}/s", size = size(bytes as u64)),
     }
 }
 
@@ -184,18 +184,12 @@ fn uptime(started: SystemTime) -> String {
         .map_or(0, |up| up.as_secs());
     let (days, hours, minutes) = (seconds / DAY, seconds % DAY / HOUR, seconds % HOUR / MINUTE);
     let time = match (days, hours, minutes) {
-        (0, 0, 0) => return L10N.tr("engine-up-now"),
-        (0, 0, minutes) => L10N.tr_args("duration-minutes", [("minutes", minutes.into())]),
-        (0, hours, minutes) => L10N.tr_args(
-            "duration-hours",
-            [("hours", hours.into()), ("minutes", minutes.into())],
-        ),
-        (days, hours, _) => L10N.tr_args(
-            "duration-days",
-            [("days", days.into()), ("hours", hours.into())],
-        ),
+        (0, 0, 0) => return tr!("· up just now"),
+        (0, 0, minutes) => tr!("{minutes} min", minutes = minutes),
+        (0, hours, minutes) => tr!("{hours} h {minutes} min", hours = hours, minutes = minutes),
+        (days, hours, _) => tr!("{days} d {hours} h", days = days, hours = hours),
     };
-    L10N.tr_args("engine-up", [("time", time.into())])
+    tr!("· up {time}", time = time)
 }
 
 fn gigabytes(bytes: u64) -> String {
@@ -204,29 +198,26 @@ fn gigabytes(bytes: u64) -> String {
 
 fn engine_text(info: &EngineInfo) -> EngineText {
     let flavor = match info.flavor {
-        Flavor::Docker => "engine-docker",
-        Flavor::Podman => "engine-podman",
+        Flavor::Docker => text!("Docker {version}"),
+        Flavor::Podman => text!("Podman {version}"),
     };
-    let engine = L10N.tr_args(flavor, [("version", info.version.clone().into())]);
+    let engine = flavor.tr_args(&[("version", &info.version.clone() as &dyn std::fmt::Display)]);
     let mut detail = vec![
-        L10N.tr_args("engine-cpus", [("count", info.cpus.into())]),
-        L10N.tr_args("engine-memory", [("size", gigabytes(info.memory).into())]),
+        trn!("1 CPU", "{count} CPUs", count = info.cpus),
+        tr!("{size} GB memory", size = gigabytes(info.memory)),
     ];
     if let Some(disk) = info.disk {
-        detail.push(L10N.tr_args("engine-disk", [("size", gigabytes(disk).into())]));
+        detail.push(tr!("{size} GB disk", size = gigabytes(disk)));
     }
-    let mut versions = vec![L10N.tr_args("engine-api", [("version", info.api.clone().into())])];
+    let mut versions = vec![tr!("API {version}", version = info.api.clone())];
     if info.rootless {
-        versions.push(L10N.tr("rootless"));
+        versions.push(tr!("rootless"));
     }
     EngineText {
-        headline: L10N.tr_args("engine-running", [("engine", engine.into())]),
+        headline: tr!("{engine} running", engine = engine),
         uptime: info.started.map(uptime).unwrap_or_default(),
         detail: detail.join(" · "),
-        app: L10N.tr_args(
-            "velox-version",
-            [("version", env!("CARGO_PKG_VERSION").into())],
-        ),
+        app: tr!("Velox {version}", version = env!("CARGO_PKG_VERSION")),
         engine: versions.join(" · "),
         running: true,
     }
@@ -238,53 +229,51 @@ impl Pane for Overview {
         self.engine = Some(engine.id());
         let reclaim = tool(
             PRUNE_SYMBOL,
-            &L10N.tr("reclaim-space-menu"),
+            text!("Reclaim Space…"),
             palette,
             acts,
             Act::Command(RECLAIM),
         );
-        let card = |title: &str, svg: &str, tone: Tone, act: Act| {
+        let card = |title: Text, svg: &str, tone: Tone, act: Act| {
             let acts = Rc::clone(acts);
-            Card::new(
-                &L10N.tr(title),
-                symbol(svg, tone.color(palette)),
-                move || push(&acts, act.clone()),
-            )
+            Card::new(&title.tr(), symbol(svg, tone.color(palette)), move || {
+                push(&acts, act.clone())
+            })
         };
         let stats = [
             card(
-                "pane-containers",
+                text!("Containers"),
                 CONTAINERS_SYMBOL,
                 Tone::Green,
                 Act::Navigate(Section::Containers),
             ),
             card(
-                "pane-images",
+                text!("Images"),
                 IMAGES_SYMBOL,
                 Tone::Blue,
                 Act::Navigate(Section::Images),
             ),
             card(
-                "pane-volumes",
+                text!("Volumes"),
                 VOLUMES_SYMBOL,
                 Tone::Orange,
                 Act::Navigate(Section::Volumes),
             ),
             card(
-                "card-disk",
+                text!("Disk"),
                 DISK_SYMBOL,
                 Tone::Purple,
                 Act::Command(RECLAIM),
             ),
         ];
         self.cards = stats.iter().map(Widget::id).collect();
-        let breakdown = Breakdown::new(&L10N.tr("card-disk-breakdown"));
+        let breakdown = Breakdown::new(&tr!("Disk Breakdown"));
         self.breakdown = Some(breakdown.id());
         let live = [
-            Live::new(&L10N.tr("card-cpu"), SPAN),
-            Live::new(&L10N.tr("card-memory"), SPAN),
-            Live::new(&L10N.tr("card-disk-io"), SPAN),
-            Live::new(&L10N.tr("card-network"), SPAN),
+            Live::new(&tr!("CPU"), SPAN),
+            Live::new(&tr!("Memory"), SPAN),
+            Live::new(&tr!("Disk I/O"), SPAN),
+            Live::new(&tr!("Network"), SPAN),
         ];
         self.live = live.iter().map(Widget::id).collect();
         let content = Stack::new(
@@ -319,37 +308,33 @@ impl Pane for Overview {
         let usage = scope.store.usage.as_ref();
         let known = |bytes: Option<u64>| bytes.map_or_else(|| "—".to_owned(), size);
         let disk_caption = match scope.info.disk {
-            Some(disk) => L10N.tr_args("card-of-disk", [("size", gigabytes(disk).into())]),
-            None => L10N.tr_args(
-                "card-reclaimable",
-                [(
-                    "size",
-                    known(usage.map(|usage| {
-                        usage.images.reclaimable
-                            + usage.containers.reclaimable
-                            + usage.build_cache.reclaimable
-                    }))
-                    .into(),
-                )],
+            Some(disk) => tr!("of {size} GB disk", size = gigabytes(disk)),
+            None => tr!(
+                "{size} reclaimable",
+                size = known(usage.map(|usage| {
+                    usage.images.reclaimable
+                        + usage.containers.reclaimable
+                        + usage.build_cache.reclaimable
+                })),
             ),
         };
         let values = [
             (
                 running.to_string(),
-                L10N.tr_args("card-of-total", [("total", containers.into())]),
+                tr!("of {total} total", total = containers),
             ),
             (
                 scope.store.images.len().to_string(),
-                L10N.tr_args(
-                    "card-total",
-                    [("size", known(usage.map(|usage| usage.images.total)).into())],
+                tr!(
+                    "{size} total",
+                    size = known(usage.map(|usage| usage.images.total))
                 ),
             ),
             (
                 scope.store.volumes.len().to_string(),
-                L10N.tr_args(
-                    "card-stored",
-                    [("size", known(usage.map(|usage| usage.volumes.total)).into())],
+                tr!(
+                    "{size} stored",
+                    size = known(usage.map(|usage| usage.volumes.total))
                 ),
             ),
             (known(usage.map(|usage| usage.total())), disk_caption),
@@ -360,8 +345,8 @@ impl Pane for Overview {
             }
         }
         if let Some(breakdown) = self.breakdown.and_then(|id| ui.widget_as::<Breakdown>(id)) {
-            let part = |key: &str, bytes: u64, tone: Tone| Part {
-                label: L10N.tr_args(key, [("size", size(bytes).into())]),
+            let part = |key: Text, bytes: u64, tone: Tone| Part {
+                label: key.tr_args(&[("size", &size(bytes) as &dyn std::fmt::Display)]),
                 bytes,
                 tone,
             };
@@ -369,11 +354,15 @@ impl Pane for Overview {
                 usage
                     .map(|usage| {
                         vec![
-                            part("breakdown-images", usage.images.total, Tone::Blue),
-                            part("breakdown-containers", usage.containers.total, Tone::Green),
-                            part("breakdown-volumes", usage.volumes.total, Tone::Purple),
+                            part(text!("Images {size}"), usage.images.total, Tone::Blue),
                             part(
-                                "breakdown-build-cache",
+                                text!("Containers {size}"),
+                                usage.containers.total,
+                                Tone::Green,
+                            ),
+                            part(text!("Volumes {size}"), usage.volumes.total, Tone::Purple),
+                            part(
+                                text!("Build cache {size}"),
                                 usage.build_cache.total,
                                 Tone::Orange,
                             ),
@@ -385,13 +374,13 @@ impl Pane for Overview {
         let machines = self.fleet.borrow().running();
         let last = self.history.back().copied().unwrap_or_default();
         let quiet = running == 0 && machines == 0;
-        let note = quiet.then(|| L10N.tr("no-running-containers"));
+        let note = quiet.then(|| tr!("No running containers"));
         let value = |text: String| Readout {
             label: None,
             value: text,
         };
-        let labelled = |key: &str, tone: Tone, text: String| Readout {
-            label: Some((L10N.tr(key), tone)),
+        let labelled = |key: Text, tone: Tone, text: String| Readout {
+            label: Some((key.tr(), tone)),
             value: text,
         };
         let live = [
@@ -405,15 +394,15 @@ impl Pane for Overview {
             ),
             (
                 vec![
-                    labelled("rate-read", Tone::Blue, speed(last.read)),
-                    labelled("rate-write", Tone::Red, speed(last.written)),
+                    labelled(text!("Read"), Tone::Blue, speed(last.read)),
+                    labelled(text!("Write"), Tone::Red, speed(last.written)),
                 ],
                 self.mirrored(DISK_FLOOR, |point| point.read, |point| point.written),
             ),
             (
                 vec![
-                    labelled("rate-in", Tone::Blue, speed(last.received)),
-                    labelled("rate-out", Tone::Red, speed(last.sent)),
+                    labelled(text!("In"), Tone::Blue, speed(last.received)),
+                    labelled(text!("Out"), Tone::Red, speed(last.sent)),
                 ],
                 self.mirrored(NETWORK_FLOOR, |point| point.received, |point| point.sent),
             ),
@@ -448,12 +437,8 @@ impl Pane for Overview {
             return false;
         };
         match result {
-            Ok(reclaimed) => tell(
-                ui,
-                &L10N.tr_args("reclaimed-title", [("size", size(*reclaimed).into())]),
-                "",
-            ),
-            Err(message) => tell(ui, &L10N.tr("cannot-reclaim"), message),
+            Ok(reclaimed) => tell(ui, &tr!("Reclaimed {size}", size = size(*reclaimed)), ""),
+            Err(message) => tell(ui, &tr!("Cannot reclaim space"), message),
         }
         true
     }
@@ -467,7 +452,7 @@ pub fn reclaim_sheet(ui: &mut Ui, acts: &Acts, store: &Store) {
         volumes: false,
     }));
     let usage = store.usage.clone().unwrap_or_default();
-    let toggle = |label: &str, on: bool, reclaimable: u64, set: fn(&mut Reclaim, bool)| {
+    let toggle = |label: Text, on: bool, reclaimable: u64, set: fn(&mut Reclaim, bool)| {
         let chosen = Rc::clone(&chosen);
         let state = match on {
             true => CheckState::On,
@@ -475,11 +460,11 @@ pub fn reclaim_sheet(ui: &mut Ui, acts: &Acts, store: &Store) {
         };
         let note = match reclaimable {
             0 => "—".to_owned(),
-            bytes => L10N.tr_args("about-size", [("size", size(bytes).into())]),
+            bytes => tr!("≈ {size}", size = size(bytes)),
         };
         Field::new(
             "",
-            Checkbox::new(&L10N.tr(label), state, move |on| {
+            Checkbox::new(&label.tr(), state, move |on| {
                 set(&mut chosen.borrow_mut(), on);
             }),
         )
@@ -487,25 +472,25 @@ pub fn reclaim_sheet(ui: &mut Ui, acts: &Acts, store: &Store) {
     };
     let fields = Fields::new(vec![
         toggle(
-            "reclaim-containers",
+            text!("Stopped containers"),
             true,
             usage.containers.reclaimable,
             |chosen, on| chosen.containers = on,
         ),
         toggle(
-            "reclaim-images",
+            text!("Unused images"),
             true,
             usage.images.reclaimable,
             |chosen, on| chosen.images = on,
         ),
         toggle(
-            "reclaim-build-cache",
+            text!("Build cache"),
             true,
             usage.build_cache.reclaimable,
             |chosen, on| chosen.build_cache = on,
         ),
         toggle(
-            "reclaim-volumes",
+            text!("Unused volumes"),
             false,
             usage.volumes.reclaimable,
             |chosen, on| chosen.volumes = on,
@@ -514,8 +499,8 @@ pub fn reclaim_sheet(ui: &mut Ui, acts: &Acts, store: &Store) {
     let acts = Rc::clone(acts);
     ui.present_sheet(
         Alert::new(
-            &L10N.tr("reclaim-title"),
-            &L10N.tr("reclaim-message"),
+            &tr!("Reclaim Space"),
+            &tr!("Removes engine data nothing uses. Volumes hold real data: leave them off unless you are sure."),
             move |choice| {
                 let chosen = *chosen.borrow();
                 let any =
@@ -526,7 +511,7 @@ pub fn reclaim_sheet(ui: &mut Ui, acts: &Acts, store: &Store) {
             },
         )
         .accessory(fields)
-        .destructive(&L10N.tr("reclaim"), "reclaim")
-        .cancel(&L10N.tr("button-cancel"), "cancel"),
+        .destructive(&tr!("Reclaim"), "reclaim")
+        .cancel(&tr!("Cancel"), "cancel"),
     );
 }

@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use bande_l10n::{text, tr};
 use accesskit::{Action, ActionRequest, TreeId};
 use bande_datetime::DateFormats;
 use bande_toolkit::ui::{
@@ -10,7 +11,7 @@ use jiff::civil::{Date, Weekday};
 use jiff::tz::TimeZone;
 
 use super::panel::{Line, Panel, Width};
-use super::{L10N, Signal, Signals, sender};
+use super::{Signal, Signals, sender};
 use crate::ical::{DaySpec, Frequency, Rule};
 
 const WIDTH: f32 = 540.0;
@@ -44,13 +45,13 @@ fn nth(day: Date) -> i16 {
 }
 
 fn nth_title(nth: i16) -> String {
-    L10N.tr(match nth {
-        1 => "nth-first",
-        2 => "nth-second",
-        3 => "nth-third",
-        4 => "nth-fourth",
-        _ => "nth-last",
-    })
+    match nth {
+        1 => tr!("first"),
+        2 => tr!("second"),
+        3 => tr!("third"),
+        4 => tr!("fourth"),
+        _ => tr!("last"),
+    }
 }
 
 fn weekday_name(formats: &DateFormats, day: Date) -> String {
@@ -87,7 +88,7 @@ impl Custom {
         let by_weekday =
             rule.is_some_and(|rule| rule.by_day.iter().any(|spec| spec.ordinal.is_some()));
         let on_weekday = [by_weekday && frequency == 2, by_weekday && frequency == 3];
-        let mut panel = Panel::new(Some(&L10N.tr("custom-title")), WIDTH, LABEL_WIDTH).sheet();
+        let mut panel = Panel::new(Some(&tr!("Custom Repeat")), WIDTH, LABEL_WIDTH).sheet();
         let send = sender(signals);
         let count = panel.add(
             TextField::new("1", &interval, move |text| {
@@ -96,23 +97,23 @@ impl Custom {
             .without_text_checking(),
         );
         let units: Vec<String> = [
-            "custom-days",
-            "custom-weeks",
-            "custom-months",
-            "custom-years",
+            text!("days"),
+            text!("weeks"),
+            text!("months"),
+            text!("years"),
         ]
         .iter()
-        .map(|message| L10N.tr(message))
+        .map(|message| message.tr())
         .collect();
         let send = sender(signals);
         let unit = panel.add(PopUpButton::new(
-            &L10N.tr("custom-every"),
+            &tr!("every:"),
             &units,
             frequency,
             move |index| send(Signal::CustomFrequency(index)),
         ));
         panel.line(Line::new(
-            Some(&L10N.tr("custom-every")),
+            Some(&tr!("every:")),
             vec![(count, Width::Fixed(56.0)), (unit, Width::Fill)],
             ROW,
         ));
@@ -133,60 +134,48 @@ impl Custom {
                 (panel.add(check), Width::Fill)
             })
             .collect();
-        let weekly = panel.line(Line::new(Some(&L10N.tr("custom-on")), cells, ROW));
+        let weekly = panel.line(Line::new(Some(&tr!("on:")), cells, ROW));
         let weekday = weekday_name(formats, start);
-        let on_the = L10N.tr_args(
-            "custom-on-the",
-            [
-                ("nth", nth_title(nth(start)).into()),
-                ("weekday", weekday.clone().into()),
-            ],
+        let on_the = tr!(
+            "on the {nth} {weekday}",
+            nth = nth_title(nth(start)),
+            weekday = weekday.clone()
         );
-        let monthly_choices = [
-            L10N.tr_args("custom-on-day", [("day", start.day().into())]),
-            on_the.clone(),
-        ];
+        let monthly_choices = [tr!("on day {day}", day = start.day()), on_the.clone()];
         let send = sender(signals);
         let monthly = panel.add(PopUpButton::new(
-            &L10N.tr("custom-on"),
+            &tr!("on:"),
             &monthly_choices,
             usize::from(on_weekday[0]),
             move |index| send(Signal::CustomOnWeekday(0, index == 1)),
         ));
         let monthly = panel.line(Line::new(
-            Some(&L10N.tr("custom-on")),
+            Some(&tr!("on:")),
             vec![(monthly, Width::Fill)],
             ROW,
         ));
         let month = start.strftime("%B").to_string();
         let yearly_choices = [
-            L10N.tr_args(
-                "custom-on-date",
-                [("day", start.day().into()), ("month", month.clone().into())],
-            ),
-            L10N.tr_args(
-                "custom-on-the-of",
-                [("on", on_the.into()), ("month", month.into())],
-            ),
+            tr!("on {month} {day}", day = start.day(), month = month.clone()),
+            tr!("{on} of {month}", on = on_the, month = month),
         ];
         let send = sender(signals);
         let yearly = panel.add(PopUpButton::new(
-            &L10N.tr("custom-on"),
+            &tr!("on:"),
             &yearly_choices,
             usize::from(on_weekday[1]),
             move |index| send(Signal::CustomOnWeekday(1, index == 1)),
         ));
         let yearly = panel.line(Line::new(
-            Some(&L10N.tr("custom-on")),
+            Some(&tr!("on:")),
             vec![(yearly, Width::Fill)],
             ROW,
         ));
         let send = sender(signals);
         let cancel =
-            panel.add(Button::new(&L10N.tr("cancel"), move || send(Signal::CustomCancel)).cancel());
+            panel.add(Button::new(&tr!("Cancel"), move || send(Signal::CustomCancel)).cancel());
         let send = sender(signals);
-        let done = panel
-            .add(Button::new(&L10N.tr("custom-done"), move || send(Signal::CustomDone)).primary());
+        let done = panel.add(Button::new(&tr!("OK"), move || send(Signal::CustomDone)).primary());
         panel.line(
             Line::new(
                 None,

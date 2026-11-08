@@ -1,10 +1,10 @@
+use bande_l10n::{Text, text, tr};
 use bande_app_menu::{Entry, edit_submenu};
-use bande_mail::L10N;
 use bande_mail::settings::SortBy;
 use bande_mail::ui::{MailView, SHORTCUTS};
 
-fn item(message: &str, action: &str) -> Entry {
-    let entry = Entry::item(&L10N.tr(message), action);
+fn item(message: Text, action: &str) -> Entry {
+    let entry = Entry::item(&message.tr(), action);
     match SHORTCUTS.iter().find(|(known, _)| *known == action) {
         Some((_, shortcut)) => entry.shortcut(shortcut),
         None => entry,
@@ -14,7 +14,7 @@ fn item(message: &str, action: &str) -> Entry {
 pub const VIEWER: &str = "viewer";
 
 pub fn window_menu() -> Vec<Entry> {
-    vec![Entry::item(&L10N.tr("menu-viewer"), VIEWER)]
+    vec![Entry::item(&tr!("Message Viewer"), VIEWER)]
 }
 
 pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
@@ -23,71 +23,65 @@ pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
         .into_iter()
         .map(|(name, id)| Entry::item(&name, &format!("move-to:{id}")))
         .collect::<Vec<_>>();
-    let selection = |message: &str, action: &str| item(message, action).enabled(viewer);
+    let selection = |message: Text, action: &str| item(message, action).enabled(viewer);
     vec![
         Entry::submenu(
-            &L10N.tr("menu-file"),
+            &tr!("File"),
             vec![
-                item("action-compose", "compose"),
+                item(text!("New Message"), "compose"),
                 Entry::separator(),
-                item("menu-add-account", "add-account"),
+                item(text!("Add Account…"), "add-account"),
                 Entry::separator(),
-                selection("menu-find", "find"),
+                selection(text!("Find"), "find"),
                 Entry::separator(),
                 bande_app_menu::print_item(viewer),
             ],
         ),
         edit_submenu(Vec::new()),
-        Entry::submenu(&L10N.tr("menu-view"), {
+        Entry::submenu(&tr!("View"), {
             let settings = view.settings();
             let mut entries = SortBy::ALL
                 .into_iter()
                 .map(|sort| {
-                    Entry::item(
-                        &L10N.tr(&format!("menu-sort-{}", sort.name())),
-                        &format!("sort-{}", sort.name()),
-                    )
-                    .radio(settings.sort == sort)
+                    Entry::item(&sort_title(sort.name()), &format!("sort-{}", sort.name()))
+                        .radio(settings.sort == sort)
                 })
                 .collect::<Vec<_>>();
             entries.push(Entry::separator());
             entries.push(
-                Entry::item(&L10N.tr("menu-sort-descending"), "sort-descending")
-                    .radio(!settings.ascending),
+                Entry::item(&tr!("Descending"), "sort-descending").radio(!settings.ascending),
             );
-            entries.push(
-                Entry::item(&L10N.tr("menu-sort-ascending"), "sort-ascending")
-                    .radio(settings.ascending),
-            );
+            entries
+                .push(Entry::item(&tr!("Ascending"), "sort-ascending").radio(settings.ascending));
             entries.push(Entry::separator());
             entries.push(
-                Entry::item(&L10N.tr("menu-bcc-field"), "bcc-field").radio(settings.bcc_field),
+                Entry::item(&tr!("Bcc Address Field"), "bcc-field").radio(settings.bcc_field),
             );
             entries
         }),
         Entry::submenu(
-            &L10N.tr("menu-mailbox"),
+            &tr!("Mailbox"),
             vec![
-                item("action-get-mail", "get-mail"),
+                item(text!("Get Mail"), "get-mail"),
                 Entry::separator(),
-                selection("menu-mark-all-read", "mark-all-read"),
+                selection(text!("Mark All as Read"), "mark-all-read"),
                 Entry::separator(),
-                item("menu-new-mailbox", "new-mailbox"),
+                item(text!("New Mailbox…"), "new-mailbox"),
             ],
         ),
         Entry::submenu(
-            &L10N.tr("menu-message"),
+            &tr!("Message"),
             vec![
-                item("compose-send", "send").enabled(windowed),
+                item(text!("Send"), "send").enabled(windowed),
                 Entry::separator(),
-                selection("action-reply", "reply"),
-                selection("action-reply-all", "reply-all"),
-                selection("action-forward", "forward"),
+                selection(text!("Reply"), "reply"),
+                selection(text!("Reply All"), "reply-all"),
+                selection(text!("Forward"), "forward"),
                 Entry::separator(),
-                selection("menu-toggle-read", "toggle-read"),
-                selection("menu-toggle-flag", "toggle-flag"),
+                selection(text!("Mark as Read or Unread"), "toggle-read"),
+                selection(text!("Flag or Unflag"), "toggle-flag"),
                 Entry::submenu(
-                    &L10N.tr("menu-flag"),
+                    &tr!("Flag"),
                     MailView::flag_colors()
                         .into_iter()
                         .map(|(name, action)| Entry::item(&name, &action))
@@ -95,13 +89,24 @@ pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
                 )
                 .enabled(viewer),
                 Entry::separator(),
-                selection("menu-apply-rules", "apply-rules"),
+                selection(text!("Apply Rules"), "apply-rules"),
                 Entry::separator(),
-                selection("action-archive", "archive"),
-                selection("action-junk", "junk"),
-                Entry::submenu(&L10N.tr("menu-move-to"), targets).enabled(viewer),
-                selection("action-delete", "delete"),
+                selection(text!("Archive"), "archive"),
+                selection(text!("Move to Junk"), "junk"),
+                Entry::submenu(&tr!("Move To"), targets).enabled(viewer),
+                selection(text!("Delete"), "delete"),
             ],
         ),
     ]
+}
+
+fn sort_title(name: &str) -> String {
+    match name {
+        "date" => tr!("Sort by Date"),
+        "from" => tr!("Sort by From"),
+        "subject" => tr!("Sort by Subject"),
+        "size" => tr!("Sort by Size"),
+        "unread" => tr!("Sort by Unread"),
+        other => other.to_owned(),
+    }
 }

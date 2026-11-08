@@ -3,6 +3,7 @@ use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 use std::time::Instant;
 
+use bande_l10n::{Text, text, tr};
 use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_toolkit::ui::{
@@ -22,7 +23,6 @@ use super::sheet::{CONTINUE, port_free};
 use super::snapshots::{self, Sheet, Tool, ToolIds};
 use super::widgets::{Bar, Slot, ToolRow};
 use super::{Intent, Intents, Request, push};
-use crate::L10N;
 use crate::ui::{Centered, symbol};
 
 pub const MACHINE_WINDOW_SIZE: (u32, u32) = (720, 520);
@@ -46,12 +46,12 @@ impl Tab {
     const ALL: [Tab; 4] = [Tab::Console, Tab::Info, Tab::Snapshots, Tab::Settings];
 
     fn title(self) -> String {
-        L10N.tr(match self {
-            Tab::Console => "machine-tab-console",
-            Tab::Info => "machine-tab-info",
-            Tab::Snapshots => "machine-tab-snapshots",
-            Tab::Settings => "machine-tab-settings",
-        })
+        match self {
+            Tab::Console => tr!("Console"),
+            Tab::Info => tr!("Info"),
+            Tab::Snapshots => tr!("Snapshots"),
+            Tab::Settings => tr!("Settings"),
+        }
     }
 }
 
@@ -136,22 +136,22 @@ impl MachineWindow {
         let tabs_intents = Rc::clone(intents);
         let titles = Tab::ALL.map(Tab::title);
         let tabs = SegmentedControl::new(
-            &L10N.tr("machine-tabs"),
+            &tr!("Machine"),
             &titles,
             Tab::ALL.iter().position(|shown| *shown == self.tab),
             move |index| push(&tabs_intents, Intent::Tab(index)),
         );
-        let button = |svg: &str, label: &str, act: Act| {
+        let button = |svg: &str, label: Text, act: Act| {
             let intents = Rc::clone(intents);
             let click = move || push(&intents, Intent::Act(act));
-            let label = L10N.tr(label);
+            let label = label.tr();
             match symbol(svg, palette.ink) {
                 Some(image) => Button::symbol(image, &label, click).tooltip(&label),
                 None => Button::new(&label, click),
             }
         };
-        let start = button(START_SYMBOL, "machine-start", Act::Start);
-        let stop = button(STOP_SYMBOL, "machine-shut-down", Act::ShutDown);
+        let start = button(START_SYMBOL, text!("Start"), Act::Start);
+        let stop = button(STOP_SYMBOL, text!("Shut Down"), Act::ShutDown);
         self.start = start.id();
         self.stop = stop.id();
         if let Some(bar) = self.ui.widget_as::<Bar>(self.bar) {
@@ -179,11 +179,8 @@ impl MachineWindow {
             bridges.push(bridge.clone());
         }
         let label = |choice: Option<&String>| match choice {
-            None => L10N.tr("machine-network-shared"),
-            Some(bridge) => L10N.tr_args(
-                "machine-network-bridged",
-                [("bridge", bridge.clone().into())],
-            ),
+            None => tr!("Shared with this computer"),
+            Some(bridge) => tr!("Bridged to {bridge}", bridge = bridge.clone()),
         };
         let current = match network {
             bande_vm::Network::Shared => 0,
@@ -195,8 +192,10 @@ impl MachineWindow {
         let mut choices = vec![label(None)];
         choices.extend(bridges.iter().map(|bridge| label(Some(bridge))));
         let hint = match (locked, bridges.is_empty()) {
-            (true, _) => Some("machine-shut-down-to-change"),
-            (false, true) => Some("machine-network-no-bridge"),
+            (true, _) => Some(text!("Shut down to change")),
+            (false, true) => Some(text!(
+                "To give the machine its own address on your network, make a network bridge in Network settings."
+            )),
             (false, false) => None,
         };
         let control: Box<dyn Widget> = match locked {
@@ -204,7 +203,7 @@ impl MachineWindow {
             false => {
                 let intents = Rc::clone(&self.intents);
                 boxed(PopUpButton::new(
-                    &L10N.tr("machine-network"),
+                    &tr!("Network"),
                     &choices,
                     current,
                     move |index| {
@@ -219,9 +218,9 @@ impl MachineWindow {
             }
         };
         let mut column = vec![control];
-        column.extend(hint.map(|key| boxed(Label::new(&L10N.tr(key)).secondary())));
+        column.extend(hint.map(|key| boxed(Label::new(&key.tr()).secondary())));
         FormLine::Row(
-            L10N.tr("machine-network"),
+            tr!("Network"),
             boxed(Stack::new(Axis::Vertical, 2.0, 0.0, column)),
         )
     }
@@ -246,14 +245,12 @@ impl MachineWindow {
     pub fn title(&self) -> String {
         let fleet = self.fleet.borrow();
         let Some(entry) = fleet.entry(&self.id) else {
-            return L10N.tr("machine-gone");
+            return tr!("This machine was deleted.");
         };
-        L10N.tr_args(
-            "machine-window-title",
-            [
-                ("name", entry.name().to_owned().into()),
-                ("status", present::status_text(entry).into()),
-            ],
+        tr!(
+            "{name} — {status}",
+            name = entry.name().to_owned(),
+            status = present::status_text(entry)
         )
     }
 
@@ -303,8 +300,7 @@ impl MachineWindow {
 
     pub fn present_notice(&mut self, title: &str, message: &str) {
         self.ui.present_sheet(
-            bande_toolkit::ui::Alert::new(title, message, |_| {})
-                .primary(&L10N.tr("button-ok"), "ok"),
+            bande_toolkit::ui::Alert::new(title, message, |_| {}).primary(&tr!("OK"), "ok"),
         );
     }
 
@@ -623,7 +619,7 @@ impl MachineWindow {
         self.graphs = None;
         let Some(shown) = shown else {
             return centered(vec![boxed(
-                Label::new(&L10N.tr("machine-gone")).secondary(),
+                Label::new(&tr!("This machine was deleted.")).secondary(),
             )]);
         };
         match self.tab {
@@ -662,11 +658,11 @@ impl MachineWindow {
             Tab::Snapshots => {
                 let table = snapshots::table(&self.intents);
                 let button =
-                    |key: &str, tool: Tool| snapshots::tool_button(&self.intents, key, tool);
-                let take = button("machine-take-snapshot-ellipsis", Tool::Take);
-                let revert = button("machine-revert-ellipsis", Tool::Revert);
-                let delete = button("machine-delete-snapshot-ellipsis", Tool::Delete);
-                let clone = button("machine-clone-ellipsis", Tool::Clone);
+                    |title: String, tool: Tool| snapshots::tool_button(&self.intents, &title, tool);
+                let take = button(tr!("Take Snapshot…"), Tool::Take);
+                let revert = button(tr!("Revert…"), Tool::Revert);
+                let delete = button(tr!("Delete…"), Tool::Delete);
+                let clone = button(tr!("Clone…"), Tool::Clone);
                 self.snapshot_tools = Some(ToolIds {
                     table: table.id(),
                     take: take.id(),
@@ -687,36 +683,36 @@ impl MachineWindow {
     fn console_placeholder(&self, shown: &Shown) -> Box<dyn Widget> {
         let intents = Rc::clone(&self.intents);
         if !shown.running {
-            let mut start = Button::new(&L10N.tr("machine-start"), move || {
+            let mut start = Button::new(&tr!("Start"), move || {
                 push(&intents, Intent::Act(Act::Start))
             });
             start.set_enabled(self.can(Act::Start));
             return centered(vec![row(boxed(start))]);
         }
         let message = match (&self.failure, &self.session) {
-            (Some(reason), _) if !reason.is_empty() => L10N.tr_args(
-                "machine-console-failed",
-                [("reason", reason.clone().into())],
-            ),
-            (Some(_), _) => L10N.tr("machine-console-off"),
-            (None, Some(console)) if console.has_closed_picture() => L10N.tr("machine-console-off"),
-            (None, _) => L10N.tr("machine-console-connecting"),
+            (Some(reason), _) if !reason.is_empty() => {
+                tr!("Cannot show the display: {reason}", reason = reason.clone())
+            }
+            (Some(_), _) => tr!("The machine has no picture to show."),
+            (None, Some(console)) if console.has_closed_picture() => {
+                tr!("The machine has no picture to show.")
+            }
+            (None, _) => tr!("Connecting to the display…"),
         };
         let retry_intents = Rc::clone(&self.intents);
         let mut children = vec![boxed(Label::new(&message).secondary())];
         let mut buttons = Vec::new();
         if self.terminal {
-            let mut connect = Button::new(&L10N.tr("machine-connect"), move || {
+            let mut connect = Button::new(&tr!("Connect via SSH"), move || {
                 push(&intents, Intent::Connect)
             });
             connect.set_enabled(self.can_connect());
             buttons.push(boxed(connect));
         }
         if self.failure.is_some() {
-            buttons.push(boxed(Button::new(
-                &L10N.tr("machine-console-retry"),
-                move || push(&retry_intents, Intent::RetryConsole),
-            )));
+            buttons.push(boxed(Button::new(&tr!("Try Again"), move || {
+                push(&retry_intents, Intent::RetryConsole)
+            })));
         }
         children.push(boxed(Stack::new(Axis::Horizontal, 8.0, 0.0, buttons)));
         centered(children)
@@ -733,9 +729,9 @@ impl MachineWindow {
             let intents = Rc::clone(&self.intents);
             move |value: f64| push(&intents, Intent::Change(make(value)))
         };
-        let gigabytes = |value: f64| L10N.tr_args("machine-gigabytes", [("count", value.into())]);
+        let gigabytes = |value: f64| tr!("{count} GB", count = value);
         let cpus = std::thread::available_parallelism().map_or(1, |cpus| cpus.get()) as f64;
-        let lockable = |label: &str, value: String, control: Box<dyn Widget>| {
+        let lockable = |label: Text, value: String, control: Box<dyn Widget>| {
             let widget = match locked {
                 true => boxed(Stack::new(
                     Axis::Vertical,
@@ -743,37 +739,33 @@ impl MachineWindow {
                     0.0,
                     vec![
                         boxed(Label::new(&value)),
-                        boxed(Label::new(&L10N.tr("machine-shut-down-to-change")).secondary()),
+                        boxed(Label::new(&tr!("Shut down to change")).secondary()),
                     ],
                 )),
                 false => control,
             };
-            FormLine::Row(L10N.tr(label), widget)
+            FormLine::Row(label.tr(), widget)
         };
         let name_intents = Rc::clone(&self.intents);
         let port_fleet = Rc::clone(&self.fleet);
         let port_intents = Rc::clone(&self.intents);
         let port = manifest.ssh_port();
         let mut lines = vec![
-            FormLine::Heading(L10N.tr("machine-section-machine")),
+            FormLine::Heading(tr!("Machine")),
             FormLine::Row(
-                L10N.tr("machine-name"),
-                boxed(TextField::new(
-                    &L10N.tr("machine-name"),
-                    &manifest.name,
-                    move |text| {
-                        let text = text.trim();
-                        if !text.is_empty() {
-                            push(&name_intents, Intent::Change(Change::Name(text.to_owned())));
-                        }
-                    },
-                )),
+                tr!("Name"),
+                boxed(TextField::new(&tr!("Name"), &manifest.name, move |text| {
+                    let text = text.trim();
+                    if !text.is_empty() {
+                        push(&name_intents, Intent::Change(Change::Name(text.to_owned())));
+                    }
+                })),
             ),
             lockable(
-                "machine-cpus",
+                text!("CPUs"),
                 manifest.cpus.to_string(),
                 boxed(Stepper::new(
-                    &L10N.tr("machine-cpus"),
+                    &tr!("CPUs"),
                     f64::from(manifest.cpus),
                     (1.0, cpus),
                     1.0,
@@ -781,11 +773,11 @@ impl MachineWindow {
                 )),
             ),
             lockable(
-                "machine-memory",
+                text!("Memory"),
                 gigabytes((manifest.memory_mib / MIB_PER_GIB) as f64),
                 boxed(
                     Stepper::new(
-                        &L10N.tr("machine-memory"),
+                        &tr!("Memory"),
                         (manifest.memory_mib / MIB_PER_GIB) as f64,
                         (1.0, 1024.0),
                         1.0,
@@ -795,16 +787,16 @@ impl MachineWindow {
                 ),
             ),
             FormLine::Row(
-                L10N.tr("machine-disk-size"),
+                tr!("Disk"),
                 boxed(Label::new(&gigabytes(manifest.disk_gib as f64))),
             ),
-            FormLine::Heading(L10N.tr("machine-section-network")),
+            FormLine::Heading(tr!("Network")),
             self.network_row(&manifest.network, locked),
             lockable(
-                "machine-ssh-port",
+                text!("SSH port on this computer"),
                 port.map_or_else(|| "—".to_owned(), |port| port.to_string()),
                 boxed(TextField::new(
-                    &L10N.tr("machine-ssh-port"),
+                    &tr!("SSH port on this computer"),
                     &port.map(|port| port.to_string()).unwrap_or_default(),
                     move |text| {
                         let Some(port) = text
@@ -831,12 +823,10 @@ impl MachineWindow {
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            let mut eject = Button::new(&L10N.tr("machine-eject"), move || {
-                push(&intents, Intent::Eject)
-            });
+            let mut eject = Button::new(&tr!("Eject"), move || push(&intents, Intent::Eject));
             eject.set_enabled(!locked);
             lines.push(FormLine::Row(
-                L10N.tr("machine-iso"),
+                tr!("Disc image"),
                 boxed(Stack::new(
                     Axis::Horizontal,
                     8.0,
@@ -845,7 +835,7 @@ impl MachineWindow {
                 )),
             ));
         }
-        lines.push(FormLine::Heading(L10N.tr("machine-section-display")));
+        lines.push(FormLine::Heading(tr!("Display")));
         let has_memory =
             manifest.snapshots.iter().any(|snapshot| snapshot.memory) || manifest.is_suspended();
         let available =
@@ -854,48 +844,52 @@ impl MachineWindow {
         let changeable = !locked && !has_memory && available;
         let toggle: Box<dyn Widget> = match changeable {
             true => boxed(Toggle::new(
-                &L10N.tr("machine-graphics-3d"),
+                &tr!("3D graphics"),
                 manifest.graphics_3d,
                 move |on| push(&toggle_intents, Intent::Graphics3d(on)),
             )),
-            false => boxed(Label::new(&L10N.tr(match manifest.graphics_3d {
-                true => "machine-on",
-                false => "machine-off",
-            }))),
+            false => boxed(Label::new(&match manifest.graphics_3d {
+                true => tr!("On"),
+                false => tr!("Off"),
+            })),
         };
         let hint = match (available, has_memory, locked) {
-            (false, _, _) => Some("machine-graphics-3d-unavailable"),
-            (true, true, _) => Some("machine-graphics-3d-snapshots"),
-            (true, false, true) => Some("machine-shut-down-to-change"),
+            (false, _, _) => Some(text!(
+                "Needs a graphics card this computer can share, and a Linux guest."
+            )),
+            (true, true, _) => Some(text!(
+                "Delete the snapshots with memory, or resume the machine, to change this."
+            )),
+            (true, false, true) => Some(text!("Shut down to change")),
             (true, false, false) => None,
         };
         let mut column: Vec<Box<dyn Widget>> = vec![toggle];
-        column.extend(hint.map(|key| boxed(Label::new(&L10N.tr(key)).secondary())));
+        column.extend(hint.map(|key| boxed(Label::new(&key.tr()).secondary())));
         lines.push(FormLine::Row(
-            L10N.tr("machine-graphics-3d"),
+            tr!("3D graphics"),
             boxed(Stack::new(Axis::Vertical, 2.0, 0.0, column)),
         ));
         let displays = manifest.displays.clamp(1, bande_vm::MAX_DISPLAYS);
         let windows = manifest.preset == bande_vm::Preset::Windows;
         lines.push(match (windows, has_memory) {
-            (true, _) => FormLine::Row(L10N.tr("machine-displays"), boxed(Label::new("1"))),
+            (true, _) => FormLine::Row(tr!("Displays"), boxed(Label::new("1"))),
             (false, true) => FormLine::Row(
-                L10N.tr("machine-displays"),
+                tr!("Displays"),
                 boxed(Stack::new(
                     Axis::Vertical,
                     2.0,
                     0.0,
                     vec![
                         boxed(Label::new(&displays.to_string())),
-                        boxed(Label::new(&L10N.tr("machine-graphics-3d-snapshots")).secondary()),
+                        boxed(Label::new(&tr!("Delete the snapshots with memory, or resume the machine, to change this.")).secondary()),
                     ],
                 )),
             ),
             (false, false) => lockable(
-                "machine-displays",
+                text!("Displays"),
                 displays.to_string(),
                 boxed(Stepper::new(
-                    &L10N.tr("machine-displays"),
+                    &tr!("Displays"),
                     f64::from(displays),
                     (1.0, f64::from(bande_vm::MAX_DISPLAYS)),
                     1.0,
@@ -903,21 +897,21 @@ impl MachineWindow {
                 )),
             ),
         });
-        lines.push(FormLine::Heading(L10N.tr("machine-section-startup")));
+        lines.push(FormLine::Heading(tr!("Startup")));
         let login_intents = Rc::clone(&self.intents);
         lines.push(FormLine::Row(
-            L10N.tr("machine-start-at-login"),
+            tr!("Start when you log in"),
             boxed(Toggle::new(
-                &L10N.tr("machine-start-at-login"),
+                &tr!("Start when you log in"),
                 entry.listed.starts_at_login,
                 move |on| push(&login_intents, Intent::StartAtLogin(on)),
             )),
         ));
-        lines.push(FormLine::Heading(L10N.tr("machine-section-shares")));
+        lines.push(FormLine::Heading(tr!("Shared Folders")));
         for share in &manifest.shares {
             let intents = Rc::clone(&self.intents);
             let tag = share.tag.clone();
-            let mut remove = Button::new(&L10N.tr("machine-share-remove"), move || {
+            let mut remove = Button::new(&tr!("Remove"), move || {
                 push(&intents, Intent::RemoveShare(tag.clone()))
             });
             remove.set_enabled(!locked);
@@ -930,9 +924,9 @@ impl MachineWindow {
                     vec![
                         boxed(remove),
                         boxed(
-                            Label::new(&L10N.tr_args(
-                                "machine-share-mount",
-                                [("tag", share.tag.clone().into())],
+                            Label::new(&tr!(
+                                "In the guest: sudo mount -t virtiofs {tag} /mnt",
+                                tag = share.tag.clone()
                             ))
                             .secondary(),
                         ),
@@ -941,7 +935,7 @@ impl MachineWindow {
             ));
         }
         let intents = Rc::clone(&self.intents);
-        let mut add = Button::new(&L10N.tr("machine-share-add"), move || {
+        let mut add = Button::new(&tr!("Add Folder…"), move || {
             push(&intents, Intent::AddShare)
         });
         add.set_enabled(!locked && bande_vm::Host::virtiofsd().is_some());

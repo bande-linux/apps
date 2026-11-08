@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use bande_l10n::tr;
 use accesskit::{Action, ActionRequest, TreeId};
 
 use bande_toolkit::ui::{
@@ -9,7 +10,7 @@ use bande_toolkit::ui::{
 };
 
 use super::panel::{Line, Panel, Width};
-use super::{L10N, Signal, Signals, sender};
+use super::{Signal, Signals, sender};
 
 const WIDTH: f32 = 440.0;
 const LABEL_WIDTH: f32 = 96.0;
@@ -42,25 +43,35 @@ impl Preset {
     ];
 
     fn title(self) -> String {
-        L10N.tr(match self {
-            Self::ICloud => "account-icloud",
-            Self::Fastmail => "account-fastmail",
-            Self::Google => "account-google",
-            Self::Nextcloud => "account-nextcloud",
-            Self::Other => "account-caldav",
-            Self::Subscription => "account-subscription",
-        })
+        match self {
+            Self::ICloud => tr!("iCloud"),
+            Self::Fastmail => tr!("Fastmail"),
+            Self::Google => tr!("Google"),
+            Self::Nextcloud => tr!("Nextcloud"),
+            Self::Other => tr!("Other CalDAV Account"),
+            Self::Subscription => tr!("Subscription"),
+        }
     }
 
     pub fn hint(self) -> String {
-        L10N.tr(match self {
-            Self::ICloud => "account-icloud-hint",
-            Self::Fastmail => "account-fastmail-hint",
-            Self::Google => "account-google-hint",
-            Self::Nextcloud => "account-nextcloud-hint",
-            Self::Other => "account-caldav-hint",
-            Self::Subscription => "account-subscription-hint",
-        })
+        match self {
+            Self::ICloud => tr!(
+                "Sign in with your Apple Account and an app-specific password from account.apple.com."
+            ),
+            Self::Fastmail => {
+                tr!("Sign in with an app password from Fastmail’s Settings ▸ Privacy & Security.")
+            }
+            Self::Google => tr!(
+                "Google needs OAuth. To see a Google calendar, paste its secret address in iCal format."
+            ),
+            Self::Nextcloud => tr!(
+                "Enter your Nextcloud server; an app password from Settings ▸ Security works best."
+            ),
+            Self::Other => {
+                tr!("Enter the server, or leave it empty to look it up from your e-mail address.")
+            }
+            Self::Subscription => tr!("Paste a webcal:// or https:// link to a calendar."),
+        }
     }
 
     fn kind(self) -> Kind {
@@ -97,17 +108,18 @@ pub struct Setup {
 
 impl Setup {
     pub fn build(signals: &Signals) -> (Panel, Self) {
-        let mut panel = Panel::new(Some(&L10N.tr("account-title")), WIDTH, LABEL_WIDTH).sheet();
+        let mut panel =
+            Panel::new(Some(&tr!("Add a Calendar Account")), WIDTH, LABEL_WIDTH).sheet();
         let send = sender(signals);
         let kinds: Vec<String> = Preset::ALL.iter().map(|preset| preset.title()).collect();
         let kind = panel.add(PopUpButton::new(
-            &L10N.tr("account-kind"),
+            &tr!("account:"),
             &kinds,
             0,
             move |index| send(Signal::SetupKind(index)),
         ));
         panel.line(Line::new(
-            Some(&L10N.tr("account-kind")),
+            Some(&tr!("account:")),
             vec![(kind, Width::Fill)],
             ROW,
         ));
@@ -119,7 +131,7 @@ impl Setup {
             .without_text_checking(),
         );
         panel.line(Line::new(
-            Some(&L10N.tr("account-user")),
+            Some(&tr!("user name:")),
             vec![(user, Width::Fill)],
             ROW,
         ));
@@ -129,19 +141,21 @@ impl Setup {
             submit(Signal::SetupSubmit);
         }));
         panel.line(Line::new(
-            Some(&L10N.tr("account-password")),
+            Some(&tr!("password:")),
             vec![(password, Width::Fill)],
             ROW,
         ));
         let send = sender(signals);
         let server = panel.add(
-            TextField::new(&L10N.tr("account-server-placeholder"), "", move |text| {
-                send(Signal::SetupServer(text.to_owned()))
-            })
+            TextField::new(
+                &tr!("dav.example.com, or a webcal:// link"),
+                "",
+                move |text| send(Signal::SetupServer(text.to_owned())),
+            )
             .without_text_checking(),
         );
         panel.line(Line::new(
-            Some(&L10N.tr("account-server")),
+            Some(&tr!("server or URL:")),
             vec![(server, Width::Fill)],
             ROW,
         ));
@@ -149,10 +163,10 @@ impl Setup {
         panel.line(Line::new(None, vec![(note, Width::Fill)], 36.0));
         let send = sender(signals);
         let cancel =
-            panel.add(Button::new(&L10N.tr("cancel"), move || send(Signal::SetupCancel)).cancel());
+            panel.add(Button::new(&tr!("Cancel"), move || send(Signal::SetupCancel)).cancel());
         let send = sender(signals);
-        let sign_in = panel
-            .add(Button::new(&L10N.tr("sign-in"), move || send(Signal::SetupSubmit)).primary());
+        let sign_in =
+            panel.add(Button::new(&tr!("Sign In"), move || send(Signal::SetupSubmit)).primary());
         panel.line(
             Line::new(
                 None,
@@ -180,11 +194,12 @@ impl Setup {
     }
 
     pub fn sign_in(signals: &Signals, account: &str, name: &str, user: &str) -> (Panel, Self) {
-        let title = L10N.tr_args("sign-in-title", [("name", name.to_owned().into())]);
+        let title = tr!("Sign in to “{name}”", name = name.to_owned());
         let mut panel = Panel::new(Some(&title), WIDTH, LABEL_WIDTH).sheet();
-        let message = panel.add(Label::new(
-            &L10N.tr_args("sign-in-message", [("user", user.to_owned().into())]),
-        ));
+        let message = panel.add(Label::new(&tr!(
+            "Enter the password or app password for {user}.",
+            user = user.to_owned()
+        )));
         panel.line(Line::new(None, vec![(message, Width::Fill)], 36.0));
         let (send, submit) = (sender(signals), sender(signals));
         let password = panel.add(SecureField::new("", 13.0, move |secret| {
@@ -192,7 +207,7 @@ impl Setup {
             submit(Signal::SetupSubmit);
         }));
         panel.line(Line::new(
-            Some(&L10N.tr("account-password")),
+            Some(&tr!("password:")),
             vec![(password, Width::Fill)],
             ROW,
         ));
@@ -200,10 +215,10 @@ impl Setup {
         panel.line(Line::new(None, vec![(note, Width::Fill)], 18.0));
         let send = sender(signals);
         let cancel =
-            panel.add(Button::new(&L10N.tr("cancel"), move || send(Signal::SetupCancel)).cancel());
+            panel.add(Button::new(&tr!("Cancel"), move || send(Signal::SetupCancel)).cancel());
         let send = sender(signals);
-        let sign_in = panel
-            .add(Button::new(&L10N.tr("sign-in"), move || send(Signal::SetupSubmit)).primary());
+        let sign_in =
+            panel.add(Button::new(&tr!("Sign In"), move || send(Signal::SetupSubmit)).primary());
         panel.line(
             Line::new(
                 None,

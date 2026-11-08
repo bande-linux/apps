@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use bande_l10n::tr;
 use bande_inbox::Outbox;
 use bande_media::Playback;
 use zbus::blocking::Connection;
@@ -120,7 +121,7 @@ impl Root {
 
     #[zbus(property)]
     fn identity(&self) -> String {
-        crate::L10N.tr("app-name")
+        tr!("Player")
     }
 
     #[zbus(property)]

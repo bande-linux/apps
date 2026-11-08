@@ -2,6 +2,7 @@ use std::net::TcpListener;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::ui::{
     Alert, Button, Form, FormLine, Label, PopUpButton, RadioGroup, SecureField, Stepper, TextField,
     Widget,
@@ -11,7 +12,6 @@ use bande_vm::{CloudInit, Forward, Host, Installer, NewMachine, Preset, catalog}
 use super::backend::{Login, Plan, Source};
 use super::fleet::Fleet;
 use super::{Intent, Intents, push};
-use crate::L10N;
 
 pub const CONTINUE: &str = "continue";
 pub const BACK: &str = "back";
@@ -184,8 +184,8 @@ impl Draft {
 
     fn os(&self) -> String {
         match (self.installs_from_iso(), self.preset) {
-            (true, Preset::Windows) => L10N.tr("machine-preset-windows"),
-            (true, Preset::Linux) => L10N.tr("machine-preset-linux"),
+            (true, Preset::Windows) => tr!("Windows 11"),
+            (true, Preset::Linux) => tr!("Linux"),
             (false, _) => catalog()
                 .get(self.image)
                 .map(|image| image.os.to_owned())
@@ -266,23 +266,23 @@ impl Draft {
             let intents = Rc::clone(intents);
             move |value: usize| push(&intents, Intent::Field(make(value)))
         };
-        let new = |key: &str| {
+        let new = |key: Text| {
             let choice = Rc::clone(&choice);
             Alert::new(
-                &L10N.tr("machine-new-title"),
-                &error.map_or_else(|| L10N.tr(key), str::to_owned),
+                &tr!("New Virtual Machine"),
+                &error.map_or_else(|| key.tr(), str::to_owned),
                 move |action| push(&choice, Intent::Sheet(action.to_owned())),
             )
         };
         let alert = match self.step {
             Step::Image => {
-                let iso = L10N.tr("machine-image-iso");
-                let import = L10N.tr("machine-image-import");
+                let iso = tr!("Install from a disc image…");
+                let import = tr!("Import a disk image…");
                 let mut names: Vec<&str> = catalog().iter().map(|image| image.os).collect();
                 names.push(&iso);
                 names.push(&import);
-                new("machine-step-image").accessory(RadioGroup::new(
-                    &L10N.tr("machine-image"),
+                new(text!("Choose what the machine starts from.")).accessory(RadioGroup::new(
+                    &tr!("Cloud image"),
                     &names,
                     Some(self.image),
                     index(Field::Image),
@@ -291,16 +291,11 @@ impl Draft {
             Step::Installer => {
                 let chooser = Rc::clone(intents);
                 let disk = self.imports_disk();
-                let presets = [
-                    L10N.tr("machine-preset-linux"),
-                    L10N.tr("machine-preset-windows"),
-                ];
+                let presets = [tr!("Linux"), tr!("Windows 11")];
                 let chosen = self.iso.as_ref().map_or_else(
-                    || {
-                        L10N.tr(match disk {
-                            true => "machine-disk-none",
-                            false => "machine-iso-none",
-                        })
+                    || match disk {
+                        true => tr!("No disk image chosen"),
+                        false => tr!("No disc image chosen"),
                     },
                     |path| {
                         path.file_name()
@@ -310,26 +305,26 @@ impl Draft {
                 );
                 let mut lines = vec![
                     FormLine::Row(
-                        L10N.tr(match disk {
-                            true => "machine-disk",
-                            false => "machine-iso",
-                        }),
+                        match disk {
+                            true => tr!("Disk image"),
+                            false => tr!("Disc image"),
+                        },
                         Box::new(Label::new(&chosen)) as Box<dyn Widget>,
                     ),
                     FormLine::Row(
                         String::new(),
                         Box::new(Button::new(
-                            &L10N.tr(match disk {
-                                true => "machine-disk-choose",
-                                false => "machine-iso-choose",
-                            }),
+                            &match disk {
+                                true => tr!("Choose Disk Image…"),
+                                false => tr!("Choose Disc Image…"),
+                            },
                             move || push(&chooser, Intent::ChooseIso(disk)),
                         )),
                     ),
                     FormLine::Row(
-                        L10N.tr("machine-preset"),
+                        tr!("System"),
                         Box::new(PopUpButton::new(
-                            &L10N.tr("machine-preset"),
+                            &tr!("System"),
                             &presets,
                             usize::from(self.preset == Preset::Windows),
                             index(Field::Preset),
@@ -339,23 +334,28 @@ impl Draft {
                 if self.preset == Preset::Windows && Host::swtpm().is_none() {
                     lines.push(FormLine::Row(
                         String::new(),
-                        Box::new(Label::new(&L10N.tr("machine-windows-needs-swtpm")).secondary()),
+                        Box::new(
+                            Label::new(&tr!("Windows 11 needs a TPM: sudo apt install swtpm"))
+                                .secondary(),
+                        ),
                     ));
                 }
                 new(match disk {
-                    true => "machine-step-import",
-                    false => "machine-step-installer",
+                    true => text!("Choose the disk image to import. Velox copies it."),
+                    false => text!("Choose the disc image to install from."),
                 })
-                .accessory(Form::new(&L10N.tr("machine-step-installer"), lines))
+                .accessory(Form::new(
+                    &tr!("Choose the disc image to install from."),
+                    lines,
+                ))
             }
             Step::Resources => {
-                let gigabytes =
-                    |value: f64| L10N.tr_args("machine-gigabytes", [("count", value.into())]);
+                let gigabytes = |value: f64| tr!("{count} GB", count = value);
                 let lines = vec![
                     FormLine::Row(
-                        L10N.tr("machine-cpus"),
+                        tr!("CPUs"),
                         Box::new(Stepper::new(
-                            &L10N.tr("machine-cpus"),
+                            &tr!("CPUs"),
                             f64::from(self.cpus),
                             (1.0, f64::from(self.limits.0)),
                             1.0,
@@ -363,10 +363,10 @@ impl Draft {
                         )),
                     ),
                     FormLine::Row(
-                        L10N.tr("machine-memory"),
+                        tr!("Memory"),
                         Box::new(
                             Stepper::new(
-                                &L10N.tr("machine-memory"),
+                                &tr!("Memory"),
                                 self.memory_gib as f64,
                                 (1.0, self.limits.1 as f64),
                                 1.0,
@@ -376,10 +376,10 @@ impl Draft {
                         ),
                     ),
                     FormLine::Row(
-                        L10N.tr("machine-disk-size"),
+                        tr!("Disk"),
                         Box::new(
                             Stepper::new(
-                                &L10N.tr("machine-disk-size"),
+                                &tr!("Disk"),
                                 self.disk_gib as f64,
                                 DISK_RANGE,
                                 DISK_STEP,
@@ -389,12 +389,19 @@ impl Draft {
                         ),
                     ),
                 ];
-                new("machine-step-resources")
-                    .accessory(Form::new(&L10N.tr("machine-step-resources"), lines))
+                new(text!("Choose the machine’s processors, memory and disk.")).accessory(
+                    Form::new(
+                        &tr!("Choose the machine’s processors, memory and disk."),
+                        lines,
+                    ),
+                )
             }
             Step::Identity => {
                 let key: Box<dyn Widget> = match self.keys.is_empty() {
-                    true => Box::new(Label::new(&L10N.tr("machine-no-key")).secondary()),
+                    true => Box::new(
+                        Label::new(&tr!("No SSH key in ~/.ssh. Make one with ssh-keygen."))
+                            .secondary(),
+                    ),
                     false => {
                         let names: Vec<String> = self
                             .keys
@@ -406,7 +413,7 @@ impl Draft {
                             })
                             .collect();
                         Box::new(PopUpButton::new(
-                            &L10N.tr("machine-ssh-key"),
+                            &tr!("SSH key"),
                             &names,
                             self.key,
                             index(Field::Key),
@@ -415,85 +422,78 @@ impl Draft {
                 };
                 if self.installs_from_iso() {
                     let lines = vec![FormLine::Row(
-                        L10N.tr("machine-name"),
-                        Box::new(TextField::new(
-                            &L10N.tr("machine-name"),
-                            &self.name,
-                            field(Field::Name),
-                        )) as Box<dyn Widget>,
+                        tr!("Name"),
+                        Box::new(TextField::new(&tr!("Name"), &self.name, field(Field::Name)))
+                            as Box<dyn Widget>,
                     )];
-                    return new("machine-step-name")
-                        .accessory(Form::new(&L10N.tr("machine-step-name"), lines))
-                        .other(&L10N.tr("machine-back"), BACK)
-                        .cancel(&L10N.tr("machine-cancel"), CANCEL)
-                        .primary(&L10N.tr("machine-create"), CONTINUE);
+                    return new(text!("Name the machine."))
+                        .accessory(Form::new(&tr!("Name the machine."), lines))
+                        .other(&tr!("Back"), BACK)
+                        .cancel(&tr!("Cancel"), CANCEL)
+                        .primary(&tr!("Create"), CONTINUE);
                 }
                 let lines = vec![
                     FormLine::Row(
-                        L10N.tr("machine-name"),
-                        Box::new(TextField::new(
-                            &L10N.tr("machine-name"),
-                            &self.name,
-                            field(Field::Name),
-                        )),
+                        tr!("Name"),
+                        Box::new(TextField::new(&tr!("Name"), &self.name, field(Field::Name))),
                     ),
                     FormLine::Row(
-                        L10N.tr("machine-user"),
-                        Box::new(TextField::new(
-                            &L10N.tr("machine-user"),
-                            &self.user,
-                            field(Field::User),
-                        )),
+                        tr!("User"),
+                        Box::new(TextField::new(&tr!("User"), &self.user, field(Field::User))),
                     ),
                     FormLine::Row(
-                        L10N.tr("machine-password"),
+                        tr!("Password"),
                         Box::new(
-                            SecureField::new(&L10N.tr("machine-password-hint"), FIELD_TEXT, |_| {})
+                            SecureField::new(&tr!("Optional"), FIELD_TEXT, |_| {})
                                 .on_edit(field(Field::Password)),
                         ),
                     ),
-                    FormLine::Row(L10N.tr("machine-ssh-key"), key),
+                    FormLine::Row(tr!("SSH key"), key),
                     FormLine::Row(
-                        L10N.tr("machine-ssh-port"),
+                        tr!("SSH port on this computer"),
                         Box::new(TextField::new(
-                            &L10N.tr("machine-ssh-port"),
+                            &tr!("SSH port on this computer"),
                             &self.port,
                             field(Field::Port),
                         )),
                     ),
                 ];
-                new("machine-step-identity")
-                    .accessory(Form::new(&L10N.tr("machine-step-identity"), lines))
+                new(text!("Name the machine and choose how you sign in.")).accessory(Form::new(
+                    &tr!("Name the machine and choose how you sign in."),
+                    lines,
+                ))
             }
         };
         let mut alert = alert;
         if self.step != Step::Image {
-            alert = alert.other(&L10N.tr("machine-back"), BACK);
+            alert = alert.other(&tr!("Back"), BACK);
         }
         let primary = match self.step {
-            Step::Identity => "machine-create",
-            _ => "machine-continue",
+            Step::Identity => text!("Create"),
+            _ => text!("Continue"),
         };
         alert
-            .cancel(&L10N.tr("machine-cancel"), CANCEL)
-            .primary(&L10N.tr(primary), CONTINUE)
+            .cancel(&tr!("Cancel"), CANCEL)
+            .primary(&primary.tr(), CONTINUE)
     }
 
     pub fn plan(&self, fleet: &Fleet) -> Result<Plan, String> {
         let name = self.name.trim().to_owned();
         if !valid_name(&name) {
-            return Err(L10N.tr("machine-invalid-name"));
+            return Err(tr!(
+                "Use lowercase letters, digits and hyphens for the name."
+            ));
         }
         if fleet.entries.values().any(|entry| entry.name() == name)
             || fleet.jobs.values().any(|job| job.name == name)
         {
-            return Err(L10N.tr_args("machine-name-taken", [("name", name.into())]));
+            return Err(tr!("A machine named “{name}” already exists.", name = name));
         }
         if self.installs_from_iso() {
             let iso = self
                 .iso
                 .clone()
-                .ok_or_else(|| L10N.tr("machine-iso-none"))?;
+                .ok_or_else(|| tr!("No disc image chosen"))?;
             return Ok(Plan {
                 source: Source::Iso(Installer {
                     iso,
@@ -513,7 +513,9 @@ impl Draft {
         }
         let user = self.user.trim().to_owned();
         if !valid_user(&user) {
-            return Err(L10N.tr("machine-invalid-user"));
+            return Err(tr!(
+                "Use lowercase letters, digits, hyphens and underscores for the user, and not root."
+            ));
         }
         let port = self
             .port
@@ -521,20 +523,20 @@ impl Draft {
             .parse::<u16>()
             .ok()
             .filter(|port| *port >= LOWEST_PORT)
-            .ok_or_else(|| L10N.tr("machine-invalid-port"))?;
+            .ok_or_else(|| tr!("Choose a port from 1024 to 65535."))?;
         if !port_free(fleet, port) {
-            return Err(L10N.tr_args("machine-port-taken", [("port", port.into())]));
+            return Err(tr!("Port {port} is in use.", port = port));
         }
         let key_file = self
             .keys
             .get(self.key)
-            .ok_or_else(|| L10N.tr("machine-no-key"))?;
+            .ok_or_else(|| tr!("No SSH key in ~/.ssh. Make one with ssh-keygen."))?;
         let key = std::fs::read_to_string(key_file)
             .map(|key| key.trim().to_owned())
             .map_err(|error| error.to_string())?;
         let image = *catalog()
             .get(self.image)
-            .ok_or_else(|| L10N.tr("machine-image"))?;
+            .ok_or_else(|| tr!("Cloud image"))?;
         let identity = key_file.with_extension("");
         Ok(Plan {
             source: Source::Cloud(

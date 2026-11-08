@@ -5,16 +5,17 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use std::rc::Rc;
 
+
+use bande_l10n::{text, tr, trn};
+
+use crate::engine::{Task, Volume};
+use crate::resources::{
+    Act, Acts, Pane, Scope, age, boxed, confirm, matches, push, search, size, tell, tool,
+};
 use bande_app_menu::Entry;
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{
     Alert, Button, Cell, Column, Menu, MenuItem, Row, Table, TextField, Ui, Widget, WidgetId,
-};
-
-use crate::L10N;
-use crate::engine::{Task, Volume};
-use crate::resources::{
-    Act, Acts, Pane, Scope, age, boxed, confirm, matches, push, search, size, tell, tool,
 };
 
 const PROJECT_PREFIX: &str = "project:";
@@ -70,7 +71,7 @@ fn users<'a>(scope: &'a Scope, name: &str) -> Vec<&'a str> {
 fn volume_row(scope: &Scope, volume: &Volume) -> Row {
     let users = users(scope, &volume.name);
     let used_by = match users.is_empty() {
-        true => Cell::new(L10N.tr("dangling")).tinted(scope.palette.warning),
+        true => Cell::new(tr!("dangling")).tinted(scope.palette.warning),
         false => Cell::new(users.join(", ")),
     };
     let size = scope
@@ -120,10 +121,8 @@ fn rows(scope: &Scope, filter: &str) -> Vec<Row> {
     named.extend(projects.into_iter().map(|(project, mut members)| {
         members.sort_by_key(|volume| volume.name.to_lowercase());
         let status = match live.contains(project) {
-            true => {
-                Cell::new(L10N.tr_args("volume-count", [("count", members.len().into())])).muted()
-            }
-            false => Cell::new(L10N.tr("no-containers")).tinted(scope.palette.warning),
+            true => Cell::new(trn!("1 volume", "{count} volumes", count = members.len())).muted(),
+            false => Cell::new(tr!("no containers")).tinted(scope.palette.warning),
         };
         let row = Row::new(
             format!("{PROJECT_PREFIX}{project}"),
@@ -170,26 +169,26 @@ pub fn name_sheet(ui: &mut Ui, acts: &Acts, archive: &Path) {
     let typed = Rc::new(RefCell::new(stem.clone()));
     let field = {
         let typed = Rc::clone(&typed);
-        TextField::new(&L10N.tr("volume-name"), &stem, move |text| {
+        TextField::new(&tr!("Volume name"), &stem, move |text| {
             *typed.borrow_mut() = text.trim().to_owned();
         })
     };
     let acts = Rc::clone(acts);
     let archive = archive.to_path_buf();
-    let message = L10N.tr_args(
-        "import-volume-message",
-        [("file", archive.display().to_string().into())],
+    let message = tr!(
+        "Creates a volume from {file}.",
+        file = archive.display().to_string()
     );
     ui.present_sheet(
-        Alert::new(&L10N.tr("import-volume-title"), &message, move |choice| {
+        Alert::new(&tr!("Import Volume"), &message, move |choice| {
             let name = typed.borrow().clone();
             if choice == "import" && !name.is_empty() {
                 push(&acts, Act::Task(Task::ImportVolume(name, archive.clone())));
             }
         })
         .accessory(field)
-        .primary(&L10N.tr("import"), "import")
-        .cancel(&L10N.tr("button-cancel"), "cancel"),
+        .primary(&tr!("Import"), "import")
+        .cancel(&tr!("Cancel"), "cancel"),
     );
 }
 
@@ -197,40 +196,38 @@ impl Pane for Volumes {
     fn build(&mut self, acts: &Acts, palette: &Palette) -> (Vec<Box<dyn Widget>>, Box<dyn Widget>) {
         let import = tool(
             IMPORT_SYMBOL,
-            "import-volume",
+            text!("Import Volume"),
             palette,
             acts,
             Act::Command(IMPORT),
         );
         let prune = tool(
             PRUNE_SYMBOL,
-            "prune-volumes",
+            text!("Prune Unused Volumes"),
             palette,
             acts,
             Act::Command(PRUNE),
         );
         let remove = tool(
             REMOVE_SYMBOL,
-            "remove-selected",
+            text!("Remove Selected"),
             palette,
             acts,
             Act::Command(REMOVE),
         );
-        let field = search("filter-volumes", &self.filter, acts);
+        let field = search(text!("Filter volumes"), &self.filter, acts);
         self.remove = Some(remove.id());
         self.search = Some(field.id());
         let select = Rc::clone(acts);
         let expand = Rc::clone(acts);
         let menu_acts = Rc::clone(acts);
         let table = Table::new(vec![
-            Column::new(&L10N.tr("column-name"), NAME_WIDTH)
+            Column::new(&tr!("Name"), NAME_WIDTH)
                 .flexible()
                 .unsortable(),
-            Column::new(&L10N.tr("column-size"), SIZE_WIDTH)
-                .numeric()
-                .unsortable(),
-            Column::new(&L10N.tr("column-used-by"), USED_BY_WIDTH).unsortable(),
-            Column::new(&L10N.tr("column-created"), CREATED_WIDTH).unsortable(),
+            Column::new(&tr!("Size"), SIZE_WIDTH).numeric().unsortable(),
+            Column::new(&tr!("Used By"), USED_BY_WIDTH).unsortable(),
+            Column::new(&tr!("Created"), CREATED_WIDTH).unsortable(),
         ])
         .on_selection(move |keys| push(&select, Act::Select(keys.to_vec())))
         .on_expand(move |keys, expanded, _| push(&expand, Act::Expand(keys.to_vec(), expanded)))
@@ -238,17 +235,14 @@ impl Pane for Volumes {
             |keys| match keys {
                 [] => None,
                 [key] if !key.starts_with(PROJECT_PREFIX) => Some(Menu::new(vec![
-                    MenuItem::new(&L10N.tr("copy-name"), COPY_NAME),
-                    MenuItem::new(&L10N.tr("copy-mountpoint"), COPY_MOUNTPOINT),
+                    MenuItem::new(&tr!("Copy Name"), COPY_NAME),
+                    MenuItem::new(&tr!("Copy Mountpoint"), COPY_MOUNTPOINT),
                     MenuItem::separator(),
-                    MenuItem::new(&L10N.tr("export-volume"), EXPORT),
+                    MenuItem::new(&tr!("Export as tar…"), EXPORT),
                     MenuItem::separator(),
-                    MenuItem::new(&L10N.tr("remove-ellipsis"), REMOVE),
+                    MenuItem::new(&tr!("Remove…"), REMOVE),
                 ])),
-                _ => Some(Menu::new(vec![MenuItem::new(
-                    &L10N.tr("remove-ellipsis"),
-                    REMOVE,
-                )])),
+                _ => Some(Menu::new(vec![MenuItem::new(&tr!("Remove…"), REMOVE)])),
             },
             move |action, keys| push(&menu_acts, Act::Menu(action.to_owned(), keys.to_vec())),
         );
@@ -299,14 +293,14 @@ impl Pane for Volumes {
     fn menu(&self, _scope: &Scope) -> Option<Entry> {
         let one = matches!(self.selected.as_slice(), [key] if !key.starts_with(PROJECT_PREFIX));
         Some(Entry::submenu(
-            &L10N.tr("menu-volume"),
+            &tr!("Volume"),
             vec![
-                Entry::item(&L10N.tr("import-volume-ellipsis"), IMPORT),
-                Entry::item(&L10N.tr("export-volume"), EXPORT).enabled(one),
-                Entry::item(&L10N.tr("copy-name"), COPY_NAME).enabled(one),
+                Entry::item(&tr!("Import Volume…"), IMPORT),
+                Entry::item(&tr!("Export as tar…"), EXPORT).enabled(one),
+                Entry::item(&tr!("Copy Name"), COPY_NAME).enabled(one),
                 Entry::separator(),
-                Entry::item(&L10N.tr("remove-ellipsis"), REMOVE).enabled(!self.selected.is_empty()),
-                Entry::item(&L10N.tr("prune-unused-ellipsis"), PRUNE),
+                Entry::item(&tr!("Remove…"), REMOVE).enabled(!self.selected.is_empty()),
+                Entry::item(&tr!("Prune Unused…"), PRUNE),
             ],
         ))
     }
@@ -317,9 +311,11 @@ impl Pane for Volumes {
             PRUNE => confirm(
                 ui,
                 acts,
-                &L10N.tr("prune-volumes-title"),
-                &L10N.tr("prune-volumes-message"),
-                &L10N.tr("prune-volumes"),
+                &tr!("Prune unused volumes?"),
+                &tr!(
+                    "Removes every volume no container uses, with its data. This cannot be undone."
+                ),
+                &tr!("Prune Unused Volumes"),
                 Task::PruneVolumes,
             ),
             _ => {
@@ -356,15 +352,17 @@ impl Pane for Volumes {
                 let names = names(scope, keys);
                 let title = match names.as_slice() {
                     [] => return,
-                    [only] => L10N.tr_args("remove-volume-title", [("name", only.clone().into())]),
-                    _ => L10N.tr_args("remove-volumes-title", [("count", names.len().into())]),
+                    [only] => tr!("Remove “{name}”?", name = only.clone()),
+                    _ => tr!("Remove {count} volumes?", count = names.len()),
                 };
                 confirm(
                     ui,
                     acts,
                     &title,
-                    &L10N.tr("remove-volume-message"),
-                    &L10N.tr("remove"),
+                    &tr!(
+                        "Its data is deleted. A volume still used by a container cannot be removed."
+                    ),
+                    &tr!("Remove"),
                     Task::RemoveVolumes(names),
                 );
             }
@@ -375,27 +373,26 @@ impl Pane for Volumes {
     fn finished(&mut self, ui: &mut Ui, task: &Task, result: &Result<u64, String>) -> bool {
         let (title, message) = match (task, result) {
             (Task::PruneVolumes, Ok(reclaimed)) => (
-                L10N.tr("pruned-volumes"),
-                L10N.tr_args("reclaimed", [("size", size(*reclaimed).into())]),
+                tr!("Pruned unused volumes"),
+                tr!("Reclaimed {size}.", size = size(*reclaimed)),
             ),
             (Task::ImportVolume(name, _), Ok(_)) => (
-                L10N.tr_args("imported-volume", [("name", name.clone().into())]),
+                tr!("Imported into “{name}”", name = name.clone()),
                 String::new(),
             ),
-            (Task::ExportVolume(name), Ok(_)) => (
-                L10N.tr_args("exported-volume", [("name", name.clone().into())]),
-                String::new(),
-            ),
+            (Task::ExportVolume(name), Ok(_)) => {
+                (tr!("Exported “{name}”", name = name.clone()), String::new())
+            }
             (Task::ImportVolume(name, _), Err(message)) => (
-                L10N.tr_args("cannot-import", [("name", name.clone().into())]),
+                tr!("Cannot import into “{name}”", name = name.clone()),
                 message.clone(),
             ),
             (Task::ExportVolume(name), Err(message)) => (
-                L10N.tr_args("cannot-export", [("name", name.clone().into())]),
+                tr!("Cannot export “{name}”", name = name.clone()),
                 message.clone(),
             ),
             (Task::RemoveVolumes(_) | Task::PruneVolumes, Err(message)) => {
-                (L10N.tr("cannot-remove-volumes"), message.clone())
+                (tr!("Cannot remove every volume"), message.clone())
             }
             _ => return false,
         };

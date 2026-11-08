@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 
+use bande_l10n::tr;
 use bande_datetime::DateFormats;
 use bande_inbox::{Inbox, Outbox};
 use jiff::tz::TimeZone;
@@ -9,7 +10,6 @@ use zbus::zvariant::Value;
 use zbus::{MatchRule, message};
 
 use crate::alerts::Due;
-use crate::ui::L10N;
 
 const APP_ID: &str = "org.bande.Calendar";
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
@@ -77,7 +77,7 @@ fn show(category: &str, title: &str, body: &str, actions: &[&str]) -> zbus::Resu
             Some(NOTIFICATIONS),
             "Notify",
             &(
-                L10N.tr("app-name"),
+                tr!("Calendar"),
                 0u32,
                 APP_ID,
                 title,
@@ -137,7 +137,7 @@ impl Notices {
         };
         let outbox = self.inbox.outbox();
         in_background("alert", move || {
-            let snooze = L10N.tr("snooze");
+            let snooze = tr!("Snooze");
             match show(
                 "x-calendar.alert",
                 &due.title,
@@ -154,8 +154,8 @@ impl Notices {
     }
 
     pub fn sign_in_failed(&self, account: String, name: &str) {
-        let title = L10N.tr_args("sign-in-failed", [("name", name.into())]);
-        let body = L10N.tr("sign-in-failed-message");
+        let title = tr!("Can’t sign in to “{name}”", name = name);
+        let body = tr!("The server refused the password. Click to enter it again.");
         let outbox = self.inbox.outbox();
         in_background("sign-in", move || {
             match show("x-calendar.sign-in", &title, &body, &[OPEN, ""]) {

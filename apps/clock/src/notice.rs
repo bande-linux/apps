@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 
+use bande_l10n::tr;
 use bande_inbox::{Inbox, Outbox};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::Value;
 use zbus::{MatchRule, message};
-
-use crate::ui::L10N;
 
 const APP_ID: &str = "org.bande.Clock";
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
@@ -79,11 +78,11 @@ fn listen(outbox: &Outbox<Notice>) -> zbus::Result<()> {
 
 fn show(ring: &Ring) -> zbus::Result<u32> {
     let (second, second_label) = match ring.subject {
-        Subject::Alarm(_) if ring.snooze => (SNOOZE, L10N.tr("snooze")),
-        Subject::Alarm(_) => (STOP, L10N.tr("stop")),
-        Subject::Timer(_) => (REPEAT, L10N.tr("repeat")),
+        Subject::Alarm(_) if ring.snooze => (SNOOZE, tr!("Snooze")),
+        Subject::Alarm(_) => (STOP, tr!("Stop")),
+        Subject::Timer(_) => (REPEAT, tr!("Repeat")),
     };
-    let stop = L10N.tr("stop");
+    let stop = tr!("Stop");
     let mut actions = vec![OPEN, "", second, second_label.as_str()];
     if second != STOP {
         actions.extend([STOP, stop.as_str()]);
@@ -101,7 +100,7 @@ fn show(ring: &Ring) -> zbus::Result<u32> {
             Some(NOTIFICATIONS),
             "Notify",
             &(
-                L10N.tr("app-name"),
+                tr!("Clock"),
                 0u32,
                 APP_ID,
                 ring.title.as_str(),

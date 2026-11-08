@@ -2,20 +2,21 @@ mod run;
 
 use std::rc::Rc;
 
-use bande_app_menu::Entry;
-use bande_toolkit::Palette;
-use bande_toolkit::ui::{
-    Button, Cell, Column, Label, Menu, MenuItem, ProgressBar, Row, Table, TextField, Ui, Widget,
-    WidgetId,
-};
 
-use crate::L10N;
+use bande_l10n::{text, tr};
+
 use crate::engine::{Image, Task};
 use crate::resources::{
     Act, Acts, Banded, Pane, Scope, Strip, age, boxed, confirm, matches, push, search, size, tell,
     tool,
 };
 use crate::ui::dot;
+use bande_app_menu::Entry;
+use bande_toolkit::Palette;
+use bande_toolkit::ui::{
+    Button, Cell, Column, Label, Menu, MenuItem, ProgressBar, Row, Table, TextField, Ui, Widget,
+    WidgetId,
+};
 
 pub const PULL: &str = "pull-image";
 pub const RUN: &str = "run-image";
@@ -78,7 +79,7 @@ fn arch(palette: &Palette, image: &Image) -> Cell {
     let mut all = image.architectures.iter();
     match (all.next(), all.next()) {
         (None, _) => Cell::new("—").muted(),
-        (Some(_), Some(_)) => Cell::new(L10N.tr("arch-multi")),
+        (Some(_), Some(_)) => Cell::new(tr!("multi")),
         (Some(arch), None) if arch == host_arch() => Cell::new(arch.as_str()),
         (Some(arch), None) => Cell::new(arch.as_str()).tinted(palette.warning),
     }
@@ -171,12 +172,16 @@ impl Images {
         match bar {
             Bar::Field => {
                 let typed = Rc::clone(acts);
-                let field = TextField::new(&L10N.tr("pull-placeholder"), &self.text, move |text| {
-                    push(&typed, Act::Text(text.to_owned()));
-                });
+                let field = TextField::new(
+                    &tr!("Pull image (e.g. nginx:latest)"),
+                    &self.text,
+                    move |text| {
+                        push(&typed, Act::Text(text.to_owned()));
+                    },
+                );
                 let id = field.id();
                 let pull = Rc::clone(acts);
-                let button = Button::new(&L10N.tr("pull"), move || {
+                let button = Button::new(&tr!("Pull"), move || {
                     push(&pull, Act::Command(PULL_NOW));
                 })
                 .primary();
@@ -184,19 +189,15 @@ impl Images {
             }
             Bar::Pulling(reference, status, percent) => {
                 let label = match percent {
-                    Some(percent) => L10N.tr_args(
-                        "pulling-percent",
-                        [
-                            ("reference", reference.clone().into()),
-                            ("percent", (*percent).into()),
-                        ],
+                    Some(percent) => tr!(
+                        "Pulling {reference}… {percent}%",
+                        reference = reference.clone(),
+                        percent = (*percent)
                     ),
-                    None => L10N.tr_args(
-                        "pulling",
-                        [
-                            ("reference", reference.clone().into()),
-                            ("status", status.clone().into()),
-                        ],
+                    None => tr!(
+                        "Pulling {reference}: {status}",
+                        reference = reference.clone(),
+                        status = status.clone()
                     ),
                 };
                 let value = percent.map_or(0.0, |percent| percent as f32 / 100.0);
@@ -216,15 +217,15 @@ impl Images {
             return;
         }
         let title = match references.as_slice() {
-            [only] => L10N.tr_args("remove-image-title", [("name", only.clone().into())]),
-            _ => L10N.tr_args("remove-images-title", [("count", references.len().into())]),
+            [only] => tr!("Remove “{name}”?", name = only.clone()),
+            _ => tr!("Remove {count} images?", count = references.len()),
         };
         confirm(
             ui,
             acts,
             &title,
-            &L10N.tr("remove-image-message"),
-            &L10N.tr("remove"),
+            &tr!("An image still used by a container cannot be removed."),
+            &tr!("Remove"),
             Task::RemoveImages(references),
         );
     }
@@ -244,35 +245,33 @@ impl Pane for Images {
         self.acts = Some(Rc::clone(acts));
         let prune = tool(
             PRUNE_SYMBOL,
-            "prune-images",
+            text!("Prune Unused Images"),
             palette,
             acts,
             Act::Command(PRUNE),
         );
         let remove = tool(
             REMOVE_SYMBOL,
-            "remove-selected",
+            text!("Remove Selected"),
             palette,
             acts,
             Act::Command(REMOVE),
         );
-        let run = tool(RUN_SYMBOL, "run-image", palette, acts, Act::Command(RUN));
-        let field = search("filter-images", &self.filter, acts);
+        let run = tool(RUN_SYMBOL, text!("Run…"), palette, acts, Act::Command(RUN));
+        let field = search(text!("Filter images"), &self.filter, acts);
         self.tools = vec![(run.id(), true), (prune.id(), false), (remove.id(), true)];
         self.search = Some(field.id());
         let select = Rc::clone(acts);
         let menu_acts = Rc::clone(acts);
         let table = Table::new(vec![
-            Column::new(&L10N.tr("column-repository"), REPOSITORY_WIDTH)
+            Column::new(&tr!("Repository"), REPOSITORY_WIDTH)
                 .flexible()
                 .unsortable(),
-            Column::new(&L10N.tr("column-tag"), TAG_WIDTH).unsortable(),
-            Column::new(&L10N.tr("column-arch"), ARCH_WIDTH).unsortable(),
-            Column::new(&L10N.tr("column-in-use"), IN_USE_WIDTH).unsortable(),
-            Column::new(&L10N.tr("column-created"), CREATED_WIDTH).unsortable(),
-            Column::new(&L10N.tr("column-size"), SIZE_WIDTH)
-                .numeric()
-                .unsortable(),
+            Column::new(&tr!("Tag"), TAG_WIDTH).unsortable(),
+            Column::new(&tr!("Arch"), ARCH_WIDTH).unsortable(),
+            Column::new(&tr!("In Use"), IN_USE_WIDTH).unsortable(),
+            Column::new(&tr!("Created"), CREATED_WIDTH).unsortable(),
+            Column::new(&tr!("Size"), SIZE_WIDTH).numeric().unsortable(),
         ])
         .on_selection(move |keys| push(&select, Act::Select(keys.to_vec())))
         .context_menu(
@@ -281,15 +280,15 @@ impl Pane for Images {
                 match keys.len() {
                     0 => None,
                     1 => Some(Menu::new(vec![
-                        MenuItem::new(&L10N.tr("run-ellipsis"), RUN),
+                        MenuItem::new(&tr!("Run…"), RUN),
                         MenuItem::separator(),
-                        MenuItem::new(&L10N.tr("copy-reference"), COPY_REFERENCE),
-                        MenuItem::new(&L10N.tr("copy-image-id"), COPY_ID),
+                        MenuItem::new(&tr!("Copy Reference"), COPY_REFERENCE),
+                        MenuItem::new(&tr!("Copy Image ID"), COPY_ID),
                         MenuItem::separator(),
-                        MenuItem::new(&L10N.tr("remove-ellipsis"), REMOVE),
+                        MenuItem::new(&tr!("Remove…"), REMOVE),
                     ])),
                     count => Some(Menu::new(vec![MenuItem::new(
-                        &L10N.tr_args("remove-images", [("count", count.into())]),
+                        &tr!("Remove {count} Images", count = count),
                         REMOVE,
                     )])),
                 }
@@ -355,13 +354,13 @@ impl Pane for Images {
     fn menu(&self, _scope: &Scope) -> Option<Entry> {
         let selected = !self.references().is_empty();
         Some(Entry::submenu(
-            &L10N.tr("menu-image"),
+            &tr!("Image"),
             vec![
-                Entry::item(&L10N.tr("run-ellipsis"), RUN),
-                Entry::item(&L10N.tr("copy-reference"), COPY_REFERENCE).enabled(selected),
+                Entry::item(&tr!("Run…"), RUN),
+                Entry::item(&tr!("Copy Reference"), COPY_REFERENCE).enabled(selected),
                 Entry::separator(),
-                Entry::item(&L10N.tr("remove-ellipsis"), REMOVE).enabled(selected),
-                Entry::item(&L10N.tr("prune-unused-ellipsis"), PRUNE),
+                Entry::item(&tr!("Remove…"), REMOVE).enabled(selected),
+                Entry::item(&tr!("Prune Unused…"), PRUNE),
             ],
         ))
     }
@@ -386,9 +385,9 @@ impl Pane for Images {
             PRUNE => confirm(
                 ui,
                 acts,
-                &L10N.tr("prune-images-title"),
-                &L10N.tr("prune-images-message"),
-                &L10N.tr("prune-images"),
+                &tr!("Prune unused images?"),
+                &tr!("Removes every image no container uses. This cannot be undone."),
+                &tr!("Prune Unused Images"),
                 Task::PruneImages,
             ),
             _ => {
@@ -423,17 +422,17 @@ impl Pane for Images {
     fn finished(&mut self, ui: &mut Ui, task: &Task, result: &Result<u64, String>) -> bool {
         let title = match (task, result) {
             (Task::PruneImages, Ok(reclaimed)) => {
-                let message = L10N.tr_args("reclaimed", [("size", size(*reclaimed).into())]);
-                tell(ui, &L10N.tr("pruned-images"), &message);
+                let message = tr!("Reclaimed {size}.", size = size(*reclaimed));
+                tell(ui, &tr!("Pruned unused images"), &message);
                 return true;
             }
             (Task::Pull(reference), Err(_)) => {
-                L10N.tr_args("cannot-pull", [("name", reference.clone().into())])
+                tr!("Cannot pull “{name}”", name = reference.clone())
             }
             (Task::Run(spec), Err(_)) => {
-                L10N.tr_args("cannot-run", [("name", spec.image.clone().into())])
+                tr!("Cannot run “{name}”", name = spec.image.clone())
             }
-            (Task::RemoveImages(_) | Task::PruneImages, Err(_)) => L10N.tr("cannot-remove-images"),
+            (Task::RemoveImages(_) | Task::PruneImages, Err(_)) => tr!("Cannot remove every image"),
             _ => return false,
         };
         if let Err(message) = result {

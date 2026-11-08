@@ -1,8 +1,7 @@
+use bande_l10n::tr;
 use bande_app_settings::{Shared, Stored, flag, pairs};
 use bande_toolkit::ui::{Context, Form, FormLine, Label, ScrollView, Toggle, Ui};
 use bande_toolkit::{Appearance, TextSystem};
-
-use crate::L10N;
 
 pub const SETTINGS_SIZE: (u32, u32) = (520, 280);
 
@@ -32,17 +31,17 @@ impl Stored for SoftwareSettings {
 pub fn settings_form(appearance: Appearance, settings: &Shared<SoftwareSettings>) -> Ui {
     let shared = settings.clone();
     let flathub = Toggle::new(
-        &L10N.tr("settings-flathub"),
+        &tr!("Get apps from Flathub"),
         settings.borrow().flathub,
         move |on| shared.borrow_mut().flathub = on,
     );
     let form = Form::new(
-        &L10N.tr("settings-title"),
+        &tr!("Software Settings"),
         vec![
-            FormLine::Heading(L10N.tr("settings-sources")),
-            FormLine::Row(L10N.tr("settings-flathub"), Box::new(flathub)),
+            FormLine::Heading(tr!("Sources")),
+            FormLine::Row(tr!("Get apps from Flathub"), Box::new(flathub)),
             FormLine::Wide(Box::new(
-                Label::new(&L10N.tr("settings-flathub-note")).secondary(),
+                Label::new(&tr!("Flathub offers apps Debian doesn’t have, and newer versions, packaged by their developers or the community. They install for you only, without a password, run in a sandbox and update with Software Update.")).secondary(),
             )),
         ],
     );

@@ -1,3 +1,4 @@
+use bande_l10n::{Text, text, tr};
 use bande_design::{Accent, Scheme};
 use bande_toolkit::Point;
 use bande_toolkit::ui::{
@@ -8,8 +9,7 @@ use jiff::civil::{DateTime, Time};
 
 use super::geometry::{self, TimeGrid};
 use super::{
-    CalendarView, Confirm, Drag, Hit, L10N, Mode, Part, Request, SIDEBAR_WIDTH, Signal,
-    TOOLBAR_HEIGHT,
+    CalendarView, Confirm, Drag, Hit, Mode, Part, Request, SIDEBAR_WIDTH, Signal, TOOLBAR_HEIGHT,
 };
 use crate::edit::{Scope, new_event, shifted};
 use crate::store::Found;
@@ -34,15 +34,15 @@ const ACTION_DELETE_CALENDAR: &str = "calendar-delete:";
 const ACTION_NEW_CALENDAR: &str = "new-calendar";
 const ACTION_NEW_CALENDAR_IN: &str = "new-calendar:";
 
-const COLORS: [(Accent, &str); 8] = [
-    (Accent::Rose, "color-rose"),
-    (Accent::Ember, "color-ember"),
-    (Accent::Amber, "color-amber"),
-    (Accent::Moss, "color-moss"),
-    (Accent::Teal, "color-teal"),
-    (Accent::Ultramarine, "color-ultramarine"),
-    (Accent::Plum, "color-plum"),
-    (Accent::Graphite, "color-graphite"),
+const COLORS: [(Accent, Text); 8] = [
+    (Accent::Rose, text!("Red")),
+    (Accent::Ember, text!("Orange")),
+    (Accent::Amber, text!("Yellow")),
+    (Accent::Moss, text!("Green")),
+    (Accent::Teal, text!("Teal")),
+    (Accent::Ultramarine, text!("Blue")),
+    (Accent::Plum, text!("Purple")),
+    (Accent::Graphite, text!("Graphite")),
 ];
 
 fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
@@ -52,11 +52,8 @@ fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
         .iter()
         .enumerate()
         .map(|(position, (accent, label))| {
-            MenuItem::new(
-                &L10N.tr(label),
-                &format!("{ACTION_COLOR}{index}:{position}"),
-            )
-            .checked(current == Some(*accent))
+            MenuItem::new(&label.tr(), &format!("{ACTION_COLOR}{index}:{position}"))
+                .checked(current == Some(*accent))
         })
         .collect();
     let subscription = calendar.info.read_only && calendar.info.url.is_none();
@@ -68,23 +65,23 @@ fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
         .count();
     items.push(MenuItem::separator());
     items.push(MenuItem::new(
-        &L10N.tr("rename-calendar"),
+        &tr!("Rename…"),
         &format!("{ACTION_RENAME}{index}"),
     ));
     items.push(MenuItem::new(
-        &L10N.tr("export"),
+        &tr!("Export…"),
         &format!("{ACTION_EXPORT_CALENDAR}{index}"),
     ));
     if !subscription && (calendar.info.account != crate::store::LOCAL_ACCOUNT || locals > 1) {
         items.push(MenuItem::new(
-            &L10N.tr("delete-calendar"),
+            &tr!("Delete Calendar"),
             &format!("{ACTION_DELETE_CALENDAR}{index}"),
         ));
     }
     if calendar.info.account != crate::store::LOCAL_ACCOUNT {
         items.push(MenuItem::separator());
         items.push(MenuItem::new(
-            &L10N.tr("remove-account"),
+            &tr!("Remove Account"),
             &format!("{ACTION_REMOVE_ACCOUNT}{}", calendar.info.account),
         ));
     }
@@ -396,13 +393,13 @@ fn pointer_down(view: &mut CalendarView, pointer: &Pointer) -> bool {
                 let mut items = Vec::new();
                 if !matches!(account.kind, crate::store::AccountKind::Subscription { .. }) {
                     items.push(MenuItem::new(
-                        &L10N.tr("new-calendar"),
+                        &tr!("New Calendar…"),
                         &format!("{ACTION_NEW_CALENDAR_IN}{id}"),
                     ));
                 }
                 if id != crate::store::LOCAL_ACCOUNT {
                     items.push(MenuItem::new(
-                        &L10N.tr("remove-account"),
+                        &tr!("Remove Account"),
                         &format!("{ACTION_REMOVE_ACCOUNT}{id}"),
                     ));
                 }
@@ -701,7 +698,7 @@ fn reschedule(
                 end,
                 all_day,
             },
-            &L10N.tr("change-recurring-title"),
+            &tr!("Do you want to change only this event, or all events in the series?"),
         ),
         false => view.apply_reschedule(&found, start, end, all_day, Scope::Series),
     }
@@ -871,7 +868,7 @@ fn submit_setup(view: &mut CalendarView) {
     match request {
         Some(request) => {
             setup.busy = true;
-            setup.show_note(&mut view.ui, &L10N.tr("syncing"));
+            setup.show_note(&mut view.ui, &tr!("Updating…"));
             view.requests.push(request);
         }
         None => setup.password = None,

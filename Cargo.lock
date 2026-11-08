@@ -402,7 +402,7 @@ dependencies = [
 [[package]]
 name = "bande-app"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "accesskit",
  "bande-app-menu",
@@ -424,7 +424,7 @@ dependencies = [
 [[package]]
 name = "bande-app-menu"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-inbox",
  "bande-keyboard",
@@ -435,7 +435,7 @@ dependencies = [
 [[package]]
 name = "bande-app-settings"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -469,7 +469,7 @@ dependencies = [
 [[package]]
 name = "bande-audio"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "pipewire",
  "rustix",
@@ -480,7 +480,7 @@ dependencies = [
 [[package]]
 name = "bande-bluetooth"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "blocking",
  "zbus",
@@ -489,7 +489,7 @@ dependencies = [
 [[package]]
 name = "bande-bus"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "tracing",
  "zbus",
@@ -561,7 +561,7 @@ dependencies = [
 [[package]]
 name = "bande-config"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-bus",
  "bande-design",
@@ -578,7 +578,7 @@ dependencies = [
 [[package]]
 name = "bande-content"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-fs",
  "bande-inbox",
@@ -597,7 +597,7 @@ dependencies = [
 [[package]]
 name = "bande-datetime"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "icu_calendar",
  "icu_datetime",
@@ -611,7 +611,7 @@ dependencies = [
 [[package]]
 name = "bande-design"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 
 [[package]]
 name = "bande-disks"
@@ -635,7 +635,7 @@ dependencies = [
 [[package]]
 name = "bande-fs"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-datetime",
  "bande-l10n",
@@ -655,7 +655,7 @@ dependencies = [
 [[package]]
 name = "bande-graphics"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "ash",
  "bande-design",
@@ -677,7 +677,7 @@ dependencies = [
 [[package]]
 name = "bande-inbox"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "rustix",
 ]
@@ -703,7 +703,7 @@ dependencies = [
 [[package]]
 name = "bande-keyboard"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-l10n",
  "roxmltree 0.21.2",
@@ -719,23 +719,36 @@ dependencies = [
 [[package]]
 name = "bande-l10n"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-l10n-macros",
- "fluent-bundle",
+ "bande-l10n-source",
  "tracing",
- "unic-langid",
 ]
 
 [[package]]
 name = "bande-l10n-macros"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
+dependencies = [
+ "bande-l10n-source",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "bande-l10n-source"
+version = "0.1.9"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
+dependencies = [
+ "proc-macro2",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "bande-log"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "rustix",
  "tracing",
@@ -778,7 +791,7 @@ dependencies = [
 [[package]]
 name = "bande-media"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "rustix",
  "serde",
@@ -788,7 +801,7 @@ dependencies = [
 [[package]]
 name = "bande-media-view"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "accesskit",
  "bande-content",
@@ -817,7 +830,7 @@ dependencies = [
 [[package]]
 name = "bande-network"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-log",
  "zbus",
@@ -826,7 +839,7 @@ dependencies = [
 [[package]]
 name = "bande-notify"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-bus",
  "bande-datetime",
@@ -841,7 +854,7 @@ dependencies = [
 [[package]]
 name = "bande-packages"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "rustix",
  "serde",
@@ -852,7 +865,7 @@ dependencies = [
 [[package]]
 name = "bande-pdf"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-graphics",
  "krilla",
@@ -884,7 +897,7 @@ dependencies = [
 [[package]]
 name = "bande-power"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-audio",
  "bande-bus",
@@ -925,7 +938,7 @@ dependencies = [
 [[package]]
 name = "bande-protocols"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "wayland-backend",
  "wayland-client",
@@ -936,7 +949,7 @@ dependencies = [
 [[package]]
 name = "bande-search"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-bus",
  "bande-config",
@@ -985,7 +998,7 @@ dependencies = [
 [[package]]
 name = "bande-sound"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "tracing",
  "zbus",
@@ -994,12 +1007,12 @@ dependencies = [
 [[package]]
 name = "bande-spring"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 
 [[package]]
 name = "bande-status"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-app-menu",
  "bande-bluetooth",
@@ -1060,6 +1073,7 @@ dependencies = [
  "accesskit",
  "alacritty_terminal",
  "bande-design",
+ "bande-l10n",
  "bande-toolkit",
  "bande-volumes",
  "bande-xdg",
@@ -1095,7 +1109,7 @@ dependencies = [
 [[package]]
 name = "bande-thumbnails"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-inbox",
  "bande-volumes",
@@ -1109,7 +1123,7 @@ dependencies = [
 [[package]]
 name = "bande-toolkit"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "accesskit",
  "bande-graphics",
@@ -1120,7 +1134,7 @@ dependencies = [
 [[package]]
 name = "bande-toolkit-platform"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -1190,7 +1204,7 @@ dependencies = [
 [[package]]
 name = "bande-volumes"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "rustix",
  "tracing",
@@ -1200,7 +1214,7 @@ dependencies = [
 [[package]]
 name = "bande-watch"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "rustix",
 ]
@@ -1208,7 +1222,7 @@ dependencies = [
 [[package]]
 name = "bande-widgets"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "accesskit",
  "bande-graphics",
@@ -1221,7 +1235,7 @@ dependencies = [
 [[package]]
 name = "bande-xdg"
 version = "0.1.9"
-source = "git+https://github.com/bande-linux/desktop?rev=f9d4ade478697f5e4916233065ff1b181cd97e6c#f9d4ade478697f5e4916233065ff1b181cd97e6c"
+source = "git+https://github.com/bande-linux/desktop?rev=4c4f809a771d4c56abc4c2b544475014edc59f88#4c4f809a771d4c56abc4c2b544475014edc59f88"
 dependencies = [
  "bande-bus",
  "bande-inbox",
@@ -2028,41 +2042,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
 dependencies = [
  "num-traits",
-]
-
-[[package]]
-name = "fluent-bundle"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01203cb8918f5711e73891b347816d932046f95f54207710bda99beaeb423bf4"
-dependencies = [
- "fluent-langneg",
- "fluent-syntax",
- "intl-memoizer",
- "intl_pluralrules",
- "rustc-hash 2.1.3",
- "self_cell",
- "smallvec",
- "unic-langid",
-]
-
-[[package]]
-name = "fluent-langneg"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7eebbe59450baee8282d71676f3bfed5689aeab00b27545e83e5f14b1195e8b0"
-dependencies = [
- "unic-langid",
-]
-
-[[package]]
-name = "fluent-syntax"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54f0d287c53ffd184d04d8677f590f4ac5379785529e5e08b1c8083acdd5c198"
-dependencies = [
- "memchr",
- "thiserror",
 ]
 
 [[package]]
@@ -3032,25 +3011,6 @@ checksum = "3b5cf4372d022092674a83b8febf5865f7a573cc0c5baec5e49c879b6a20978f"
 dependencies = [
  "block-padding",
  "hybrid-array",
-]
-
-[[package]]
-name = "intl-memoizer"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "310da2e345f5eb861e7a07ee182262e94975051db9e4223e909ba90f392f163f"
-dependencies = [
- "type-map",
- "unic-langid",
-]
-
-[[package]]
-name = "intl_pluralrules"
-version = "7.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "078ea7b7c29a2b4df841a7f6ac8775ff6074020c6776d48491ce2268e068f972"
-dependencies = [
- "unic-langid",
 ]
 
 [[package]]
@@ -4891,12 +4851,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "self_cell"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ab42ca02749e120097e328d91d415325bdf43b1c72c4c8badf37375fe40a813"
-
-[[package]]
 name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5564,15 +5518,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86a801b3cea342a06d468c8710662aa29e5e05e4f5c0d62f00bbb7f2ad7941c2"
 
 [[package]]
-name = "type-map"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb30dbbd9036155e74adad6812e9898d03ec374946234fbcebd5dfc7b9187b90"
-dependencies = [
- "rustc-hash 2.1.3",
-]
-
-[[package]]
 name = "typed-path"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5593,24 +5538,6 @@ dependencies = [
  "memoffset",
  "tempfile",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "unic-langid"
-version = "0.9.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a28ba52c9b05311f4f6e62d5d9d46f094bd6e84cb8df7b3ef952748d752a7d05"
-dependencies = [
- "unic-langid-impl",
-]
-
-[[package]]
-name = "unic-langid-impl"
-version = "0.9.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dce1bf08044d4b7a94028c93786f8566047edc11110595914de93362559bc658"
-dependencies = [
- "tinystr",
 ]
 
 [[package]]

@@ -18,10 +18,6 @@ pub mod sync;
 pub mod ui;
 pub mod worker;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
 pub const KEYRING: &str = "org.bande.Mail";
 
 pub fn keyring_key<'a>(email: &'a str, host: &'a str) -> [(&'a str, &'a str); 2] {
@@ -31,6 +27,3 @@ pub fn keyring_key<'a>(email: &'a str, host: &'a str) -> [(&'a str, &'a str); 2]
 pub fn keyring_label(email: &str) -> String {
     format!("Mail password for {email}")
 }
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-mail")));

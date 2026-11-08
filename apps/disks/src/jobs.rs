@@ -9,6 +9,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
+
+use bande_l10n::tr;
+
+use crate::model::Scheme;
+use crate::view::Choose;
 use bande_volumes::udisks::{
     BLOCK, ENCRYPTED, FILESYSTEM, LOOP, MANAGER, MANAGER_PATH, Objects, PARTITION, PARTITION_TABLE,
     UDISKS,
@@ -17,10 +22,6 @@ use serde::Serialize;
 use zbus::blocking::Connection;
 use zbus::zvariant::{DynamicType, Fd, ObjectPath, OwnedObjectPath, Value};
 use zeroize::Zeroizing;
-
-use crate::L10N;
-use crate::model::Scheme;
-use crate::view::Choose;
 
 const DISMISSED: &str = "org.freedesktop.UDisks2.Error.NotAuthorizedDismissed";
 const CHUNK: usize = 4 << 20;
@@ -54,13 +55,13 @@ impl Format {
     ];
 
     pub fn title(self) -> String {
-        L10N.tr(match self {
-            Self::Ext4 => "format-ext4",
-            Self::Ext4Encrypted => "format-ext4-encrypted",
-            Self::ExFat => "format-exfat",
-            Self::Fat32 => "format-fat32",
-            Self::Ntfs => "format-ntfs",
-        })
+        match self {
+            Self::Ext4 => tr!("Linux (ext4)"),
+            Self::Ext4Encrypted => tr!("Linux (ext4, Encrypted)"),
+            Self::ExFat => tr!("ExFAT"),
+            Self::Fat32 => tr!("MS-DOS (FAT32)"),
+            Self::Ntfs => tr!("Windows NT (NTFS)"),
+        }
     }
 
     fn kind(self) -> &'static str {
@@ -361,7 +362,9 @@ fn first_aid(system: &Connection, filesystem: &str) -> Result<Outcome, Failure> 
     remount(system, &unmounted)?;
     match consistent || repaired {
         true => Ok(Outcome::Checked { repaired }),
-        false => Err(Failure::Failed(L10N.tr("first-aid-failed"))),
+        false => Err(Failure::Failed(tr!(
+            "The volume has errors that First Aid couldn’t repair. Back up its data and erase it."
+        ))),
     }
 }
 
@@ -383,7 +386,7 @@ fn copy(
     let mut shown = 0u64;
     loop {
         if cancel.swap(false, Ordering::Relaxed) {
-            return Err(Failure::Failed(L10N.tr("copy-stopped")));
+            return Err(Failure::Failed(tr!("The operation was stopped.")));
         }
         let read = from.read(&mut buffer)?;
         if read == 0 {
@@ -431,7 +434,7 @@ fn restore(
     let objects = Objects::load(system)?;
     let capacity: u64 = objects.get(target, BLOCK, "Size").unwrap_or(0);
     if size > capacity {
-        return Err(Failure::Failed(L10N.tr("restore-too-big")));
+        return Err(Failure::Failed(tr!("The image is too big.")));
     }
     release(system, &members(system, target)?)?;
     let device = open_device(system, target, "OpenForRestore")?;
@@ -461,7 +464,7 @@ fn mount_image(system: &Connection, file: &PathBuf) -> Result<Outcome, Failure> 
 fn image_filter() -> bande_app::Filter {
     let patterns = ["*.img", "*.iso", "*.IMG", "*.ISO", "*.raw"];
     (
-        L10N.tr("disk-images"),
+        tr!("Disk Images"),
         patterns
             .iter()
             .map(|pattern| (0, (*pattern).to_owned()))
@@ -646,17 +649,17 @@ impl Worker {
                 let chosen = match &choose {
                     Choose::SaveImage(_, name) => bande_app::choose_save_file(
                         &session,
-                        &L10N.tr("save-image"),
+                        &tr!("Save Image"),
                         &format!("{name}.img"),
                     ),
                     Choose::Restore(_) => bande_app::choose_file(
                         &session,
-                        &L10N.tr("choose-image"),
+                        &tr!("Choose an Image"),
                         Some(image_filter()),
                     ),
                     Choose::MountImage => bande_app::choose_file(
                         &session,
-                        &L10N.tr("open-image"),
+                        &tr!("Open Disk Image"),
                         Some(image_filter()),
                     ),
                 };

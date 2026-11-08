@@ -13,11 +13,10 @@ mod toolbar;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::LazyLock;
 
+use bande_l10n::tr;
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_datetime::DateFormats;
-use bande_l10n::Localizer;
 use bande_toolkit::ui::{Alert, ClipboardRequest, Context, Cursor, FreeLayout, Menu, Ui, WidgetId};
 use bande_toolkit::{
     Appearance, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextSystem,
@@ -35,9 +34,6 @@ use bande_design::{Accent, Scheme};
 pub use settings_view::{SETTINGS_SIZE, SettingsView};
 pub use toolbar::TOOLBAR_HEIGHT;
 
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-calendar")));
-
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 const MAX_ZONES: usize = 12;
 
@@ -53,12 +49,12 @@ impl Mode {
     pub const ALL: [Self; 4] = [Self::Day, Self::Week, Self::Month, Self::Year];
 
     fn title(self) -> String {
-        L10N.tr(match self {
-            Self::Day => "day",
-            Self::Week => "week",
-            Self::Month => "month",
-            Self::Year => "year",
-        })
+        match self {
+            Self::Day => tr!("Day"),
+            Self::Week => tr!("Week"),
+            Self::Month => tr!("Month"),
+            Self::Year => tr!("Year"),
+        }
     }
 }
 
@@ -562,7 +558,7 @@ impl CalendarView {
             .accounts
             .iter()
             .filter_map(|known| match known.kind {
-                AccountKind::Local => Some((known.id.clone(), L10N.tr("on-my-computer"))),
+                AccountKind::Local => Some((known.id.clone(), tr!("On My Computer"))),
                 AccountKind::CalDav { .. } => Some((known.id.clone(), known.name.clone())),
                 AccountKind::Subscription { .. } => None,
             })
@@ -602,7 +598,7 @@ impl CalendarView {
         };
         naming.close(&mut self.ui);
         let name = match naming.name.trim() {
-            "" => L10N.tr("untitled"),
+            "" => tr!("Untitled"),
             name => name.to_owned(),
         };
         match naming.target {
@@ -675,14 +671,15 @@ impl CalendarView {
         let Some(calendar) = self.library.calendars.get(index) else {
             return;
         };
-        let title = L10N.tr_args(
-            "delete-calendar-title",
-            [("name", calendar.info.name.clone().into())],
-        );
+        let title = tr!("Delete “{name}”?", name = calendar.info.name.clone());
         self.confirm = Some(Confirm::DeleteCalendar(index));
-        let alert = Alert::new(&title, &L10N.tr("delete-calendar-message"), self.choice())
-            .cancel(&L10N.tr("cancel"), "cancel")
-            .destructive(&L10N.tr("delete"), "accept");
+        let alert = Alert::new(
+            &title,
+            &tr!("Its events are deleted too, also on the server."),
+            self.choice(),
+        )
+        .cancel(&tr!("Cancel"), "cancel")
+        .destructive(&tr!("Delete"), "accept");
         self.ui.present_dialog(alert);
     }
 
@@ -799,25 +796,30 @@ impl CalendarView {
             return false;
         };
         let name = self.library.calendars[calendar].info.name.clone();
-        let title = L10N.tr_args(
-            "import-title",
-            [("count", objects.len().into()), ("calendar", name.into())],
+        let title = tr!(
+            "Add {count} events to “{calendar}”?",
+            count = objects.len(),
+            calendar = name
         );
-        let message = L10N.tr_args("import-message", [("file", file.to_owned().into())]);
+        let message = tr!("From {file}", file = file.to_owned());
         self.confirm = Some(Confirm::Import(objects, calendar));
         let alert = Alert::new(&title, &message, self.choice())
-            .cancel(&L10N.tr("cancel"), "cancel")
-            .primary(&L10N.tr("import"), "accept");
+            .cancel(&tr!("Cancel"), "cancel")
+            .primary(&tr!("Add"), "accept");
         self.ui.present_dialog(alert);
         true
     }
 
     pub fn offer_subscription(&mut self, url: &str) {
-        let title = L10N.tr_args("subscribe-title", [("url", url.to_owned().into())]);
+        let title = tr!("Subscribe to “{url}”?", url = url.to_owned());
         self.confirm = Some(Confirm::Subscribe(url.to_owned()));
-        let alert = Alert::new(&title, &L10N.tr("subscribe-message"), self.choice())
-            .cancel(&L10N.tr("cancel"), "cancel")
-            .primary(&L10N.tr("subscribe"), "accept");
+        let alert = Alert::new(
+            &title,
+            &tr!("The calendar is read-only and refreshes as set in Calendar Settings."),
+            self.choice(),
+        )
+        .cancel(&tr!("Cancel"), "cancel")
+        .primary(&tr!("Subscribe"), "accept");
         self.ui.present_dialog(alert);
     }
 
@@ -1043,9 +1045,9 @@ impl CalendarView {
     pub(crate) fn ask_scope(&mut self, confirm: Confirm, title: &str) {
         self.confirm = Some(confirm);
         let alert = Alert::new(title, "", self.choice())
-            .cancel(&L10N.tr("cancel"), "cancel")
-            .other(&L10N.tr("only-this"), "occurrence")
-            .primary(&L10N.tr("all-events"), "series");
+            .cancel(&tr!("Cancel"), "cancel")
+            .other(&tr!("Only This Event"), "occurrence")
+            .primary(&tr!("All Events"), "series");
         self.ui.present_dialog(alert);
     }
 
@@ -1053,21 +1055,25 @@ impl CalendarView {
         let Some(account) = self.library.account(id) else {
             return;
         };
-        let title = L10N.tr_args(
-            "remove-account-title",
-            [("name", account.name.clone().into())],
-        );
+        let title = tr!("Remove “{name}”?", name = account.name.clone());
         self.confirm = Some(Confirm::RemoveAccount(id.to_owned()));
-        let alert = Alert::new(&title, &L10N.tr("remove-account-message"), self.choice())
-            .cancel(&L10N.tr("cancel"), "cancel")
-            .destructive(&L10N.tr("remove-account"), "accept");
+        let alert = Alert::new(
+            &title,
+            &tr!("Its calendars are removed from this computer. Nothing is deleted on the server."),
+            self.choice(),
+        )
+        .cancel(&tr!("Cancel"), "cancel")
+        .destructive(&tr!("Remove Account"), "accept");
         self.ui.present_dialog(alert);
     }
 
     pub(crate) fn ask_delete(&mut self, found: Found) {
         self.close_inspector(false);
         match found.occurrence.recurring {
-            true => self.ask_scope(Confirm::Delete(found), &L10N.tr("delete-recurring-title")),
+            true => self.ask_scope(
+                Confirm::Delete(found),
+                &tr!("Do you want to delete only this event, or all events in the series?"),
+            ),
             false => self.apply_delete(&found, Scope::Series),
         }
     }
@@ -1260,7 +1266,7 @@ impl CalendarView {
                     details: Box::new(details),
                     calendar,
                 },
-                &L10N.tr("change-recurring-title"),
+                &tr!("Do you want to change only this event, or all events in the series?"),
             ),
             false => self.apply_details(&found, &details, calendar, Scope::Series),
         }

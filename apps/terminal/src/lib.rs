@@ -7,10 +7,6 @@ mod settings;
 mod settings_view;
 mod tabs;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
 pub use bande_terminal_view::{
     CellPoint, Command, DEFAULT_FONT_SIZE, GridSize, Highlights, Link, MouseButton, MouseKind,
     Painter, Pane, Profile, SCROLLBACK, SearchDirection, SelectionKind, Terminal, Theme, bracketed,
@@ -30,9 +26,6 @@ pub use settings::{
 };
 pub use settings_view::{SETTINGS_SIZE, settings_view};
 pub use tabs::{FULL_SCREEN_LEADING, STRIP_HEIGHT};
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-terminal")));
 
 pub const COLUMNS: usize = 80;
 pub const ROWS: usize = 24;

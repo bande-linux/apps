@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use bande_l10n::{text, tr};
 use accesskit::{Node, NodeId, Role};
 use bande_toolkit::ui::{Context, Parts, Size, Ui, Widget, WidgetId};
 use bande_toolkit::{
@@ -7,7 +8,7 @@ use bande_toolkit::{
     WINDOW_HEADER_HEIGHT,
 };
 
-use crate::{L10N, tr_with};
+use crate::tr_with;
 use bande_content::pdf::protocol::Opened;
 use bande_content::{Decoded, Kind};
 
@@ -20,40 +21,37 @@ const SECTION_GAP: f32 = 14.0;
 pub type Row = (String, String);
 
 fn kind_name(kind: Kind) -> String {
-    L10N.tr(match kind {
-        Kind::Png => "kind-png",
-        Kind::Jpeg => "kind-jpeg",
-        Kind::Gif => "kind-gif",
-        Kind::Webp => "kind-webp",
-        Kind::Svg => "kind-svg",
-        Kind::Pdf => "kind-pdf",
-    })
+    match kind {
+        Kind::Png => tr!("PNG image"),
+        Kind::Jpeg => tr!("JPEG image"),
+        Kind::Gif => tr!("GIF image"),
+        Kind::Webp => tr!("WebP image"),
+        Kind::Svg => tr!("SVG image"),
+        Kind::Pdf => tr!("PDF document"),
+    }
 }
 
 pub fn file_rows(path: &Path) -> Vec<Row> {
     let mut rows = vec![(
-        L10N.tr("info-name"),
+        tr!("Name"),
         path.file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default(),
     )];
     if let Some(folder) = path.parent() {
-        rows.push((L10N.tr("info-where"), folder.display().to_string()));
+        rows.push((tr!("Where"), folder.display().to_string()));
     }
     let metadata = match bande_volumes::on_connected_volume(path) {
         true => Err(std::io::ErrorKind::Unsupported.into()),
         false => std::fs::metadata(path),
     };
     if let Ok(metadata) = metadata {
-        rows.push((L10N.tr("info-size"), bande_fs::format_size(metadata.len())));
+        rows.push((tr!("Size"), bande_fs::format_size(metadata.len())));
         if let Ok(created) = metadata.created() {
-            rows.push((L10N.tr("info-created"), bande_fs::format_list_date(created)));
+            rows.push((tr!("Created"), bande_fs::format_list_date(created)));
         }
         if let Ok(modified) = metadata.modified() {
-            rows.push((
-                L10N.tr("info-modified"),
-                bande_fs::format_list_date(modified),
-            ));
+            rows.push((tr!("Modified"), bande_fs::format_list_date(modified)));
         }
     }
     rows
@@ -63,42 +61,43 @@ pub fn picture_rows(decoded: &Decoded) -> Vec<Row> {
     let facts = &decoded.facts;
     let mut rows = Vec::new();
     if let Some(kind) = facts.kind {
-        rows.push((L10N.tr("info-kind"), kind_name(kind)));
+        rows.push((tr!("Kind"), kind_name(kind)));
     }
     let (width, height) = facts.natural.unwrap_or((decoded.width, decoded.height));
     rows.push((
-        L10N.tr("info-dimensions"),
+        tr!("Dimensions"),
         tr_with(
-            "dimensions",
+            text!("{width} × {height} pixels"),
             &[("width", width.to_string()), ("height", height.to_string())],
         ),
     ));
     if let Some((count, complete)) = facts.frames {
-        let key = if complete { "frames" } else { "frames-first" };
-        rows.push((
-            L10N.tr("info-frames"),
-            tr_with(key, &[("count", count.to_string())]),
-        ));
+        let key = if complete {
+            text!("{count}")
+        } else {
+            text!("{count} (too long to play; showing the first)")
+        };
+        rows.push((tr!("Frames"), tr_with(key, &[("count", count.to_string())])));
     }
     rows.extend(
         facts
             .camera
             .iter()
-            .map(|(label, value)| (L10N.tr(label), value.clone())),
+            .map(|(label, value)| (fact_label(label), value.clone())),
     );
     rows
 }
 
 pub fn document_rows(opened: &Opened) -> Vec<Row> {
     let mut rows = vec![
-        (L10N.tr("info-kind"), kind_name(Kind::Pdf)),
-        (L10N.tr("info-pages"), opened.pages.len().to_string()),
+        (tr!("Kind"), kind_name(Kind::Pdf)),
+        (tr!("Pages"), opened.pages.len().to_string()),
     ];
     if let Some((width, height)) = opened.pages.first() {
         rows.push((
-            L10N.tr("info-page-size"),
+            tr!("Page size"),
             tr_with(
-                "page-size",
+                text!("{width} × {height} points"),
                 &[
                     ("width", format!("{width:.0}")),
                     ("height", format!("{height:.0}")),
@@ -107,13 +106,13 @@ pub fn document_rows(opened: &Opened) -> Vec<Row> {
         ));
     }
     if !opened.version.is_empty() {
-        rows.push((L10N.tr("info-version"), opened.version.clone()));
+        rows.push((tr!("PDF version"), opened.version.clone()));
     }
     rows.extend(
         opened
             .details
             .iter()
-            .map(|(key, value)| (L10N.tr(&format!("info-{key}")), value.clone())),
+            .map(|(key, value)| (detail_label(key), value.clone())),
     );
     rows
 }
@@ -232,4 +231,28 @@ pub fn info_ui(appearance: Appearance, sections: Vec<Vec<Row>>) -> (Ui, WidgetId
     );
     ui.set_appearance(appearance);
     (ui, id)
+}
+
+fn fact_label(id: &str) -> String {
+    match id {
+        "info-camera" => tr!("Camera"),
+        "info-lens" => tr!("Lens"),
+        "info-taken" => tr!("Taken"),
+        "info-exposure" => tr!("Exposure"),
+        "info-aperture" => tr!("Aperture"),
+        "info-iso" => tr!("ISO"),
+        "info-focal-length" => tr!("Focal length"),
+        other => other.to_owned(),
+    }
+}
+
+fn detail_label(key: &str) -> String {
+    match key {
+        "title" => tr!("Title"),
+        "author" => tr!("Author"),
+        "subject" => tr!("Subject"),
+        "creator" => tr!("Created with"),
+        "producer" => tr!("Produced by"),
+        other => other.to_owned(),
+    }
 }

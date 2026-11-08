@@ -1,4 +1,6 @@
-use crate::L10N;
+
+use bande_l10n::tr;
+
 use crate::imap::Role;
 use crate::store::{Account, Mailbox, MailboxId, Scope};
 use crate::ui::symbols::Symbol;
@@ -42,20 +44,20 @@ const UNIFIED: [Role; 6] = [
 ];
 
 pub fn role_title(role: Role) -> String {
-    L10N.tr(match role {
-        Role::Inbox => "mailbox-inbox",
-        Role::Drafts => "mailbox-drafts",
-        Role::Sent => "mailbox-sent",
-        Role::Archive => "mailbox-archive",
-        Role::Junk => "mailbox-junk",
-        Role::Trash => "mailbox-trash",
-        Role::All => "mailbox-all",
-        Role::Flagged => "mailbox-flagged",
-    })
+    match role {
+        Role::Inbox => tr!("Inbox"),
+        Role::Drafts => tr!("Drafts"),
+        Role::Sent => tr!("Sent"),
+        Role::Archive => tr!(context = "mailbox", "Archive"),
+        Role::Junk => tr!("Junk"),
+        Role::Trash => tr!("Trash"),
+        Role::All => tr!("All Mail"),
+        Role::Flagged => tr!("Flagged"),
+    }
 }
 
 pub fn rows(accounts: &[(Account, Vec<Mailbox>)], unread: impl Fn(&Scope) -> usize) -> Vec<Row> {
-    let mut rows = vec![Row::Heading(L10N.tr("sidebar-mailboxes"))];
+    let mut rows = vec![Row::Heading(tr!("Mailboxes"))];
     for role in UNIFIED {
         let present = accounts
             .iter()

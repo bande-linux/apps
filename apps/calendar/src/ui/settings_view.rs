@@ -1,6 +1,16 @@
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 
+
+use bande_l10n::{Text, text, tr};
+
+use super::inspector::alert_title;
+use crate::edit::Alert;
+use crate::settings::{
+    CalendarSettings, Change, HOURS_SHOWN, REFRESH_MINUTES, SUBSCRIPTION_MINUTES, WEEKDAYS,
+    announce,
+};
+use crate::store::{ACCOUNTS_FILE, AccountKind, Summary, data_dir};
 use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_app_settings::{SettingsWatch, SettingsWindow, Shared, settings_folder};
@@ -12,22 +22,13 @@ use bande_toolkit::ui::{
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 use jiff::civil::{Date, Time};
 
-use super::L10N;
-use super::inspector::alert_title;
-use crate::edit::Alert;
-use crate::settings::{
-    CalendarSettings, Change, HOURS_SHOWN, REFRESH_MINUTES, SUBSCRIPTION_MINUTES, WEEKDAYS,
-    announce,
-};
-use crate::store::{ACCOUNTS_FILE, AccountKind, Summary, data_dir};
-
 pub const SETTINGS_SIZE: (u32, u32) = (520, 560);
 
 type Set<T> = fn(&mut CalendarSettings, T);
 
 fn pop_up<T: Copy + PartialEq + 'static>(
     settings: &Shared<CalendarSettings>,
-    message: &str,
+    message: Text,
     choices: Vec<(T, String)>,
     current: T,
     set: Set<T>,
@@ -39,7 +40,7 @@ fn pop_up<T: Copy + PartialEq + 'static>(
         .unwrap_or_default();
     let shared = settings.clone();
     Box::new(PopUpButton::new(
-        &L10N.tr(message),
+        &message.tr(),
         &labels,
         chosen,
         move |index| {
@@ -66,12 +67,12 @@ fn hour_label(formats: &DateFormats, hour: u8) -> String {
 
 fn every_label(minutes: u32) -> String {
     match minutes {
-        0 => L10N.tr("refresh-manually"),
-        1 => L10N.tr("refresh-every-minute"),
-        60 => L10N.tr("refresh-every-hour"),
-        1440 => L10N.tr("refresh-every-day"),
-        10080 => L10N.tr("refresh-every-week"),
-        minutes => L10N.tr_args("refresh-every-minutes", [("minutes", minutes.into())]),
+        0 => tr!("Manually"),
+        1 => tr!("Every minute"),
+        60 => tr!("Every hour"),
+        1440 => tr!("Every day"),
+        10080 => tr!("Every week"),
+        minutes => tr!("Every {minutes} minutes", minutes = minutes),
     }
 }
 
@@ -100,17 +101,13 @@ fn general(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormLi
         .unwrap_or_default();
     let shared = settings.clone();
     let labels: Vec<String> = calendars.into_iter().map(|(_, name)| name).collect();
-    let default_calendar = PopUpButton::new(
-        &L10N.tr("settings-default-calendar"),
-        &labels,
-        chosen,
-        move |index| {
+    let default_calendar =
+        PopUpButton::new(&tr!("Default calendar:"), &labels, chosen, move |index| {
             if let Some(id) = ids.get(index) {
                 shared.borrow_mut().default_calendar = id.clone();
             }
-        },
-    );
-    let weekdays = std::iter::once((None, L10N.tr("settings-week-default")))
+        });
+    let weekdays = std::iter::once((None, tr!("Default for Region")))
         .chain(WEEKDAYS.iter().map(|day| {
             let name = Date::constant(2000, 1, 2)
                 .nth_weekday_of_month(1, *day)
@@ -127,32 +124,27 @@ fn general(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormLi
         .map(|hour| (hour, hour_label(&formats, hour)))
         .collect();
     let shared = settings.clone();
-    let week_numbers = Toggle::new(
-        &L10N.tr("settings-week-numbers"),
-        current.week_numbers,
-        move |on| shared.borrow_mut().week_numbers = on,
-    );
+    let week_numbers = Toggle::new(&tr!("Show week numbers"), current.week_numbers, move |on| {
+        shared.borrow_mut().week_numbers = on
+    });
     vec![
-        FormLine::Heading(L10N.tr("settings-general")),
+        FormLine::Heading(tr!("General")),
+        FormLine::Row(tr!("Default calendar:"), Box::new(default_calendar)),
         FormLine::Row(
-            L10N.tr("settings-default-calendar"),
-            Box::new(default_calendar),
-        ),
-        FormLine::Row(
-            L10N.tr("settings-start-week"),
+            tr!("Start week on:"),
             pop_up(
                 settings,
-                "settings-start-week",
+                text!("Start week on:"),
                 weekdays,
                 current.first_weekday,
                 |settings, day| settings.first_weekday = day,
             ),
         ),
         FormLine::Row(
-            L10N.tr("settings-day-starts"),
+            tr!("Day starts at:"),
             pop_up(
                 settings,
-                "settings-day-starts",
+                text!("Day starts at:"),
                 starts,
                 current.day_start,
                 |settings, hour| {
@@ -162,10 +154,10 @@ fn general(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormLi
             ),
         ),
         FormLine::Row(
-            L10N.tr("settings-day-ends"),
+            tr!("Day ends at:"),
             pop_up(
                 settings,
-                "settings-day-ends",
+                text!("Day ends at:"),
                 ends,
                 current.day_end,
                 |settings, hour| {
@@ -175,39 +167,34 @@ fn general(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormLi
             ),
         ),
         FormLine::Row(
-            L10N.tr("settings-hours-shown"),
+            tr!("Show:"),
             pop_up(
                 settings,
-                "settings-hours-shown",
+                text!("Show:"),
                 HOURS_SHOWN
                     .iter()
-                    .map(|hours| {
-                        (
-                            *hours,
-                            L10N.tr_args("settings-hours", [("hours", (*hours).into())]),
-                        )
-                    })
+                    .map(|hours| (*hours, tr!("{hours} hours at a time", hours = (*hours))))
                     .collect(),
                 current.hours_shown,
                 |settings, hours| settings.hours_shown = hours,
             ),
         ),
-        FormLine::Row(L10N.tr("settings-week-numbers"), Box::new(week_numbers)),
+        FormLine::Row(tr!("Show week numbers"), Box::new(week_numbers)),
     ]
 }
 
 fn advanced(settings: &Shared<CalendarSettings>) -> Vec<FormLine> {
     let shared = settings.clone();
     let time_zones = Toggle::new(
-        &L10N.tr("settings-time-zones"),
+        &tr!("Time zone support"),
         settings.borrow().time_zones,
         move |on| shared.borrow_mut().time_zones = on,
     );
     vec![
-        FormLine::Heading(L10N.tr("settings-advanced")),
-        FormLine::Row(L10N.tr("settings-time-zones"), Box::new(time_zones)),
+        FormLine::Heading(tr!("Advanced")),
+        FormLine::Row(tr!("Time zone support"), Box::new(time_zones)),
         FormLine::Wide(Box::new(
-            Label::new(&L10N.tr("settings-time-zones-note")).secondary(),
+            Label::new(&tr!("Shows each event’s time zone in its details, so times can be set in another zone, such as a flight’s departure and arrival.")).secondary(),
         )),
     ]
 }
@@ -221,34 +208,34 @@ fn alerts(settings: &Shared<CalendarSettings>) -> Vec<FormLine> {
     };
     let shared = settings.clone();
     let when_closed = Toggle::new(
-        &L10N.tr("settings-alerts-when-closed"),
+        &tr!("Show alerts when Calendar is closed"),
         current.alerts_when_closed,
         move |on| shared.borrow_mut().alerts_when_closed = on,
     );
     vec![
-        FormLine::Heading(L10N.tr("settings-alerts")),
+        FormLine::Heading(tr!("Default Alerts")),
         FormLine::Row(
-            L10N.tr("settings-event-alert"),
+            tr!("Events:"),
             pop_up(
                 settings,
-                "settings-event-alert",
+                text!("Events:"),
                 choices(&Alert::TIMED),
                 current.timed_alert,
                 |settings, alert| settings.timed_alert = alert,
             ),
         ),
         FormLine::Row(
-            L10N.tr("settings-all-day-alert"),
+            tr!("All-day events:"),
             pop_up(
                 settings,
-                "settings-all-day-alert",
+                text!("All-day events:"),
                 choices(&Alert::ALL_DAY),
                 current.all_day_alert,
                 |settings, alert| settings.all_day_alert = alert,
             ),
         ),
         FormLine::Row(
-            L10N.tr("settings-alerts-when-closed"),
+            tr!("Show alerts when Calendar is closed"),
             Box::new(when_closed),
         ),
     ]
@@ -262,22 +249,22 @@ fn accounts(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormL
             .collect()
     };
     let mut lines = vec![
-        FormLine::Heading(L10N.tr("settings-accounts")),
+        FormLine::Heading(tr!("Accounts")),
         FormLine::Row(
-            L10N.tr("settings-refresh"),
+            tr!("Refresh calendars:"),
             pop_up(
                 settings,
-                "settings-refresh",
+                text!("Refresh calendars:"),
                 every(&REFRESH_MINUTES),
                 current.refresh_minutes,
                 |settings, minutes| settings.refresh_minutes = minutes,
             ),
         ),
         FormLine::Row(
-            L10N.tr("settings-subscription-refresh"),
+            tr!("Refresh subscriptions:"),
             pop_up(
                 settings,
-                "settings-subscription-refresh",
+                text!("Refresh subscriptions:"),
                 every(&SUBSCRIPTION_MINUTES),
                 current.subscription_minutes,
                 |settings, minutes| settings.subscription_minutes = minutes,
@@ -289,24 +276,23 @@ fn accounts(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormL
         let (kind, mut buttons): (String, Vec<Box<dyn Widget>>) = match &account.kind {
             AccountKind::Local => continue,
             AccountKind::CalDav { server, .. } => (
-                L10N.tr_args("settings-caldav-at", [("server", server.clone().into())]),
-                vec![Box::new(Button::new(
-                    &L10N.tr("change-password"),
-                    move || announce(Change::Password(id.clone())),
-                ))],
+                tr!("CalDAV on {server}", server = server.clone()),
+                vec![Box::new(Button::new(&tr!("Password…"), move || {
+                    announce(Change::Password(id.clone()))
+                }))],
             ),
             AccountKind::Subscription {
                 url,
                 refresh_minutes,
                 alerts,
             } => (
-                L10N.tr_args("settings-subscribed-to", [("url", url.clone().into())]),
+                tr!("Subscribed to {url}", url = url.clone()),
                 subscription_controls(&account.id, *refresh_minutes, *alerts),
             ),
         };
         let id = account.id.clone();
         buttons.push(Box::new(
-            Button::new(&L10N.tr("settings-remove"), move || {
+            Button::new(&tr!("Remove…"), move || {
                 announce(Change::RemoveAccount(id.clone()))
             })
             .tooltip(&kind),
@@ -316,10 +302,10 @@ fn accounts(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormL
             Box::new(Stack::new(Axis::Horizontal, 8.0, 0.0, buttons).trailing()),
         ));
     }
-    let add = Button::new(&L10N.tr("add-account"), || announce(Change::AddAccount));
+    let add = Button::new(&tr!("Add Account…"), || announce(Change::AddAccount));
     lines.push(FormLine::Row(String::new(), Box::new(add)));
     lines.push(FormLine::Wide(Box::new(
-        Label::new(&L10N.tr("settings-accounts-note")).secondary(),
+        Label::new(&tr!("iCloud and Fastmail sign in with an app password, Nextcloud with your password or an app password. Google needs OAuth, which Calendar cannot do yet.")).secondary(),
     )));
     lines
 }
@@ -331,7 +317,7 @@ fn subscription_controls(id: &str, refresh: Option<u32>, alerts: bool) -> Vec<Bo
     let labels: Vec<String> = choices
         .iter()
         .map(|choice| match choice {
-            None => L10N.tr("refresh-default"),
+            None => tr!("As in Settings"),
             Some(minutes) => every_label(*minutes),
         })
         .collect();
@@ -341,7 +327,7 @@ fn subscription_controls(id: &str, refresh: Option<u32>, alerts: bool) -> Vec<Bo
         .unwrap_or_default();
     let shared = id.to_owned();
     let refresh = PopUpButton::new(
-        &L10N.tr("settings-subscription-refresh"),
+        &tr!("Refresh subscriptions:"),
         &labels,
         chosen,
         move |index| {
@@ -355,7 +341,7 @@ fn subscription_controls(id: &str, refresh: Option<u32>, alerts: bool) -> Vec<Bo
         true => CheckState::On,
         false => CheckState::Off,
     };
-    let alerts = Checkbox::new(&L10N.tr("settings-subscription-alerts"), state, move |on| {
+    let alerts = Checkbox::new(&tr!("Alerts"), state, move |on| {
         announce(Change::SubscriptionAlerts(shared.clone(), on))
     });
     vec![Box::new(refresh), Box::new(alerts)]
@@ -367,7 +353,7 @@ fn settings_form(appearance: Appearance, settings: &Shared<CalendarSettings>) ->
     lines.extend(alerts(settings));
     lines.extend(accounts(settings, &summary));
     lines.extend(advanced(settings));
-    let form = Form::new(&L10N.tr("settings-title"), lines);
+    let form = Form::new(&tr!("Calendar Settings"), lines);
     let mut ui = Ui::new(
         Box::new(ScrollView::new(form)),
         Context::new(TextSystem::new(), appearance.palette()),

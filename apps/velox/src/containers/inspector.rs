@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use bande_l10n::tr;
 use bande_toolkit::TextRole;
 use bande_toolkit::ui::{
     Axis, Button, Graph, GraphKind, ScrollView, Series, Stack, Ui, Widget, WidgetId,
@@ -12,7 +13,6 @@ use super::menu::url;
 use super::pane::{Intent, Intents, push};
 use super::stats::{Graphs, HISTORY, Usage};
 use super::widgets::Text;
-use crate::L10N;
 use crate::engine::Container;
 
 pub const WIDTH: f32 = 280.0;
@@ -81,7 +81,7 @@ fn when(stamp: &str) -> Option<String> {
 fn state_text(inspect: &Inspect) -> String {
     let state = &inspect.state;
     let mut text = match state.status.as_str() {
-        "exited" => L10N.tr_args("state-exited", [("code", state.exit_code.into())]),
+        "exited" => tr!("Exited ({code})", code = state.exit_code),
         status => {
             let mut chars = status.chars();
             chars
@@ -91,49 +91,43 @@ fn state_text(inspect: &Inspect) -> String {
         }
     };
     if state.oom_killed {
-        text = L10N.tr_args("state-oom", [("state", text.into())]);
+        text = tr!("{state}, out of memory", state = text);
     }
     text
 }
 
 fn container_lines(inspect: &Inspect, intents: &Intents) -> Vec<Box<dyn Widget>> {
-    let mut lines = vec![section(&L10N.tr("inspector-container"))];
-    lines.push(fact(&L10N.tr("inspector-image"), &inspect.config.image));
-    lines.push(fact(&L10N.tr("inspector-state"), &state_text(inspect)));
+    let mut lines = vec![section(&tr!("CONTAINER"))];
+    lines.push(fact(&tr!("Image"), &inspect.config.image));
+    lines.push(fact(&tr!("State"), &state_text(inspect)));
     if !inspect.state.error.is_empty() {
         lines.push(note(&inspect.state.error));
     }
     if let Some(created) = when(&inspect.created) {
-        lines.push(fact(&L10N.tr("inspector-created"), &created));
+        lines.push(fact(&tr!("Created"), &created));
     }
-    lines.push(fact(
-        &L10N.tr("inspector-restarts"),
-        &inspect.restart_count.to_string(),
-    ));
+    lines.push(fact(&tr!("Restarts"), &inspect.restart_count.to_string()));
     if inspect.state.restarting || inspect.restart_count >= CRASH_LOOP {
-        lines.push(note(&L10N.tr("inspector-crash-loop")));
+        lines.push(note(&tr!("It keeps restarting. Check its logs.")));
     }
-    lines.push(section(&L10N.tr("inspector-process")));
-    lines.push(fact(&L10N.tr("inspector-command"), &inspect.command()));
+    lines.push(section(&tr!("PROCESS")));
+    lines.push(fact(&tr!("Command"), &inspect.command()));
     if !inspect.config.working_dir.is_empty() {
-        lines.push(fact(
-            &L10N.tr("inspector-workdir"),
-            &inspect.config.working_dir,
-        ));
+        lines.push(fact(&tr!("Working Folder"), &inspect.config.working_dir));
     }
     let environment = inspect.config.env.as_deref().unwrap_or_default();
-    lines.push(section(&L10N.tr_args(
-        "inspector-environment",
-        [("count", environment.len().into())],
+    lines.push(section(&tr!(
+        "ENVIRONMENT ({count})",
+        count = environment.len()
     )));
     lines.extend(environment.iter().map(|variable| note(variable)));
-    lines.push(section(&L10N.tr("inspector-network")));
+    lines.push(section(&tr!("NETWORK")));
     if let Some(ip) = inspect.ip() {
-        lines.push(fact(&L10N.tr("inspector-ip"), ip));
+        lines.push(fact(&tr!("IP Address"), ip));
     }
     let ports = inspect.ports();
     if ports.is_empty() {
-        lines.push(note(&L10N.tr("inspector-no-ports")));
+        lines.push(note(&tr!("No published ports")));
     }
     for (host, inside) in ports {
         let Ok(port) = host.parse::<u16>() else {
@@ -150,9 +144,9 @@ fn container_lines(inspect: &Inspect, intents: &Intents) -> Vec<Box<dyn Widget>>
             )],
         )));
     }
-    lines.push(section(&L10N.tr_args(
-        "inspector-mounts",
-        [("count", inspect.mounts.len().into())],
+    lines.push(section(&tr!(
+        "MOUNTS ({count})",
+        count = inspect.mounts.len()
     )));
     for mount in &inspect.mounts {
         let source = match (&mount.name, mount.kind.as_str()) {
@@ -161,14 +155,12 @@ fn container_lines(inspect: &Inspect, intents: &Intents) -> Vec<Box<dyn Widget>>
         };
         let mode = match mount.writable {
             true => String::new(),
-            false => format!(" · {}", L10N.tr("inspector-read-only")),
+            false => format!(" · {}", tr!("read-only")),
         };
         lines.push(fact(&mount.destination, &format!("{source}{mode}")));
     }
     let labels = inspect.labels();
-    lines.push(section(
-        &L10N.tr_args("inspector-labels", [("count", labels.len().into())]),
-    ));
+    lines.push(section(&tr!("LABELS ({count})", count = labels.len())));
     lines.extend(
         labels
             .into_iter()
@@ -178,8 +170,7 @@ fn container_lines(inspect: &Inspect, intents: &Intents) -> Vec<Box<dyn Widget>>
 }
 
 fn graph(title: &str, values: &(Vec<Series>, String)) -> Graph {
-    let mut graph =
-        Graph::new(title, GraphKind::Area, HISTORY).caption(title, &L10N.tr("inspector-minute"));
+    let mut graph = Graph::new(title, GraphKind::Area, HISTORY).caption(title, &tr!("1 min"));
     graph.set_series(values.0.clone());
     graph.set_note(Some(&values.1));
     graph
@@ -188,10 +179,10 @@ fn graph(title: &str, values: &(Vec<Series>, String)) -> Graph {
 pub fn graph_widgets(usage: &Usage) -> (Vec<Box<dyn Widget>>, GraphIds) {
     let graphs = usage.graphs();
     let shown = [
-        graph(&L10N.tr("stats-cpu"), &graphs.cpu),
-        graph(&L10N.tr("stats-memory"), &graphs.memory),
-        graph(&L10N.tr("stats-network"), &graphs.network),
-        graph(&L10N.tr("stats-disk"), &graphs.disk),
+        graph(&tr!("CPU"), &graphs.cpu),
+        graph(&tr!("Memory"), &graphs.memory),
+        graph(&tr!("Network"), &graphs.network),
+        graph(&tr!("Disk"), &graphs.disk),
     ];
     let ids = GraphIds {
         cpu: shown[0].id(),
@@ -210,11 +201,9 @@ pub fn build(
     let mut lines: Vec<Box<dyn Widget>> = Vec::new();
     let mut ids = None;
     match subject {
-        Subject::Nothing => lines.push(note(&L10N.tr("inspector-none"))),
+        Subject::Nothing => lines.push(note(&tr!("No Selection"))),
         Subject::Many(count) => {
-            lines.push(note(
-                &L10N.tr_args("inspector-many", [("count", count.into())]),
-            ));
+            lines.push(note(&tr!("{count} Selected", count = count)));
         }
         Subject::Project {
             name,
@@ -223,12 +212,13 @@ pub fn build(
             directory,
         } => {
             lines.push(boxed(Text::new(name, TextRole::Heading)));
-            lines.push(note(&L10N.tr_args(
-                "project-running",
-                [("running", running.into()), ("total", total.into())],
+            lines.push(note(&tr!(
+                "{running} of {total} running",
+                running = running,
+                total = total
             )));
             if let Some(directory) = directory {
-                lines.push(fact(&L10N.tr("inspector-project-dir"), directory));
+                lines.push(fact(&tr!("Folder"), directory));
             }
         }
         Subject::Container { container, inspect } => {
@@ -237,7 +227,7 @@ pub fn build(
             if container.running() {
                 let (shown, graph_ids) = graph_widgets(&usage.cloned().unwrap_or_default());
                 ids = Some(graph_ids);
-                lines.push(section(&L10N.tr("inspector-stats")));
+                lines.push(section(&tr!("STATS")));
                 lines.extend(shown);
             }
             if let Some(inspect) = inspect {

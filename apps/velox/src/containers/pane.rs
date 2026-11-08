@@ -2,6 +2,7 @@ use std::cell::{Ref, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
+use bande_l10n::{Text, text, tr, trn};
 use bande_app_menu::Entry;
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{
@@ -17,7 +18,6 @@ use super::stats::Usage;
 use super::table::{self, PROJECT_PREFIX, Shown};
 use super::widgets::{PortLinks, Split};
 use super::work::{Event, Request as Work};
-use crate::L10N;
 use crate::engine::{Action, Container, Engine, EngineInfo, Flavor, Sample};
 use crate::shell::ShellTarget;
 use crate::ui::{Centered, Request, symbol};
@@ -406,13 +406,13 @@ impl Containers {
                 drop(model);
                 if let Some(message) = failure {
                     let title = match verb {
-                        Verb::Up => "cannot-up",
-                        Verb::Down => "cannot-down",
-                        Verb::Restart => "cannot-restart-project",
+                        Verb::Up => text!("Cannot start the project “{name}”"),
+                        Verb::Down => text!("Cannot take down the project “{name}”"),
+                        Verb::Restart => text!("Cannot restart the project “{name}”"),
                     };
                     alert(
                         ui,
-                        &L10N.tr_args(title, [("name", project.into())]),
+                        &title.tr_args(&[("name", &project as &dyn std::fmt::Display)]),
                         &message,
                     );
                 }
@@ -571,13 +571,17 @@ impl Containers {
     ) {
         let title = match (ids.len(), single) {
             (1, Some(container)) => {
-                L10N.tr_args("delete-one", [("name", container.name().to_owned().into())])
+                tr!("Delete “{name}”?", name = container.name().to_owned())
             }
-            (count, _) => L10N.tr_args("delete-many", [("count", count.into())]),
+            (count, _) => tr!("Delete {count} containers?", count = count),
         };
-        let mut message = L10N.tr_args("delete-kept", [("count", ids.len().into())]);
+        let mut message = trn!(
+            "Its changes to the file system are lost. Volumes are kept.",
+            "Their changes to the file system are lost. Volumes are kept.",
+            count = ids.len()
+        );
         if running {
-            message = format!("{message} {}", L10N.tr("delete-running"));
+            message = format!("{message} {}", tr!("Running containers are stopped first."));
         }
         let intents = Rc::clone(&self.intents);
         ui.present_sheet(
@@ -586,22 +590,26 @@ impl Containers {
                     push(&intents, Intent::Confirmed(Confirm::Delete(ids.clone())));
                 }
             })
-            .destructive(&L10N.tr("button-delete"), "delete")
-            .cancel(&L10N.tr("button-cancel"), "cancel"),
+            .destructive(&tr!("Delete"), "delete")
+            .cancel(&tr!("Cancel"), "cancel"),
         );
     }
 
     fn confirm_down(&mut self, ui: &mut Ui, compose: Compose) {
-        let title = L10N.tr_args("down-title", [("name", compose.project.clone().into())]);
+        let title = tr!("Take down “{name}”?", name = compose.project.clone());
         let intents = Rc::clone(&self.intents);
         ui.present_sheet(
-            Alert::new(&title, &L10N.tr("down-kept"), move |choice| {
-                if choice == "down" {
-                    push(&intents, Intent::Confirmed(Confirm::Down(compose.clone())));
-                }
-            })
-            .destructive(&L10N.tr("button-down"), "down")
-            .cancel(&L10N.tr("button-cancel"), "cancel"),
+            Alert::new(
+                &title,
+                &tr!("Its containers and networks are removed. Volumes and images are kept."),
+                move |choice| {
+                    if choice == "down" {
+                        push(&intents, Intent::Confirmed(Confirm::Down(compose.clone())));
+                    }
+                },
+            )
+            .destructive(&tr!("Down"), "down")
+            .cancel(&tr!("Cancel"), "cancel"),
         );
     }
 
@@ -614,29 +622,29 @@ impl Containers {
 
     pub fn inspector_entry(&self) -> Entry {
         let label = match self.inspector {
-            true => "hide-inspector",
-            false => "show-inspector",
+            true => text!("Hide Inspector"),
+            false => text!("Show Inspector"),
         };
-        Entry::item(&L10N.tr(label), menu::INSPECTOR).shortcut("Ctrl+I")
+        Entry::item(&label.tr(), menu::INSPECTOR).shortcut("Ctrl+I")
     }
 
     pub fn tools(&mut self, palette: &Palette) -> Vec<Box<dyn Widget>> {
-        let button = |svg: &str, label: &str, command: &'static str| {
+        let button = |svg: &str, label: Text, command: &'static str| {
             let intents = Rc::clone(&self.intents);
             let click = move || push(&intents, Intent::Command(command));
-            let label = L10N.tr(label);
+            let label = label.tr();
             match symbol(svg, palette.ink) {
                 Some(image) => Button::symbol(image, &label, click).tooltip(&label),
                 None => Button::new(&label, click),
             }
         };
-        let start = button(START_SYMBOL, "container-start", "container-start");
-        let stop = button(STOP_SYMBOL, "container-stop", "container-stop");
-        let restart = button(RESTART_SYMBOL, "container-restart", "container-restart");
-        let delete = button(DELETE_SYMBOL, "container-delete", menu::DELETE);
-        let inspector = button(INSPECTOR_SYMBOL, "toggle-inspector", menu::INSPECTOR);
+        let start = button(START_SYMBOL, text!("Start"), "container-start");
+        let stop = button(STOP_SYMBOL, text!("Stop"), "container-stop");
+        let restart = button(RESTART_SYMBOL, text!("Restart"), "container-restart");
+        let delete = button(DELETE_SYMBOL, text!("Delete…"), menu::DELETE);
+        let inspector = button(INSPECTOR_SYMBOL, text!("Inspector"), menu::INSPECTOR);
         let intents = Rc::clone(&self.intents);
-        let search = SearchField::new(&L10N.tr("filter-containers"), &self.filter, move |text| {
+        let search = SearchField::new(&tr!("Filter containers"), &self.filter, move |text| {
             push(&intents, Intent::Filter(text.to_owned()));
         });
         self.tools = Some(Tools {
@@ -709,8 +717,8 @@ impl Containers {
                 6.0,
                 0.0,
                 vec![
-                    boxed(Label::new(&L10N.tr("empty-title"))),
-                    boxed(Label::new(&L10N.tr("empty-hint")).secondary()),
+                    boxed(Label::new(&tr!("No Containers"))),
+                    boxed(Label::new(&tr!("Run one with docker run.")).secondary()),
                 ],
             )),
             EMPTY_WIDTH,
@@ -938,17 +946,17 @@ impl Containers {
 
 fn failure_title(action: Action, name: &str) -> String {
     let key = match action {
-        Action::Start => "cannot-start",
-        Action::Stop => "cannot-stop",
-        Action::Restart => "cannot-restart",
-        Action::Pause => "cannot-pause",
-        Action::Resume => "cannot-resume",
-        Action::Kill => "cannot-kill",
-        Action::Remove => "cannot-delete",
+        Action::Start => text!("Cannot start “{name}”"),
+        Action::Stop => text!("Cannot stop “{name}”"),
+        Action::Restart => text!("Cannot restart “{name}”"),
+        Action::Pause => text!("Cannot pause “{name}”"),
+        Action::Resume => text!("Cannot resume “{name}”"),
+        Action::Kill => text!("Cannot kill “{name}”"),
+        Action::Remove => text!("Cannot delete “{name}”"),
     };
-    L10N.tr_args(key, [("name", name.to_owned().into())])
+    key.tr_args(&[("name", &name.to_owned() as &dyn std::fmt::Display)])
 }
 
 fn alert(ui: &mut Ui, title: &str, message: &str) {
-    ui.present_sheet(Alert::new(title, message, |_| {}).primary(&L10N.tr("button-ok"), "ok"));
+    ui.present_sheet(Alert::new(title, message, |_| {}).primary(&tr!("OK"), "ok"));
 }

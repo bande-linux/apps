@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use bande_l10n::{tr, trn};
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{
     Alert, Button, ClipboardRequest, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton,
@@ -11,12 +12,10 @@ use bande_toolkit::{
     TextSystem,
 };
 
-use bande_app_menu::Entry;
-
-use crate::L10N;
 use crate::model::{StopTarget, stop_target};
 use crate::sampler::Snapshot;
 use crate::signal::{SignalError, Stop};
+use bande_app_menu::Entry;
 
 pub(crate) const QUIT: &str = "quit";
 pub(crate) const FORCE_QUIT: &str = "force-quit";
@@ -116,7 +115,7 @@ pub(crate) fn symbol_button(
 pub(crate) fn stop_button(on_click: impl FnMut() + 'static) -> Button {
     symbol_button(
         Image::from_svg(STOP_SYMBOL, SYMBOL_PIXELS, SYMBOL_PIXELS),
-        &L10N.tr("stop-label"),
+        &tr!("Quit Process"),
         on_click,
     )
 }
@@ -134,28 +133,32 @@ pub(crate) fn stop_alert(
     icon: Option<Image>,
     choose: impl FnMut(&str) + 'static,
 ) -> Alert {
-    let names = || {
-        [
-            ("name", target.name.clone().into()),
-            ("count", target.count.into()),
-        ]
-    };
     let alert = match force {
         true => Alert::new(
-            &L10N.tr_args("force-quit-confirm", names()),
-            &L10N.tr("force-quit-confirm-message"),
+            &trn!(
+                "Do you want to force quit “{name}”?",
+                "Do you want to force quit the {count} selected items?",
+                count = target.count,
+                name = target.name
+            ),
+            &tr!("Any unsaved changes are lost."),
             choose,
         )
-        .destructive(&L10N.tr("button-force-quit"), FORCE_QUIT),
+        .destructive(&tr!("Force Quit"), FORCE_QUIT),
         false => Alert::new(
-            &L10N.tr_args("quit-title", names()),
-            &L10N.tr("quit-message"),
+            &trn!(
+                "Do you want to quit “{name}”?",
+                "Do you want to quit the {count} selected items?",
+                count = target.count,
+                name = target.name
+            ),
+            &tr!("Quit asks it to close. Force Quit ends it at once, and any unsaved changes are lost."),
             choose,
         )
-        .other(&L10N.tr("button-force-quit"), FORCE_QUIT)
-        .primary(&L10N.tr("button-quit"), QUIT),
+        .other(&tr!("Force Quit"), FORCE_QUIT)
+        .primary(&tr!("Quit"), QUIT),
     };
-    with_icon(alert.cancel(&L10N.tr("button-cancel"), CANCEL), icon)
+    with_icon(alert.cancel(&tr!("Cancel"), CANCEL), icon)
 }
 
 pub(crate) fn signal_alert(
@@ -165,21 +168,24 @@ pub(crate) fn signal_alert(
     choose: impl FnMut(&str) + 'static,
 ) -> Alert {
     let signal = crate::menu::signal_title(how);
-    let title = L10N.tr_args(
-        "signal-confirm",
-        [
-            ("signal", signal.into()),
-            ("name", target.name.clone().into()),
-            ("count", target.count.into()),
-        ],
+    let title = trn!(
+        "Do you want to send {signal} to “{name}”?",
+        "Do you want to send {signal} to the {count} selected items?",
+        count = target.count,
+        signal = signal,
+        name = target.name.clone()
     );
     let message = match how {
-        Stop::Pause => L10N.tr("signal-pause-message"),
-        _ => L10N.tr("signal-message"),
+        Stop::Pause => tr!(
+            "A paused process does nothing until it gets Continue. Pausing a part of the desktop can freeze the screen."
+        ),
+        _ => tr!(
+            "A process that doesn’t handle this signal ends at once, and any unsaved changes are lost."
+        ),
     };
     let alert = Alert::new(&title, &message, choose)
-        .primary(&L10N.tr("button-send"), SEND)
-        .cancel(&L10N.tr("button-cancel"), CANCEL);
+        .primary(&tr!("Send"), SEND)
+        .cancel(&tr!("Cancel"), CANCEL);
     with_icon(alert, icon)
 }
 
@@ -207,11 +213,14 @@ pub(crate) fn send_signal(
         Ok(()) => None,
         Err(SignalError::PermissionDenied) => Some(with_icon(
             Alert::new(
-                &L10N.tr_args("quit-denied", [("name", target.name.clone().into())]),
-                &L10N.tr("quit-denied-message"),
+                &tr!(
+                    "“{name}” belongs to another user.",
+                    name = target.name.clone()
+                ),
+                &tr!("Only its owner or an administrator can quit it."),
                 choose,
             )
-            .primary(&L10N.tr("button-ok"), CANCEL),
+            .primary(&tr!("OK"), CANCEL),
             icon,
         )),
         Err(error) => {

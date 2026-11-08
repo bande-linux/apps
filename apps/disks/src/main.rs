@@ -4,13 +4,13 @@ use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
 use std::time::Instant;
 
+use bande_l10n::tr;
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_disks::{
     ADD_PARTITION, Abilities, DELETE_PARTITION, DisksView, EJECT, ERASE, FIRST_AID, IMAGE_FROM,
-    L10N, MOUNT, Model, OPEN_IMAGE, RENAME, RESIZE, RESTORE, Report, Request, SIDEBAR_WIDTH,
-    Worker,
+    MOUNT, Model, OPEN_IMAGE, RENAME, RESIZE, RESTORE, Report, Request, SIDEBAR_WIDTH, Worker,
 };
 use bande_toolkit::{
     Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
@@ -25,7 +25,7 @@ static INFO: Info = Info {
     id: "org.bande.DiskUtility",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Disk Utility"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -128,7 +128,7 @@ impl Disks {
         let abilities = self.abilities.clone();
         let opened = cx.open(
             Kind::Main,
-            &L10N.tr("app-name"),
+            &tr!("Disk Utility"),
             WINDOW_SIZE,
             |appearance| {
                 let mut view = DisksView::new(appearance);
@@ -197,30 +197,29 @@ impl Program for Disks {
             .main
             .and_then(|main| cx.view(main))
             .map(|pane| pane.view.mount_title())
-            .unwrap_or_else(|| L10N.tr("action-mount"));
+            .unwrap_or_else(|| tr!("Mount"));
         let file = vec![
-            Entry::item(&L10N.tr("menu-open-image"), OPEN_IMAGE)
+            Entry::item(&tr!("Open Disk Image…"), OPEN_IMAGE)
                 .shortcut("Ctrl+O")
                 .without_window(),
-            self.item(cx, L10N.tr("menu-image-from"), IMAGE_FROM),
+            self.item(cx, tr!("Image from Selection…"), IMAGE_FROM),
         ];
         let edit = edit_submenu(vec![
             Entry::separator(),
-            self.item(cx, L10N.tr("menu-first-aid"), FIRST_AID),
-            self.item(cx, L10N.tr("menu-add-partition"), ADD_PARTITION),
-            self.item(cx, L10N.tr("menu-delete-partition"), DELETE_PARTITION),
-            self.item(cx, L10N.tr("menu-resize"), RESIZE),
-            self.item(cx, L10N.tr("menu-erase"), ERASE),
-            self.item(cx, L10N.tr("menu-restore"), RESTORE),
-            self.item(cx, L10N.tr("menu-rename"), RENAME),
+            self.item(cx, tr!("First Aid…"), FIRST_AID),
+            self.item(cx, tr!("Add Partition…"), ADD_PARTITION),
+            self.item(cx, tr!("Delete Partition…"), DELETE_PARTITION),
+            self.item(cx, tr!("Resize Partition…"), RESIZE),
+            self.item(cx, tr!("Erase…"), ERASE),
+            self.item(cx, tr!("Restore…"), RESTORE),
+            self.item(cx, tr!("Rename…"), RENAME),
             Entry::separator(),
             self.item(cx, mount, MOUNT),
-            self.item(cx, L10N.tr("action-eject"), EJECT)
-                .shortcut("Ctrl+E"),
+            self.item(cx, tr!("Eject"), EJECT).shortcut("Ctrl+E"),
         ]);
         Menus {
-            menus: vec![Entry::submenu(&L10N.tr("menu-file"), file), edit],
-            window: vec![Entry::item(&L10N.tr("app-name"), SHOW_MAIN)],
+            menus: vec![Entry::submenu(&tr!("File"), file), edit],
+            window: vec![Entry::item(&tr!("Disk Utility"), SHOW_MAIN)],
         }
     }
 

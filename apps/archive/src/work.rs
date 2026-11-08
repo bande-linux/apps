@@ -3,12 +3,13 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+
+use bande_l10n::{text, tr};
+
+use crate::settings::ArchiveSettings;
 use bande_fs::{
     Change, Job, Outcome, Progress, Refusal, Report, Task, Trash, archive_path, format_size,
 };
-
-use crate::L10N;
-use crate::settings::ArchiveSettings;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Kind {
@@ -117,9 +118,9 @@ impl Work {
             return Ended::Cancelled;
         }
         if let Some(shortfall) = outcome.shortfall {
-            return Ended::Failed(L10N.tr_args(
-                "needs-space",
-                [("size", format_size(shortfall.needed).into())],
+            return Ended::Failed(tr!(
+                "{size} more free space is needed.",
+                size = format_size(shortfall.needed)
             ));
         }
         if let Some(failure) = outcome.failures.first() {
@@ -159,28 +160,26 @@ impl Work {
 
     pub fn title(&self) -> String {
         let id = match self.kind {
-            Kind::Expand { .. } => "expanding",
-            Kind::Compress { .. } => "compressing",
+            Kind::Expand { .. } => text!("Expanding “{name}”"),
+            Kind::Compress { .. } => text!("Compressing “{name}”"),
         };
-        L10N.tr_args(id, [("name", self.subject().into())])
+        id.tr_args(&[("name", &self.subject() as &dyn std::fmt::Display)])
     }
 
     pub fn failure_title(&self) -> String {
         let id = match self.kind {
-            Kind::Expand { .. } => "cannot-expand",
-            Kind::Compress { .. } => "cannot-compress",
+            Kind::Expand { .. } => text!("Unable to expand “{name}”"),
+            Kind::Compress { .. } => text!("Unable to compress “{name}”"),
         };
-        L10N.tr_args(id, [("name", self.subject().into())])
+        id.tr_args(&[("name", &self.subject() as &dyn std::fmt::Display)])
     }
 
     pub fn detail(&self) -> String {
         let progress = &self.progress;
-        L10N.tr_args(
-            "done-of-total",
-            [
-                ("done", format_size(progress.bytes_done).into()),
-                ("total", format_size(progress.bytes_total).into()),
-            ],
+        tr!(
+            "{done} of {total}",
+            done = format_size(progress.bytes_done),
+            total = format_size(progress.bytes_total)
         )
     }
 

@@ -2,16 +2,17 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
+
+use bande_l10n::{text, tr};
+
+use crate::engine::{Network, Task};
+use crate::resources::{
+    Act, Acts, Field, Fields, Pane, Scope, boxed, confirm, matches, push, search, tell, tool,
+};
 use bande_app_menu::Entry;
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{
     Alert, Button, Cell, Column, Menu, MenuItem, Row, Table, TextField, Ui, Widget, WidgetId,
-};
-
-use crate::L10N;
-use crate::engine::{Network, Task};
-use crate::resources::{
-    Act, Acts, Field, Fields, Pane, Scope, boxed, confirm, matches, push, search, tell, tool,
 };
 
 const USER_PREFIX: &str = "net:";
@@ -63,7 +64,7 @@ fn row(scope: &Scope, network: &Network) -> Row {
         true => vec![Row::new(
             format!("{MEMBER_PREFIX}{}:", network.id),
             vec![
-                Cell::new(L10N.tr("no-attached-containers")).muted(),
+                Cell::new(tr!("No attached containers")).muted(),
                 Cell::new(""),
                 Cell::new(""),
                 Cell::new(""),
@@ -103,13 +104,13 @@ fn create_sheet(ui: &mut Ui, acts: &Acts) {
     let typed = Rc::new(RefCell::new((String::new(), String::new())));
     let name = {
         let typed = Rc::clone(&typed);
-        TextField::new(&L10N.tr("network-name-placeholder"), "", move |text| {
+        TextField::new(&tr!("backend"), "", move |text| {
             typed.borrow_mut().0 = text.trim().to_owned();
         })
     };
     let subnet = {
         let typed = Rc::clone(&typed);
-        TextField::new(&L10N.tr("network-subnet-placeholder"), "", move |text| {
+        TextField::new(&tr!("Automatic"), "", move |text| {
             typed.borrow_mut().1 = text.trim().to_owned();
         })
         .without_text_checking()
@@ -117,8 +118,8 @@ fn create_sheet(ui: &mut Ui, acts: &Acts) {
     let acts = Rc::clone(acts);
     ui.present_sheet(
         Alert::new(
-            &L10N.tr("create-network-title"),
-            &L10N.tr("create-network-message"),
+            &tr!("New Network"),
+            &tr!("A bridge network on this computer."),
             move |choice| {
                 let (name, subnet) = typed.borrow().clone();
                 if choice == "create" && !name.is_empty() {
@@ -127,11 +128,11 @@ fn create_sheet(ui: &mut Ui, acts: &Acts) {
             },
         )
         .accessory(Fields::new(vec![
-            Field::new(&L10N.tr("network-name"), name),
-            Field::new(&L10N.tr("network-subnet"), subnet),
+            Field::new(&tr!("Name"), name),
+            Field::new(&tr!("Subnet"), subnet),
         ]))
-        .primary(&L10N.tr("create"), "create")
-        .cancel(&L10N.tr("button-cancel"), "cancel"),
+        .primary(&tr!("Create"), "create")
+        .cancel(&tr!("Cancel"), "cancel"),
     );
 }
 
@@ -149,31 +150,31 @@ impl Pane for Networks {
     fn build(&mut self, acts: &Acts, palette: &Palette) -> (Vec<Box<dyn Widget>>, Box<dyn Widget>) {
         let create = tool(
             CREATE_SYMBOL,
-            "create-network",
+            text!("New Network"),
             palette,
             acts,
             Act::Command(CREATE),
         );
         let remove = tool(
             REMOVE_SYMBOL,
-            "remove-selected",
+            text!("Remove Selected"),
             palette,
             acts,
             Act::Command(REMOVE),
         );
-        let field = search("filter-networks", &self.filter, acts);
+        let field = search(text!("Filter networks"), &self.filter, acts);
         self.remove = Some(remove.id());
         self.search = Some(field.id());
         let select = Rc::clone(acts);
         let expand = Rc::clone(acts);
         let menu_acts = Rc::clone(acts);
         let table = Table::new(vec![
-            Column::new(&L10N.tr("column-name"), NAME_WIDTH)
+            Column::new(&tr!("Name"), NAME_WIDTH)
                 .flexible()
                 .unsortable(),
-            Column::new(&L10N.tr("column-driver"), DRIVER_WIDTH).unsortable(),
-            Column::new(&L10N.tr("column-subnet"), SUBNET_WIDTH).unsortable(),
-            Column::new(&L10N.tr("column-containers"), CONTAINERS_WIDTH)
+            Column::new(&tr!("Driver"), DRIVER_WIDTH).unsortable(),
+            Column::new(&tr!("Subnet"), SUBNET_WIDTH).unsortable(),
+            Column::new(&tr!("Containers"), CONTAINERS_WIDTH)
                 .numeric()
                 .unsortable(),
         ])
@@ -187,9 +188,9 @@ impl Pane for Networks {
                     .any(|key| key.starts_with(USER_PREFIX) || key.starts_with(BUILTIN_PREFIX));
                 network.then(|| {
                     Menu::new(vec![
-                        MenuItem::new(&L10N.tr("copy-name"), COPY_NAME),
+                        MenuItem::new(&tr!("Copy Name"), COPY_NAME),
                         MenuItem::separator(),
-                        MenuItem::new(&L10N.tr("remove-ellipsis"), REMOVE).enabled(user),
+                        MenuItem::new(&tr!("Remove…"), REMOVE).enabled(user),
                     ])
                 })
             },
@@ -251,12 +252,11 @@ impl Pane for Networks {
 
     fn menu(&self, _scope: &Scope) -> Option<Entry> {
         Some(Entry::submenu(
-            &L10N.tr("menu-network"),
+            &tr!("Network"),
             vec![
-                Entry::item(&L10N.tr("create-network-ellipsis"), CREATE),
+                Entry::item(&tr!("New Network…"), CREATE),
                 Entry::separator(),
-                Entry::item(&L10N.tr("remove-ellipsis"), REMOVE)
-                    .enabled(!self.removable().is_empty()),
+                Entry::item(&tr!("Remove…"), REMOVE).enabled(!self.removable().is_empty()),
             ],
         ))
     }
@@ -300,16 +300,16 @@ impl Pane for Networks {
                 let title = match removable.as_slice() {
                     [] => return,
                     [only] => {
-                        L10N.tr_args("remove-network-title", [("name", only.name.clone().into())])
+                        tr!("Remove “{name}”?", name = only.name.clone())
                     }
-                    _ => L10N.tr_args("remove-networks-title", [("count", removable.len().into())]),
+                    _ => tr!("Remove {count} networks?", count = removable.len()),
                 };
                 confirm(
                     ui,
                     acts,
                     &title,
-                    &L10N.tr("remove-network-message"),
-                    &L10N.tr("remove"),
+                    &tr!("Disconnect its containers first."),
+                    &tr!("Remove"),
                     Task::RemoveNetworks(
                         removable.iter().map(|network| network.id.clone()).collect(),
                     ),
@@ -322,9 +322,9 @@ impl Pane for Networks {
     fn finished(&mut self, ui: &mut Ui, task: &Task, result: &Result<u64, String>) -> bool {
         let title = match (task, result) {
             (Task::CreateNetwork(name, _), Err(_)) => {
-                L10N.tr_args("cannot-create-network", [("name", name.clone().into())])
+                tr!("Cannot create “{name}”", name = name.clone())
             }
-            (Task::RemoveNetworks(_), Err(_)) => L10N.tr("cannot-remove-networks"),
+            (Task::RemoveNetworks(_), Err(_)) => tr!("Cannot remove every network"),
             _ => return false,
         };
         if let Err(message) = result {

@@ -1,10 +1,11 @@
+use bande_l10n::tr;
 use bande_datetime::Month;
 use bande_toolkit::{Point, Radius, Rect, TextAlign, TextRole, TextStyle};
 use jiff::civil::Date;
 
 use super::paint::calendar_color;
 use super::painter::Painter;
-use super::{Hit, L10N, ViewModel};
+use super::{Hit, ViewModel};
 use crate::store::AccountKind;
 
 const INSET: f32 = 10.0;
@@ -43,8 +44,8 @@ pub fn paint(
             continue;
         }
         let heading = match account.kind {
-            AccountKind::Local => L10N.tr("on-my-computer"),
-            AccountKind::Subscription { .. } => L10N.tr("subscriptions"),
+            AccountKind::Local => tr!("On My Computer"),
+            AccountKind::Subscription { .. } => tr!("Subscriptions"),
             AccountKind::CalDav { .. } => account.name.clone(),
         };
         let heading_rect = Rect::new(

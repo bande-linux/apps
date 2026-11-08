@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use bande_l10n::{Text, text, tr};
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWatch, Stored, settings_folder};
@@ -18,7 +19,7 @@ use bande_calendar::store::{Account, AccountKind, CalendarInfo, Library, data_di
 use bande_calendar::sync::{apply, subscription_outcome};
 use bande_calendar::ui::painter::{color_text, parse_color};
 use bande_calendar::ui::{
-    CalendarView, L10N, Mode, Request, SETTINGS_SIZE, SIDEBAR_WIDTH, SettingsView, TOOLBAR_HEIGHT,
+    CalendarView, Mode, Request, SETTINGS_SIZE, SIDEBAR_WIDTH, SettingsView, TOOLBAR_HEIGHT,
 };
 use bande_calendar::wake::WallAlarm;
 use bande_calendar::worker::{Job, Reply, Worker};
@@ -49,10 +50,10 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Calendar"),
     keys: Keys::Standard,
     settings: Some(Settings {
-        title: || L10N.tr("settings-title"),
+        title: || tr!("Calendar Settings"),
         size: SETTINGS_SIZE,
         view: settings_window,
     }),
@@ -72,8 +73,8 @@ fn choose(outbox: bande_inbox::Outbox<Chosen>, export: Option<(String, String)>)
         .name("choose".to_owned())
         .spawn(move || {
             let (title, save) = match &export {
-                Some((name, _)) => (L10N.tr("export-dialog-title"), Choose::Save(name)),
-                None => (L10N.tr("import-dialog-title"), Choose::Open),
+                Some((name, _)) => (tr!("Export Calendar"), Choose::Save(name)),
+                None => (tr!("Import Events"), Choose::Open),
             };
             let chosen = match choose_file(&title, save) {
                 Ok(Some(path)) => path,
@@ -87,12 +88,10 @@ fn choose(outbox: bande_inbox::Outbox<Chosen>, export: Option<(String, String)>)
                 None => Chosen::Open(chosen),
                 Some((_, data)) => match bande_xdg::replace_file(&chosen, data) {
                     Ok(()) => return,
-                    Err(error) => Chosen::Failed(L10N.tr_args(
-                        "export-failed",
-                        [
-                            ("file", chosen.display().to_string().into()),
-                            ("error", error.to_string().into()),
-                        ],
+                    Err(error) => Chosen::Failed(tr!(
+                        "Cannot export {file}: {error}",
+                        file = chosen.display().to_string(),
+                        error = error.to_string()
                     )),
                 },
             };
@@ -157,20 +156,20 @@ fn load_settings() -> CalendarSettings {
         .unwrap_or_default()
 }
 
-fn entry(label: &str, action: &str) -> Entry {
-    Entry::item(&L10N.tr(label), action)
+fn entry(label: Text, action: &str) -> Entry {
+    Entry::item(&label.tr(), action)
 }
 
 fn zone_menu(view: &CalendarView) -> Entry {
     let shown = view.shown_zone();
     let items =
-        std::iter::once(Entry::item(&L10N.tr("zone-system"), "zone:").radio(shown.is_none()))
+        std::iter::once(Entry::item(&tr!("System Time Zone"), "zone:").radio(shown.is_none()))
             .chain(view.zones().into_iter().map(|zone| {
                 let chosen = shown == Some(zone.as_str());
                 Entry::item(&zone, &format!("zone:{zone}")).radio(chosen)
             }))
             .collect();
-    Entry::submenu(&L10N.tr("zone-menu"), items)
+    Entry::submenu(&tr!("Time Zone"), items)
 }
 
 fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
@@ -180,10 +179,10 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
         .enumerate()
         .map(|(index, shown)| {
             let label = match shown {
-                Mode::Day => "day",
-                Mode::Week => "week",
-                Mode::Month => "month",
-                Mode::Year => "year",
+                Mode::Day => text!("Day"),
+                Mode::Week => text!("Week"),
+                Mode::Month => text!("Month"),
+                Mode::Year => text!("Year"),
             };
             entry(label, &format!("mode-{index}"))
                 .shortcut(&format!("Ctrl+{}", index + 1))
@@ -195,30 +194,30 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
     }
     view_menu.extend([
         Entry::separator(),
-        entry("go-to-today", "today").shortcut("Ctrl+T"),
-        entry("previous-period", "previous"),
-        entry("next-period", "next"),
+        entry(text!("Go to Today"), "today").shortcut("Ctrl+T"),
+        entry(text!("Previous"), "previous"),
+        entry(text!("Next"), "next"),
         Entry::separator(),
-        entry("find", "find").shortcut("Ctrl+F"),
+        entry(text!("Find"), "find").shortcut("Ctrl+F"),
     ]);
     vec![
         Entry::submenu(
-            &L10N.tr("menu-file"),
+            &tr!("File"),
             vec![
-                entry("new-event", NEW_EVENT).shortcut("Ctrl+N"),
+                entry(text!("New Event"), NEW_EVENT).shortcut("Ctrl+N"),
                 Entry::separator(),
-                entry("new-calendar", "new-calendar"),
-                entry("add-account", "add-account"),
-                entry("refresh", REFRESH).shortcut("Ctrl+R"),
+                entry(text!("New Calendar…"), "new-calendar"),
+                entry(text!("Add Account…"), "add-account"),
+                entry(text!("Refresh Calendars"), REFRESH).shortcut("Ctrl+R"),
                 Entry::separator(),
-                entry("import-menu", IMPORT),
-                entry("export", EXPORT),
+                entry(text!("Import…"), IMPORT),
+                entry(text!("Export…"), EXPORT),
                 Entry::separator(),
                 bande_app_menu::print_item(true),
             ],
         ),
         edit_submenu(Vec::new()),
-        Entry::submenu(&L10N.tr("menu-view"), view_menu),
+        Entry::submenu(&tr!("View"), view_menu),
     ]
 }
 
@@ -338,7 +337,7 @@ impl CalendarApp {
         }
         self.syncing = true;
         self.errors.clear();
-        view.set_status(Some(L10N.tr("syncing")));
+        view.set_status(Some(tr!("Updating…")));
         self.worker.send(Job::Sync(calendars));
     }
 
@@ -437,7 +436,7 @@ impl CalendarApp {
 
     fn add_subscription(&mut self, view: &mut CalendarView, url: String, data: &str) {
         let Ok(objects) = CalendarObject::parse(data) else {
-            view.account_failed(&L10N.tr_args("not-a-calendar", [("url", url.into())]));
+            view.account_failed(&tr!("{url} is not a calendar.", url = url));
             return;
         };
         let header = |name: &str| {
@@ -508,8 +507,10 @@ impl CalendarApp {
                 Reply::Synced(outcome) => {
                     for title in apply(view.library_mut(), outcome, false) {
                         self.sync_again = true;
-                        self.errors
-                            .push(L10N.tr_args("conflict", [("title", title.into())]));
+                        self.errors.push(tr!(
+                            "“{title}” was changed elsewhere; both versions are kept.",
+                            title = title
+                        ));
                     }
                 }
                 Reply::Refreshed { calendar, data } => {
@@ -546,10 +547,8 @@ impl CalendarApp {
                 Reply::Failed { calendar, error } => {
                     let name = Self::calendar_name(view, &calendar);
                     tracing::warn!("cannot sync {name}: {error}");
-                    self.errors.push(L10N.tr_args(
-                        "sync-error",
-                        [("name", name.into()), ("error", error.into())],
-                    ));
+                    self.errors
+                        .push(tr!("{name}: {error}", name = name, error = error));
                 }
                 Reply::Made {
                     account,
@@ -578,7 +577,7 @@ impl CalendarApp {
                     self.syncing = false;
                     let now = Zoned::now().with_time_zone(self.zone.clone());
                     let status = self.errors.first().cloned().unwrap_or_else(|| {
-                        L10N.tr_args("synced-at", [("time", clock(&self.formats, &now).into())])
+                        tr!("Updated {time}", time = clock(&self.formats, &now))
                     });
                     view.set_status(Some(status));
                     if std::mem::take(&mut self.sync_again) {
@@ -988,7 +987,7 @@ impl Program for CalendarApp {
                 .or(self.parked.as_ref())
                 .map(|Pane(view)| app_menus(view, self.settings.time_zones))
                 .unwrap_or_default(),
-            window: vec![entry("app-name", SHOW_CALENDAR)],
+            window: vec![entry(text!("Calendar"), SHOW_CALENDAR)],
         }
     }
 

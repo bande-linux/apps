@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use bande_l10n::tr;
 use accesskit::{Action, ActionRequest, Node, Role, TreeId, TreeUpdate};
 use bande_toolkit::ui::{
     Button, ClipboardRequest, Context, Cursor, Event, Key, Modifiers, Size, TextField, Ui, Widget,
@@ -9,8 +10,6 @@ use bande_toolkit::ui::{
 use bande_toolkit::{
     Appearance, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem, grown_line,
 };
-
-use crate::L10N;
 
 const BANNER_HEIGHT: f32 = 36.0;
 const FIELD_WIDTH: f32 = 240.0;
@@ -165,8 +164,8 @@ impl Widget for BannerView {
     fn access(&self, _cx: &Context) -> Node {
         let model = self.model.borrow();
         let (role, label) = match model.kind {
-            Kind::Find => (Role::Toolbar, L10N.tr("find-bar")),
-            Kind::Rename => (Role::Toolbar, L10N.tr("menu-edit-title")),
+            Kind::Find => (Role::Toolbar, tr!("Find")),
+            Kind::Rename => (Role::Toolbar, tr!("Edit Title")),
             Kind::Confirm => (Role::Alert, model.status.clone().unwrap_or_default()),
         };
         let mut node = Node::new(role);
@@ -236,7 +235,7 @@ impl Banner {
             height: BANNER_HEIGHT,
         }));
         let changed = model.clone();
-        let field = TextField::new(&L10N.tr("find-placeholder"), query, move |text| {
+        let field = TextField::new(&tr!("Find"), query, move |text| {
             let mut model = changed.borrow_mut();
             model.query = text.to_owned();
             model.actions.push(BannerAction::QueryChanged);
@@ -245,9 +244,9 @@ impl Banner {
         let focus = field.id();
         let children = vec![
             Box::new(field) as Box<dyn Widget>,
-            action_button(&model, &L10N.tr("find-previous"), BannerAction::Older),
-            action_button(&model, &L10N.tr("find-next"), BannerAction::Newer),
-            action_button(&model, &L10N.tr("find-done"), BannerAction::Dismiss),
+            action_button(&model, &tr!("Previous"), BannerAction::Older),
+            action_button(&model, &tr!("Next"), BannerAction::Newer),
+            action_button(&model, &tr!("Done"), BannerAction::Dismiss),
         ];
         Self::new(appearance, text, model, 3, children, focus)
     }
@@ -262,15 +261,15 @@ impl Banner {
             height: BANNER_HEIGHT,
         }));
         let changed = model.clone();
-        let field = TextField::new(&L10N.tr("title-placeholder"), title, move |text| {
+        let field = TextField::new(&tr!("Tab title"), title, move |text| {
             changed.borrow_mut().query = text.to_owned();
         })
         .without_text_checking();
         let focus = field.id();
         let children = vec![
             Box::new(field) as Box<dyn Widget>,
-            action_button(&model, &L10N.tr("cancel"), BannerAction::Dismiss),
-            Box::new(action(&model, &L10N.tr("rename"), BannerAction::Confirm).primary()),
+            action_button(&model, &tr!("Cancel"), BannerAction::Dismiss),
+            Box::new(action(&model, &tr!("Rename"), BannerAction::Confirm).primary()),
         ];
         Self::new(appearance, text, model, 1, children, focus)
     }
@@ -284,7 +283,7 @@ impl Banner {
             area: Rect::default(),
             height: BANNER_HEIGHT,
         }));
-        let cancel = action_button(&model, &L10N.tr("cancel"), BannerAction::Dismiss);
+        let cancel = action_button(&model, &tr!("Cancel"), BannerAction::Dismiss);
         let confirm: Box<dyn Widget> =
             Box::new(action(&model, confirm, BannerAction::Confirm).primary());
         let focus = confirm.id();
@@ -331,7 +330,7 @@ impl Banner {
     }
 
     pub fn set_found(&mut self, found: bool) {
-        self.model.borrow_mut().status = (!found).then(|| L10N.tr("find-not-found"));
+        self.model.borrow_mut().status = (!found).then(|| tr!("Not found"));
     }
 
     pub fn contains(&self, point: Point) -> bool {

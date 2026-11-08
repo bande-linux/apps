@@ -17,10 +17,6 @@ mod system;
 mod traffic;
 mod view;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
 pub use apps::{Catalog, Group, GroupKey};
 pub use asked::Asked;
 pub use cpu::{CpuShare, read_cpu_ticks};
@@ -39,6 +35,3 @@ pub use system::{Memory, Pressure, PressureLevel};
 pub use view::{Icons, Request, Screen};
 
 pub const FILES_APP_ID: &str = "org.bande.Files";
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-monitor")));

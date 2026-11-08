@@ -5,12 +5,12 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Instant;
 
+use bande_l10n::tr;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::client::{Engine, Error, api_at_least};
 use super::http::{Body, Upload};
-use crate::L10N;
 
 const COMPOSE_PROJECT: &str = "com.docker.compose.project";
 const HELPER_LABEL: &str = "org.bande.velox.helper";
@@ -757,7 +757,7 @@ impl Engine {
                 (!layers.is_empty()).then(|| layers.values().sum::<f32>() / layers.len() as f32);
             let percent = fraction.map(|fraction| (fraction * 100.0).round() as u32);
             let status = match line.id {
-                Some(_) if done.is_some() => L10N.tr("pull-downloading"),
+                Some(_) if done.is_some() => tr!("Downloading"),
                 _ => line.status,
             };
             let key = (status.clone(), percent);

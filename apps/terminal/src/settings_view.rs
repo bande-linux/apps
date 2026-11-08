@@ -1,7 +1,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+
+use bande_l10n::{Text, text, tr};
+
+use crate::settings::{
+    COLUMN_RANGE, CloseAsk, CursorStyle, FONT_SIZES, FONTS, NewTabFolder, ROW_RANGE,
+    SCROLLBACK_CHOICES, Settings,
+};
 use accesskit::{Node, Role};
+use bande_terminal_view::{Profile, Theme};
 use bande_toolkit::ui::{
     Context, Form, FormLine, PopUpButton, ScrollView, SegmentedControl, Size, Stepper, TextField,
     Toggle, Ui, Widget, WidgetId,
@@ -9,13 +17,6 @@ use bande_toolkit::ui::{
 use bande_toolkit::{
     Appearance, Item, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle, TextSystem,
 };
-
-use crate::L10N;
-use crate::settings::{
-    COLUMN_RANGE, CloseAsk, CursorStyle, FONT_SIZES, FONTS, NewTabFolder, ROW_RANGE,
-    SCROLLBACK_CHOICES, Settings,
-};
-use bande_terminal_view::{Profile, Theme};
 
 pub const SETTINGS_SIZE: (u32, u32) = (520, 600);
 const PREVIEW: f32 = 76.0;
@@ -54,7 +55,7 @@ impl Widget for Preview {
             .set_monospace_family((!font.is_empty()).then_some(font.as_str()));
         let rect = Rect::new(frame.x, frame.y + 4.0, frame.width, frame.height - 8.0);
         let sample = cx.text.paragraph(
-            &L10N.tr("settings-preview-sample"),
+            &tr!("~/bande $ cargo build --release"),
             TextStyle::role(TextRole::Mono, theme.foreground),
             None,
             TextAlign::Start,
@@ -95,7 +96,7 @@ impl Widget for Preview {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Image);
-        node.set_label(L10N.tr("settings-preview-sample"));
+        node.set_label(tr!("~/bande $ cargo build --release"));
         node
     }
 }
@@ -150,26 +151,21 @@ fn form(settings: &SharedSettings, fonts: &[String]) -> Form {
     let current = settings.borrow().clone();
     let profiles: Vec<String> = Profile::ALL
         .iter()
-        .map(|profile| L10N.tr(profile.message()))
+        .map(|profile| (profile.message()).tr())
         .collect();
     let chosen = Profile::ALL
         .iter()
         .position(|candidate| *candidate == current.profile)
         .unwrap_or_default();
     let shared = settings.clone();
-    let profile_button = PopUpButton::new(
-        &L10N.tr("settings-profile"),
-        &profiles,
-        chosen,
-        move |index| {
-            let profile = Profile::ALL.get(index).copied().unwrap_or_default();
-            shared.borrow_mut().profile = profile;
-        },
-    );
+    let profile_button = PopUpButton::new(&tr!("Profile"), &profiles, chosen, move |index| {
+        let profile = Profile::ALL.get(index).copied().unwrap_or_default();
+        shared.borrow_mut().profile = profile;
+    });
     let shared = settings.clone();
     let families = fonts.to_vec();
     let font = PopUpButton::new(
-        &L10N.tr("settings-font"),
+        &tr!("Font"),
         fonts,
         fonts
             .iter()
@@ -184,16 +180,16 @@ fn form(settings: &SharedSettings, fonts: &[String]) -> Form {
     );
     let shared = settings.clone();
     let size = Stepper::new(
-        &L10N.tr("settings-font-size"),
+        &tr!("Text size"),
         f64::from(current.font_size),
         (f64::from(FONT_SIZES.0), f64::from(FONT_SIZES.1)),
         1.0,
         move |value| shared.borrow_mut().font_size = value as f32,
     )
-    .format(|value| L10N.tr_args("settings-points", [("size", (value as i64).into())]));
+    .format(|value| tr!("{size} pt", size = (value as i64)));
     let shared = settings.clone();
     let columns = Stepper::new(
-        &L10N.tr("settings-columns"),
+        &tr!("Columns"),
         current.columns as f64,
         (COLUMN_RANGE.0 as f64, COLUMN_RANGE.1 as f64),
         1.0,
@@ -201,7 +197,7 @@ fn form(settings: &SharedSettings, fonts: &[String]) -> Form {
     );
     let shared = settings.clone();
     let rows = Stepper::new(
-        &L10N.tr("settings-rows"),
+        &tr!("Rows"),
         current.rows as f64,
         (ROW_RANGE.0 as f64, ROW_RANGE.1 as f64),
         1.0,
@@ -209,11 +205,11 @@ fn form(settings: &SharedSettings, fonts: &[String]) -> Form {
     );
     let cursors: Vec<String> = CursorStyle::ALL
         .iter()
-        .map(|style| L10N.tr(style.message()))
+        .map(|style| (style.message()).tr())
         .collect();
     let shared = settings.clone();
     let cursor = SegmentedControl::new(
-        &L10N.tr("settings-cursor"),
+        &tr!("Cursor"),
         &cursors,
         CursorStyle::ALL
             .iter()
@@ -224,110 +220,108 @@ fn form(settings: &SharedSettings, fonts: &[String]) -> Form {
     );
     let audible = toggle(
         settings,
-        &L10N.tr("settings-audible"),
+        &tr!("Play the alert sound"),
         current.audible_bell,
         |settings, on| settings.audible_bell = on,
     );
     let flash = toggle(
         settings,
-        &L10N.tr("settings-flash"),
+        &tr!("Flash the window"),
         current.flash_on_bell,
         |settings, on| settings.flash_on_bell = on,
     );
     let badge = toggle(
         settings,
-        &L10N.tr("settings-badge"),
+        &tr!("Show a badge in the bar"),
         current.badge_on_bell,
         |settings, on| settings.badge_on_bell = on,
     );
     let notify = toggle(
         settings,
-        &L10N.tr("settings-notify"),
+        &tr!("Notify when long commands finish"),
         current.notify_finished,
         |settings, on| settings.notify_finished = on,
     );
     let blink = toggle(
         settings,
-        &L10N.tr("settings-blink"),
+        &tr!("Blink the cursor"),
         current.blink,
         |settings, on| settings.blink = on,
     );
     let shared = settings.clone();
-    let shell = TextField::new(
-        &L10N.tr("settings-shell-placeholder"),
-        &current.shell,
-        move |text| shared.borrow_mut().shell = text.to_owned(),
-    )
+    let shell = TextField::new(&tr!("Login shell"), &current.shell, move |text| {
+        shared.borrow_mut().shell = text.to_owned()
+    })
     .without_text_checking();
     let folder = pop_up(
         settings,
-        &L10N.tr("settings-new-tabs"),
+        &tr!("New tabs and windows open in"),
         &NewTabFolder::ALL,
-        |folder| L10N.tr(folder.message()),
+        |folder| (folder.message()).tr(),
         current.new_tab_folder,
         |settings, folder| settings.new_tab_folder = folder,
     );
     let close = pop_up(
         settings,
-        &L10N.tr("settings-close-ask"),
+        &tr!("Ask before closing"),
         &CloseAsk::ALL,
-        |ask| L10N.tr(ask.message()),
+        |ask| (ask.message()).tr(),
         current.close_ask,
         |settings, ask| settings.close_ask = ask,
     );
     let scrollback = pop_up(
         settings,
-        &L10N.tr("settings-scrollback"),
+        &tr!("Scrollback"),
         &SCROLLBACK_CHOICES,
-        |lines| L10N.tr_args("settings-lines", [("count", grouped(lines).into())]),
+        |lines| tr!("{count} lines", count = grouped(lines)),
         current.scrollback,
         |settings, lines| settings.scrollback = lines,
     );
     let meta = toggle(
         settings,
-        &L10N.tr("settings-alt-as-meta"),
+        &tr!("Use Alt as Meta"),
         current.alt_as_meta,
         |settings, on| settings.alt_as_meta = on,
     );
     let paste = toggle(
         settings,
-        &L10N.tr("settings-paste-warning"),
+        &tr!("Warn before pasting several lines"),
         current.paste_warning,
         |settings, on| settings.paste_warning = on,
     );
-    let heading = |message: &str| FormLine::Heading(L10N.tr(message));
-    let row = |message: &str, control: Box<dyn Widget>| FormLine::Row(L10N.tr(message), control);
+    let heading = |message: Text| FormLine::Heading(message.tr());
+    let row = |message: Text, control: Box<dyn Widget>| FormLine::Row(message.tr(), control);
     Form::new(
-        &L10N.tr("settings-title"),
+        &tr!("Terminal Settings"),
         vec![
-            heading("settings-appearance"),
-            row("settings-profile", Box::new(profile_button)),
+            heading(text!("Appearance")),
+            row(text!("Profile"), Box::new(profile_button)),
             FormLine::Wide(Box::new(Preview {
                 id: WidgetId::next(),
                 settings: settings.clone(),
                 frame: Rect::default(),
                 items: Vec::new(),
             })),
-            row("settings-font", Box::new(font)),
-            row("settings-font-size", Box::new(size)),
-            row("settings-columns", Box::new(columns)),
-            row("settings-rows", Box::new(rows)),
-            row("settings-cursor", Box::new(cursor)),
-            row("settings-blink", Box::new(blink)),
-            heading("settings-shell"),
-            row("settings-shell-command", Box::new(shell)),
-            row("settings-new-tabs", Box::new(folder)),
-            row("settings-close-ask", Box::new(close)),
-            heading("settings-input"),
-            row("settings-alt-as-meta", Box::new(meta)),
-            row("settings-paste-warning", Box::new(paste)),
-            row("settings-scrollback", Box::new(scrollback)),
-            heading("settings-bell"),
-            row("settings-audible", Box::new(audible)),
-            row("settings-flash", Box::new(flash)),
-            row("settings-badge", Box::new(badge)),
-            heading("settings-notifications"),
-            row("settings-notify", Box::new(notify)),
+            row(text!("Font"), Box::new(font)),
+            row(text!("Text size"), Box::new(size)),
+            row(text!("Columns"), Box::new(columns)),
+            row(text!("Rows"), Box::new(rows)),
+            row(text!("Cursor"), Box::new(cursor)),
+            row(text!("Blink the cursor"), Box::new(blink)),
+            heading(text!("Shell")),
+            row(text!("Run command"), Box::new(shell)),
+            row(text!("New tabs and windows open in"), Box::new(folder)),
+            row(text!("Ask before closing"), Box::new(close)),
+            heading(text!("Keyboard and Paste")),
+            row(text!("Use Alt as Meta"), Box::new(meta)),
+            row(text!("Warn before pasting several lines"), Box::new(paste)),
+            row(text!("Scrollback"), Box::new(scrollback)),
+            heading(text!("Bell")),
+            row(text!("Play the alert sound"), Box::new(audible)),
+            row(text!("Flash the window"), Box::new(flash)),
+            row(text!("Show a badge in the bar"), Box::new(badge)),
+            heading(text!("Notifications")),
+            row(text!("Notify when long commands finish"), Box::new(notify)),
         ],
     )
 }

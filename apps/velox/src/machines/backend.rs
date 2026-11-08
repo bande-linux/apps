@@ -11,6 +11,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime};
 
+use bande_l10n::tr;
 use bande_vm::{
     ActiveState, CloudImage, CloudInit, Forward, HelperFailure, Host, ImageStore, Installer,
     Library, Machine, Manifest, Network, NewClone, NewMachine, Qmp, Share, Units, UsbDevice,
@@ -19,7 +20,6 @@ use bande_watch::{Changes, FolderWatch};
 use serde::{Deserialize, Serialize};
 
 use super::readiness::{self, Blocker};
-use crate::L10N;
 
 const LOGIN_FILE: &str = "velox.json";
 const SSH_PORT: u16 = 22;
@@ -177,14 +177,18 @@ struct Shared {
 fn describe(error: bande_vm::Error) -> String {
     match error {
         bande_vm::Error::Helper(failure) => match failure {
-            HelperFailure::NoPkexec => L10N.tr("machine-helper-no-pkexec"),
-            HelperFailure::NoHelper => L10N.tr("machine-helper-missing"),
-            HelperFailure::NotAuthorized => L10N.tr("machine-helper-not-authorized"),
+            HelperFailure::NoPkexec => tr!(
+                "Velox needs pkexec to ask for an administrator’s password. Install the pkexec package."
+            ),
+            HelperFailure::NoHelper => tr!("The Velox helper is missing. Reinstall Velox."),
+            HelperFailure::NotAuthorized => tr!(
+                "The administrator’s password was not given, or this account is not allowed to do this."
+            ),
             HelperFailure::Refused(reason) => {
-                L10N.tr_args("machine-helper-refused", [("reason", reason.into())])
+                tr!("The Velox helper refused: {reason}", reason = reason)
             }
         },
-        bande_vm::Error::Cancelled => L10N.tr("machine-helper-cancelled"),
+        bande_vm::Error::Cancelled => tr!("The password prompt was cancelled."),
         error => error.to_string(),
     }
 }

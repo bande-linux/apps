@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
+
+use bande_l10n::tr;
+
 use super::client::{Engine, Error};
 use super::informer::Update;
 use super::resources::RunSpec;
-use crate::L10N;
 use crate::volumes::portal;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,7 +78,7 @@ pub fn perform(engine: &Engine, api: &str, task: Task, send: impl Fn(Update) -> 
         Task::RemoveVolumes(names) => each(names, |name| engine.remove_volume(name)),
         Task::PruneVolumes => engine.prune_volumes(None, api).map_err(message),
         Task::ChooseArchive => {
-            match portal::choose_archive(&L10N.tr("import-volume-title")) {
+            match portal::choose_archive(&tr!("Import Volume")) {
                 Ok(Some(path)) => {
                     send(Update::Chosen(path));
                 }
@@ -90,8 +92,7 @@ pub fn perform(engine: &Engine, api: &str, task: Task, send: impl Fn(Update) -> 
             .map(|()| 0)
             .map_err(message),
         Task::ExportVolume(name) => {
-            let chosen =
-                portal::choose_save_path(&L10N.tr("export-volume-title"), &format!("{name}.tar"));
+            let chosen = portal::choose_save_path(&tr!("Export Volume"), &format!("{name}.tar"));
             match chosen {
                 Ok(Some(path)) => engine
                     .export_volume(name, &path)

@@ -3,7 +3,9 @@ use std::fs;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 
-use crate::L10N;
+
+use bande_l10n::tr;
+
 use crate::proc::{Stat, parse_kilobytes, parse_number, parse_stat};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,15 +53,15 @@ pub struct Statistics {
 }
 
 pub fn state_name(state: char) -> String {
-    L10N.tr(match state {
-        'R' => "state-running",
-        'S' => "state-sleeping",
-        'D' => "state-waiting",
-        'Z' => "state-zombie",
-        'T' | 't' => "state-stopped",
-        'I' => "state-idle",
-        _ => "state-unknown",
-    })
+    match state {
+        'R' => tr!("Running"),
+        'S' => tr!("Sleeping"),
+        'D' => tr!("Waiting for the disk"),
+        'Z' => tr!("Ended, waiting for its parent"),
+        'T' | 't' => tr!("Stopped"),
+        'I' => tr!("Idle"),
+        _ => tr!("Unknown"),
+    }
 }
 
 fn parse_maps(text: &str) -> Vec<Mapping> {
@@ -140,12 +142,10 @@ fn parse_sockets(text: &str, protocol: &str) -> Vec<(u64, String)> {
             let remote = parse_socket_address(fields.get(2)?)?;
             let inode = fields.get(9)?.parse::<u64>().ok()?;
             let description = if protocol == "TCP" && *fields.get(3)? == TCP_LISTEN {
-                L10N.tr_args(
-                    "port-listening",
-                    [
-                        ("protocol", protocol.into()),
-                        ("local", local.to_string().into()),
-                    ],
+                tr!(
+                    "{protocol} {local} (listening)",
+                    protocol = protocol,
+                    local = local.to_string()
                 )
             } else if remote.port() == 0 {
                 format!("{protocol} {local}")

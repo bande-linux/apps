@@ -1,3 +1,4 @@
+use bande_l10n::{Text, text};
 use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::vte::ansi::{Color as AnsiColor, NamedColor, Rgb};
 use bande_design::{Accent, Appearance, Color, Contrast, Palette, Scheme};
@@ -165,20 +166,20 @@ impl Profile {
         Self::ALL.into_iter().find(|profile| profile.name() == name)
     }
 
-    pub fn message(self) -> &'static str {
+    pub fn message(self) -> Text {
         match self {
-            Self::Datum => "profile-datum",
-            Self::Paper => "profile-paper",
-            Self::Ink => "profile-ink",
-            Self::Midnight => "profile-midnight",
-            Self::Contrast => "profile-contrast",
-            Self::SolarizedLight => "profile-solarized-light",
-            Self::SolarizedDark => "profile-solarized-dark",
-            Self::Dracula => "profile-dracula",
-            Self::Nord => "profile-nord",
-            Self::Gruvbox => "profile-gruvbox",
-            Self::TokyoNight => "profile-tokyo-night",
-            Self::Catppuccin => "profile-catppuccin",
+            Self::Datum => text!("Datum"),
+            Self::Paper => text!("Paper"),
+            Self::Ink => text!("Ink"),
+            Self::Midnight => text!("Midnight"),
+            Self::Contrast => text!("High Contrast"),
+            Self::SolarizedLight => text!("Solarized Light"),
+            Self::SolarizedDark => text!("Solarized Dark"),
+            Self::Dracula => text!("Dracula"),
+            Self::Nord => text!("Nord"),
+            Self::Gruvbox => text!("Gruvbox"),
+            Self::TokyoNight => text!("Tokyo Night"),
+            Self::Catppuccin => text!("Catppuccin Mocha"),
         }
     }
 

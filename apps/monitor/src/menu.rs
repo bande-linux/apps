@@ -1,9 +1,10 @@
-use bande_app_menu::{Entry, edit_submenu};
-use bande_toolkit::ui::{Menu, MenuItem};
 
-use crate::L10N;
+use bande_l10n::{Text, text, tr};
+
 use crate::model::{Column, Filter, Frequency, Tab};
 use crate::signal::Stop;
+use bande_app_menu::{Entry, edit_submenu};
+use bande_toolkit::ui::{Menu, MenuItem};
 
 pub const COLUMN_ACTION: &str = "column:";
 
@@ -63,13 +64,21 @@ const ACTIONS: [(MenuCommand, &str); 30] = [
 ];
 
 pub(crate) fn signal_title(how: Stop) -> String {
-    L10N.tr(&format!("signal-{}", how.id()))
+    match how.id() {
+        "hup" => tr!("Hangup (SIGHUP)"),
+        "int" => tr!("Interrupt (SIGINT)"),
+        "stop" => tr!("Pause (SIGSTOP)"),
+        "cont" => tr!("Continue (SIGCONT)"),
+        "usr1" => tr!("User 1 (SIGUSR1)"),
+        "usr2" => tr!("User 2 (SIGUSR2)"),
+        other => other.to_owned(),
+    }
 }
 
 fn signal_item_title(how: Stop) -> String {
     match how {
         Stop::Resume => signal_title(how),
-        _ => L10N.tr_args("menu-signal-asks", [("signal", signal_title(how).into())]),
+        _ => tr!("{signal}…", signal = signal_title(how)),
     }
 }
 
@@ -89,8 +98,8 @@ impl MenuCommand {
     }
 }
 
-fn item(message: &str, command: MenuCommand) -> MenuItem {
-    MenuItem::new(&L10N.tr(message), command.action())
+fn item(message: Text, command: MenuCommand) -> MenuItem {
+    MenuItem::new(&message.tr(), command.action())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -103,24 +112,25 @@ pub struct Selected {
 }
 
 pub fn process_menu(selected: Selected) -> Menu {
-    let force_quit = item("menu-force-quit", MenuCommand::ForceQuit).enabled(selected.stoppable);
+    let force_quit = item(text!("Force Quit…"), MenuCommand::ForceQuit).enabled(selected.stoppable);
     let mut items = vec![
-        item("menu-quit", MenuCommand::Quit)
+        item(text!("Quit…"), MenuCommand::Quit)
             .shortcut("Ctrl+E")
             .enabled(selected.stoppable)
             .alternate(force_quit),
         MenuItem::separator(),
-        item("menu-inspect", MenuCommand::Inspect)
+        item(text!("Inspect"), MenuCommand::Inspect)
             .shortcut("Ctrl+I")
             .enabled(selected.inspectable),
     ];
     if selected.files {
-        items.push(item("menu-show-in-files", MenuCommand::ShowInFiles).enabled(selected.located));
+        items
+            .push(item(text!("Show in Files"), MenuCommand::ShowInFiles).enabled(selected.located));
     }
     items.extend([
         MenuItem::separator(),
         MenuItem::submenu(
-            &L10N.tr("menu-send-signal"),
+            &tr!("Send Signal to Process"),
             Menu::new(
                 Stop::SENDABLE
                     .map(|how| {
@@ -131,8 +141,8 @@ pub fn process_menu(selected: Selected) -> Menu {
             ),
         ),
         MenuItem::separator(),
-        item("menu-copy-name", MenuCommand::CopyName),
-        item("menu-copy-pid", MenuCommand::CopyPid).enabled(selected.has_pid),
+        item(text!("Copy Name"), MenuCommand::CopyName),
+        item(text!("Copy PID"), MenuCommand::CopyPid).enabled(selected.has_pid),
     ]);
     Menu::new(items)
 }
@@ -150,8 +160,8 @@ pub fn columns_menu(shown: &[Column]) -> Menu {
     )
 }
 
-fn entry(message: &str, command: MenuCommand) -> Entry {
-    Entry::item(&L10N.tr(message), command.action())
+fn entry(message: Text, command: MenuCommand) -> Entry {
+    Entry::item(&message.tr(), command.action())
 }
 
 pub fn app_menus(
@@ -161,7 +171,7 @@ pub fn app_menus(
     windowed: bool,
     files: bool,
 ) -> Vec<Entry> {
-    let process = |message: &str, command: MenuCommand| entry(message, command).enabled(windowed);
+    let process = |message: Text, command: MenuCommand| entry(message, command).enabled(windowed);
     let mut view = tabs
         .iter()
         .zip(1..)
@@ -177,7 +187,7 @@ pub fn app_menus(
     view.extend([
         Entry::separator(),
         Entry::submenu(
-            &L10N.tr("menu-frequency"),
+            &tr!("Update Frequency"),
             Frequency::ALL
                 .map(|choice| {
                     Entry::item(&choice.title(), MenuCommand::Frequency(choice).action())
@@ -185,32 +195,32 @@ pub fn app_menus(
                 })
                 .to_vec(),
         ),
-        entry("menu-show-cores", MenuCommand::ShowCores),
+        entry(text!("Show CPU Cores"), MenuCommand::ShowCores),
         Entry::separator(),
-        process("menu-quit-process", MenuCommand::Quit).shortcut("Ctrl+E"),
-        process("menu-force-quit-process", MenuCommand::ForceQuit),
+        process(text!("Quit Process…"), MenuCommand::Quit).shortcut("Ctrl+E"),
+        process(text!("Force Quit Process…"), MenuCommand::ForceQuit),
         Entry::submenu(
-            &L10N.tr("menu-send-signal"),
+            &tr!("Send Signal to Process"),
             Stop::SENDABLE
                 .map(|how| Entry::item(&signal_item_title(how), MenuCommand::Signal(how).action()))
                 .to_vec(),
         )
         .enabled(windowed),
-        process("menu-inspect", MenuCommand::Inspect).shortcut("Ctrl+I"),
+        process(text!("Inspect"), MenuCommand::Inspect).shortcut("Ctrl+I"),
     ]);
     if files {
         view.extend([
             Entry::separator(),
-            process("menu-show-in-files", MenuCommand::ShowInFiles),
+            process(text!("Show in Files"), MenuCommand::ShowInFiles),
         ]);
     }
     vec![
         edit_submenu(vec![
-            process("menu-copy-name", MenuCommand::CopyName),
-            process("menu-copy-pid", MenuCommand::CopyPid),
+            process(text!("Copy Name"), MenuCommand::CopyName),
+            process(text!("Copy PID"), MenuCommand::CopyPid),
             Entry::separator(),
-            process("menu-find", MenuCommand::Find).shortcut("Ctrl+F"),
+            process(text!("Find"), MenuCommand::Find).shortcut("Ctrl+F"),
         ]),
-        Entry::submenu(&L10N.tr("menu-view"), view),
+        Entry::submenu(&tr!("View"), view),
     ]
 }

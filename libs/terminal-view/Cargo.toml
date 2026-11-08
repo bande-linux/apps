@@ -12,6 +12,7 @@ publish = false
 accesskit.workspace = true
 alacritty_terminal.workspace = true
 bande-design.workspace = true
+bande-l10n.workspace = true
 bande-toolkit.workspace = true
 bande-volumes.workspace = true
 bande-xdg.workspace = true

@@ -1,114 +1,128 @@
 use std::path::PathBuf;
 
+use bande_l10n::{Text, text, tr};
 use bande_app::Menus;
 use bande_app_menu::Entry;
+use bande_terminal_view::Command;
 use bande_toolkit::ui::{Menu, MenuItem};
 use bande_xdg::path_from_file_uri;
 
-use crate::L10N;
-use bande_terminal_view::Command;
-
-const COMMANDS: [(Command, &str, &str, Option<&str>); 22] = [
-    (Command::Copy, "copy", "menu-copy", Some("Shift+Ctrl+C")),
-    (Command::Paste, "paste", "menu-paste", Some("Shift+Ctrl+V")),
+const COMMANDS: [(Command, &str, Text, Option<&str>); 22] = [
+    (Command::Copy, "copy", text!("Copy"), Some("Shift+Ctrl+C")),
+    (
+        Command::Paste,
+        "paste",
+        text!("Paste"),
+        Some("Shift+Ctrl+V"),
+    ),
     (
         Command::SelectAll,
         "select-all",
-        "menu-select-all",
+        text!("Select All"),
         Some("Shift+Ctrl+A"),
     ),
     (
         Command::ClearScrollback,
         "clear-scrollback",
-        "menu-clear-scrollback",
+        text!("Clear Scrollback"),
         Some("Shift+Ctrl+K"),
     ),
-    (Command::BiggerText, "bigger", "menu-bigger", Some("Ctrl+=")),
+    (
+        Command::BiggerText,
+        "bigger",
+        text!("Bigger"),
+        Some("Ctrl+="),
+    ),
     (
         Command::SmallerText,
         "smaller",
-        "menu-smaller",
+        text!("Smaller"),
         Some("Ctrl+-"),
     ),
     (
         Command::DefaultTextSize,
         "default-size",
-        "menu-default-size",
+        text!("Default Size"),
         Some("Ctrl+0"),
     ),
     (
         Command::NewTab,
         "new-tab",
-        "menu-new-tab",
+        text!("New Tab"),
         Some("Shift+Ctrl+T"),
     ),
     (
         Command::SelectOutput,
         "select-output",
-        "menu-select-output",
+        text!("Select Command Output"),
         None,
     ),
-    (Command::EditTitle, "edit-title", "menu-edit-title", None),
+    (Command::EditTitle, "edit-title", text!("Edit Title"), None),
     (
         Command::NewWindow,
         "new-window",
-        "menu-new-window",
+        text!("New Window"),
         Some("Shift+Ctrl+N"),
     ),
     (
         Command::NextTab,
         "next-tab",
-        "menu-next-tab",
+        text!("Show Next Tab"),
         Some("Ctrl+PgDn"),
     ),
     (
         Command::PreviousTab,
         "previous-tab",
-        "menu-previous-tab",
+        text!("Show Previous Tab"),
         Some("Ctrl+PgUp"),
     ),
-    (Command::Find, "find", "menu-find", Some("Shift+Ctrl+F")),
+    (Command::Find, "find", text!("Find…"), Some("Shift+Ctrl+F")),
     (
         Command::FindNext,
         "find-next",
-        "menu-find-next",
+        text!("Find Next"),
         Some("Shift+Ctrl+G"),
     ),
     (
         Command::SplitSideBySide,
         "split-side-by-side",
-        "menu-split-side-by-side",
+        text!("Split Side by Side"),
         Some("Shift+Ctrl+D"),
     ),
     (
         Command::SplitStacked,
         "split-stacked",
-        "menu-split-stacked",
+        text!("Split Top and Bottom"),
         Some("Shift+Ctrl+E"),
     ),
     (
         Command::NextPane,
         "next-pane",
-        "menu-next-pane",
+        text!("Select Next Pane"),
         Some("Shift+Ctrl+]"),
     ),
     (
         Command::PreviousPane,
         "previous-pane",
-        "menu-previous-pane",
+        text!("Select Previous Pane"),
         Some("Shift+Ctrl+["),
     ),
     (
         Command::PreviousPrompt,
         "previous-prompt",
-        "menu-previous-prompt",
+        text!("Jump to Previous Command"),
         None,
     ),
-    (Command::NextPrompt, "next-prompt", "menu-next-prompt", None),
+    (
+        Command::NextPrompt,
+        "next-prompt",
+        text!("Jump to Next Command"),
+        None,
+    ),
     (
         Command::FindPrevious,
         "find-previous",
-        "menu-find-previous",
+        text!("Find Previous"),
         Some("Shift+Ctrl+H"),
     ),
 ];
@@ -192,7 +206,7 @@ fn command_entry(command: Command) -> Option<(String, String, Option<&'static st
     COMMANDS
         .iter()
         .find(|(known, ..)| *known == command)
-        .map(|(_, action, message, shortcut)| (L10N.tr(message), (*action).to_owned(), *shortcut))
+        .map(|(_, action, message, shortcut)| (message.tr(), (*action).to_owned(), *shortcut))
 }
 
 fn command_item(command: Command) -> MenuItem {
@@ -203,8 +217,8 @@ fn command_item(command: Command) -> MenuItem {
     }
 }
 
-fn item(message: &str, command: MenuCommand) -> MenuItem {
-    MenuItem::new(&L10N.tr(message), &command.action())
+fn item(message: Text, command: MenuCommand) -> MenuItem {
+    MenuItem::new(&message.tr(), &command.action())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -223,25 +237,25 @@ pub fn terminal_menu(context: &TerminalContext) -> Menu {
         match path_from_file_uri(uri) {
             Some(path) => {
                 items.extend([
-                    item("menu-open", MenuCommand::OpenLink(uri.clone())),
+                    item(text!("Open"), MenuCommand::OpenLink(uri.clone())),
                     item(
-                        "menu-copy-path",
+                        text!("Copy Path"),
                         MenuCommand::CopyLink(path.display().to_string()),
                     ),
                 ]);
                 if context.files {
-                    items.push(item("menu-show-in-files", MenuCommand::Reveal(path)));
+                    items.push(item(text!("Show in Files"), MenuCommand::Reveal(path)));
                 }
             }
             None => items.extend([
-                item("menu-open-link", MenuCommand::OpenLink(uri.clone())),
-                item("menu-copy-link", MenuCommand::CopyLink(uri.clone())),
+                item(text!("Open Link"), MenuCommand::OpenLink(uri.clone())),
+                item(text!("Copy Link"), MenuCommand::CopyLink(uri.clone())),
             ]),
         }
         items.push(MenuItem::separator());
     }
     if let Some(word) = &context.look_up {
-        let title = L10N.tr_args("menu-look-up", [("word", word.as_str().into())]);
+        let title = tr!("Look Up “{word}”", word = word.as_str());
         items.extend([
             MenuItem::new(&title, &MenuCommand::LookUp.action()),
             MenuItem::separator(),
@@ -257,7 +271,7 @@ pub fn terminal_menu(context: &TerminalContext) -> Menu {
     ]);
     if context.files {
         items.extend([
-            item("menu-show-in-files", MenuCommand::ShowInFiles).enabled(context.knows_directory),
+            item(text!("Show in Files"), MenuCommand::ShowInFiles).enabled(context.knows_directory),
             MenuItem::separator(),
         ]);
     }
@@ -268,7 +282,7 @@ pub fn terminal_menu(context: &TerminalContext) -> Menu {
         command_item(Command::SplitSideBySide),
         command_item(Command::SplitStacked),
         MenuItem::separator(),
-        item("menu-close-tab", MenuCommand::CloseTab(context.tab)).shortcut(CLOSE_TAB_SHORTCUT),
+        item(text!("Close Tab"), MenuCommand::CloseTab(context.tab)).shortcut(CLOSE_TAB_SHORTCUT),
     ]);
     Menu::new(items)
 }
@@ -278,8 +292,8 @@ pub fn tab_menu(tab: Option<u32>, tabs: usize) -> Menu {
     if let Some(tab) = tab {
         items.extend([
             MenuItem::separator(),
-            item("menu-close-tab", MenuCommand::CloseTab(tab)),
-            item("menu-close-other-tabs", MenuCommand::CloseOtherTabs(tab)).enabled(tabs > 1),
+            item(text!("Close Tab"), MenuCommand::CloseTab(tab)),
+            item(text!("Close Other Tabs"), MenuCommand::CloseOtherTabs(tab)).enabled(tabs > 1),
         ]);
     }
     Menu::new(items)
@@ -315,23 +329,20 @@ pub fn app_menus(windowed: bool, files: bool) -> Menus {
     ]);
     if files {
         shell.extend([
-            Entry::item(
-                &L10N.tr("menu-show-in-files"),
-                &MenuCommand::ShowInFiles.action(),
-            ),
+            Entry::item(&tr!("Show in Files"), &MenuCommand::ShowInFiles.action()),
             Entry::separator(),
         ]);
     }
     shell.extend([
         bande_app_menu::print_item(windowed).shortcut(PRINT_SHORTCUT),
         Entry::separator(),
-        Entry::item(&L10N.tr("menu-close-window"), CLOSE_WINDOW).enabled(windowed),
+        Entry::item(&tr!("Close Window"), CLOSE_WINDOW).enabled(windowed),
     ]);
     Menus {
         menus: vec![
-            Entry::submenu(&L10N.tr("menu-shell"), shell),
+            Entry::submenu(&tr!("Shell"), shell),
             Entry::submenu(
-                &L10N.tr("menu-edit"),
+                &tr!("Edit"),
                 command_entries(&[
                     Some(Command::Copy),
                     Some(Command::Paste),
@@ -349,7 +360,7 @@ pub fn app_menus(windowed: bool, files: bool) -> Menus {
                 ]),
             ),
             Entry::submenu(
-                &L10N.tr("menu-view"),
+                &tr!("View"),
                 command_entries(&[
                     Some(Command::BiggerText),
                     Some(Command::SmallerText),

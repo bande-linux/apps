@@ -4,6 +4,17 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+
+use bande_l10n::{tr, trn};
+
+use crate::document::{Content, Format, Loaded, encode, read};
+use crate::encoding::{LineEnding, TextEncoding};
+use crate::file::{MAX_FILE_BYTES, read_bounded};
+use crate::find::{self, Query};
+use crate::formats::{heading, markdown, rtf};
+use crate::session::seconds_now;
+use crate::session::{Record, Session};
+use crate::worker::{Message, WriteError, spawn};
 use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_inbox::Outbox;
@@ -15,16 +26,6 @@ use bande_toolkit::ui::{
 use bande_toolkit::{
     Appearance, Color, Rect, Scene, TextAlign, TextStyle, TextSystem, Window, WindowEvent,
 };
-
-use crate::L10N;
-use crate::document::{Content, Format, Loaded, encode, read};
-use crate::encoding::{LineEnding, TextEncoding};
-use crate::file::{MAX_FILE_BYTES, read_bounded};
-use crate::find::{self, Query};
-use crate::formats::{heading, markdown, rtf};
-use crate::session::seconds_now;
-use crate::session::{Record, Session};
-use crate::worker::{Message, WriteError, spawn};
 
 const SETTLE: Duration = Duration::from_millis(1500);
 const FIND_ROW: f32 = 40.0;
@@ -323,7 +324,7 @@ impl DocumentView {
 
     pub fn title(&self) -> String {
         match self.is_edited() && !self.loading {
-            true => L10N.tr_args("title-edited", [("name", self.name().into())]),
+            true => tr!("{name} — Edited", name = self.name()),
             false => self.name(),
         }
     }
@@ -438,9 +439,9 @@ impl DocumentView {
             self.format = format;
         }
         self.note = damaged.then(|| {
-            L10N.tr_args(
-                "status-damaged",
-                [("encoding", crate::encoding_name(encoding).into())],
+            tr!(
+                "Some bytes are not {encoding}",
+                encoding = crate::encoding_name(encoding)
             )
         });
         self.rich = rich.is_some();
@@ -476,11 +477,11 @@ impl DocumentView {
         let signals = Rc::clone(&self.signals);
         self.ui.present_sheet(
             Alert::new(
-                &L10N.tr_args("open-failed", [("name", self.name().into())]),
+                &tr!("“{name}” could not be opened.", name = self.name()),
                 error,
                 move |action| signals.borrow_mut().push(Signal::Choice(action.to_owned())),
             )
-            .primary(&L10N.tr("ok"), "ok"),
+            .primary(&tr!("OK"), "ok"),
         );
     }
 
@@ -554,8 +555,11 @@ impl DocumentView {
         if self.lossy && self.path.is_some() {
             return self.ask(
                 Asking::Lossy,
-                &L10N.tr_args("lossy-title", [("name", self.name().into())]),
-                &L10N.tr("lossy-message"),
+                &tr!(
+                    "“{name}” has pictures or tables that TextEdit can’t keep.",
+                    name = self.name()
+                ),
+                &tr!("Saving over it would lose them. Save a copy as rich text instead?"),
                 &[("save-copy", true), ("cancel", false)],
             );
         }
@@ -684,11 +688,8 @@ impl DocumentView {
             Err(WriteError::Unmappable) => {
                 self.ask(
                     Asking::SaveAsUnicode,
-                    &L10N.tr_args(
-                        "unmappable-title",
-                        [("encoding", crate::encoding_name(self.encoding).into())],
-                    ),
-                    &L10N.tr("unmappable-message"),
+                    &tr!("The document can’t be saved as {encoding}.", encoding = crate::encoding_name(self.encoding)),
+                    &tr!("It contains characters that this encoding can’t hold. Save it as Unicode (UTF-8) instead?"),
                     &[("save-unicode", true), ("cancel", false)],
                 );
             }
@@ -696,7 +697,7 @@ impl DocumentView {
                 self.close_after_save = false;
                 self.ask(
                     Asking::Failed,
-                    &L10N.tr_args("save-failed", [("name", self.name().into())]),
+                    &tr!("“{name}” could not be saved.", name = self.name()),
                     &error,
                     &[("ok", true)],
                 );
@@ -707,8 +708,11 @@ impl DocumentView {
     pub fn ask_to_save(&mut self) {
         self.ask(
             Asking::SaveChanges,
-            &L10N.tr_args("save-changes-title", [("name", self.name().into())]),
-            &L10N.tr("save-changes-message"),
+            &tr!(
+                "Do you want to save the changes made to “{name}”?",
+                name = self.name()
+            ),
+            &tr!("Your changes will be lost if you don’t save them."),
             &[("save", true), ("dont-save", false), ("cancel", false)],
         );
     }
@@ -723,7 +727,7 @@ impl DocumentView {
             signals.borrow_mut().push(Signal::Choice(action.to_owned()));
         });
         for (action, primary) in buttons {
-            let label = L10N.tr(action);
+            let label = button_label(action);
             alert = match (*primary, *action) {
                 (true, _) => alert.primary(&label, action),
                 (false, "cancel") => alert.cancel(&label, action),
@@ -740,17 +744,17 @@ impl DocumentView {
         self.asking = Some(Asking::GoToLine);
         self.line.clear();
         let (typed, chosen) = (Rc::clone(&self.signals), Rc::clone(&self.signals));
-        let field = TextField::new(&L10N.tr("line-placeholder"), "", move |text| {
+        let field = TextField::new(&tr!("Line number"), "", move |text| {
             typed.borrow_mut().push(Signal::Line(text.to_owned()));
         })
         .without_text_checking();
         self.ui.present_sheet(
-            Alert::new(&L10N.tr("go-to-line"), "", move |action| {
+            Alert::new(&tr!("Go to Line…"), "", move |action| {
                 chosen.borrow_mut().push(Signal::Choice(action.to_owned()));
             })
             .accessory(field)
-            .cancel(&L10N.tr("cancel"), "cancel")
-            .primary(&L10N.tr("go"), "go"),
+            .cancel(&tr!("Cancel"), "cancel")
+            .primary(&tr!("Go"), "go"),
         );
     }
 
@@ -822,16 +826,12 @@ impl DocumentView {
         let bar = FindBar {
             replacing,
             query: host.insert(
-                SearchField::new(
-                    &L10N.tr("find-placeholder"),
-                    &self.query.pattern,
-                    push(Signal::Query),
-                ),
+                SearchField::new(&tr!("Find"), &self.query.pattern, push(Signal::Query)),
                 at,
             ),
             case: host.insert(
                 Checkbox::new(
-                    &L10N.tr("match-case"),
+                    &tr!("Match Case"),
                     state(self.query.case),
                     toggle(Signal::Case),
                 ),
@@ -839,32 +839,32 @@ impl DocumentView {
             ),
             regex: host.insert(
                 Checkbox::new(
-                    &L10N.tr("regular-expression"),
+                    &tr!("Regular Expression"),
                     state(self.query.regex),
                     toggle(Signal::Regex),
                 ),
                 at,
             ),
             previous: host.insert(
-                Button::new("‹", click(Signal::Previous)).tooltip(&L10N.tr("find-previous")),
+                Button::new("‹", click(Signal::Previous)).tooltip(&tr!("Find Previous")),
                 at,
             ),
             next: host.insert(
-                Button::new("›", click(Signal::Next)).tooltip(&L10N.tr("find-next")),
+                Button::new("›", click(Signal::Next)).tooltip(&tr!("Find Next")),
                 at,
             ),
-            done: host.insert(Button::new(&L10N.tr("done"), click(Signal::HideFind)), at),
+            done: host.insert(Button::new(&tr!("Done"), click(Signal::HideFind)), at),
             replacement: host.insert(
                 TextField::new(
-                    &L10N.tr("replace-placeholder"),
+                    &tr!("Replace with"),
                     &self.replacement,
                     push(Signal::Replacement),
                 ),
                 at,
             ),
-            replace: host.insert(Button::new(&L10N.tr("replace"), click(Signal::Replace)), at),
+            replace: host.insert(Button::new(&tr!("Replace"), click(Signal::Replace)), at),
             replace_all: host.insert(
-                Button::new(&L10N.tr("replace-all"), click(Signal::ReplaceAll)),
+                Button::new(&tr!("Replace All"), click(Signal::ReplaceAll)),
                 at,
             ),
             message: host.insert(Label::new("").secondary(), at),
@@ -912,13 +912,9 @@ impl DocumentView {
             };
         }
         let signals = Rc::clone(&self.signals);
-        let mut field = SearchField::new(
-            &L10N.tr("find-placeholder"),
-            &self.query.pattern,
-            move |text| {
-                signals.borrow_mut().push(Signal::Query(text.to_owned()));
-            },
-        );
+        let mut field = SearchField::new(&tr!("Find"), &self.query.pattern, move |text| {
+            signals.borrow_mut().push(Signal::Query(text.to_owned()));
+        });
         field.select(0..self.query.pattern.len());
         if let Some(bar) = &mut self.find
             && let Some(host) = self.ui.widget_as::<FreeLayout>(self.host)
@@ -940,7 +936,7 @@ impl DocumentView {
         let matcher = match self.query.compile() {
             Ok(matcher) => matcher,
             Err(_) => {
-                self.find_message = L10N.tr("find-invalid");
+                self.find_message = tr!("Not a valid regular expression");
                 return;
             }
         };
@@ -964,13 +960,13 @@ impl DocumentView {
                     editor.select(range);
                 }
             }
-            None => self.find_message = L10N.tr("find-none"),
+            None => self.find_message = tr!("Not found"),
         }
     }
 
     fn replace(&mut self) {
         let Ok(matcher) = self.query.compile() else {
-            self.find_message = L10N.tr("find-invalid");
+            self.find_message = tr!("Not a valid regular expression");
             return;
         };
         let text = self.text();
@@ -998,7 +994,7 @@ impl DocumentView {
 
     fn replace_all(&mut self) {
         let Ok(matcher) = self.query.compile() else {
-            self.find_message = L10N.tr("find-invalid");
+            self.find_message = tr!("Not a valid regular expression");
             return;
         };
         let text = self.text();
@@ -1010,7 +1006,7 @@ impl DocumentView {
             editor.insert(&replaced);
             editor.select(0..0);
         }
-        self.find_message = L10N.tr_args("replaced", [("count", count.into())]);
+        self.find_message = trn!("One replaced", "{count} replaced", count = count);
     }
 
     pub fn attributes(&self) -> (TextAttributes, ParagraphAttributes) {
@@ -1134,8 +1130,8 @@ impl DocumentView {
         if !confirmed && self.format != Format::Markdown {
             return self.ask(
                 Asking::MakePlain,
-                &L10N.tr("make-plain-title"),
-                &L10N.tr("make-plain-message"),
+                &tr!("Convert this document to plain text?"),
+                &tr!("Its fonts, styles, colours and lists will be lost. The converted document is saved as a new plain text file."),
                 &[("make-plain-confirm", true), ("cancel", false)],
             );
         }
@@ -1236,20 +1232,21 @@ impl DocumentView {
 
     fn status_line(&self) -> String {
         let counts = match (self.loading, self.counts) {
-            (true, _) => L10N.tr("status-opening"),
-            (false, Some((words, characters))) => L10N.tr_args(
-                "status-counts",
-                [("words", words.into()), ("characters", characters.into())],
+            (true, _) => tr!("Opening…"),
+            (false, Some((words, characters))) => format!(
+                "{}, {}",
+                trn!("1 word", "{count} words", count = words),
+                trn!("1 character", "{count} characters", count = characters)
             ),
             (false, None) => String::new(),
         };
         let mut parts = vec![counts];
         if self.format != Format::Plain {
-            parts.push(L10N.tr(&format!("format-{}", self.format.name())));
+            parts.push(format_title(self.format.name()));
         }
         if self.format.is_text() {
             parts.push(crate::encoding_name(self.encoding));
-            parts.push(L10N.tr(&format!("line-ending-{}", self.line_ending.name())));
+            parts.push(line_ending_title(self.line_ending.name()));
         }
         parts.extend(self.note.clone());
         parts.retain(|part| !part.is_empty());
@@ -1328,9 +1325,9 @@ impl DocumentView {
                 frames.push((id, Rect::new(right, row(index, height), item_width, height)));
                 right -= GAP;
             };
-            let done_width = self.fit(&L10N.tr("done"));
-            let regex_width = self.fit(&L10N.tr("regular-expression"));
-            let case_width = self.fit(&L10N.tr("match-case"));
+            let done_width = self.fit(&tr!("Done"));
+            let regex_width = self.fit(&tr!("Regular Expression"));
+            let case_width = self.fit(&tr!("Match Case"));
             place(done, done_width, 0.0, BUTTON_HEIGHT, &mut frames);
             place(next, BUTTON_HEIGHT + 8.0, 0.0, BUTTON_HEIGHT, &mut frames);
             place(
@@ -1355,8 +1352,8 @@ impl DocumentView {
             top = FIND_ROW;
             match replacing {
                 true => {
-                    let replace_width = self.fit(&L10N.tr("replace"));
-                    let all_width = self.fit(&L10N.tr("replace-all"));
+                    let replace_width = self.fit(&tr!("Replace"));
+                    let all_width = self.fit(&tr!("Replace All"));
                     let field = Rect::new(
                         MARGIN,
                         row(1.0, TEXT_FIELD_HEIGHT),
@@ -1515,5 +1512,38 @@ fn autosaved(content: &Content) -> String {
     match content {
         Content::Plain(text) => text.to_string(),
         Content::Rich(rich) => rtf::write(rich),
+    }
+}
+
+fn format_title(name: &str) -> String {
+    match name {
+        "rtf" => tr!("Rich Text Document"),
+        "markdown" => tr!("Markdown"),
+        "html" => tr!("Web Page"),
+        "docx" => tr!("Word Document"),
+        "odt" => tr!("OpenDocument Text"),
+        other => other.to_owned(),
+    }
+}
+
+pub fn line_ending_title(name: &str) -> String {
+    match name {
+        "lf" => tr!("LF (macOS and Linux)"),
+        "crlf" => tr!("CRLF (Windows)"),
+        "cr" => tr!("CR (Classic Mac OS)"),
+        other => other.to_owned(),
+    }
+}
+
+fn button_label(action: &str) -> String {
+    match action {
+        "cancel" => tr!("Cancel"),
+        "dont-save" => tr!("Don’t Save"),
+        "make-plain-confirm" => tr!("Make Plain Text"),
+        "ok" => tr!("OK"),
+        "save" => tr!("Save"),
+        "save-copy" => tr!("Save a Copy…"),
+        "save-unicode" => tr!("Save as UTF-8"),
+        other => other.to_owned(),
     }
 }

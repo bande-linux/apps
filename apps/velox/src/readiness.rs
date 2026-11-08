@@ -3,7 +3,9 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
-use crate::L10N;
+
+use bande_l10n::{Text, text, tr};
+
 use crate::engine::{Engine, EngineInfo, Error, Flavor};
 
 const DOCKER_INSTALL: &str = "\
@@ -67,7 +69,7 @@ pub struct Advice {
 
 fn podman_alternative() -> Steps {
     Steps {
-        title: L10N.tr("steps-podman"),
+        title: tr!("Or Podman (rootless, from Debian)"),
         commands: PODMAN_INSTALL,
     }
 }
@@ -88,52 +90,60 @@ fn debian_testing() -> bool {
 
 impl Readiness {
     pub fn advice(&self) -> Advice {
-        let advice = |headline: &str| Advice {
-            headline: L10N.tr(headline),
+        let advice = |headline: Text| Advice {
+            headline: headline.tr(),
             steps: None,
             note: None,
             link: None,
             alternative: None,
         };
-        let steps = |title: &str, commands| {
+        let steps = |title: Text, commands| {
             Some(Steps {
-                title: L10N.tr(title),
+                title: title.tr(),
                 commands,
             })
         };
         match self {
             Self::NotInstalled if debian_testing() => Advice {
-                steps: steps("steps-docker", DOCKER_INSTALL_TESTING.as_str()),
-                note: Some(L10N.tr("steps-testing-note")),
+                steps: steps(
+                    text!("Docker Engine (recommended)"),
+                    DOCKER_INSTALL_TESTING.as_str(),
+                ),
+                note: Some(tr!(
+                    "Docker publishes no packages for Debian testing, so these steps use trixie's."
+                )),
                 link: Some(INSTALL_LINK),
                 alternative: Some(podman_alternative()),
-                ..advice("not-installed")
+                ..advice(text!("Install a container engine to continue"))
             },
             Self::NotInstalled => Advice {
-                steps: steps("steps-docker", DOCKER_INSTALL),
+                steps: steps(text!("Docker Engine (recommended)"), DOCKER_INSTALL),
                 link: Some(INSTALL_LINK),
                 alternative: Some(podman_alternative()),
-                ..advice("not-installed")
+                ..advice(text!("Install a container engine to continue"))
             },
             Self::NotRunning(Flavor::Docker) => Advice {
-                steps: steps("steps-start-docker", DOCKER_START),
-                ..advice("docker-not-running")
+                steps: steps(text!("Start Docker"), DOCKER_START),
+                ..advice(text!("Docker is not running"))
             },
             Self::NotRunning(Flavor::Podman) => Advice {
-                steps: steps("steps-start-podman", PODMAN_START),
-                ..advice("podman-not-running")
+                steps: steps(text!("Start Podman"), PODMAN_START),
+                ..advice(text!("Podman is not running"))
             },
             Self::NoAccess => Advice {
-                steps: steps("steps-access", DOCKER_GROUP),
-                note: Some(L10N.tr("docker-group-note")),
+                steps: steps(
+                    text!("Add yourself to the docker group, then log out and back in"),
+                    DOCKER_GROUP,
+                ),
+                note: Some(tr!("The docker group is root-equivalent.")),
                 link: Some(ACCESS_LINK),
                 alternative: Some(podman_alternative()),
-                ..advice("no-access")
+                ..advice(text!("No access to Docker"))
             },
-            Self::Relogin => advice("relogin"),
+            Self::Relogin => advice(text!("Log out and back in to finish")),
             Self::TooOld => Advice {
                 link: Some(INSTALL_LINK),
-                ..advice("too-old")
+                ..advice(text!("Update Docker to continue"))
             },
         }
     }

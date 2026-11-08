@@ -4,6 +4,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
 use bande_notify::Urgency;
 use bande_notify::client::{Request, notify};
 use zbus::blocking::Connection;
@@ -115,7 +116,7 @@ fn serve(app_id: &str, receiver: &Receiver<Outgoing>) {
             Outgoing::Notify { summary, body } => notify(
                 &connection,
                 &Request {
-                    app_name: &bande_terminal::L10N.tr("title"),
+                    app_name: &tr!("Terminal"),
                     replaces_id: 0,
                     app_icon: app_id,
                     summary: &summary,

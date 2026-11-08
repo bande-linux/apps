@@ -5,6 +5,7 @@ use std::os::unix::net::UnixStream;
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
 use bande_toolkit::ui::{
     ClipboardRequest, Cursor, PointerButton, PointerCapture, SurfaceInput, SurfaceScaling,
     SurfaceView, Ui, Widget, WidgetId,
@@ -15,8 +16,6 @@ use bande_toolkit::{
 use bande_vm::{
     Damage, Display, DisplayEvent, DisplayInput, GuestDmabuf, Library, MouseButton, Scanout, Wheel,
 };
-
-use crate::L10N;
 
 const RESIZE_SETTLE: Duration = Duration::from_millis(200);
 const WHEEL_STEP: f32 = 15.0;
@@ -132,7 +131,7 @@ impl Console {
         let (width, height) = self.picture?;
         let input = self.display.input();
         let gathered = Cell::new(Point::new(0.0, 0.0));
-        let mut view = SurfaceView::new(surface.id(), &L10N.tr("machine-console"), move |event| {
+        let mut view = SurfaceView::new(surface.id(), &tr!("Guest display"), move |event| {
             pass_to_guest(&input, &gathered, event)
         })
         .scaling(SurfaceScaling::Fit)
@@ -197,7 +196,9 @@ impl Console {
             );
         }
         if !window.supports_dmabuf(dmabuf.fourcc, dmabuf.modifier) {
-            return Err(L10N.tr("machine-console-no-3d"));
+            return Err(tr!(
+                "this display cannot show the 3D picture; turn 3D graphics off in Settings"
+            ));
         }
         let Some(surface) = self.surface.as_mut() else {
             return Ok(());

@@ -2,12 +2,13 @@ use std::cell::RefCell;
 use std::process::ExitCode;
 use std::rc::Rc;
 
+use bande_l10n::{Text, text, tr};
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_calculator::{
-    Angle, Base, Engine, Keypad, L10N, Mode, WORD_SIZES, base_name, mode_name, parse_base,
-    parse_mode, restore, save,
+    Angle, Base, Engine, Keypad, Mode, WORD_SIZES, base_name, mode_name, parse_base, parse_mode,
+    restore, save,
 };
 use bande_toolkit::ui::{Context, Event, Key, TextView, Ui, Widget, WidgetId};
 use bande_toolkit::{
@@ -33,7 +34,7 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Calculator"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -155,7 +156,7 @@ impl Calculator {
         let engine = self.engine.clone();
         let opened = cx.open(
             Kind::Main,
-            &L10N.tr("app-name"),
+            &tr!("Calculator"),
             window_size(mode),
             |appearance| Pane::Keypad {
                 ui: new_ui(Box::new(Keypad::new(engine.clone())), appearance),
@@ -182,10 +183,10 @@ impl Calculator {
         let shown = tape_text(&self.engine.borrow());
         let tape = cx.open(
             Kind::Utility("tape"),
-            &L10N.tr("tape-title"),
+            &tr!("Paper Tape"),
             TAPE_SIZE,
             |appearance| {
-                let mut text = TextView::new(&L10N.tr("tape-empty"), &shown, |_| {})
+                let mut text = TextView::new(&tr!("Calculations appear here"), &shown, |_| {})
                     .read_only()
                     .borderless();
                 text.select(shown.len()..shown.len());
@@ -283,35 +284,37 @@ impl Calculator {
 
     fn view_menu(&self) -> Entry {
         let engine = self.engine.borrow();
-        let mode = |mode: Mode, message: &str, shortcut: &str| {
-            Entry::item(
-                &L10N.tr(message),
-                &format!("{MODE_ACTION}{}", mode_name(mode)),
-            )
-            .shortcut(shortcut)
-            .radio(engine.mode == mode)
+        let mode = |mode: Mode, message: Text, shortcut: &str| {
+            Entry::item(&message.tr(), &format!("{MODE_ACTION}{}", mode_name(mode)))
+                .shortcut(shortcut)
+                .radio(engine.mode == mode)
         };
         let scientific = engine.mode == Mode::Scientific;
         let programmer = engine.mode == Mode::Programmer;
         let mut entries = vec![
-            mode(Mode::Basic, "menu-basic", "Ctrl+1"),
-            mode(Mode::Scientific, "menu-scientific", "Ctrl+2"),
-            mode(Mode::Programmer, "menu-programmer", "Ctrl+3"),
+            mode(Mode::Basic, text!("Basic"), "Ctrl+1"),
+            mode(Mode::Scientific, text!("Scientific"), "Ctrl+2"),
+            mode(Mode::Programmer, text!("Programmer"), "Ctrl+3"),
             Entry::separator(),
-            Entry::item(&L10N.tr("menu-rpn"), RPN).radio(engine.rpn),
-            Entry::item(&L10N.tr("menu-grouping"), GROUPING).radio(engine.grouping),
+            Entry::item(&tr!("RPN Mode"), RPN).radio(engine.rpn),
+            Entry::item(&tr!("Show Thousands Separators"), GROUPING).radio(engine.grouping),
             Entry::separator(),
-            Entry::item(&L10N.tr("menu-degrees"), DEGREES)
+            Entry::item(&tr!("Degrees"), DEGREES)
                 .radio(engine.angle == Angle::Degrees)
                 .enabled(scientific),
-            Entry::item(&L10N.tr("menu-radians"), RADIANS)
+            Entry::item(&tr!("Radians"), RADIANS)
                 .radio(engine.angle == Angle::Radians)
                 .enabled(scientific),
             Entry::separator(),
         ];
         entries.extend(Base::ALL.into_iter().map(|base| {
             Entry::item(
-                &L10N.tr(&format!("menu-{}", base_name(base))),
+                &match base {
+                    Base::Hexadecimal => tr!("Hexadecimal"),
+                    Base::Decimal => tr!("Decimal"),
+                    Base::Octal => tr!("Octal"),
+                    Base::Binary => tr!("Binary"),
+                },
                 &format!("{BASE_ACTION}{}", base_name(base)),
             )
             .radio(engine.base == base)
@@ -319,12 +322,12 @@ impl Calculator {
         }));
         entries.push(
             Entry::submenu(
-                &L10N.tr("menu-word-size"),
+                &tr!("Word Size"),
                 WORD_SIZES
                     .iter()
                     .map(|bits| {
                         Entry::item(
-                            &L10N.tr_args("menu-bits", [("bits", bits.to_string().into())]),
+                            &tr!("{bits}-bit", bits = bits.to_string()),
                             &format!("{WORD_ACTION}{bits}"),
                         )
                         .radio(engine.bits == *bits)
@@ -333,7 +336,7 @@ impl Calculator {
             )
             .enabled(programmer),
         );
-        Entry::submenu(&L10N.tr("menu-view"), entries)
+        Entry::submenu(&tr!("View"), entries)
     }
 }
 
@@ -363,13 +366,13 @@ impl Program for Calculator {
         Menus {
             menus: vec![
                 edit_submenu(vec![
-                    Entry::item(&L10N.tr("menu-clear-tape"), CLEAR_TAPE).enabled(has_tape),
+                    Entry::item(&tr!("Clear Tape"), CLEAR_TAPE).enabled(has_tape),
                 ]),
                 self.view_menu(),
             ],
             window: vec![
-                Entry::item(&L10N.tr("app-name"), SHOW_CALCULATOR),
-                Entry::item(&L10N.tr("tape-title"), PAPER_TAPE).radio(self.tape.is_some()),
+                Entry::item(&tr!("Calculator"), SHOW_CALCULATOR),
+                Entry::item(&tr!("Paper Tape"), PAPER_TAPE).radio(self.tape.is_some()),
             ],
         }
     }

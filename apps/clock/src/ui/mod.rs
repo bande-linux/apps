@@ -2,13 +2,12 @@ mod widgets;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
+use bande_l10n::{Text, text, tr};
 use bande_app::View;
 use bande_datetime::DateFormats;
 use bande_datetime::daylight::{Sky, place_of, sky};
-use bande_l10n::Localizer;
 use bande_sound::Alert as Sound;
 use bande_toolkit::ui::{
     Alert, Axis, BUTTON_HEIGHT, Button, CheckState, Checkbox, Column, Context, Form, FormLine,
@@ -26,9 +25,6 @@ use jiff::{Timestamp, Zoned};
 use self::widgets::{Digits, Fixed, Line};
 use crate::cities::{self, City, city_name};
 use crate::model::{Alarm, Clock, DEFAULT_SOUND, Days, Timer, TimerState, boot_now};
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-clock")));
 
 const HEADER: f32 = WINDOW_HEADER_HEIGHT as f32;
 const SEGMENT_WIDTH: f32 = 96.0;
@@ -63,7 +59,12 @@ impl Page {
     }
 
     pub fn title(self) -> String {
-        L10N.tr(self.key())
+        match self {
+            Self::Alarms => tr!("Alarms"),
+            Self::Timers => tr!("Timers"),
+            Self::Stopwatch => tr!("Stopwatch"),
+            Self::World => tr!("World Clock"),
+        }
     }
 
     pub fn command(self) -> String {
@@ -165,7 +166,7 @@ const SYMBOL_PIXELS: u32 = 16;
 
 fn add_button(on_click: impl FnMut() + 'static) -> Button {
     match Image::from_svg(PLUS.as_bytes(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
-        Some(image) => Button::symbol(image, &L10N.tr("add"), on_click),
+        Some(image) => Button::symbol(image, &tr!("Add"), on_click),
         None => Button::new("+", on_click),
     }
 }
@@ -211,13 +212,13 @@ pub fn length_name(length: Duration) -> String {
     let (hours, minutes, rest) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
     let mut parts = Vec::new();
     if hours > 0 {
-        parts.push(L10N.tr_args("hours", [("count", hours.into())]));
+        parts.push(tr!("{count} h", count = hours));
     }
     if minutes > 0 {
-        parts.push(L10N.tr_args("minutes", [("count", minutes.into())]));
+        parts.push(tr!("{count} min", count = minutes));
     }
     if rest > 0 || parts.is_empty() {
-        parts.push(L10N.tr_args("seconds", [("count", rest.into())]));
+        parts.push(tr!("{count} s", count = rest));
     }
     parts.join(" ")
 }
@@ -231,7 +232,7 @@ pub fn timer_name(timer: &Timer) -> String {
 
 pub fn alarm_name(alarm: &Alarm) -> String {
     match alarm.label.trim().is_empty() {
-        true => L10N.tr("alarm"),
+        true => tr!("Alarm"),
         false => alarm.label.clone(),
     }
 }
@@ -249,9 +250,9 @@ fn short_weekday(formats: &DateFormats, day: Weekday) -> String {
 fn repeat_text(formats: &DateFormats, days: Days) -> String {
     match days {
         Days::ONCE => String::new(),
-        Days::WEEKDAYS => L10N.tr("repeat-weekdays"),
-        Days::WEEKEND => L10N.tr("repeat-weekends"),
-        Days::EVERY_DAY => L10N.tr("repeat-every-day"),
+        Days::WEEKDAYS => tr!("Weekdays"),
+        Days::WEEKEND => tr!("Weekends"),
+        Days::EVERY_DAY => tr!("Every Day"),
         days => weekdays()
             .filter(|day| days.has(*day))
             .map(|day| short_weekday(formats, day))
@@ -265,7 +266,13 @@ fn weekdays() -> impl Iterator<Item = Weekday> {
 }
 
 fn sound_title(sound: Sound) -> String {
-    L10N.tr(&format!("sound-{}", sound.keyword()))
+    match sound.keyword() {
+        "mallet" => tr!("Mallet"),
+        "knock" => tr!("Knock"),
+        "low" => tr!("Low"),
+        "tick" => tr!("Tick"),
+        other => other.to_owned(),
+    }
 }
 
 fn sound_index(keyword: &str) -> usize {
@@ -277,9 +284,9 @@ fn sound_index(keyword: &str) -> usize {
 
 fn offset_text(city: &Zoned, here: &Zoned) -> String {
     let day = match city.date().cmp(&here.date()) {
-        std::cmp::Ordering::Less => L10N.tr("yesterday"),
-        std::cmp::Ordering::Equal => L10N.tr("today"),
-        std::cmp::Ordering::Greater => L10N.tr("tomorrow"),
+        std::cmp::Ordering::Less => tr!("Yesterday"),
+        std::cmp::Ordering::Equal => tr!("Today"),
+        std::cmp::Ordering::Greater => tr!("Tomorrow"),
     };
     let difference = city.offset().seconds() - here.offset().seconds();
     if difference == 0 {
@@ -288,15 +295,13 @@ fn offset_text(city: &Zoned, here: &Zoned) -> String {
     let sign = if difference > 0 { "+" } else { "−" };
     let minutes = difference.abs() / 60;
     let hours = match minutes % 60 {
-        0 => L10N.tr_args("hours-short", [("count", (minutes / 60).into())]),
+        0 => tr!("{count} h", count = (minutes / 60)),
         rest => format!("{}:{rest:02}", minutes / 60),
     };
-    L10N.tr_args(
-        "city-offset",
-        [
-            ("day", day.into()),
-            ("difference", format!("{sign}{hours}").into()),
-        ],
+    tr!(
+        "{day}, {difference}",
+        day = day,
+        difference = format!("{sign}{hours}")
     )
 }
 
@@ -314,7 +319,7 @@ impl ClockView {
         let send = sender(&intents);
         let tabs = root.insert_in_header(
             SegmentedControl::new(
-                &L10N.tr("app-name"),
+                &tr!("Clock"),
                 &titles,
                 Page::ALL.iter().position(|shown| *shown == page),
                 move |index| send(Intent::Page(index)),
@@ -324,7 +329,7 @@ impl ClockView {
         );
         let send = sender(&intents);
         let add = root.insert_in_header(
-            add_button(move || send(Intent::Add)).tooltip(&L10N.tr("add")),
+            add_button(move || send(Intent::Add)).tooltip(&tr!("Add")),
             Rect::default(),
         );
         let body = root.insert(Label::new(""), Rect::default());
@@ -574,7 +579,7 @@ impl ClockView {
         };
         let label_field = |text: &str| {
             let send = sender(&self.intents);
-            boxed(TextField::new(&L10N.tr("label"), text, move |text| {
+            boxed(TextField::new(&tr!("Label"), text, move |text| {
                 send(Intent::Field(Field::Label(text.to_owned())))
             }))
         };
@@ -582,7 +587,7 @@ impl ClockView {
             let send = sender(&self.intents);
             let titles: Vec<String> = Sound::ALL.into_iter().map(sound_title).collect();
             boxed(PopUpButton::new(
-                &L10N.tr("sound"),
+                &tr!("Sound"),
                 &titles,
                 sound_index(keyword),
                 move |index| send(Intent::Field(Field::Sound(index))),
@@ -608,20 +613,15 @@ impl ClockView {
                 let send = sender(&self.intents);
                 let lines = vec![
                     FormLine::Row(
-                        L10N.tr("time"),
+                        tr!("Time"),
                         boxed(Stack::new(
                             Axis::Horizontal,
                             6.0,
                             0.0,
                             vec![
-                                stepper(&L10N.tr("hour"), alarm.hour as u64, 23.0, Field::Hour),
+                                stepper(&tr!("Hour"), alarm.hour as u64, 23.0, Field::Hour),
                                 boxed(Label::new(":")),
-                                stepper(
-                                    &L10N.tr("minute"),
-                                    alarm.minute as u64,
-                                    59.0,
-                                    Field::Minute,
-                                ),
+                                stepper(&tr!("Minute"), alarm.minute as u64, 59.0, Field::Minute),
                             ],
                         )),
                     ),
@@ -634,27 +634,27 @@ impl ClockView {
                             boxed(Stack::new(Axis::Horizontal, 8.0, 0.0, later_days)),
                         ],
                     ))),
-                    FormLine::Row(L10N.tr("label"), label_field(&alarm.label)),
-                    FormLine::Row(L10N.tr("sound"), sound_choice(&alarm.sound)),
+                    FormLine::Row(tr!("Label"), label_field(&alarm.label)),
+                    FormLine::Row(tr!("Sound"), sound_choice(&alarm.sound)),
                     FormLine::Row(
-                        L10N.tr("snooze"),
-                        boxed(Toggle::new(&L10N.tr("snooze"), alarm.snooze, move |on| {
+                        tr!("Snooze"),
+                        boxed(Toggle::new(&tr!("Snooze"), alarm.snooze, move |on| {
                             send(Intent::Field(Field::Snooze(on)))
                         })),
                     ),
                 ];
                 let title = match alarm.id {
-                    0 => L10N.tr("new-alarm"),
-                    _ => L10N.tr("edit-alarm"),
+                    0 => tr!("New Alarm"),
+                    _ => tr!("Edit Alarm"),
                 };
                 let mut alert = Alert::new(&title, "", choose).accessory(Form::new(&title, lines));
                 if alarm.id != 0 {
-                    alert = alert.other(&L10N.tr("delete"), "delete");
+                    alert = alert.other(&tr!("Delete"), "delete");
                 }
                 (
                     alert
-                        .cancel(&L10N.tr("cancel"), "cancel")
-                        .primary(&L10N.tr("save"), "save"),
+                        .cancel(&tr!("Cancel"), "cancel")
+                        .primary(&tr!("Save"), "save"),
                     None,
                 )
             }
@@ -665,34 +665,34 @@ impl ClockView {
                         6.0,
                         0.0,
                         vec![
-                            stepper(&L10N.tr("hour"), draft.hours, 23.0, Field::Hour),
+                            stepper(&tr!("Hour"), draft.hours, 23.0, Field::Hour),
                             boxed(Label::new(":")),
-                            stepper(&L10N.tr("minute"), draft.minutes, 59.0, Field::Minute),
+                            stepper(&tr!("Minute"), draft.minutes, 59.0, Field::Minute),
                             boxed(Label::new(":")),
-                            stepper(&L10N.tr("second"), draft.seconds, 59.0, Field::Second),
+                            stepper(&tr!("Second"), draft.seconds, 59.0, Field::Second),
                         ],
                     ))),
-                    FormLine::Row(L10N.tr("label"), label_field(&draft.label)),
-                    FormLine::Row(L10N.tr("sound"), sound_choice(&draft.sound)),
+                    FormLine::Row(tr!("Label"), label_field(&draft.label)),
+                    FormLine::Row(tr!("Sound"), sound_choice(&draft.sound)),
                 ];
-                let title = L10N.tr("new-timer");
+                let title = tr!("New Timer");
                 (
                     Alert::new(&title, "", choose)
                         .accessory(Form::new(&title, lines))
-                        .cancel(&L10N.tr("cancel"), "cancel")
-                        .primary(&L10N.tr("start"), "start"),
+                        .cancel(&tr!("Cancel"), "cancel")
+                        .primary(&tr!("Start"), "start"),
                     None,
                 )
             }
             Sheet::City { .. } => {
                 let send = sender(&self.intents);
-                let search = SearchField::new(&L10N.tr("search-cities"), "", move |text| {
+                let search = SearchField::new(&tr!("Search Cities"), "", move |text| {
                     send(Intent::Search(text.to_owned()))
                 });
                 let send = sender(&self.intents);
                 let mut list = Table::new(vec![
-                    Column::new(&L10N.tr("city"), 160.0).flexible(),
-                    Column::new(&L10N.tr("country"), 140.0),
+                    Column::new(&tr!("City"), 160.0).flexible(),
+                    Column::new(&tr!("Country"), 140.0),
                 ])
                 .on_selection(move |keys| send(Intent::Chosen(keys.to_vec())));
                 list.set_rows(city_rows(&self.cities, ""));
@@ -704,10 +704,10 @@ impl ClockView {
                     vec![boxed(search), boxed(Fixed::new(CITY_LIST_HEIGHT, list))],
                 );
                 (
-                    Alert::new(&L10N.tr("add-city"), "", choose)
+                    Alert::new(&tr!("Add City"), "", choose)
                         .accessory(fields)
-                        .cancel(&L10N.tr("cancel"), "cancel")
-                        .primary(&L10N.tr("add"), "add"),
+                        .cancel(&tr!("Cancel"), "cancel")
+                        .primary(&tr!("Add"), "add"),
                     Some(id),
                 )
             }
@@ -736,12 +736,12 @@ impl ClockView {
         self.refresh_live();
     }
 
-    fn empty(&self, key: &str) -> Box<dyn Widget> {
+    fn empty(&self, key: Text) -> Box<dyn Widget> {
         boxed(Stack::new(
             Axis::Vertical,
             0.0,
             PADDING * 2.0,
-            vec![boxed(Label::new(&L10N.tr(key)).secondary())],
+            vec![boxed(Label::new(&key.tr()).secondary())],
         ))
     }
 
@@ -751,7 +751,7 @@ impl ClockView {
 
     fn alarms_page(&mut self) -> Stack {
         if self.clock.alarms.is_empty() {
-            return self.list(vec![self.empty("no-alarms")]);
+            return self.list(vec![self.empty(text!("No Alarms"))]);
         }
         let mut alarms = self.clock.alarms.clone();
         alarms.sort_by_key(|alarm| (alarm.hour, alarm.minute));
@@ -766,12 +766,9 @@ impl ClockView {
                     .unwrap_or_default();
                 let repeat = repeat_text(&self.formats, alarm.days);
                 let snoozed = alarm.snoozed.map(|until| {
-                    L10N.tr_args(
-                        "snoozed-until",
-                        [(
-                            "time",
-                            clock_time(&self.formats, &until.to_zoned(self.zone.clone())).into(),
-                        )],
+                    tr!(
+                        "snoozed until {time}",
+                        time = clock_time(&self.formats, &until.to_zoned(self.zone.clone())),
                     )
                 });
                 let detail = [
@@ -788,7 +785,7 @@ impl ClockView {
                     send(Intent::Change(Change::EnableAlarm(id, on)))
                 });
                 let send = sender(&self.intents);
-                let edit = Button::new(&L10N.tr("edit"), move || send(Intent::Edit(id))).quiet();
+                let edit = Button::new(&tr!("Edit…"), move || send(Intent::Edit(id))).quiet();
                 boxed(Line::new(
                     &format!("{time} {detail}"),
                     vec![
@@ -821,15 +818,15 @@ impl ClockView {
             .collect();
         let mut lines = vec![boxed(Stack::new(Axis::Horizontal, 6.0, INSET, presets))];
         if self.clock.timers.is_empty() {
-            lines.push(self.empty("no-timers"));
+            lines.push(self.empty(text!("No Timers")));
         }
         let boot = boot_now();
         for timer in &self.clock.timers {
             let id = timer.id;
             let (title, running) = match timer.state {
-                TimerState::Idle => (L10N.tr("start"), false),
-                TimerState::Running { .. } => (L10N.tr("pause"), true),
-                TimerState::Paused { .. } => (L10N.tr("resume"), false),
+                TimerState::Idle => (tr!("Start"), false),
+                TimerState::Running { .. } => (tr!("Pause"), true),
+                TimerState::Paused { .. } => (tr!("Resume"), false),
             };
             let send = sender(&self.intents);
             let start = Button::new(&title, move || send(Intent::Change(Change::StartPause(id))));
@@ -839,11 +836,11 @@ impl ClockView {
             };
             let send = sender(&self.intents);
             let second = match timer.state {
-                TimerState::Idle => Button::new(&L10N.tr("delete"), move || {
+                TimerState::Idle => Button::new(&tr!("Delete"), move || {
                     send(Intent::Change(Change::DeleteTimer(id)))
                 })
                 .quiet(),
-                _ => Button::new(&L10N.tr("cancel"), move || {
+                _ => Button::new(&tr!("Cancel"), move || {
                     send(Intent::Change(Change::ResetTimer(id)))
                 }),
             };
@@ -870,20 +867,20 @@ impl ClockView {
         self.live.push((elapsed.id(), Live::Stopwatch));
         let send = sender(&self.intents);
         let toggle = match running {
-            true => Button::new(&L10N.tr("stop"), move || {
+            true => Button::new(&tr!("Stop"), move || {
                 send(Intent::Change(Change::StopwatchToggle))
             }),
-            false => Button::new(&L10N.tr("start"), move || {
+            false => Button::new(&tr!("Start"), move || {
                 send(Intent::Change(Change::StopwatchToggle))
             })
             .primary(),
         };
         let send = sender(&self.intents);
         let mut lap = match running || stopwatch.banked.is_zero() {
-            true => Button::new(&L10N.tr("lap"), move || {
+            true => Button::new(&tr!("Lap"), move || {
                 send(Intent::Change(Change::StopwatchLap))
             }),
-            false => Button::new(&L10N.tr("reset"), move || {
+            false => Button::new(&tr!("Reset"), move || {
                 send(Intent::Change(Change::StopwatchReset))
             }),
         };
@@ -907,10 +904,10 @@ impl ClockView {
             let current = Digits::new("", SMALL);
             self.live.push((current.id(), Live::Lap));
             lines.push(boxed(Line::new(
-                &L10N.tr_args("lap-number", [("number", (laps.len() + 1).into())]),
-                vec![boxed(Label::new(&L10N.tr_args(
-                    "lap-number",
-                    [("number", (laps.len() + 1).into())],
+                &tr!("Lap {number}", number = (laps.len() + 1)),
+                vec![boxed(Label::new(&tr!(
+                    "Lap {number}",
+                    number = (laps.len() + 1)
                 )))],
                 vec![boxed(current)],
             )));
@@ -918,7 +915,7 @@ impl ClockView {
         let mut previous = Duration::ZERO;
         let mut finished = Vec::new();
         for (index, total) in laps.iter().enumerate() {
-            let title = L10N.tr_args("lap-number", [("number", (index + 1).into())]);
+            let title = tr!("Lap {number}", number = (index + 1));
             let time = lap_time(total.saturating_sub(previous));
             previous = *total;
             finished.push(boxed(Line::new(
@@ -933,7 +930,7 @@ impl ClockView {
 
     fn world_page(&mut self) -> Stack {
         if self.clock.cities.is_empty() {
-            return self.list(vec![self.empty("no-cities")]);
+            return self.list(vec![self.empty(text!("No Cities"))]);
         }
         let here = Zoned::now().with_time_zone(self.zone.clone());
         let lines = self
@@ -947,14 +944,14 @@ impl ClockView {
                     sky(&there, place_of(&city_zone)).is_some_and(|(sky, _)| sky == Sky::Night);
                 let detail = offset_text(&there, &here);
                 let detail = match night {
-                    true => format!("{detail} · {}", L10N.tr("night")),
+                    true => format!("{detail} · {}", tr!("night")),
                     false => detail,
                 };
                 let time = Digits::new(&clock_time(&self.formats, &there), BIG).light();
                 self.live.push((time.id(), Live::City(zone.clone())));
                 let (send, zone) = (sender(&self.intents), zone.clone());
                 let name = city_name(&zone);
-                let remove = Button::new(&L10N.tr("remove"), move || {
+                let remove = Button::new(&tr!("Remove"), move || {
                     send(Intent::Change(Change::RemoveCity(zone.clone())))
                 })
                 .quiet();

@@ -7,20 +7,9 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use accesskit::{ActionRequest, TreeUpdate};
-use bande_toolkit::ui::{
-    Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
-    Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, past_drag_slop,
-    shortcut_pressed,
-};
-use bande_toolkit::{
-    Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
-};
-use jiff::Timestamp;
-use jiff::tz::TimeZone;
-use zeroize::Zeroizing;
 
-use crate::L10N;
+use bande_l10n::{Text, text, tr, trn};
+
 use crate::compose::{Draft, Original, Outgoing, forward, reply, signed};
 use crate::discover::Settings;
 use crate::error::Result;
@@ -37,8 +26,20 @@ use crate::ui::sidebar::{Place, Row, rows};
 use crate::ui::symbols::Symbols;
 use crate::ui::toolbar::{Signal, Signals, Toolbar};
 use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status, Worker};
+use accesskit::{ActionRequest, TreeUpdate};
 use bande_app_settings::{Stored, settings_folder};
 use bande_keyring::Keyring;
+use bande_toolkit::ui::{
+    Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
+    Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, past_drag_slop,
+    shortcut_pressed,
+};
+use bande_toolkit::{
+    Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
+};
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
+use zeroize::Zeroizing;
 
 pub const SHORTCUTS: [(&str, &str); 9] = [
     ("compose", "Ctrl+N"),
@@ -59,14 +60,14 @@ const UNDO_TRIES: u8 = 3;
 const MOVED_IN_KEPT: Duration = Duration::from_secs(10 * 60);
 const UNDO_LEVELS: usize = 20;
 const OPENED_UNREAD: usize = 10;
-const FLAG_COLORS: [&str; 7] = [
-    "flag-red",
-    "flag-orange",
-    "flag-yellow",
-    "flag-green",
-    "flag-blue",
-    "flag-purple",
-    "flag-gray",
+const FLAG_COLORS: [Text; 7] = [
+    text!("Red"),
+    text!("Orange"),
+    text!("Yellow"),
+    text!("Green"),
+    text!("Blue"),
+    text!("Purple"),
+    text!("Gray"),
 ];
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 
@@ -463,11 +464,11 @@ impl MailView {
             "{}\n{}\n{}\n\n{}",
             envelope.subject,
             names(&envelope.from),
-            L10N.tr_args("header-to", [("names", names(&envelope.to).into())]),
+            tr!("To: {names}", names = names(&envelope.to)),
             reading.content.text(),
         );
         let title = match summary.subject.is_empty() {
-            true => L10N.tr("no-subject"),
+            true => tr!("No Subject"),
             false => summary.subject.clone(),
         };
         Some((title, text))
@@ -515,7 +516,7 @@ impl MailView {
                 Row::Place { place, title, .. } if *place == self.place => Some(title.clone()),
                 _ => None,
             })
-            .unwrap_or_else(|| L10N.tr("app-name"))
+            .unwrap_or_else(|| tr!("Mail"))
     }
 
     pub fn header(&self) -> Header {
@@ -1027,7 +1028,7 @@ impl MailView {
         FLAG_COLORS
             .iter()
             .enumerate()
-            .map(|(color, name)| (L10N.tr(name), format!("flag-color:{color}")))
+            .map(|(color, name)| (name.tr(), format!("flag-color:{color}")))
             .collect()
     }
 
@@ -1242,7 +1243,7 @@ impl MailView {
                     None => mailbox.path.clone(),
                 };
                 let name = match mailbox.role {
-                    Some(Role::Inbox) => L10N.tr("mailbox-inbox"),
+                    Some(Role::Inbox) => tr!("Inbox"),
                     _ => name,
                 };
                 (name, mailbox.id)
@@ -1323,11 +1324,11 @@ impl MailView {
         if let Some(mailbox) = lost.first().and_then(|id| self.mailbox(*id)) {
             self.ui.present_sheet(
                 Alert::new(
-                    &L10N.tr_args("undo-lost-title", [("count", lost.len().into())]),
-                    &L10N.tr_args("undo-lost-message", [("mailbox", mailbox.name.into())]),
+                    &trn!("A Message Could Not Be Put Back", "{count} Messages Could Not Be Put Back", count = lost.len()),
+                    &tr!("Mail did not find it in {mailbox} on the server. It may have been moved or deleted there.", mailbox = mailbox.name),
                     |_| {},
                 )
-                .primary(&L10N.tr("button-ok"), "ok"),
+                .primary(&tr!("OK"), "ok"),
             );
         }
         self.reload();
@@ -1412,19 +1413,13 @@ impl MailView {
             return;
         };
         let envelope = &reading.content.envelope;
-        let attribution = L10N.tr_args(
-            "reply-attribution",
-            [
-                (
-                    "date",
-                    envelope
-                        .date
-                        .map(|date| full_date(date, &self.zone))
-                        .unwrap_or_default()
-                        .into(),
-                ),
-                ("name", envelope.sender().shown().to_owned().into()),
-            ],
+        let attribution = tr!(
+            "On {date}, {name} wrote:",
+            date = envelope
+                .date
+                .map(|date| full_date(date, &self.zone))
+                .unwrap_or_default(),
+            name = envelope.sender().shown().to_owned()
         );
         let quote = self.settings.quote.then_some(attribution.as_str());
         let mut draft = reply(&reading.content, &account.address(), all, quote);
@@ -1498,21 +1493,15 @@ impl MailView {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
-        let heading = L10N.tr_args(
-            "forward-heading",
-            [
-                ("from", names(&envelope.from).into()),
-                (
-                    "date",
-                    envelope
-                        .date
-                        .map(|date| full_date(date, &self.zone))
-                        .unwrap_or_default()
-                        .into(),
-                ),
-                ("subject", envelope.subject.clone().into()),
-                ("to", names(&envelope.to).into()),
-            ],
+        let heading = tr!(
+            "Begin forwarded message:\n\nFrom: {from}\nSubject: {subject}\nDate: {date}\nTo: {to}",
+            from = names(&envelope.from),
+            date = envelope
+                .date
+                .map(|date| full_date(date, &self.zone))
+                .unwrap_or_default(),
+            subject = envelope.subject.clone(),
+            to = names(&envelope.to)
         );
         let mut draft = forward(&reading.content, &account.address(), &heading);
         draft.body = signed(&draft.body, &account.signature);
@@ -1602,7 +1591,7 @@ impl MailView {
                 self.held.push((account, command));
             } else if let Command::Send(outgoing) | Command::SaveDraft(outgoing) = command {
                 self.requests.push(Request::NotSent {
-                    error: L10N.tr("account-gone"),
+                    error: tr!("No account sends from this address any more."),
                     outgoing,
                 });
             }
@@ -1622,11 +1611,11 @@ impl MailView {
             }
             self.ui.present_sheet(
                 Alert::new(
-                    &L10N.tr_args("held-title", [("count", count.into())]),
-                    &L10N.tr_args("held-message", [("email", account.email.clone().into())]),
+                    &trn!("A Message Is Waiting to Be Sent", "{count} Messages Are Waiting to Be Sent", count = count),
+                    &tr!("{email} is turned off. Mail sends what is waiting when you turn the account on again in Settings → Accounts. If you quit Mail first, it opens again as an unsent message.", email = account.email.clone()),
                     |_| {},
                 )
-                .primary(&L10N.tr("button-ok"), "ok"),
+                .primary(&tr!("OK"), "ok"),
             );
         }
     }
@@ -1760,9 +1749,9 @@ impl MailView {
         if let Err(error) = saved {
             tracing::warn!("cannot save {name}: {error}");
             self.requests.push(Request::Notify {
-                summary: L10N.tr_args(
-                    "attachment-save-failed",
-                    [("error", error.to_string().into())],
+                summary: tr!(
+                    "The attachment couldn’t be saved: {error}",
+                    error = error.to_string()
                 ),
                 body: name,
                 sound: false,
@@ -1850,8 +1839,8 @@ impl MailView {
                 MailEvent::Sent(_) => {}
                 MailEvent::MailboxRefused(reason) => {
                     self.ui.present_sheet(
-                        Alert::new(&L10N.tr("mailbox-refused"), &reason, |_| {})
-                            .primary(&L10N.tr("button-ok"), "ok"),
+                        Alert::new(&tr!("The mailbox could not be changed"), &reason, |_| {})
+                            .primary(&tr!("OK"), "ok"),
                     );
                 }
                 MailEvent::NotSent(_, error, outgoing) => {
@@ -1950,7 +1939,7 @@ impl MailView {
             .collect::<Vec<_>>();
         if arrived.len() > NOTIFIED_AT_ONCE {
             self.requests.push(Request::Notify {
-                summary: L10N.tr_args("new-messages", [("count", arrived.len().into())]),
+                summary: tr!("{count} new messages", count = arrived.len()),
                 body: arrived
                     .iter()
                     .take(NOTIFIED_AT_ONCE)
@@ -1965,7 +1954,7 @@ impl MailView {
             self.requests.push(Request::Notify {
                 summary: summary.sender.shown().to_owned(),
                 body: match summary.subject.as_str() {
-                    "" => L10N.tr("no-subject"),
+                    "" => tr!("No Subject"),
                     subject => subject.to_owned(),
                 },
                 sound,
@@ -2081,11 +2070,11 @@ impl MailView {
             _ => None,
         };
         let problem = if name.is_empty() || !email.contains('@') {
-            Some("setup-missing")
+            Some(text!("Enter your name and email address."))
         } else if password.is_empty() {
-            Some("setup-missing-password")
+            Some(text!("Enter your password."))
         } else if *mode == Mode::Manual && servers.is_none() {
-            Some("setup-missing-servers")
+            Some(text!("Enter both server names."))
         } else if self
             .store
             .accounts()
@@ -2093,18 +2082,18 @@ impl MailView {
             .iter()
             .any(|account| account.email.eq_ignore_ascii_case(&email))
         {
-            Some("setup-exists")
+            Some(text!("This account is already set up."))
         } else {
             None
         };
         if let Some(problem) = problem {
-            state.borrow_mut().status = Some((L10N.tr(problem), true));
+            state.borrow_mut().status = Some((problem.tr(), true));
             return;
         }
         {
             let mut state = state.borrow_mut();
             state.busy = true;
-            state.status = Some((L10N.tr("checking-account"), false));
+            state.status = Some((tr!("Checking the account…"), false));
         }
         let request = SetupRequest {
             name,
@@ -2143,8 +2132,12 @@ impl MailView {
                 let mut state = state.borrow_mut();
                 fill_servers(&mut state, &settings);
                 let message = match app_password_hint(&settings.imap.host) {
-                    Some(hint) => format!("{} {}", L10N.tr("setup-wrong-password"), L10N.tr(hint)),
-                    None => L10N.tr("setup-wrong-password"),
+                    Some(hint) => format!(
+                        "{} {}",
+                        tr!("The user name or password is incorrect."),
+                        hint.tr()
+                    ),
+                    None => tr!("The user name or password is incorrect."),
                 };
                 state.status = Some((message, true));
             }
@@ -2158,7 +2151,10 @@ impl MailView {
                 }
                 if let Some(setup) = &self.setup {
                     setup.state.borrow_mut().status = Some((
-                        L10N.tr_args("setup-no-servers", [("reason", reason.into())]),
+                        tr!(
+                            "Mail could not reach the servers: {reason}",
+                            reason = reason
+                        ),
                         true,
                     ));
                 }
@@ -2604,16 +2600,13 @@ impl MailView {
             Target::Attachment(id, index) if secondary => {
                 self.focus_entry(id);
                 let menu = Menu::new(vec![
+                    MenuItem::new(&tr!("Open Attachment"), &format!("attachment-open:{index}")),
                     MenuItem::new(
-                        &L10N.tr("attachment-open"),
-                        &format!("attachment-open:{index}"),
-                    ),
-                    MenuItem::new(
-                        &L10N.tr("attachment-save-as"),
+                        &tr!("Save Attachment…"),
                         &format!("attachment-save-as:{index}"),
                     ),
                     MenuItem::new(
-                        &L10N.tr("attachment-save"),
+                        &tr!("Save to Downloads Folder"),
                         &format!("attachment-save:{index}"),
                     ),
                 ]);
@@ -2666,19 +2659,11 @@ impl MailView {
         let own = mailbox.role.is_none();
         Some(Menu::new(vec![
             MenuItem::new(
-                &L10N.tr("menu-new-mailbox"),
+                &tr!("New Mailbox…"),
                 &format!("mailbox-new:{}", mailbox.account),
             ),
-            MenuItem::new(
-                &L10N.tr("menu-rename-mailbox"),
-                &format!("mailbox-rename:{id}"),
-            )
-            .enabled(own),
-            MenuItem::new(
-                &L10N.tr("menu-delete-mailbox"),
-                &format!("mailbox-delete:{id}"),
-            )
-            .enabled(own),
+            MenuItem::new(&tr!("Rename Mailbox…"), &format!("mailbox-rename:{id}")).enabled(own),
+            MenuItem::new(&tr!("Delete Mailbox…"), &format!("mailbox-delete:{id}")).enabled(own),
         ]))
     }
 
@@ -2691,7 +2676,7 @@ impl MailView {
         let typed = Rc::new(RefCell::new(name.to_owned()));
         let field = {
             let typed = Rc::clone(&typed);
-            TextField::new(&L10N.tr("mailbox-name-placeholder"), name, move |text| {
+            TextField::new(&tr!("Name"), name, move |text| {
                 *typed.borrow_mut() = text.to_owned();
             })
         };
@@ -2703,15 +2688,15 @@ impl MailView {
             }
         })
         .accessory(field)
-        .primary(&L10N.tr("button-ok"), "ok")
-        .cancel(&L10N.tr("button-cancel"), "cancel");
+        .primary(&tr!("OK"), "ok")
+        .cancel(&tr!("Cancel"), "cancel");
         self.ui.present_sheet(alert);
     }
 
     fn mailbox_action(&mut self, verb: &str, id: i64) {
         match verb {
             "mailbox-new" => {
-                self.ask_mailbox_name(&L10N.tr("new-mailbox-title"), "", move |name| {
+                self.ask_mailbox_name(&tr!("New Mailbox"), "", move |name| {
                     Signal::NewMailbox(id, name)
                 });
             }
@@ -2719,10 +2704,7 @@ impl MailView {
                 let Some(mailbox) = self.mailbox(id) else {
                     return;
                 };
-                let title = L10N.tr_args(
-                    "rename-mailbox-title",
-                    [("name", mailbox.name.clone().into())],
-                );
+                let title = tr!("Rename “{name}”", name = mailbox.name.clone());
                 self.ask_mailbox_name(&title, &mailbox.name, move |name| {
                     Signal::RenameMailbox(id, name)
                 });
@@ -2733,16 +2715,16 @@ impl MailView {
                 };
                 let signals = Rc::clone(&self.signals);
                 let alert = Alert::new(
-                    &L10N.tr_args("delete-mailbox-title", [("name", mailbox.name.into())]),
-                    &L10N.tr("delete-mailbox-message"),
+                    &tr!("Delete “{name}”?", name = mailbox.name),
+                    &tr!("The mailbox and every message in it are deleted from the server."),
                     move |choice| {
                         if choice == "delete" {
                             signals.borrow_mut().push(Signal::DeleteMailbox(id));
                         }
                     },
                 )
-                .destructive(&L10N.tr("action-delete"), "delete")
-                .cancel(&L10N.tr("button-cancel"), "cancel");
+                .destructive(&tr!("Delete"), "delete")
+                .cancel(&tr!("Cancel"), "cancel");
                 self.ui.present_sheet(alert);
             }
             _ => {}
@@ -2820,28 +2802,24 @@ impl MailView {
             .as_ref()
             .is_some_and(|summary| summary.flags.flagged);
         Menu::new(vec![
-            MenuItem::new(&L10N.tr("action-reply"), "reply"),
-            MenuItem::new(&L10N.tr("action-reply-all"), "reply-all"),
-            MenuItem::new(&L10N.tr("action-forward"), "forward"),
+            MenuItem::new(&tr!("Reply"), "reply"),
+            MenuItem::new(&tr!("Reply All"), "reply-all"),
+            MenuItem::new(&tr!("Forward"), "forward"),
             MenuItem::separator(),
             MenuItem::new(
-                &L10N.tr(if read {
-                    "action-mark-unread"
+                &if read {
+                    tr!("Mark as Unread")
                 } else {
-                    "action-mark-read"
-                }),
+                    tr!("Mark as Read")
+                },
                 "toggle-read",
             ),
             MenuItem::new(
-                &L10N.tr(if flagged {
-                    "action-unflag"
-                } else {
-                    "action-flag"
-                }),
+                &if flagged { tr!("Unflag") } else { tr!("Flag") },
                 "toggle-flag",
             ),
             MenuItem::submenu(
-                &L10N.tr("menu-flag"),
+                &tr!("Flag"),
                 Menu::new(
                     Self::flag_colors()
                         .into_iter()
@@ -2850,11 +2828,10 @@ impl MailView {
                 ),
             ),
             MenuItem::separator(),
-            MenuItem::new(&L10N.tr("action-archive"), "archive")
-                .enabled(self.can_move_to(Role::Archive)),
-            MenuItem::new(&L10N.tr("action-junk"), "junk").enabled(self.can_move_to(Role::Junk)),
+            MenuItem::new(&tr!("Archive"), "archive").enabled(self.can_move_to(Role::Archive)),
+            MenuItem::new(&tr!("Move to Junk"), "junk").enabled(self.can_move_to(Role::Junk)),
             MenuItem::submenu(
-                &L10N.tr("menu-move-to"),
+                &tr!("Move To"),
                 Menu::new(
                     self.move_targets()
                         .into_iter()
@@ -2862,7 +2839,7 @@ impl MailView {
                         .collect(),
                 ),
             ),
-            MenuItem::new(&L10N.tr("action-delete"), "delete"),
+            MenuItem::new(&tr!("Delete"), "delete"),
         ])
     }
 
@@ -3001,7 +2978,7 @@ fn write_new(folder: &std::path::Path, name: &str, data: &[u8]) -> std::io::Resu
     Err(std::io::Error::other("no free file name"))
 }
 
-fn app_password_hint(host: &str) -> Option<&'static str> {
+fn app_password_hint(host: &str) -> Option<Text> {
     let host = host.to_ascii_lowercase();
     let provider = |domains: &[&str]| {
         domains
@@ -3009,15 +2986,25 @@ fn app_password_hint(host: &str) -> Option<&'static str> {
             .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
     };
     if provider(&["gmail.com", "googlemail.com"]) {
-        Some("hint-google")
+        Some(text!(
+            "Google needs an app password for Mail: turn on 2-Step Verification, then create one at myaccount.google.com/apppasswords."
+        ))
     } else if provider(&["outlook.com", "office365.com", "hotmail.com", "live.com"]) {
-        Some("hint-microsoft")
+        Some(text!(
+            "Outlook.com and Microsoft 365 may refuse passwords from mail apps; Mail cannot sign in with Microsoft yet."
+        ))
     } else if provider(&["me.com", "mac.com", "icloud.com"]) {
-        Some("hint-icloud")
+        Some(text!(
+            "iCloud needs an app-specific password: create one at account.apple.com under Sign-In and Security."
+        ))
     } else if provider(&["yahoo.com", "aol.com"]) {
-        Some("hint-yahoo")
+        Some(text!(
+            "Yahoo and AOL need an app password: create one in your account's security settings."
+        ))
     } else if provider(&["fastmail.com", "messagingengine.com"]) {
-        Some("hint-fastmail")
+        Some(text!(
+            "Fastmail needs an app password: create one in Settings → Privacy & Security."
+        ))
     } else {
         None
     }

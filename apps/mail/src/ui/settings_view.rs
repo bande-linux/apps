@@ -4,18 +4,9 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
-use accesskit::TreeUpdate;
-use bande_app::View;
-use bande_app_settings::{Stored, settings_folder};
-use bande_toolkit::ui::{
-    Alert, Axis, Button, Context, Form, FormLine, FreeLayout, Label, PopUpButton, SEGMENTED_HEIGHT,
-    ScrollView, SegmentedControl, Stack, TextField, TextView, Toggle, Ui, Widget, WidgetId,
-};
-use bande_toolkit::{
-    Appearance, FrameRegions, Rect, SHEET_INSET, Scene, TextSystem, Window, WindowEvent,
-};
 
-use crate::L10N;
+use bande_l10n::{Text, text, tr, trn};
+
 use crate::discover::Settings as Servers;
 use crate::net::{Network, Security, Server};
 use crate::settings::{Change, MAX_PREVIEW_LINES, MailSettings, announce};
@@ -23,7 +14,17 @@ use crate::setup::{Outcome, Request as SetupRequest, check};
 use crate::store::{Account, AccountId, Rule, RuleAction, RuleField, Store};
 use crate::ui::view::TOOLBAR_HEIGHT;
 use crate::worker::{Event as MailEvent, Mailroom};
+use accesskit::TreeUpdate;
+use bande_app::View;
+use bande_app_settings::{Stored, settings_folder};
 use bande_keyring::Keyring;
+use bande_toolkit::ui::{
+    Alert, Axis, Button, Context, Form, FormLine, FreeLayout, Label, PopUpButton, SEGMENTED_HEIGHT,
+    ScrollView, SegmentedControl, Stack, TextField, TextView, Toggle, Ui, Widget, WidgetId,
+};
+use bande_toolkit::{
+    Appearance, FrameRegions, Rect, SHEET_INSET, Scene, TextSystem, Window, WindowEvent,
+};
 
 pub const SETTINGS_SIZE: (u32, u32) = (620, 620);
 const TAB_WIDTH: f32 = 92.0;
@@ -49,13 +50,13 @@ const TABS: [Tab; 5] = [
 
 impl Tab {
     fn title(self) -> String {
-        L10N.tr(match self {
-            Self::General => "settings-general",
-            Self::Accounts => "settings-accounts",
-            Self::Viewing => "settings-viewing",
-            Self::Composing => "settings-composing",
-            Self::Rules => "settings-rules",
-        })
+        match self {
+            Self::General => tr!("General"),
+            Self::Accounts => tr!("Accounts"),
+            Self::Viewing => tr!("Viewing"),
+            Self::Composing => tr!("Composing"),
+            Self::Rules => tr!("Rules"),
+        }
     }
 }
 
@@ -188,50 +189,43 @@ fn edited(
     }
 }
 
-fn field(state: &Shared, text: &str, placeholder: &str, set: fn(&mut Editing, &str)) -> TextField {
-    TextField::new(&L10N.tr(placeholder), text, edited(state, None, set)).without_text_checking()
+fn field(state: &Shared, text: &str, placeholder: Text, set: fn(&mut Editing, &str)) -> TextField {
+    TextField::new(&placeholder.tr(), text, edited(state, None, set)).without_text_checking()
 }
 
 fn security(state: &Shared, chosen: usize, set: fn(&mut Editing, usize)) -> PopUpButton {
     let names = SECURITIES
         .iter()
-        .map(|security| {
-            L10N.tr(match security {
-                Security::Tls => "security-tls",
-                Security::StartTls => "security-starttls",
-                Security::Plain => "security-none",
-            })
+        .map(|security| match security {
+            Security::Tls => tr!("TLS"),
+            Security::StartTls => tr!("STARTTLS"),
+            Security::Plain => tr!("None (this computer only)"),
         })
         .collect::<Vec<_>>();
     let state = Rc::clone(state);
-    PopUpButton::new(
-        &L10N.tr("settings-security"),
-        &names,
-        chosen,
-        move |index| {
-            set(&mut state.borrow_mut().editing, index);
-        },
-    )
+    PopUpButton::new(&tr!("Security"), &names, chosen, move |index| {
+        set(&mut state.borrow_mut().editing, index);
+    })
 }
 
-fn rule_field(field: RuleField) -> &'static str {
+fn rule_field(field: RuleField) -> Text {
     match field {
-        RuleField::From => "rule-from",
-        RuleField::To => "rule-to",
-        RuleField::Subject => "rule-subject",
+        RuleField::From => text!("From"),
+        RuleField::To => text!("To or Cc"),
+        RuleField::Subject => text!("Subject"),
     }
 }
 
-fn heading(message: &str) -> FormLine {
-    FormLine::Heading(L10N.tr(message))
+fn heading(message: Text) -> FormLine {
+    FormLine::Heading(message.tr())
 }
 
-fn row(message: &str, control: impl Widget + 'static) -> FormLine {
-    FormLine::Row(L10N.tr(message), Box::new(control))
+fn row(message: Text, control: impl Widget + 'static) -> FormLine {
+    FormLine::Row(message.tr(), Box::new(control))
 }
 
-fn note(message: &str) -> FormLine {
-    FormLine::Wide(Box::new(Label::new(&L10N.tr(message)).secondary()))
+fn note(message: Text) -> FormLine {
+    FormLine::Wide(Box::new(Label::new(&message.tr()).secondary()))
 }
 
 fn buttons(buttons: Vec<Button>) -> FormLine {
@@ -281,11 +275,10 @@ impl SettingsView {
         }));
         let titles = TABS.iter().map(|tab| tab.title()).collect::<Vec<_>>();
         let choose = Rc::clone(&state);
-        let tabs =
-            SegmentedControl::new(&L10N.tr("settings-title"), &titles, Some(0), move |index| {
-                choose.borrow_mut().signals.push(Signal::Tab(index))
-            })
-            .fill_equally();
+        let tabs = SegmentedControl::new(&tr!("Settings"), &titles, Some(0), move |index| {
+            choose.borrow_mut().signals.push(Signal::Tab(index))
+        })
+        .fill_equally();
         let mut host = FreeLayout::new();
         let host_id = Widget::id(&host);
         let tabs = host.insert(tabs, Rect::default());
@@ -368,27 +361,29 @@ impl SettingsView {
         Form::new(
             &Tab::General.title(),
             vec![
-                heading("settings-new-messages"),
+                heading(text!("New Messages")),
                 row(
-                    "settings-notify",
+                    text!("Show notifications"),
                     toggle(
                         &self.state,
-                        &L10N.tr("settings-notify"),
+                        &tr!("Show notifications"),
                         settings.notify,
                         |settings, on| settings.notify = on,
                     ),
                 ),
                 row(
-                    "settings-sound",
+                    text!("Play a sound"),
                     toggle(
                         &self.state,
-                        &L10N.tr("settings-sound"),
+                        &tr!("Play a sound"),
                         settings.sound,
                         |settings, on| settings.sound = on,
                     ),
                 ),
-                heading("settings-default-reader"),
-                note("settings-default-reader-note"),
+                heading(text!("Default Email Reader")),
+                note(text!(
+                    "To open email links in Mail, choose it in Settings → Default Apps."
+                )),
             ],
         )
     }
@@ -397,13 +392,13 @@ impl SettingsView {
         let settings = self.state.borrow().settings.clone();
         let lines = (0..=MAX_PREVIEW_LINES)
             .map(|lines| match lines {
-                0 => L10N.tr("settings-preview-none"),
-                lines => L10N.tr_args("settings-preview-lines", [("lines", lines.into())]),
+                0 => tr!("None"),
+                lines => trn!("1 line", "{lines} lines", lines = lines),
             })
             .collect::<Vec<_>>();
         let state = Rc::clone(&self.state);
         let preview = PopUpButton::new(
-            &L10N.tr("settings-preview"),
+            &tr!("Preview"),
             &lines,
             usize::from(settings.preview_lines),
             move |index| {
@@ -415,47 +410,47 @@ impl SettingsView {
         Form::new(
             &Tab::Viewing.title(),
             vec![
-                heading("settings-message-list"),
-                row("settings-preview", preview),
+                heading(text!("Message List")),
+                row(text!("Preview"), preview),
                 row(
-                    "settings-conversations",
+                    text!("Organize by conversation"),
                     toggle(
                         &self.state,
-                        &L10N.tr("settings-conversations"),
+                        &tr!("Organize by conversation"),
                         settings.conversations,
                         |settings, on| settings.conversations = on,
                     ),
                 ),
-                heading("settings-message"),
+                heading(text!("Messages")),
                 row(
-                    "settings-plain-text",
+                    text!("Show plain text when a message has it"),
                     toggle(
                         &self.state,
-                        &L10N.tr("settings-plain-text"),
+                        &tr!("Show plain text when a message has it"),
                         settings.plain_text,
                         |settings, on| settings.plain_text = on,
                     ),
                 ),
                 row(
-                    "settings-fixed-width",
+                    text!("Use a fixed-width font for plain text"),
                     toggle(
                         &self.state,
-                        &L10N.tr("settings-fixed-width"),
+                        &tr!("Use a fixed-width font for plain text"),
                         settings.fixed_width,
                         |settings, on| settings.fixed_width = on,
                     ),
                 ),
-                heading("settings-privacy"),
+                heading(text!("Privacy")),
                 row(
-                    "settings-load-remote",
+                    text!("Load remote content in messages"),
                     toggle(
                         &self.state,
-                        &L10N.tr("settings-load-remote"),
+                        &tr!("Load remote content in messages"),
                         settings.load_remote,
                         |settings, on| settings.load_remote = on,
                     ),
                 ),
-                note("settings-load-remote-note"),
+                note(text!("Remote pictures can tell the sender when and where you read a message. When this is off, a message shows Load Remote Content instead, and Mail remembers the senders you load it for.")),
             ]
             .into_iter()
             .chain(self.remote_senders())
@@ -470,9 +465,13 @@ impl SettingsView {
             .and_then(|store| store.remote_senders().ok())
             .filter(|count| *count > 0)?;
         Some(FormLine::Row(
-            L10N.tr_args("settings-remote-senders", [("count", count.into())]),
+            trn!(
+                "Remote content loads for one sender",
+                "Remote content loads for {count} senders",
+                count = count
+            ),
             Box::new(Button::new(
-                &L10N.tr("button-forget"),
+                &tr!("Forget"),
                 sender(&self.state, Signal::ForgetSenders),
             )),
         ))
@@ -480,8 +479,8 @@ impl SettingsView {
 
     fn rule_actions(&self) -> Vec<(String, RuleAction)> {
         let mut actions = vec![
-            (L10N.tr("rule-flag"), RuleAction::Flag),
-            (L10N.tr("rule-read"), RuleAction::Read),
+            (tr!("Flag the message"), RuleAction::Flag),
+            (tr!("Mark as read"), RuleAction::Read),
         ];
         let Some(store) = &self.store else {
             return actions;
@@ -490,12 +489,10 @@ impl SettingsView {
             for mailbox in store.mailboxes(account.id).unwrap_or_default() {
                 if mailbox.selectable {
                     actions.push((
-                        L10N.tr_args(
-                            "rule-move",
-                            [
-                                ("mailbox", mailbox.path.clone().into()),
-                                ("account", account.email.clone().into()),
-                            ],
+                        tr!(
+                            "Move to {mailbox} ({account})",
+                            mailbox = mailbox.path.clone(),
+                            account = account.email.clone()
                         ),
                         RuleAction::Move(mailbox.id),
                     ));
@@ -508,17 +505,17 @@ impl SettingsView {
     fn rules(&self) -> Form {
         let fields = RuleField::ALL
             .iter()
-            .map(|field| L10N.tr(rule_field(*field)))
+            .map(|field| (rule_field(*field)).tr())
             .collect::<Vec<_>>();
         let actions = self.rule_actions();
-        let mut lines = vec![heading("settings-rules-list")];
+        let mut lines = vec![heading(text!("Rules"))];
         let rules = self
             .store
             .as_ref()
             .and_then(|store| store.rules().ok())
             .unwrap_or_default();
         if rules.is_empty() {
-            lines.push(note("settings-no-rules"));
+            lines.push(note(text!("No rules yet.")));
         }
         for rule in rules {
             let action = actions
@@ -528,28 +525,27 @@ impl SettingsView {
                 .unwrap_or_default();
             let joiner = format!(
                 " {} ",
-                L10N.tr(match rule.every {
-                    true => "rule-and",
-                    false => "rule-or",
-                })
+                match rule.every {
+                    true => tr!("and"),
+                    false => tr!("or"),
+                }
             );
             let conditions = rule
                 .conditions
                 .iter()
                 .map(|(field, pattern)| {
-                    L10N.tr_args(
-                        "rule-condition",
-                        [
-                            ("field", L10N.tr(rule_field(*field)).into()),
-                            ("pattern", pattern.clone().into()),
-                        ],
+                    tr!(
+                        "{field} contains “{pattern}”",
+                        field = (rule_field(*field)).tr(),
+                        pattern = pattern.clone()
                     )
                 })
                 .collect::<Vec<_>>()
                 .join(&joiner);
-            let description = L10N.tr_args(
-                "rule-description",
-                [("conditions", conditions.into()), ("action", action.into())],
+            let description = tr!(
+                "{conditions}: {action}",
+                conditions = conditions,
+                action = action
             );
             lines.push(FormLine::Row(
                 description,
@@ -559,11 +555,11 @@ impl SettingsView {
                     0.0,
                     vec![
                         Box::new(Button::new(
-                            &L10N.tr("button-edit"),
+                            &tr!("Edit"),
                             sender(&self.state, Signal::EditRule(rule.id)),
                         )),
                         Box::new(Button::new(
-                            &L10N.tr("button-remove"),
+                            &tr!("Remove"),
                             sender(&self.state, Signal::RemoveRule(rule.id)),
                         )),
                     ],
@@ -572,14 +568,14 @@ impl SettingsView {
         }
         let rule = self.state.borrow().rule.clone();
         lines.push(heading(match rule.editing {
-            Some(_) => "settings-edit-rule",
-            None => "settings-new-rule",
+            Some(_) => text!("Edit Rule"),
+            None => text!("New Rule"),
         }));
         if rule.conditions.len() > 1 {
             let state = Rc::clone(&self.state);
             let every = PopUpButton::new(
-                &L10N.tr("rule-match"),
-                &[L10N.tr("rule-any"), L10N.tr("rule-all")],
+                &tr!("Match"),
+                &[tr!("Any condition"), tr!("All conditions")],
                 usize::from(rule.every),
                 move |index| {
                     state
@@ -588,11 +584,11 @@ impl SettingsView {
                         .push(Signal::Matching(index == 1))
                 },
             );
-            lines.push(row("rule-match", every));
+            lines.push(row(text!("Match"), every));
         }
         for (index, (field, pattern)) in rule.conditions.iter().enumerate() {
             let state = Rc::clone(&self.state);
-            let field = PopUpButton::new(&L10N.tr("rule-if"), &fields, *field, move |chosen| {
+            let field = PopUpButton::new(&tr!("If"), &fields, *field, move |chosen| {
                 if let Some(condition) = state.borrow_mut().rule.conditions.get_mut(index) {
                     condition.0 = chosen;
                 }
@@ -604,20 +600,20 @@ impl SettingsView {
                 }
             });
             let label = match (index, rule.every) {
-                (0, _) => "rule-if",
-                (_, true) => "rule-and-if",
-                (_, false) => "rule-or-if",
+                (0, _) => text!("If"),
+                (_, true) => text!("And if"),
+                (_, false) => text!("Or if"),
             };
             lines.push(row(label, field));
-            lines.push(row("rule-contains", pattern));
+            lines.push(row(text!("contains"), pattern));
         }
         let mut condition_buttons = vec![Button::new(
-            &L10N.tr("rule-add-condition"),
+            &tr!("Add Condition"),
             sender(&self.state, Signal::AddCondition),
         )];
         if rule.conditions.len() > 1 {
             condition_buttons.push(Button::new(
-                &L10N.tr("rule-remove-condition"),
+                &tr!("Remove Condition"),
                 sender(&self.state, Signal::RemoveCondition),
             ));
         }
@@ -627,26 +623,23 @@ impl SettingsView {
             .map(|(title, _)| title.clone())
             .collect::<Vec<_>>();
         let state = Rc::clone(&self.state);
-        let action = PopUpButton::new(&L10N.tr("rule-then"), &titles, rule.action, move |index| {
+        let action = PopUpButton::new(&tr!("Then"), &titles, rule.action, move |index| {
             state.borrow_mut().rule.action = index;
         });
         let finish = match rule.editing {
             Some(_) => vec![
-                Button::new(
-                    &L10N.tr("button-cancel"),
-                    sender(&self.state, Signal::CancelRule),
-                ),
-                Button::new(&L10N.tr("rule-save"), sender(&self.state, Signal::AddRule)),
+                Button::new(&tr!("Cancel"), sender(&self.state, Signal::CancelRule)),
+                Button::new(&tr!("Save Rule"), sender(&self.state, Signal::AddRule)),
             ],
             None => vec![Button::new(
-                &L10N.tr("rule-add"),
+                &tr!("Add Rule"),
                 sender(&self.state, Signal::AddRule),
             )],
         };
         lines.extend([
-            row("rule-then", action),
+            row(text!("Then"), action),
             buttons(finish),
-            note("settings-rules-note"),
+            note(text!("Rules act on new unread mail in the Inbox while Mail is open, in this order. Message → Apply Rules runs them on the messages you choose.")),
         ]);
         Form::new(&Tab::Rules.title(), lines)
     }
@@ -721,7 +714,7 @@ impl SettingsView {
 
     fn composing(&self) -> Form {
         let settings = self.state.borrow().settings.clone();
-        let mut choices = vec![L10N.tr("settings-send-from-mailbox")];
+        let mut choices = vec![tr!("Account of the selected mailbox")];
         choices.extend(self.accounts.iter().map(|account| account.email.clone()));
         let chosen = self
             .accounts
@@ -735,7 +728,7 @@ impl SettingsView {
             .map(|account| account.email.clone())
             .collect::<Vec<_>>();
         let send_from = PopUpButton::new(
-            &L10N.tr("settings-send-from"),
+            &tr!("Send new messages from"),
             &choices,
             chosen,
             move |index| {
@@ -750,32 +743,32 @@ impl SettingsView {
         Form::new(
             &Tab::Composing.title(),
             vec![
-                heading("settings-addressing"),
-                row("settings-send-from", send_from),
-                heading("settings-responding"),
+                heading(text!("Addressing")),
+                row(text!("Send new messages from"), send_from),
+                heading(text!("Responding")),
                 row(
-                    "settings-quote",
+                    text!("Quote the original message"),
                     toggle(
                         &self.state,
-                        &L10N.tr("settings-quote"),
+                        &tr!("Quote the original message"),
                         settings.quote,
                         |settings, on| settings.quote = on,
                     ),
                 ),
-                note("settings-signature-note"),
+                note(text!("Each account’s signature is set in Accounts.")),
             ],
         )
     }
 
     fn accounts_form(&self) -> Form {
         let add = Button::new(
-            &L10N.tr("menu-add-account"),
+            &tr!("Add Account…"),
             sender(&self.state, Signal::AddAccount),
         );
         let Some(account) = self.accounts.get(self.account) else {
             return Form::new(
                 &Tab::Accounts.title(),
-                vec![note("settings-no-accounts"), buttons(vec![add])],
+                vec![note(text!("No accounts are set up.")), buttons(vec![add])],
             );
         };
         let editing = self.state.borrow().editing.clone();
@@ -785,106 +778,97 @@ impl SettingsView {
             .map(|account| account.email.clone())
             .collect::<Vec<_>>();
         let choose = Rc::clone(&self.state);
-        let chooser = PopUpButton::new(
-            &L10N.tr("settings-account"),
-            &emails,
-            self.account,
-            move |index| choose.borrow_mut().signals.push(Signal::Account(index)),
-        );
-        let remove = Button::new(
-            &L10N.tr("settings-remove-account"),
-            sender(&self.state, Signal::RemoveAccount),
-        );
+        let chooser = PopUpButton::new(&tr!("Account"), &emails, self.account, move |index| {
+            choose.borrow_mut().signals.push(Signal::Account(index))
+        });
+        let remove = Button::new(&tr!("Remove…"), sender(&self.state, Signal::RemoveAccount));
         let name = TextField::new(
-            &L10N.tr("placeholder-name"),
+            &tr!("Ann Lee"),
             &editing.name,
             edited(&self.state, Some(Signal::Identity), |editing, text| {
                 editing.name = text.to_owned();
             }),
         );
         let signature = TextView::new(
-            &L10N.tr("settings-signature-placeholder"),
+            &tr!("No signature"),
             &editing.signature,
             edited(&self.state, Some(Signal::Identity), |editing, text| {
                 editing.signature = text.to_owned();
             }),
         )
         .visible_lines(SIGNATURE_LINES);
-        let mut save = Button::new(
-            &L10N.tr("settings-save-servers"),
-            sender(&self.state, Signal::SaveServers),
-        );
+        let mut save = Button::new(&tr!("Save"), sender(&self.state, Signal::SaveServers));
         save.set_enabled(self.checking.is_none());
         let mut lines = vec![
-            row("settings-account", chooser),
+            row(text!("Account"), chooser),
             buttons(vec![add, remove]),
-            heading("settings-account-information"),
-            row("settings-enabled", {
+            heading(text!("Account Information")),
+            row(text!("Use this account"), {
                 let state = Rc::clone(&self.state);
-                Toggle::new(&L10N.tr("settings-enabled"), account.enabled, move |on| {
+                Toggle::new(&tr!("Use this account"), account.enabled, move |on| {
                     state.borrow_mut().signals.push(Signal::Enabled(on));
                 })
             }),
-            row("settings-email", Label::new(&account.email)),
-            row("settings-name", name),
-            heading("settings-signature"),
+            row(text!("Email address"), Label::new(&account.email)),
+            row(text!("Full name"), name),
+            heading(text!("Signature")),
             FormLine::Wide(Box::new(signature)),
-            heading("settings-server-settings"),
+            heading(text!("Server Settings")),
             row(
-                "settings-user",
+                text!("User name"),
                 field(
                     &self.state,
                     &editing.user,
-                    "placeholder-user",
+                    text!("Same as the email address"),
                     |editing, text| {
                         editing.user = text.to_owned();
                     },
                 ),
             ),
             row(
-                "settings-incoming",
+                text!("Incoming server (IMAP)"),
                 field(
                     &self.state,
                     &editing.incoming.0,
-                    "placeholder-incoming",
+                    text!("imap.example.com"),
                     |editing, text| editing.incoming.0 = text.to_owned(),
                 ),
             ),
             row(
-                "settings-port",
+                text!("Port"),
                 field(
                     &self.state,
                     &editing.incoming.1,
-                    "placeholder-port",
+                    text!("Port"),
                     |editing, text| editing.incoming.1 = text.to_owned(),
                 ),
             ),
             row(
-                "settings-security",
+                text!("Security"),
                 security(&self.state, editing.incoming.2, |editing, index| {
                     editing.incoming.2 = index;
                 }),
             ),
             row(
-                "settings-outgoing",
+                text!("Outgoing server (SMTP)"),
                 field(
                     &self.state,
                     &editing.outgoing.0,
-                    "placeholder-outgoing",
+                    text!("smtp.example.com"),
                     |editing, text| editing.outgoing.0 = text.to_owned(),
                 ),
             ),
             row(
-                "settings-port",
+                text!("Port"),
                 field(
                     &self.state,
                     &editing.outgoing.1,
-                    "placeholder-port",
+                    text!("Port"),
                     |editing, text| editing.outgoing.1 = text.to_owned(),
                 ),
             ),
             row(
-                "settings-security",
+                text!("Security"),
                 security(&self.state, editing.outgoing.2, |editing, index| {
                     editing.outgoing.2 = index;
                 }),
@@ -928,7 +912,7 @@ impl SettingsView {
             return;
         };
         let Some(servers) = self.state.borrow().editing.servers() else {
-            self.status = Some((L10N.tr("setup-missing-servers"), true));
+            self.status = Some((tr!("Enter both server names."), true));
             return;
         };
         if (&servers.user, &servers.imap, &servers.smtp)
@@ -936,7 +920,7 @@ impl SettingsView {
         {
             return;
         }
-        self.status = Some((L10N.tr("checking-account"), false));
+        self.status = Some((tr!("Checking the account…"), false));
         self.checking = Some(account.id);
         let (id, email, old_host) = (account.id, account.email.clone(), account.imap.host.clone());
         let (network, store_path) = (self.network.clone(), self.store_path.clone());
@@ -1015,11 +999,14 @@ impl SettingsView {
                     account.imap = servers.imap;
                     account.smtp = servers.smtp;
                 }
-                (L10N.tr("settings-servers-saved"), false)
+                (tr!("The server settings were saved."), false)
             }
-            Outcome::WrongPassword(..) => (L10N.tr("setup-wrong-password"), true),
+            Outcome::WrongPassword(..) => (tr!("The user name or password is incorrect."), true),
             Outcome::NeedsServers(_, reason) => (
-                L10N.tr_args("setup-no-servers", [("reason", reason.into())]),
+                tr!(
+                    "Mail could not reach the servers: {reason}",
+                    reason = reason
+                ),
                 true,
             ),
         });
@@ -1031,16 +1018,16 @@ impl SettingsView {
         };
         let (state, id) = (Rc::clone(&self.state), account.id);
         let alert = Alert::new(
-            &L10N.tr_args("remove-title", [("email", account.email.clone().into())]),
-            &L10N.tr("remove-message"),
+            &tr!("Remove {email}?", email = account.email.clone()),
+            &tr!("Mail forgets this account, its saved password and the copy of its mail on this computer. The mail on the server stays."),
             move |choice| {
                 if choice == "remove" {
                     state.borrow_mut().signals.push(Signal::Remove(id));
                 }
             },
         )
-        .destructive(&L10N.tr("button-remove"), "remove")
-        .cancel(&L10N.tr("button-cancel"), "cancel");
+        .destructive(&tr!("Remove"), "remove")
+        .cancel(&tr!("Cancel"), "cancel");
         self.ui.present_sheet(alert);
     }
 

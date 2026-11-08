@@ -4,6 +4,7 @@ mod widgets;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use bande_l10n::{text, tr};
 use bande_app_menu::Entry;
 use bande_toolkit::ui::{Cell, Column, Context, Label, Row, Table, Ui, Widget, WidgetId};
 use bande_toolkit::{Appearance, Header, Palette, SHEET_INSET, TextSystem};
@@ -11,7 +12,6 @@ use bande_toolkit::{Appearance, Header, Palette, SHEET_INSET, TextSystem};
 pub use self::widgets::SIDEBAR_WIDTH;
 pub(crate) use self::widgets::{Centered, Code, Ends, Root, dot, symbol};
 use self::widgets::{Light, Pill};
-use crate::L10N;
 use crate::containers::{self, Containers};
 use crate::engine::{Action, Engine, EngineInfo, Flavor, Task, Update};
 use crate::machines::{Hub, MACHINES_KEY, MACHINES_SYMBOL, MachinesPane};
@@ -69,14 +69,14 @@ impl Section {
     }
 
     pub fn title(self) -> String {
-        L10N.tr(match self {
-            Self::Overview => "pane-overview",
-            Self::Containers => "pane-containers",
-            Self::Images => "pane-images",
-            Self::Volumes => "pane-volumes",
-            Self::Networks => "pane-networks",
-            Self::Machines => "machine-pane",
-        })
+        match self {
+            Self::Overview => tr!("Overview"),
+            Self::Containers => tr!("Containers"),
+            Self::Images => tr!("Images"),
+            Self::Volumes => tr!("Volumes"),
+            Self::Networks => tr!("Networks"),
+            Self::Machines => tr!("Machines"),
+        }
     }
 
     fn symbol(self) -> &'static str {
@@ -161,12 +161,15 @@ fn short_version(version: &str) -> &str {
 
 fn engine_name(info: &EngineInfo) -> String {
     let flavor = match info.flavor {
-        Flavor::Docker => "engine-docker",
-        Flavor::Podman => "engine-podman",
+        Flavor::Docker => text!("Docker {version}"),
+        Flavor::Podman => text!("Podman {version}"),
     };
-    let name = L10N.tr_args(flavor, [("version", short_version(&info.version).into())]);
+    let name = flavor.tr_args(&[(
+        "version",
+        &short_version(&info.version) as &dyn std::fmt::Display,
+    )]);
     match info.rootless {
-        true => L10N.tr_args("engine-rootless", [("engine", name.into())]),
+        true => tr!("{engine} · rootless", engine = name),
         false => name,
     }
 }
@@ -190,7 +193,7 @@ impl VeloxView {
         let sidebar_id = sidebar.id();
         let root = Root::new(
             boxed(sidebar),
-            boxed(Pill::new(&L10N.tr("engine-connecting"), Light::Waiting)),
+            boxed(Pill::new(&tr!("Connecting…"), Light::Waiting)),
             boxed(Label::new("")),
         );
         let root_id = root.id();
@@ -275,8 +278,7 @@ impl VeloxView {
 
     pub fn present_notice(&mut self, title: &str, message: &str) {
         self.ui.present_sheet(
-            bande_toolkit::ui::Alert::new(title, message, |_| {})
-                .primary(&L10N.tr("button-ok"), "ok"),
+            bande_toolkit::ui::Alert::new(title, message, |_| {}).primary(&tr!("OK"), "ok"),
         );
     }
 
@@ -499,10 +501,7 @@ impl VeloxView {
         };
         let mut rows = vec![
             row(Section::Overview),
-            Row::new(
-                "heading",
-                vec![Cell::new(L10N.tr("sidebar-resources")).muted().label()],
-            ),
+            Row::new("heading", vec![Cell::new(tr!("Resources")).muted().label()]),
             row(Section::Containers),
             row(Section::Images),
             row(Section::Volumes),
@@ -514,8 +513,8 @@ impl VeloxView {
 
     fn pill(&self) -> Pill {
         match &self.connection {
-            Connection::Connecting => Pill::new(&L10N.tr("engine-connecting"), Light::Waiting),
-            Connection::Blocked(_) => Pill::new(&L10N.tr("engine-none"), Light::Off),
+            Connection::Connecting => Pill::new(&tr!("Connecting…"), Light::Waiting),
+            Connection::Blocked(_) => Pill::new(&tr!("No engine"), Light::Off),
             Connection::Ready(info) => Pill::new(&engine_name(info), Light::On),
         }
     }

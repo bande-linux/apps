@@ -7,13 +7,14 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::rc::Rc;
 
+use bande_l10n::tr;
 use bande_app::{
     Cx, Detached, Info, Keys, Kind, Menus, Program, Saved, Settings as SettingsWindowInfo,
     TabCarry, TabDrop, View, WindowId,
 };
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_terminal::{
-    CLOSE_WINDOW, CloseAsk, Command, GridSize, L10N, MenuCommand, Painter, SETTINGS_SIZE, Session,
+    CLOSE_WINDOW, CloseAsk, Command, GridSize, MenuCommand, Painter, SETTINGS_SIZE, Session,
     Settings, Terminal, app_menus, settings_view,
 };
 use bande_toolkit::Appearance;
@@ -27,10 +28,10 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("title"),
+    name: || tr!("Terminal"),
     keys: Keys::Shifted,
     settings: Some(SettingsWindowInfo {
-        title: || L10N.tr("settings-title"),
+        title: || tr!("Terminal Settings"),
         size: SETTINGS_SIZE,
         view: settings_window,
     }),
@@ -86,7 +87,7 @@ impl Terminals {
             Rc::clone(&self.bus),
             Rc::clone(&self.carrying),
         );
-        let window = cx.open(Kind::Main, &L10N.tr("title"), size, |appearance| {
+        let window = cx.open(Kind::Main, &tr!("Terminal"), size, |appearance| {
             painter.set_appearance(appearance);
             TerminalWindow::new(painter, settings, opened, home, bus, carrying, serial)
         })?;

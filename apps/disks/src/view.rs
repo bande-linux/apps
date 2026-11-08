@@ -3,6 +3,15 @@ use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::rc::Rc;
 
+
+use bande_l10n::{Text, text, tr};
+
+use crate::jobs::{Abilities, Erase, Failure, Format, Job, Outcome, Report};
+use crate::model::{Apple, Disk, Group, Model, Scheme, Selected, Volume};
+use crate::size::parse_size;
+use crate::widgets::{
+    CapacityBar, Closable, Heading, InfoGrid, Root, SIDEBAR_WIDTH, Segment, TOOLBAR_HEIGHT, symbol,
+};
 use bande_design::Accent;
 use bande_fs::format_size;
 use bande_toolkit::ui::{
@@ -11,14 +20,6 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{Appearance, Color, Header, Image, Palette, SHEET_INSET, TextSystem};
 use zeroize::Zeroizing;
-
-use crate::L10N;
-use crate::jobs::{Abilities, Erase, Failure, Format, Job, Outcome, Report};
-use crate::model::{Apple, Disk, Group, Model, Scheme, Selected, Volume};
-use crate::size::parse_size;
-use crate::widgets::{
-    CapacityBar, Closable, Heading, InfoGrid, Root, SIDEBAR_WIDTH, Segment, TOOLBAR_HEIGHT, symbol,
-};
 
 const DISK_SYMBOL: &str = include_str!("../data/symbols/disk.svg");
 const EXTERNAL_SYMBOL: &str = include_str!("../data/symbols/external.svg");
@@ -169,35 +170,33 @@ fn quoted(name: &str) -> String {
 }
 
 fn described(name: &str, device: &str, size: u64) -> String {
-    L10N.tr_args(
-        "device-described",
-        [
-            ("name", quoted(name).into()),
-            ("device", device.into()),
-            ("size", format_size(size).into()),
-        ],
+    tr!(
+        "{name} ({device}, {size})",
+        name = quoted(name),
+        device = device,
+        size = format_size(size)
     )
 }
 
 pub fn format_name(volume: &Volume) -> String {
     let key = match volume.fs_type.as_str() {
         "ext4" | "ext3" | "ext2" => {
-            return L10N.tr_args("fs-ext", [("kind", volume.fs_type.as_str().into())]);
+            return tr!("Linux ({kind})", kind = volume.fs_type.as_str());
         }
-        "vfat" => "fs-fat",
-        "exfat" => "fs-exfat",
-        "ntfs" => "fs-ntfs",
-        "apfs" => "fs-apfs",
-        "hfsplus" => "fs-hfs",
-        "crypto_LUKS" => "fs-luks",
-        "swap" => "fs-swap",
-        "iso9660" => "fs-iso",
-        "" => "fs-none",
+        "vfat" => text!("MS-DOS (FAT)"),
+        "exfat" => text!("ExFAT"),
+        "ntfs" => text!("Windows NT (NTFS)"),
+        "apfs" => text!("APFS"),
+        "hfsplus" => text!("Mac OS Extended"),
+        "crypto_LUKS" => text!("Encrypted (LUKS)"),
+        "swap" => text!("Linux Swap"),
+        "iso9660" => text!("ISO 9660"),
+        "" => text!("Not formatted"),
         other => return other.to_owned(),
     };
-    let name = L10N.tr(key);
+    let name = key.tr();
     match volume.encrypted && !volume.locked {
-        true => L10N.tr_args("fs-encrypted", [("kind", name.into())]),
+        true => tr!("{kind}, Encrypted", kind = name),
         false => name,
     }
 }
@@ -208,11 +207,11 @@ fn free_space(point: &str) -> Option<u64> {
 }
 
 fn location(group: Group) -> String {
-    L10N.tr(match group {
-        Group::Internal => "location-internal",
-        Group::External => "location-external",
-        Group::Images => "location-image",
-    })
+    match group {
+        Group::Internal => tr!("Internal"),
+        Group::External => tr!("External"),
+        Group::Images => tr!("Disk Images"),
+    }
 }
 
 impl DisksView {
@@ -300,7 +299,10 @@ impl DisksView {
     }
 
     pub fn warn_busy(&mut self) {
-        self.notice(&L10N.tr("quit-busy"), &L10N.tr("quit-busy-message"));
+        self.notice(
+            &tr!("Disk Utility is still working."),
+            &tr!("Wait until the operation finishes before quitting."),
+        );
     }
 
     pub fn take_requests(&mut self) -> Vec<Request> {
@@ -357,31 +359,31 @@ impl DisksView {
             }
         }
         for job in mounts {
-            self.quiet(job, "failed-mount");
+            self.quiet(job, text!("Couldn’t mount the volume."));
         }
     }
 
-    fn quiet(&mut self, job: Job, failed: &str) {
+    fn quiet(&mut self, job: Job, failed: Text) {
         self.running.push_back(Running {
             sheet: None,
             done: None,
-            failed: L10N.tr(failed),
+            failed: failed.tr(),
         });
         self.requests.push(Request::Run(job));
     }
 
-    fn start(&mut self, job: Job, title: &str, done: (String, String), failed: &str, copy: bool) {
+    fn start(&mut self, job: Job, title: &str, done: (String, String), failed: Text, copy: bool) {
         let closed = Rc::new(Flag::new(false));
         let mut alert = Alert::new(
             title,
-            &L10N.tr("working"),
+            &tr!("This may take a while. Don’t disconnect the disk."),
             choice(&self.intents, Sheet::Stop),
         );
         let progress = match copy {
             true => {
                 let bar = ProgressBar::new(title, Some(0.0));
                 let id = bar.id();
-                alert = alert.accessory(bar).cancel(&L10N.tr("button-stop"), "stop");
+                alert = alert.accessory(bar).cancel(&tr!("Stop"), "stop");
                 Some(id)
             }
             false => {
@@ -394,7 +396,7 @@ impl DisksView {
         self.running.push_back(Running {
             sheet: Some((closed, progress)),
             done: Some(done),
-            failed: L10N.tr(failed),
+            failed: failed.tr(),
         });
         self.requests.push(Request::Run(job));
     }
@@ -402,7 +404,7 @@ impl DisksView {
     fn notice(&mut self, title: &str, message: &str) {
         self.ui.present_sheet(
             Alert::new(title, message, choice(&self.intents, Sheet::Notice))
-                .primary(&L10N.tr("button-done"), "done"),
+                .primary(&tr!("Done"), "done"),
         );
     }
 
@@ -434,10 +436,10 @@ impl DisksView {
                     }
                     (Ok(Outcome::Checked { repaired }), _) => {
                         let message = match repaired {
-                            true => "first-aid-repaired",
-                            false => "first-aid-ok",
+                            true => text!("The volume had errors that were repaired."),
+                            false => text!("The volume appears to be OK."),
                         };
-                        self.notice(&L10N.tr("first-aid-complete"), &L10N.tr(message));
+                        self.notice(&tr!("First Aid process has completed."), &message.tr());
                     }
                     (Ok(Outcome::Done), Some((title, message))) => self.notice(&title, &message),
                     (Ok(Outcome::Done), None) | (Err(Failure::Dismissed), _) => {}
@@ -454,21 +456,27 @@ impl DisksView {
         };
         match choose {
             Choose::SaveImage(source, name) => {
-                let title = L10N.tr_args("imaging", [("name", quoted(&name).into())]);
+                let title = tr!("Creating an image of {name}…", name = quoted(&name));
                 let done = (
-                    L10N.tr("image-complete"),
-                    L10N.tr_args("image-saved", [("file", file.display().to_string().into())]),
+                    tr!("Image created."),
+                    tr!(
+                        "The image was saved to {file}.",
+                        file = file.display().to_string()
+                    ),
                 );
                 self.start(
                     Job::CreateImage(source, file),
                     &title,
                     done,
-                    "failed-image",
+                    text!("Couldn’t create the image."),
                     true,
                 );
             }
             Choose::Restore(target) => self.ask_restore(&target, file),
-            Choose::MountImage => self.quiet(Job::MountImage(file), "failed-open-image"),
+            Choose::MountImage => self.quiet(
+                Job::MountImage(file),
+                text!("Couldn’t open the disk image."),
+            ),
         }
     }
 
@@ -487,23 +495,19 @@ impl DisksView {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
         if image_size > size {
-            let message = L10N.tr_args(
-                "restore-too-big-message",
-                [
-                    ("image", quoted(&image_name).into()),
-                    ("target", described(&name, &device, size).into()),
-                ],
+            let message = tr!(
+                "{image} doesn’t fit on {target}.",
+                image = quoted(&image_name),
+                target = described(&name, &device, size)
             );
-            return self.notice(&L10N.tr("restore-too-big"), &message);
+            return self.notice(&tr!("The image is too big."), &message);
         }
-        let title = L10N.tr_args("restore-title", [("name", quoted(&name).into())]);
-        let message = L10N.tr_args(
-            "restore-message",
-            [
-                ("target", described(&name, &device, size).into()),
-                ("image", quoted(&image_name).into()),
-                ("image_size", format_size(image_size).into()),
-            ],
+        let title = tr!("Restore {name}?", name = quoted(&name));
+        let message = tr!(
+            "Restoring {target} from {image} ({image_size}) replaces all data stored on it. You can’t undo this action.",
+            target = described(&name, &device, size),
+            image = quoted(&image_name),
+            image_size = format_size(image_size)
         ) + &self.startup_warning(target);
         self.ui.present_sheet(
             Alert::new(
@@ -511,8 +515,8 @@ impl DisksView {
                 &message,
                 choice(&self.intents, Sheet::Restore(target.to_owned(), file)),
             )
-            .cancel(&L10N.tr("button-cancel"), "cancel")
-            .destructive(&L10N.tr("button-restore"), "restore"),
+            .cancel(&tr!("Cancel"), "cancel")
+            .destructive(&tr!("Restore"), "restore"),
         );
     }
 
@@ -535,7 +539,10 @@ impl DisksView {
             .iter()
             .any(|disk| disk.system && disk.volumes.iter().any(|volume| volume.path == path));
         match on_startup_disk {
-            true => format!("\n\n{}", L10N.tr("startup-disk-warning")),
+            true => format!(
+                "\n\n{}",
+                tr!("This partition is on the disk this computer started up from.")
+            ),
             false => String::new(),
         }
     }
@@ -587,8 +594,8 @@ impl DisksView {
 
     pub fn mount_title(&self) -> String {
         match self.mount_targets() {
-            (_, unmount) if !unmount.is_empty() => L10N.tr("action-unmount"),
-            _ => L10N.tr("action-mount"),
+            (_, unmount) if !unmount.is_empty() => tr!("Unmount"),
+            _ => tr!("Mount"),
         }
     }
 
@@ -662,13 +669,15 @@ impl DisksView {
             (MOUNT, _, _) => {
                 let (mount, unmount) = self.mount_targets();
                 for path in unmount {
-                    self.quiet(Job::Unmount(path), "failed-unmount");
+                    self.quiet(Job::Unmount(path), text!("Couldn’t unmount the volume."));
                 }
                 for path in mount {
                     self.mount(&path);
                 }
             }
-            (EJECT, Some(disk), _) => self.quiet(Job::Eject(disk.path), "failed-eject"),
+            (EJECT, Some(disk), _) => {
+                self.quiet(Job::Eject(disk.path), text!("Couldn’t eject the disk."))
+            }
             (ERASE, Some(disk), _) if whole_disk => {
                 self.ask_erase(&disk.path, &disk.name, &disk.device, disk.size, true)
             }
@@ -714,8 +723,8 @@ impl DisksView {
         };
         match (volume.locked, volume.filesystem.clone()) {
             (true, _) => {
-                let title = L10N.tr_args("unlock-title", [("name", quoted(&volume.name).into())]);
-                let field = SecureField::new(&L10N.tr("field-password"), FIELD_FONT, |_| {});
+                let title = tr!("Unlock {name}", name = quoted(&volume.name));
+                let field = SecureField::new(&tr!("Password"), FIELD_FONT, |_| {});
                 self.fields = Fields {
                     secrets: vec![field.id()],
                     ..Fields::default()
@@ -724,15 +733,17 @@ impl DisksView {
                 self.ui.present_sheet(
                     Alert::new(
                         &title,
-                        &L10N.tr("unlock-message"),
+                        &tr!("Enter the password to unlock this volume."),
                         choice(&self.intents, sheet),
                     )
                     .accessory(field)
-                    .cancel(&L10N.tr("button-cancel"), "cancel")
-                    .primary(&L10N.tr("button-unlock"), "unlock"),
+                    .cancel(&tr!("Cancel"), "cancel")
+                    .primary(&tr!("Unlock"), "unlock"),
                 );
             }
-            (false, Some(filesystem)) => self.quiet(Job::Mount(filesystem), "failed-mount"),
+            (false, Some(filesystem)) => {
+                self.quiet(Job::Mount(filesystem), text!("Couldn’t mount the volume."))
+            }
             (false, None) => {}
         }
     }
@@ -746,44 +757,44 @@ impl DisksView {
             .filter(|format| encrypted_allowed || !format.encrypted())
             .collect();
         let titles: Vec<String> = self.formats.iter().map(|format| format.title()).collect();
-        let popup = PopUpButton::new(&L10N.tr("field-format"), &titles, 0, |_| {});
+        let popup = PopUpButton::new(&tr!("Format"), &titles, 0, |_| {});
         self.fields.format = Some(popup.id());
         popup
     }
 
     fn name_field(&mut self, name: &str) -> TextField {
-        let field = TextField::new(&L10N.tr("field-name"), name, |_| {});
+        let field = TextField::new(&tr!("Name"), name, |_| {});
         self.fields.name = Some(field.id());
         field
     }
 
     fn ask_erase(&mut self, path: &str, name: &str, device: &str, size: u64, whole_disk: bool) {
         self.fields = Fields::default();
-        let title = L10N.tr_args("erase-title", [("name", quoted(name).into())]);
-        let message = L10N.tr_args(
-            "erase-message",
-            [("target", described(name, device, size).into())],
+        let title = tr!("Erase {name}?", name = quoted(name));
+        let message = tr!(
+            "Erasing {target} will permanently delete all data stored on it. You can’t undo this action.",
+            target = described(name, device, size)
         ) + &self.startup_warning(path);
         let default_name = match whole_disk {
-            true => L10N.tr("volume-untitled"),
+            true => tr!("Untitled"),
             false => name.to_owned(),
         };
         let mut lines = vec![
-            FormLine::Row(L10N.tr("field-name"), boxed(self.name_field(&default_name))),
-            FormLine::Row(L10N.tr("field-format"), boxed(self.formats_popup(true))),
+            FormLine::Row(tr!("Name"), boxed(self.name_field(&default_name))),
+            FormLine::Row(tr!("Format"), boxed(self.formats_popup(true))),
         ];
         if whole_disk {
-            let schemes = [L10N.tr("scheme-gpt"), L10N.tr("scheme-mbr")];
-            let popup = PopUpButton::new(&L10N.tr("field-scheme"), &schemes, 0, |_| {});
+            let schemes = [tr!("GUID Partition Map"), tr!("Master Boot Record")];
+            let popup = PopUpButton::new(&tr!("Scheme"), &schemes, 0, |_| {});
             self.fields.scheme = Some(popup.id());
-            lines.push(FormLine::Row(L10N.tr("field-scheme"), boxed(popup)));
+            lines.push(FormLine::Row(tr!("Scheme"), boxed(popup)));
         }
         let sheet = Sheet::Erase(path.to_owned());
         self.ui.present_sheet(
             Alert::new(&title, &message, choice(&self.intents, sheet))
                 .accessory(Form::new(&title, lines))
-                .cancel(&L10N.tr("button-cancel"), "cancel")
-                .destructive(&L10N.tr("button-erase"), "erase"),
+                .cancel(&tr!("Cancel"), "cancel")
+                .destructive(&tr!("Erase"), "erase"),
         );
     }
 
@@ -792,18 +803,17 @@ impl DisksView {
             return;
         };
         self.fields = Fields::default();
-        let title = L10N.tr_args("add-title", [("name", quoted(&disk.name).into())]);
-        let message = L10N.tr_args("add-message", [("free", format_size(free).into())]);
-        let size = TextField::new(&L10N.tr("field-size"), &format_size(free), |_| {})
-            .without_text_checking();
+        let title = tr!("Add a Partition to {name}", name = quoted(&disk.name));
+        let message = tr!(
+            "{free} of free space is available.",
+            free = format_size(free)
+        );
+        let size = TextField::new(&tr!("Size"), &format_size(free), |_| {}).without_text_checking();
         self.fields.size = Some(size.id());
         let lines = vec![
-            FormLine::Row(
-                L10N.tr("field-name"),
-                boxed(self.name_field(&L10N.tr("volume-untitled"))),
-            ),
-            FormLine::Row(L10N.tr("field-format"), boxed(self.formats_popup(true))),
-            FormLine::Row(L10N.tr("field-size"), boxed(size)),
+            FormLine::Row(tr!("Name"), boxed(self.name_field(&tr!("Untitled")))),
+            FormLine::Row(tr!("Format"), boxed(self.formats_popup(true))),
+            FormLine::Row(tr!("Size"), boxed(size)),
         ];
         self.ui.present_sheet(
             Alert::new(
@@ -812,19 +822,16 @@ impl DisksView {
                 choice(&self.intents, Sheet::Add(disk.path.clone())),
             )
             .accessory(Form::new(&title, lines))
-            .cancel(&L10N.tr("button-cancel"), "cancel")
-            .primary(&L10N.tr("button-add"), "add"),
+            .cancel(&tr!("Cancel"), "cancel")
+            .primary(&tr!("Add"), "add"),
         );
     }
 
     fn ask_delete(&mut self, volume: &Volume) {
-        let title = L10N.tr_args("delete-title", [("name", quoted(&volume.name).into())]);
-        let message = L10N.tr_args(
-            "delete-message",
-            [(
-                "target",
-                described(&volume.name, &volume.device, volume.size).into(),
-            )],
+        let title = tr!("Delete {name}?", name = quoted(&volume.name));
+        let message = tr!(
+            "Deleting the partition {target} deletes all data stored on it. You can’t undo this action.",
+            target = described(&volume.name, &volume.device, volume.size),
         ) + &self.startup_warning(&volume.path);
         self.ui.present_sheet(
             Alert::new(
@@ -832,29 +839,24 @@ impl DisksView {
                 &message,
                 choice(&self.intents, Sheet::Delete(volume.path.clone())),
             )
-            .cancel(&L10N.tr("button-cancel"), "cancel")
-            .destructive(&L10N.tr("button-delete"), "delete"),
+            .cancel(&tr!("Cancel"), "cancel")
+            .destructive(&tr!("Delete"), "delete"),
         );
     }
 
     fn ask_resize(&mut self, disk: &Disk, volume: &Volume) {
         self.fields = Fields::default();
         let largest = volume.size + disk.free_after(volume);
-        let title = L10N.tr_args("resize-title", [("name", quoted(&volume.name).into())]);
-        let message = L10N.tr_args(
-            "resize-message",
-            [
-                (
-                    "target",
-                    described(&volume.name, &volume.device, volume.size).into(),
-                ),
-                ("largest", format_size(largest).into()),
-            ],
+        let title = tr!("Resize {name}", name = quoted(&volume.name));
+        let message = tr!(
+            "Choose a new size for {target}, up to {largest}.",
+            target = described(&volume.name, &volume.device, volume.size),
+            largest = format_size(largest)
         );
-        let size = TextField::new(&L10N.tr("field-size"), &format_size(volume.size), |_| {})
-            .without_text_checking();
+        let size =
+            TextField::new(&tr!("Size"), &format_size(volume.size), |_| {}).without_text_checking();
         self.fields.size = Some(size.id());
-        let lines = vec![FormLine::Row(L10N.tr("field-size"), boxed(size))];
+        let lines = vec![FormLine::Row(tr!("Size"), boxed(size))];
         self.ui.present_sheet(
             Alert::new(
                 &title,
@@ -862,8 +864,8 @@ impl DisksView {
                 choice(&self.intents, Sheet::Resize(volume.path.clone())),
             )
             .accessory(Form::new(&title, lines))
-            .cancel(&L10N.tr("button-cancel"), "cancel")
-            .primary(&L10N.tr("button-resize"), "resize"),
+            .cancel(&tr!("Cancel"), "cancel")
+            .primary(&tr!("Resize"), "resize"),
         );
     }
 
@@ -871,10 +873,12 @@ impl DisksView {
         let Some(filesystem) = volume.filesystem.clone() else {
             return;
         };
-        let title = L10N.tr_args("first-aid-title", [("name", quoted(&volume.name).into())]);
+        let title = tr!("Run First Aid on {name}?", name = quoted(&volume.name));
         let message = match volume.mounted() {
-            true => L10N.tr("first-aid-unmounts"),
-            false => L10N.tr("first-aid-message"),
+            true => tr!(
+                "First Aid checks the volume for errors and repairs them. The volume is unmounted while it runs and mounted again afterwards."
+            ),
+            false => tr!("First Aid checks the volume for errors and repairs them."),
         };
         self.ui.present_sheet(
             Alert::new(
@@ -882,8 +886,8 @@ impl DisksView {
                 &message,
                 choice(&self.intents, Sheet::FirstAid(filesystem)),
             )
-            .cancel(&L10N.tr("button-cancel"), "cancel")
-            .primary(&L10N.tr("button-run"), "run"),
+            .cancel(&tr!("Cancel"), "cancel")
+            .primary(&tr!("Run"), "run"),
         );
     }
 
@@ -892,37 +896,37 @@ impl DisksView {
             return;
         };
         self.fields = Fields::default();
-        let title = L10N.tr_args("rename-title", [("name", quoted(&volume.name).into())]);
+        let title = tr!("Rename {name}", name = quoted(&volume.name));
         let field = self.name_field(&volume.name);
         self.ui.present_sheet(
             Alert::new(&title, "", choice(&self.intents, Sheet::Rename(filesystem)))
                 .accessory(field)
-                .cancel(&L10N.tr("button-cancel"), "cancel")
-                .primary(&L10N.tr("button-rename"), "rename"),
+                .cancel(&tr!("Cancel"), "cancel")
+                .primary(&tr!("Rename"), "rename"),
         );
     }
 
     fn ask_passphrase(&mut self, pending: Pending, problem: Option<&str>) {
-        let first = SecureField::new(&L10N.tr("field-password"), FIELD_FONT, |_| {});
-        let second = SecureField::new(&L10N.tr("field-verify"), FIELD_FONT, |_| {});
+        let first = SecureField::new(&tr!("Password"), FIELD_FONT, |_| {});
+        let second = SecureField::new(&tr!("Verify"), FIELD_FONT, |_| {});
         self.fields = Fields {
             secrets: vec![first.id(), second.id()],
             ..Fields::default()
         };
-        let title = L10N.tr("passphrase-title");
+        let title = tr!("Choose a Password");
         let message = problem
             .map(str::to_owned)
-            .unwrap_or_else(|| L10N.tr("passphrase-message"));
+            .unwrap_or_else(|| tr!("Enter a password to encrypt the volume. You need it every time you open the volume, and nobody can read its data without it."));
         let lines = vec![
-            FormLine::Row(L10N.tr("field-password"), boxed(first)),
-            FormLine::Row(L10N.tr("field-verify"), boxed(second)),
+            FormLine::Row(tr!("Password"), boxed(first)),
+            FormLine::Row(tr!("Verify"), boxed(second)),
         ];
         let sheet = Sheet::Passphrase(Box::new(pending));
         self.ui.present_sheet(
             Alert::new(&title, &message, choice(&self.intents, sheet))
                 .accessory(Form::new(&title, lines))
-                .cancel(&L10N.tr("button-cancel"), "cancel")
-                .primary(&L10N.tr("button-choose"), "choose"),
+                .cancel(&tr!("Cancel"), "cancel")
+                .primary(&tr!("Choose"), "choose"),
         );
     }
 
@@ -969,24 +973,30 @@ impl DisksView {
         let name = quoted(&erase.format.label(&erase.name));
         match pending {
             Pending::EraseVolume(path, erase) => {
-                let title = L10N.tr_args("erasing", [("name", name.into())]);
-                let done = (L10N.tr("erase-complete"), L10N.tr("erase-complete-message"));
+                let title = tr!("Erasing {name}…", name = name);
+                let done = (
+                    tr!("Erase process is complete."),
+                    tr!("Click Done to continue."),
+                );
                 self.start(
                     Job::EraseVolume(path, erase),
                     &title,
                     done,
-                    "failed-erase",
+                    text!("Erase process has failed."),
                     false,
                 );
             }
             Pending::EraseDisk(path, scheme, erase) => {
-                let title = L10N.tr_args("erasing", [("name", name.into())]);
-                let done = (L10N.tr("erase-complete"), L10N.tr("erase-complete-message"));
+                let title = tr!("Erasing {name}…", name = name);
+                let done = (
+                    tr!("Erase process is complete."),
+                    tr!("Click Done to continue."),
+                );
                 self.start(
                     Job::EraseDisk(path, scheme, erase),
                     &title,
                     done,
-                    "failed-erase",
+                    text!("Erase process has failed."),
                     false,
                 );
             }
@@ -997,10 +1007,10 @@ impl DisksView {
                 size,
                 erase,
             } => {
-                let title = L10N.tr_args("adding", [("name", name.into())]);
+                let title = tr!("Adding {name}…", name = name);
                 let done = (
-                    L10N.tr("partition-complete"),
-                    L10N.tr("partition-complete-message"),
+                    tr!("Partition process is complete."),
+                    tr!("Click Done to continue."),
                 );
                 let job = Job::AddPartition {
                     table,
@@ -1009,7 +1019,13 @@ impl DisksView {
                     size,
                     erase,
                 };
-                self.start(job, &title, done, "failed-partition", false);
+                self.start(
+                    job,
+                    &title,
+                    done,
+                    text!("Couldn’t change the partitions."),
+                    false,
+                );
             }
         }
     }
@@ -1017,8 +1033,8 @@ impl DisksView {
     fn chose(&mut self, sheet: Sheet, action: &str) {
         let partition_done = || {
             (
-                L10N.tr("partition-complete"),
-                L10N.tr("partition-complete-message"),
+                tr!("Partition process is complete."),
+                tr!("Click Done to continue."),
             )
         };
         match (sheet, action) {
@@ -1041,8 +1057,10 @@ impl DisksView {
             (Sheet::Passphrase(pending), "choose") => {
                 let secrets = self.secrets();
                 let problem = match secrets.as_slice() {
-                    [first, _] if first.is_empty() => Some(L10N.tr("passphrase-empty")),
-                    [first, second] if first != second => Some(L10N.tr("passphrase-mismatch")),
+                    [first, _] if first.is_empty() => Some(tr!("The password can’t be empty.")),
+                    [first, second] if first != second => Some(tr!(
+                        "The passwords don’t match. Enter the same password in both fields."
+                    )),
                     [_, _] => None,
                     _ => return,
                 };
@@ -1068,9 +1086,11 @@ impl DisksView {
                 };
                 let wanted = parse_size(&self.text(self.fields.size));
                 let Some(size) = wanted.filter(|size| (MIN_PARTITION..=free).contains(size)) else {
-                    let message =
-                        L10N.tr_args("size-invalid", [("largest", format_size(free).into())]);
-                    return self.notice(&L10N.tr("failed-partition"), &message);
+                    let message = tr!(
+                        "Enter a size of at least 16 MB and at most {largest}.",
+                        largest = format_size(free)
+                    );
+                    return self.notice(&tr!("Couldn’t change the partitions."), &message);
                 };
                 let Some(erase) = self.erase_choice() else {
                     return;
@@ -1088,12 +1108,12 @@ impl DisksView {
                 });
             }
             (Sheet::Delete(path), "delete") => {
-                let title = L10N.tr("deleting");
+                let title = tr!("Deleting the partition…");
                 self.start(
                     Job::DeletePartition(path),
                     &title,
                     partition_done(),
-                    "failed-partition",
+                    text!("Couldn’t change the partitions."),
                     false,
                 );
             }
@@ -1110,44 +1130,58 @@ impl DisksView {
                 let wanted = parse_size(&self.text(self.fields.size));
                 let Some(size) = wanted.filter(|size| (MIN_PARTITION..=largest).contains(size))
                 else {
-                    let message =
-                        L10N.tr_args("size-invalid", [("largest", format_size(largest).into())]);
-                    return self.notice(&L10N.tr("failed-partition"), &message);
+                    let message = tr!(
+                        "Enter a size of at least 16 MB and at most {largest}.",
+                        largest = format_size(largest)
+                    );
+                    return self.notice(&tr!("Couldn’t change the partitions."), &message);
                 };
                 let grow = size > volume.size;
                 if !self.abilities.can_resize(&volume.fs_type, grow, false) {
-                    let message = L10N.tr(match grow {
-                        true => "resize-cannot-grow",
-                        false => "resize-cannot-shrink",
-                    });
-                    return self.notice(&L10N.tr("failed-partition"), &message);
+                    let message = match grow {
+                        true => tr!("This format can’t grow."),
+                        false => tr!("This format can’t shrink."),
+                    };
+                    return self.notice(&tr!("Couldn’t change the partitions."), &message);
                 }
-                let title = L10N.tr_args("resizing", [("name", quoted(&volume.name).into())]);
+                let title = tr!("Resizing {name}…", name = quoted(&volume.name));
                 let job = Job::Resize {
                     partition: path,
                     size,
                     grow,
                 };
-                self.start(job, &title, partition_done(), "failed-partition", false);
+                self.start(
+                    job,
+                    &title,
+                    partition_done(),
+                    text!("Couldn’t change the partitions."),
+                    false,
+                );
             }
             (Sheet::FirstAid(filesystem), "run") => {
-                let title = L10N.tr("checking");
+                let title = tr!("Checking the file system…");
                 let done = (String::new(), String::new());
                 self.start(
                     Job::FirstAid(filesystem),
                     &title,
                     done,
-                    "failed-first-aid",
+                    text!("First Aid process has failed."),
                     false,
                 );
             }
             (Sheet::Rename(filesystem), "rename") => {
                 let name = self.text(self.fields.name);
-                self.quiet(Job::Rename(filesystem, name), "failed-rename");
+                self.quiet(
+                    Job::Rename(filesystem, name),
+                    text!("Couldn’t rename the volume."),
+                );
             }
             (Sheet::Unlock(encrypted), "unlock") => {
                 if let Some(passphrase) = self.secrets().into_iter().next() {
-                    self.quiet(Job::Unlock(encrypted, passphrase), "failed-unlock");
+                    self.quiet(
+                        Job::Unlock(encrypted, passphrase),
+                        text!("Couldn’t unlock the volume."),
+                    );
                 }
             }
             (Sheet::Restore(target, file), "restore") => {
@@ -1155,16 +1189,16 @@ impl DisksView {
                     .target(&target)
                     .map(|(name, ..)| name)
                     .unwrap_or_default();
-                let title = L10N.tr_args("restoring", [("name", quoted(&name).into())]);
+                let title = tr!("Restoring {name}…", name = quoted(&name));
                 let done = (
-                    L10N.tr("restore-complete"),
-                    L10N.tr("restore-complete-message"),
+                    tr!("Restore process is complete."),
+                    tr!("Click Done to continue."),
                 );
                 self.start(
                     Job::Restore(target, file),
                     &title,
                     done,
-                    "failed-restore",
+                    text!("Restore process has failed."),
                     true,
                 );
             }
@@ -1262,19 +1296,17 @@ impl DisksView {
 
     fn disk_detail(&self, disk: &Disk) -> Vec<Box<dyn Widget>> {
         let scheme = match disk.scheme {
-            Some(Scheme::Gpt) => L10N.tr("scheme-gpt"),
-            Some(Scheme::Mbr) => L10N.tr("scheme-mbr"),
-            None => L10N.tr("scheme-none"),
+            Some(Scheme::Gpt) => tr!("GUID Partition Map"),
+            Some(Scheme::Mbr) => tr!("Master Boot Record"),
+            None => tr!("No Partition Map"),
         };
         let subtitle = match &disk.image {
-            Some(file) => L10N.tr_args("subtitle-image", [("file", file.as_str().into())]),
-            None => L10N.tr_args(
-                "subtitle-disk",
-                [
-                    ("connection", disk.connection.as_str().into()),
-                    ("location", location(disk.group).into()),
-                    ("scheme", scheme.as_str().into()),
-                ],
+            Some(file) => tr!("Disk Image • {file}", file = file.as_str()),
+            None => tr!(
+                "{connection} {location} Physical Disk • {scheme}",
+                connection = disk.connection.as_str(),
+                location = location(disk.group),
+                scheme = scheme.as_str()
             ),
         };
         let mut segments: Vec<Segment> = disk
@@ -1291,52 +1323,52 @@ impl DisksView {
         let free: u64 = disk.free.iter().map(|(_, size)| size).sum();
         if free > 0 {
             segments.push(Segment {
-                name: L10N.tr("free-space"),
+                name: tr!("Free"),
                 detail: format_size(free),
                 size: free,
                 color: self.palette.hairline,
             });
         }
         let smart = match &disk.smart {
-            Some(smart) if smart.failing => L10N.tr("smart-failing"),
-            Some(_) => L10N.tr("smart-verified"),
-            None => L10N.tr("smart-unsupported"),
+            Some(smart) if smart.failing => tr!("Failing"),
+            Some(_) => tr!("Verified"),
+            None => tr!("Not Supported"),
         };
         let mut pairs = vec![
-            (L10N.tr("info-location"), location(disk.group)),
-            (L10N.tr("info-capacity"), format_size(disk.size)),
-            (L10N.tr("info-connection"), disk.connection.clone()),
-            (L10N.tr("info-children"), disk.volumes.len().to_string()),
-            (L10N.tr("info-scheme"), scheme),
-            (L10N.tr("info-smart"), smart),
-            (L10N.tr("info-device"), disk.device.clone()),
+            (tr!("Location:"), location(disk.group)),
+            (tr!("Capacity:"), format_size(disk.size)),
+            (tr!("Connection:"), disk.connection.clone()),
+            (tr!("Child count:"), disk.volumes.len().to_string()),
+            (tr!("Partition Map:"), scheme),
+            (tr!("S.M.A.R.T. status:"), smart),
+            (tr!("Device:"), disk.device.clone()),
             (
-                L10N.tr("info-type"),
-                L10N.tr(match (disk.image.is_some(), disk.solid_state) {
-                    (true, _) => "type-image",
-                    (false, true) => "type-ssd",
-                    (false, false) => "type-disk",
-                }),
+                tr!("Type:"),
+                match (disk.image.is_some(), disk.solid_state) {
+                    (true, _) => tr!("Disk Image"),
+                    (false, true) => tr!("Solid state"),
+                    (false, false) => tr!("Disk"),
+                },
             ),
         ];
         if !disk.model.is_empty() {
-            pairs.push((L10N.tr("info-model"), disk.model.clone()));
+            pairs.push((tr!("Model:"), disk.model.clone()));
         }
         if !disk.serial.is_empty() {
-            pairs.push((L10N.tr("info-serial"), disk.serial.clone()));
+            pairs.push((tr!("Serial:"), disk.serial.clone()));
         }
         if let Some(smart) = &disk.smart {
             if let Some(celsius) = smart.celsius {
-                pairs.push((L10N.tr("info-temperature"), format!("{celsius:.0} °C")));
+                pairs.push((tr!("Temperature:"), format!("{celsius:.0} °C")));
             }
             if let Some(hours) = smart.hours {
-                pairs.push((L10N.tr("info-hours"), hours.to_string()));
+                pairs.push((tr!("Power-on hours:"), hours.to_string()));
             }
         }
         if disk.apple {
-            pairs.push((L10N.tr("info-access"), L10N.tr("access-apple")));
+            pairs.push((tr!("Access:"), tr!("Apple system (read-only)")));
         } else if disk.system {
-            pairs.push((L10N.tr("info-access"), L10N.tr("access-startup")));
+            pairs.push((tr!("Access:"), tr!("Startup disk (read-only)")));
         }
         vec![
             boxed(Heading::new(
@@ -1352,12 +1384,10 @@ impl DisksView {
 
     fn volume_detail(&self, disk: &Disk, volume: &Volume) -> Vec<Box<dyn Widget>> {
         let format = format_name(volume);
-        let subtitle = L10N.tr_args(
-            "subtitle-volume",
-            [
-                ("location", location(disk.group).into()),
-                ("format", format.as_str().into()),
-            ],
+        let subtitle = tr!(
+            "{location} Physical Volume • {format}",
+            location = location(disk.group),
+            format = format.as_str()
         );
         let available = volume
             .mount_points
@@ -1366,13 +1396,13 @@ impl DisksView {
         let segments = match available {
             Some(available) => vec![
                 Segment {
-                    name: L10N.tr("used-space"),
+                    name: tr!("Used"),
                     detail: format_size(volume.size.saturating_sub(available)),
                     size: volume.size.saturating_sub(available),
                     color: self.color(0, volume.apple.is_some()),
                 },
                 Segment {
-                    name: L10N.tr("free-space"),
+                    name: tr!("Free"),
                     detail: format_size(available),
                     size: available,
                     color: self.palette.hairline,
@@ -1387,31 +1417,29 @@ impl DisksView {
         };
         let mount_point = match (volume.mount_points.first(), volume.locked) {
             (Some(point), _) => point.clone(),
-            (None, true) => L10N.tr("locked"),
-            (None, false) => L10N.tr("not-mounted"),
+            (None, true) => tr!("Locked"),
+            (None, false) => tr!("Not Mounted"),
         };
         let mut pairs = vec![
-            (L10N.tr("info-mount-point"), mount_point),
-            (L10N.tr("info-capacity"), format_size(volume.size)),
-            (L10N.tr("info-format"), format),
-            (L10N.tr("info-device"), volume.device.clone()),
-            (L10N.tr("info-connection"), disk.connection.clone()),
-            (L10N.tr("info-location"), location(disk.group)),
+            (tr!("Mount Point:"), mount_point),
+            (tr!("Capacity:"), format_size(volume.size)),
+            (tr!("Format:"), format),
+            (tr!("Device:"), volume.device.clone()),
+            (tr!("Connection:"), disk.connection.clone()),
+            (tr!("Location:"), location(disk.group)),
         ];
         if let Some(available) = available {
-            pairs.push((L10N.tr("info-available"), format_size(available)));
+            pairs.push((tr!("Available:"), format_size(available)));
         }
         if !volume.uuid.is_empty() {
-            pairs.push((L10N.tr("info-uuid"), volume.uuid.clone()));
+            pairs.push((tr!("UUID:"), volume.uuid.clone()));
         }
         match (volume.apple, volume.in_use) {
-            (Some(Apple::MacOs), _) => {
-                pairs.push((L10N.tr("info-access"), L10N.tr("access-macos")))
-            }
+            (Some(Apple::MacOs), _) => pairs.push((tr!("Access:"), tr!("macOS (read-only)"))),
             (Some(Apple::System), _) => {
-                pairs.push((L10N.tr("info-access"), L10N.tr("access-apple")))
+                pairs.push((tr!("Access:"), tr!("Apple system (read-only)")))
             }
-            (None, true) => pairs.push((L10N.tr("info-access"), L10N.tr("access-in-use"))),
+            (None, true) => pairs.push((tr!("Access:"), tr!("In use (read-only)"))),
             (None, false) => {}
         }
         vec![
@@ -1439,14 +1467,14 @@ impl DisksView {
             _ => RESIZE,
         };
         vec![
-            tool(L10N.tr("tool-add"), ADD_PARTITION),
-            tool(L10N.tr("tool-delete"), DELETE_PARTITION),
-            tool(L10N.tr("action-first-aid"), FIRST_AID),
-            tool(L10N.tr("action-partition"), partition),
-            tool(L10N.tr("action-erase"), ERASE),
-            tool(L10N.tr("action-restore"), RESTORE),
+            tool(tr!("+"), ADD_PARTITION),
+            tool(tr!("−"), DELETE_PARTITION),
+            tool(tr!("First Aid"), FIRST_AID),
+            tool(tr!("Partition"), partition),
+            tool(tr!("Erase"), ERASE),
+            tool(tr!("Restore"), RESTORE),
             tool(self.mount_title(), MOUNT),
-            tool(L10N.tr("action-eject"), EJECT),
+            tool(tr!("Eject"), EJECT),
         ]
     }
 
@@ -1464,7 +1492,7 @@ impl DisksView {
         let children = match self.selection() {
             Some(Selected::Disk(disk)) => self.disk_detail(disk),
             Some(Selected::Volume(disk, volume)) => self.volume_detail(disk, volume),
-            None => vec![boxed(Label::new(&L10N.tr("no-disks")))],
+            None => vec![boxed(Label::new(&tr!("No disks found.")))],
         };
         let content = ScrollView::new(Stack::new(
             Axis::Vertical,

@@ -4,12 +4,12 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+use bande_l10n::{Text, tr, trn};
 use bande_app_menu::Entry;
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{Alert, Button, Label, SearchField, Ui, Widget, WidgetId};
 
 pub use self::layout::{Banded, Field, Fields, Strip};
-use crate::L10N;
 use crate::engine::{
     Container, DiskUsage, EngineInfo, Image, Network, Pulling, Task, Update, Volume,
 };
@@ -39,19 +39,19 @@ pub fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
     Box::new(widget)
 }
 
-pub fn tool(svg: &str, label: &str, palette: &Palette, acts: &Acts, act: Act) -> Button {
+pub fn tool(svg: &str, label: Text, palette: &Palette, acts: &Acts, act: Act) -> Button {
     let acts = Rc::clone(acts);
     let click = move || push(&acts, act.clone());
-    let label = L10N.tr(label);
+    let label = label.tr();
     match symbol(svg, palette.ink) {
         Some(image) => Button::symbol(image, &label, click).tooltip(&label),
         None => Button::new(&label, click),
     }
 }
 
-pub fn search(placeholder: &str, text: &str, acts: &Acts) -> SearchField {
+pub fn search(placeholder: Text, text: &str, acts: &Acts) -> SearchField {
     let acts = Rc::clone(acts);
-    SearchField::new(&L10N.tr(placeholder), text, move |text| {
+    SearchField::new(&placeholder.tr(), text, move |text| {
         push(&acts, Act::Filter(text.to_owned()));
     })
 }
@@ -65,12 +65,12 @@ pub fn confirm(ui: &mut Ui, acts: &Acts, title: &str, message: &str, button: &st
             }
         })
         .destructive(button, "go")
-        .cancel(&L10N.tr("button-cancel"), "cancel"),
+        .cancel(&tr!("Cancel"), "cancel"),
     );
 }
 
 pub fn tell(ui: &mut Ui, title: &str, message: &str) {
-    ui.present_sheet(Alert::new(title, message, |_| {}).primary(&L10N.tr("button-ok"), "ok"));
+    ui.present_sheet(Alert::new(title, message, |_| {}).primary(&tr!("OK"), "ok"));
 }
 
 pub fn matches(filter: &str, texts: &[&str]) -> bool {
@@ -88,26 +88,47 @@ pub fn age(seconds: i64) -> String {
             i64::try_from(since.as_secs()).unwrap_or(i64::MAX)
         });
     let elapsed = (now - seconds).max(0);
-    let (key, count) = [
-        ("age-years", 365 * 86_400),
-        ("age-months", 30 * 86_400),
-        ("age-weeks", 7 * 86_400),
-        ("age-days", 86_400),
-        ("age-hours", 3_600),
-        ("age-minutes", 60),
-    ]
-    .into_iter()
-    .find(|(_, unit)| elapsed >= *unit)
-    .map_or(("age-now", 0), |(key, unit)| (key, elapsed / unit));
-    L10N.tr_args(key, [("count", count.into())])
+    match elapsed {
+        elapsed if elapsed >= 365 * 86_400 => {
+            trn!(
+                "1 year ago",
+                "{count} years ago",
+                count = elapsed / (365 * 86_400)
+            )
+        }
+        elapsed if elapsed >= 30 * 86_400 => {
+            trn!(
+                "1 month ago",
+                "{count} months ago",
+                count = elapsed / (30 * 86_400)
+            )
+        }
+        elapsed if elapsed >= 7 * 86_400 => {
+            trn!(
+                "1 week ago",
+                "{count} weeks ago",
+                count = elapsed / (7 * 86_400)
+            )
+        }
+        elapsed if elapsed >= 86_400 => {
+            trn!("1 day ago", "{count} days ago", count = elapsed / 86_400)
+        }
+        elapsed if elapsed >= 3_600 => {
+            trn!("1 hour ago", "{count} hours ago", count = elapsed / 3_600)
+        }
+        elapsed if elapsed >= 60 => {
+            trn!("1 minute ago", "{count} minutes ago", count = elapsed / 60)
+        }
+        _ => tr!("Just now"),
+    }
 }
 
 pub fn file_menu(ready: bool) -> Vec<Entry> {
     vec![
-        Entry::item(&L10N.tr("pull-image-menu"), images::PULL).enabled(ready),
-        Entry::item(&L10N.tr("run-image-menu"), images::RUN).enabled(ready),
+        Entry::item(&tr!("Pull Image…"), images::PULL).enabled(ready),
+        Entry::item(&tr!("Run Image…"), images::RUN).enabled(ready),
         Entry::separator(),
-        Entry::item(&L10N.tr("reclaim-space-menu"), overview::RECLAIM).enabled(ready),
+        Entry::item(&tr!("Reclaim Space…"), overview::RECLAIM).enabled(ready),
     ]
 }
 
@@ -298,7 +319,7 @@ impl Resources {
                         .is_some_and(|pane| pane.finished(ui, &task, &result))
                 });
                 if !handled && let Err(message) = &result {
-                    tell(ui, &L10N.tr("action-failed"), message);
+                    tell(ui, &tr!("Action failed"), message);
                 }
                 self.need_usage();
             }
@@ -325,7 +346,7 @@ impl Resources {
                         self.store.pulling = Some((
                             reference.clone(),
                             Pulling {
-                                status: L10N.tr("pull-starting"),
+                                status: tr!("Starting…"),
                                 fraction: None,
                             },
                         ));

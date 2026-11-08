@@ -1,12 +1,12 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use bande_l10n::{Text, text, tr, trn};
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{Cell, Column, FormLine, Label, Row, Widget};
 use bande_vm::Accel;
 
 use super::backend::{Act, Phase};
 use super::fleet::{Entry, Fleet, Job, Power};
-use crate::L10N;
 use crate::ui::dot;
 
 pub const JOB_PREFIX: &str = "job:";
@@ -22,46 +22,47 @@ const DAY: u64 = 24 * HOUR;
 
 pub fn columns() -> Vec<Column> {
     vec![
-        Column::new(&L10N.tr("column-name"), NAME_WIDTH)
+        Column::new(&tr!("Name"), NAME_WIDTH)
             .flexible()
             .unsortable(),
-        Column::new(&L10N.tr("machine-column-os"), OS_WIDTH).unsortable(),
-        Column::new(&L10N.tr("column-status"), STATUS_WIDTH).unsortable(),
-        Column::new(&L10N.tr("machine-column-address"), ADDRESS_WIDTH).unsortable(),
-        Column::new(&L10N.tr("machine-column-usage"), USAGE_WIDTH)
+        Column::new(&tr!("OS"), OS_WIDTH).unsortable(),
+        Column::new(&tr!("Status"), STATUS_WIDTH).unsortable(),
+        Column::new(&tr!("IP / SSH"), ADDRESS_WIDTH).unsortable(),
+        Column::new(&tr!("CPU / MEM"), USAGE_WIDTH)
             .numeric()
             .unsortable(),
     ]
 }
 
 pub fn pending_text(act: Act) -> String {
-    L10N.tr(match act {
-        Act::Start => "pending-start",
-        Act::ShutDown => "machine-pending-shut-down",
-        Act::ForceStop => "pending-stop",
-        Act::Restart => "machine-pending-restart",
-        Act::Delete => "machine-pending-delete",
-        Act::Pause => "machine-pending-pause",
-        Act::Resume => "machine-pending-resume",
-        Act::TakeSnapshot => "machine-pending-snapshot",
-        Act::Revert => "machine-pending-revert",
-        Act::DeleteSnapshot => "machine-pending-delete-snapshot",
-        Act::Clone => "machine-pending-clone",
-        Act::Suspend => "machine-pending-suspend",
-    })
+    match act {
+        Act::Start => tr!("Starting…"),
+        Act::ShutDown => tr!("Shutting Down…"),
+        Act::ForceStop => tr!("Stopping…"),
+        Act::Restart => tr!("Restarting…"),
+        Act::Delete => tr!("Deleting…"),
+        Act::Pause => tr!("Pausing…"),
+        Act::Resume => tr!("Resuming…"),
+        Act::TakeSnapshot => tr!("Saving…"),
+        Act::Revert => tr!("Reverting…"),
+        Act::DeleteSnapshot => tr!("Deleting Snapshot…"),
+        Act::Clone => tr!("Cloning…"),
+        Act::Suspend => tr!("Suspending…"),
+    }
 }
 
 fn uptime(since: SystemTime) -> String {
     let seconds = SystemTime::now()
         .duration_since(since)
         .map_or(0, |elapsed| elapsed.as_secs());
-    let (key, count) = match seconds {
-        seconds if seconds < MINUTE => ("machine-uptime-seconds", 0),
-        seconds if seconds < HOUR => ("machine-uptime-minutes", seconds / MINUTE),
-        seconds if seconds < DAY => ("machine-uptime-hours", seconds / HOUR),
-        seconds => ("machine-uptime-days", seconds / DAY),
-    };
-    L10N.tr_args(key, [("count", count.into())])
+    match seconds {
+        seconds if seconds < MINUTE => tr!("just started"),
+        seconds if seconds < HOUR => {
+            trn!("1 minute", "{count} minutes", count = seconds / MINUTE)
+        }
+        seconds if seconds < DAY => trn!("1 hour", "{count} hours", count = seconds / HOUR),
+        seconds => trn!("1 day", "{count} days", count = seconds / DAY),
+    }
 }
 
 pub fn status_text(entry: &Entry) -> String {
@@ -70,15 +71,15 @@ pub fn status_text(entry: &Entry) -> String {
     }
     match entry.power() {
         Power::Running => match entry.listed.since {
-            Some(since) => L10N.tr_args("machine-running-for", [("uptime", uptime(since).into())]),
-            None => L10N.tr("machine-running"),
+            Some(since) => tr!("Running · {uptime}", uptime = uptime(since)),
+            None => tr!("Running"),
         },
-        Power::Paused => L10N.tr("machine-paused"),
-        Power::Starting => L10N.tr("pending-start"),
-        Power::Stopping => L10N.tr("pending-stop"),
-        Power::Stopped if entry.listed.manifest.is_suspended() => L10N.tr("machine-suspended"),
-        Power::Stopped => L10N.tr("machine-stopped"),
-        Power::Failed => L10N.tr("machine-failed"),
+        Power::Paused => tr!("Paused"),
+        Power::Starting => tr!("Starting…"),
+        Power::Stopping => tr!("Stopping…"),
+        Power::Stopped if entry.listed.manifest.is_suspended() => tr!("Suspended"),
+        Power::Stopped => tr!("Stopped"),
+        Power::Failed => tr!("Failed"),
     }
 }
 
@@ -154,12 +155,12 @@ fn machine_row(palette: &Palette, entry: &Entry) -> Row {
 
 pub fn job_text(job: &Job) -> String {
     match job.phase {
-        Phase::Downloading(Some(fraction)) => L10N.tr_args(
-            "machine-downloading-percent",
-            [("percent", ((fraction * 100.0).round() as u32).into())],
+        Phase::Downloading(Some(fraction)) => tr!(
+            "Downloading… {percent} %",
+            percent = ((fraction * 100.0).round() as u32)
         ),
-        Phase::Downloading(None) => L10N.tr("machine-downloading"),
-        Phase::Creating => L10N.tr("machine-creating"),
+        Phase::Downloading(None) => tr!("Downloading…"),
+        Phase::Creating => tr!("Creating…"),
     }
 }
 
@@ -204,7 +205,7 @@ pub fn rows(palette: &Palette, fleet: &Fleet, filter: &str) -> Vec<Row> {
 }
 
 pub fn gigabytes(count: u64) -> String {
-    L10N.tr_args("machine-gigabytes", [("count", count.into())])
+    tr!("{count} GB", count = count)
 }
 
 fn date(seconds: u64) -> String {
@@ -213,8 +214,8 @@ fn date(seconds: u64) -> String {
         .duration_since(created)
         .map_or(0, |elapsed| elapsed.as_secs() / DAY);
     match days {
-        0 => L10N.tr("machine-created-today"),
-        days => L10N.tr_args("machine-created-days", [("count", days.into())]),
+        0 => tr!("Today"),
+        days => trn!("Yesterday", "{count} days ago", count = days),
     }
 }
 
@@ -224,66 +225,58 @@ fn value(text: impl AsRef<str>) -> Box<dyn Widget> {
 
 pub fn info_lines(entry: &Entry, accel: Option<Accel>) -> Vec<FormLine> {
     let manifest = &entry.listed.manifest;
-    let row = |key: &str, text: String| FormLine::Row(L10N.tr(key), value(text));
+    let row = |key: Text, text: String| FormLine::Row(key.tr(), value(text));
     let mut lines = vec![
-        FormLine::Heading(L10N.tr("machine-section-machine")),
-        row("machine-os", manifest.os.clone()),
-        row("column-status", status_text(entry)),
-        row("machine-cpus", manifest.cpus.to_string()),
+        FormLine::Heading(tr!("Machine")),
+        row(text!("OS"), manifest.os.clone()),
+        row(text!("Status"), status_text(entry)),
+        row(text!("CPUs"), manifest.cpus.to_string()),
         row(
-            "machine-memory",
+            text!("Memory"),
             gigabytes(manifest.memory_mib / MIB_PER_GIB),
         ),
-        row("machine-created", date(manifest.created)),
-        row(
-            "machine-snapshot-count",
-            manifest.snapshots.len().to_string(),
-        ),
+        row(text!("Created"), date(manifest.created)),
+        row(text!("Snapshots"), manifest.snapshots.len().to_string()),
     ];
     if let Some(accel) = accel {
         lines.push(row(
-            "machine-acceleration",
-            L10N.tr(match accel {
-                Accel::Kvm => "machine-kvm",
-                Accel::Tcg => "machine-emulated",
-            }),
+            text!("Acceleration"),
+            match accel {
+                Accel::Kvm => tr!("KVM"),
+                Accel::Tcg => tr!("Emulated"),
+            },
         ));
     }
-    lines.push(FormLine::Heading(L10N.tr("machine-section-disk")));
-    lines.push(row("machine-disk-size", gigabytes(manifest.disk_gib)));
+    lines.push(FormLine::Heading(tr!("Disk")));
+    lines.push(row(text!("Disk"), gigabytes(manifest.disk_gib)));
     let used = std::fs::metadata(entry.listed.dir.join("disk.qcow2"))
         .map(|meta| std::os::unix::fs::MetadataExt::blocks(&meta) * 512)
         .unwrap_or_default();
-    lines.push(row("machine-disk-used", bande_fs::format_size(used)));
-    lines.push(FormLine::Heading(L10N.tr("machine-section-network")));
+    lines.push(row(text!("Used on disk"), bande_fs::format_size(used)));
+    lines.push(FormLine::Heading(tr!("Network")));
     for forward in &manifest.forwards {
         lines.push(row(
-            "machine-forward",
-            L10N.tr_args(
-                "machine-forward-value",
-                [
-                    ("host", forward.host.into()),
-                    ("guest", forward.guest.into()),
-                ],
+            text!("Forward"),
+            tr!(
+                "localhost:{host} → {guest}",
+                host = forward.host,
+                guest = forward.guest
             ),
         ));
     }
     if let Some(address) = entry.address {
-        lines.push(row("machine-ip", address.to_string()));
+        lines.push(row(text!("IP address"), address.to_string()));
     }
     if let Some((host, port)) = entry.ssh_target() {
         lines.push(row(
-            "machine-ssh",
+            text!("SSH"),
             short_ssh(&entry.listed.login.user, &host, port),
         ));
     }
     if let Some(usage) = entry.usage {
-        lines.push(FormLine::Heading(L10N.tr("machine-section-usage")));
-        lines.push(row("machine-cpu-usage", format!("{:.0} %", usage.cpu)));
-        lines.push(row(
-            "machine-memory-usage",
-            bande_fs::format_size(usage.memory),
-        ));
+        lines.push(FormLine::Heading(tr!("Usage")));
+        lines.push(row(text!("CPU"), format!("{:.0} %", usage.cpu)));
+        lines.push(row(text!("Memory"), bande_fs::format_size(usage.memory)));
     }
     lines
 }

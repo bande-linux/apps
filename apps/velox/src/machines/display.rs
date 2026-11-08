@@ -1,6 +1,7 @@
 use std::os::fd::BorrowedFd;
 use std::time::Instant;
 
+use bande_l10n::{Text, text, tr};
 use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_toolkit::ui::{Context, Label, Ui, Widget, WidgetId};
@@ -11,7 +12,6 @@ use bande_toolkit::{
 
 use super::console::{Console, Outcome};
 use super::widgets::{Bar, Slot};
-use crate::L10N;
 use crate::ui::Centered;
 
 const TOOLBAR: f32 = WINDOW_HEADER_HEIGHT as f32;
@@ -26,16 +26,16 @@ pub struct DisplayWindow {
     session: Option<Console>,
 }
 
-fn message(key: &str) -> Box<dyn Widget> {
+fn message(key: Text) -> Box<dyn Widget> {
     Box::new(Centered::new(
-        Box::new(Label::new(&L10N.tr(key)).secondary()),
+        Box::new(Label::new(&key.tr()).secondary()),
         CENTER_WIDTH,
     ))
 }
 
 impl DisplayWindow {
     pub fn new(id: &str, index: u32, machine: &str, appearance: Appearance) -> Self {
-        let slot = Slot::new(message("machine-console-connecting"));
+        let slot = Slot::new(message(text!("Connecting to the display…")));
         let slot_id = slot.id();
         let bar = Bar::new(Box::new(slot), Vec::new(), TOOLBAR, HEADER_LEADING);
         let mut ui = Ui::new(
@@ -49,12 +49,10 @@ impl DisplayWindow {
         Self {
             id: id.to_owned(),
             display: index,
-            title: L10N.tr_args(
-                "machine-display-title",
-                [
-                    ("name", machine.to_owned().into()),
-                    ("number", (index + 1).into()),
-                ],
+            title: tr!(
+                "{name} — Display {number}",
+                name = machine.to_owned(),
+                number = (index + 1)
             ),
             ui,
             slot: slot_id,
@@ -115,12 +113,12 @@ impl View for DisplayWindow {
                 true
             }
             Outcome::NoPicture => {
-                self.show(message("machine-display-no-picture"));
+                self.show(message(text!("The guest has not turned this display on.")));
                 true
             }
             Outcome::Closed(_) => {
                 self.session = None;
-                self.show(message("machine-console-off"));
+                self.show(message(text!("The machine has no picture to show.")));
                 true
             }
         };

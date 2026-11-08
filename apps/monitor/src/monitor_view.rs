@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use bande_toolkit::ui::{
     self, Animated, BUTTON_HEIGHT, Button, Cell, Column as TableColumn, Context, Cursor, Event,
@@ -13,9 +14,6 @@ use bande_toolkit::{
     Scene, Shape, TextAlign, TextRole, TextSize, TextStyle, TextSystem, grown_line,
 };
 
-use bande_app_menu::Entry;
-
-use crate::L10N;
 use crate::list::{List, Signal, group_id, sender};
 use crate::menu::{COLUMN_ACTION, MenuCommand, Selected, app_menus, columns_menu, process_menu};
 use crate::model::{
@@ -28,6 +26,7 @@ use crate::view::{
     answer_stop, is_secondary, opens_menu, send_signal, signal_alert, stop_alert, stop_button,
     symbol_button,
 };
+use bande_app_menu::Entry;
 
 pub const TOOLBAR_HEIGHT: f32 = bande_toolkit::WINDOW_HEADER_HEIGHT as f32;
 const FOOTER_PAD: f32 = 16.0;
@@ -124,9 +123,7 @@ fn table_row(
     if let Some(name) = cells.first_mut() {
         name.icon = row.icon.as_deref().and_then(|icon| icons.get(icon));
         if !row.responding {
-            name.text = L10N
-                .tr_args("not-responding", [("name", row.name.clone().into())])
-                .into();
+            name.text = tr!("{name} (Not Responding)", name = row.name).into();
             name.tint = Some(alarm);
         }
     }
@@ -177,7 +174,7 @@ fn tabs_control(list: &List, tabs: &[Tab], tab: Tab) -> SegmentedControl {
     let send = sender(list.signals());
     let titles = tabs.iter().map(|tab| tab.title()).collect::<Vec<_>>();
     SegmentedControl::new(
-        &L10N.tr("tab-label"),
+        &tr!("Show"),
         &titles,
         tabs.iter().position(|shown| *shown == tab),
         move |index| send(Signal::Tab(index)),
@@ -196,7 +193,7 @@ impl MonitorView {
         let send = sender(list.signals());
         let inspect = list.insert_in_header(symbol_button(
             icons.get(INSPECT_SYMBOL),
-            &L10N.tr("inspect-label"),
+            &tr!("Inspect Process"),
             move || send(Signal::Inspect),
         ));
         let shown_tabs = monitor.tabs();
@@ -204,7 +201,7 @@ impl MonitorView {
         let search = list.insert_in_header(search_field(&list, monitor.filter(), ""));
         let send = sender(list.signals());
         let mut clear_button =
-            Button::new(&L10N.tr("clear-search"), move || send(Signal::ClearSearch)).quiet();
+            Button::new(&tr!("Clear Search"), move || send(Signal::ClearSearch)).quiet();
         clear_button.set_enabled(false);
         let clear = list.insert(clear_button);
         let mut view = Self {
@@ -492,7 +489,7 @@ impl MonitorView {
         let palette = self.palette;
         let text = self.list.text();
         let title = text.paragraph(
-            &L10N.tr("window-title"),
+            &tr!("Activity Monitor"),
             TextStyle::role(TextRole::WindowTitle, palette.ink),
             None,
             TextAlign::Start,
@@ -1057,8 +1054,8 @@ fn core_slots(groups: &[CoreGroup], origin: Point, width: f32) -> (Vec<CoreSlot>
     for group in groups {
         if let Some(kind) = group.kind {
             let title = match kind {
-                CoreKind::Performance => L10N.tr("cores-performance"),
-                CoreKind::Efficiency => L10N.tr("cores-efficiency"),
+                CoreKind::Performance => tr!("Performance"),
+                CoreKind::Efficiency => tr!("Efficiency"),
             };
             slots.push(CoreSlot::Label(
                 title,
@@ -1108,7 +1105,7 @@ fn paint_cores(
                 items.extend(painter.items);
             }
             CoreSlot::Strip(core, history, frame) => {
-                let name = L10N.tr_args("core-label", [("number", (core + 1).into())]);
+                let name = tr!("Core {number}", number = (core + 1));
                 let mut strip = ui::Graph::new(&name, GraphKind::Area, HISTORY);
                 strip.set_series(vec![Series::new(SeriesColor::Primary, history)]);
                 strip.set_note(Some(&name.to_uppercase()));
@@ -1122,8 +1119,8 @@ fn paint_cores(
 fn search_field(list: &List, filter: Filter, text: &str) -> SearchField {
     let send = sender(list.signals());
     let placeholder = match filter {
-        Filter::All | Filter::Hierarchy => L10N.tr("search-placeholder"),
-        filter => L10N.tr_args("search-filtered", [("filter", filter.title().into())]),
+        Filter::All | Filter::Hierarchy => tr!("Search"),
+        filter => tr!("Search {filter}", filter = filter.title()),
     };
     SearchField::new(&placeholder, text, move |text| {
         send(Signal::Search(text.to_owned()))
@@ -1266,7 +1263,10 @@ impl Screen for MonitorView {
         };
         if nothing_found {
             painter.text_in(
-                &L10N.tr_args("no-match", [("text", monitor.search().to_owned().into())]),
+                &tr!(
+                    "No processes match “{text}”",
+                    text = monitor.search().to_owned()
+                ),
                 TextStyle::role(TextRole::Body, palette.ink3),
                 empty_message,
                 TextAlign::Center,

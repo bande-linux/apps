@@ -1,8 +1,9 @@
+
+use bande_l10n::tr;
+
+use crate::engine::Action;
 use bande_app_menu::Entry;
 use bande_toolkit::ui::{Menu, MenuItem};
-
-use crate::L10N;
-use crate::engine::Action;
 
 pub const LOGS: &str = "container-logs";
 pub const TERMINAL: &str = "container-terminal";
@@ -81,10 +82,33 @@ fn with(item: Item, shortcut: Option<&'static str>, on: bool) -> Item {
     }
 }
 
-fn counted(key: &str, count: usize) -> String {
-    match count > 1 {
-        true => L10N.tr_args(&format!("{key}-many"), [("count", count.into())]),
-        false => L10N.tr(key),
+fn label(key: &str, count: usize) -> String {
+    match (key, count > 1) {
+        ("container-start", true) => tr!("Start {count} Containers", count = count),
+        ("container-stop", true) => tr!("Stop {count} Containers", count = count),
+        ("container-restart", true) => tr!("Restart {count} Containers", count = count),
+        ("container-pause", true) => tr!("Pause {count} Containers", count = count),
+        ("container-resume", true) => tr!("Resume {count} Containers", count = count),
+        ("container-kill", true) => tr!("Kill {count} Containers", count = count),
+        ("container-delete", true) => tr!("Delete {count} Containers…", count = count),
+        ("container-start", _) => tr!("Start"),
+        ("container-stop", _) => tr!("Stop"),
+        ("container-restart", _) => tr!("Restart"),
+        ("container-pause", _) => tr!("Pause"),
+        ("container-resume", _) => tr!("Resume"),
+        ("container-kill", _) => tr!("Kill"),
+        ("container-delete", _) => tr!("Delete…"),
+        ("container-logs", _) => tr!("Show Logs"),
+        ("container-terminal", _) => tr!("Open in Terminal"),
+        ("container-shell", _) => tr!("Open Shell"),
+        ("container-copy-name", _) => tr!("Name"),
+        ("container-copy-id", _) => tr!("Container ID"),
+        ("container-copy-run", _) => tr!("As docker run Command"),
+        ("container-copy-ip", _) => tr!("IP Address"),
+        ("project-up", _) => tr!("Up Project"),
+        ("project-restart", _) => tr!("Restart Project"),
+        ("project-down", _) => tr!("Down Project…"),
+        (other, _) => other.to_owned(),
     }
 }
 
@@ -97,28 +121,28 @@ pub fn items(facts: &Facts) -> Vec<Item> {
                 .iter()
                 .find(|(counted, _)| counted == action)
                 .map_or(0, |(_, count)| *count);
-            with(item(counted(name, count), name), None, count > 0)
+            with(item(label(name, count), name), None, count > 0)
         })
         .collect();
     let single = facts.single;
     items.extend([
         Item::Separator,
-        with(item(L10N.tr(LOGS), LOGS), Some("Ctrl+L"), facts.logs),
-        with(item(L10N.tr(SHELL), SHELL), None, single && facts.running),
+        with(item(label(LOGS, 1), LOGS), Some("Ctrl+L"), facts.logs),
+        with(item(label(SHELL, 1), SHELL), None, single && facts.running),
     ]);
     if facts.terminal {
         items.push(with(
-            item(L10N.tr(TERMINAL), TERMINAL),
+            item(label(TERMINAL, 1), TERMINAL),
             None,
             single && facts.running,
         ));
     }
     items.push(Item::Separator);
     let mut copies = vec![
-        with(item(L10N.tr(COPY_NAME), COPY_NAME), None, single),
-        with(item(L10N.tr(COPY_ID), COPY_ID), None, single),
-        with(item(L10N.tr(COPY_RUN), COPY_RUN), None, single),
-        with(item(L10N.tr(COPY_IP), COPY_IP), None, single && facts.ip),
+        with(item(label(COPY_NAME, 1), COPY_NAME), None, single),
+        with(item(label(COPY_ID, 1), COPY_ID), None, single),
+        with(item(label(COPY_RUN, 1), COPY_RUN), None, single),
+        with(item(label(COPY_IP, 1), COPY_IP), None, single && facts.ip),
     ];
     copies.extend(
         facts
@@ -126,25 +150,25 @@ pub fn items(facts: &Facts) -> Vec<Item> {
             .iter()
             .map(|port| item(url(*port), &format!("{COPY_URL}{port}"))),
     );
-    items.push(Item::Submenu(L10N.tr("container-copy"), copies));
+    items.push(Item::Submenu(tr!("Copy"), copies));
     items.extend(facts.ports.iter().map(|port| {
         item(
-            L10N.tr_args("container-open", [("url", url(*port).into())]),
+            tr!("Open {url}", url = url(*port)),
             &format!("{OPEN_URL}{port}"),
         )
     }));
     items.extend([
         Item::Separator,
-        with(item(L10N.tr(UP), UP), None, facts.compose),
+        with(item(label(UP, 1), UP), None, facts.compose),
         with(
-            item(L10N.tr(RESTART_PROJECT), RESTART_PROJECT),
+            item(label(RESTART_PROJECT, 1), RESTART_PROJECT),
             None,
             facts.compose,
         ),
-        with(item(L10N.tr(DOWN), DOWN), None, facts.compose),
+        with(item(label(DOWN, 1), DOWN), None, facts.compose),
         Item::Separator,
         with(
-            item(counted(DELETE, facts.removable), DELETE),
+            item(label(DELETE, facts.removable), DELETE),
             Some("Delete"),
             facts.removable > 0,
         ),

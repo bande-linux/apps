@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
+use bande_l10n::tr;
 use bande_toolkit::ui::{Axis, Button, Disclosure, Label, ScrollView, Stack, Widget};
 
 use super::widgets::{Centered, Code, Ends};
 use super::{Intent, Intents, boxed, push};
-use crate::L10N;
 use crate::readiness::Readiness;
 
 const PAGE_WIDTH: f32 = 560.0;
@@ -14,7 +14,7 @@ const PADDING: f32 = 24.0;
 fn steps(title: &str, commands: &'static str, intents: &Intents) -> Box<dyn Widget> {
     let copy = Rc::clone(intents);
     let title = boxed(Label::new(title));
-    let button = boxed(Button::new(&L10N.tr("copy"), move || {
+    let button = boxed(Button::new(&tr!("Copy"), move || {
         push(&copy, Intent::Copy(commands));
     }));
     boxed(Stack::new(
@@ -55,7 +55,7 @@ pub(super) fn page(readiness: &Readiness, intents: &Intents, alternative: bool) 
                 Axis::Vertical,
                 0.0,
                 0.0,
-                vec![steps(&L10N.tr("podman-rootless"), other.commands, intents)],
+                vec![steps(&tr!("Podman, rootless"), other.commands, intents)],
             ),
             move |open| push(&toggled, Intent::Alternative(open)),
         )));

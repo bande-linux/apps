@@ -4,25 +4,21 @@ mod pane;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::LazyLock;
 
+use bande_l10n::{Text, text, tr};
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
 use bande_app_menu::Entry;
 use bande_inbox::Inbox;
-use bande_l10n::Localizer;
 use bande_media::Track;
 
 use mpris::{Mpris, Remote};
 use pane::Pane;
 
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-player")));
-
 static INFO: Info = Info {
     id: "org.bande.Player",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Player"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -59,7 +55,7 @@ impl Player {
         let title = paths
             .first()
             .map(|path| pane::file_title(path))
-            .unwrap_or_else(|| L10N.tr("app-name"));
+            .unwrap_or_else(|| tr!("Player"));
         match cx.open(Kind::Main, &title, WINDOW_SIZE, |appearance| {
             Pane::new(appearance, paths)
         }) {
@@ -99,9 +95,9 @@ impl Player {
         let Some(outbox) = self.chosen.as_ref().map(Inbox::outbox) else {
             return;
         };
-        let title = L10N.tr("open-title");
+        let title = tr!("Open Media");
         let filter = (
-            L10N.tr("open-filter"),
+            tr!("Audio and video"),
             MEDIA_MIMES
                 .into_iter()
                 .map(|mime| (1, mime.to_owned()))
@@ -220,8 +216,8 @@ impl Program for Player {
     fn menus(&self, cx: &Cx<Self>) -> Menus {
         let pane = Self::pane_of(cx);
         let loaded = pane.is_some_and(Pane::is_loaded);
-        let item = |key: &str, action: &str, shortcut: Option<&str>, enabled: bool| {
-            let entry = Entry::item(&L10N.tr(key), action).enabled(enabled);
+        let item = |key: Text, action: &str, shortcut: Option<&str>, enabled: bool| {
+            let entry = Entry::item(&key.tr(), action).enabled(enabled);
             match shortcut {
                 Some(shortcut) => entry.shortcut(shortcut),
                 None => entry,
@@ -251,7 +247,7 @@ impl Program for Player {
                 .collect()
         });
         let mut subtitles = vec![
-            Entry::item(&L10N.tr("menu-subtitles-off"), SUBTITLES_OFF)
+            Entry::item(&tr!("Off"), SUBTITLES_OFF)
                 .enabled(loaded)
                 .radio(info.is_none_or(|info| info.selected_subtitles.is_none())),
         ];
@@ -270,34 +266,34 @@ impl Program for Player {
             );
         }
         let toggle_key = match pane.is_some_and(Pane::is_playing) {
-            true => "menu-pause",
-            false => "menu-play",
+            true => text!("Pause"),
+            false => text!("Play"),
         };
         let queue = pane.is_some_and(Pane::has_queue);
-        let file = vec![item("menu-open", OPEN, Some("Ctrl+O"), true)];
+        let file = vec![item(text!("Open…"), OPEN, Some("Ctrl+O"), true)];
         let mut playback = vec![
             item(toggle_key, TOGGLE, None, loaded),
-            item("menu-next", NEXT, Some("Ctrl+Right"), queue),
-            item("menu-previous", PREVIOUS, Some("Ctrl+Left"), queue),
+            item(text!("Next"), NEXT, Some("Ctrl+Right"), queue),
+            item(text!("Previous"), PREVIOUS, Some("Ctrl+Left"), queue),
             Entry::separator(),
-            Entry::submenu(&L10N.tr("menu-speed"), rates),
+            Entry::submenu(&tr!("Speed"), rates),
         ];
         if audio_tracks.len() > 1 {
-            playback.push(Entry::submenu(&L10N.tr("menu-audio-track"), audio_tracks));
+            playback.push(Entry::submenu(&tr!("Audio Track"), audio_tracks));
         }
         if subtitles.len() > 1 {
-            playback.push(Entry::submenu(&L10N.tr("menu-subtitles"), subtitles));
+            playback.push(Entry::submenu(&tr!("Subtitles"), subtitles));
         }
         playback.extend([
             Entry::separator(),
-            item("menu-loop", LOOP, Some("Ctrl+L"), loaded).radio(pane.is_some_and(Pane::loops)),
+            item(text!("Loop"), LOOP, Some("Ctrl+L"), loaded).radio(pane.is_some_and(Pane::loops)),
         ]);
-        let view = vec![item("menu-full-screen", FULL_SCREEN, Some("F11"), true)];
+        let view = vec![item(text!("Full Screen"), FULL_SCREEN, Some("F11"), true)];
         Menus {
             menus: vec![
-                Entry::submenu(&L10N.tr("menu-file"), file),
-                Entry::submenu(&L10N.tr("menu-playback"), playback),
-                Entry::submenu(&L10N.tr("menu-view"), view),
+                Entry::submenu(&tr!("File"), file),
+                Entry::submenu(&tr!("Playback"), playback),
+                Entry::submenu(&tr!("View"), view),
             ],
             window: Vec::new(),
         }

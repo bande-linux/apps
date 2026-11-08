@@ -1,17 +1,18 @@
-use bande_toolkit::Color;
-use bande_toolkit::ui::{Scroll, Size};
-use bande_toolkit::{
-    Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
-};
-use jiff::Timestamp;
 
-use crate::L10N;
+use bande_l10n::tr;
+
 use crate::store::Summary;
 use crate::ui::format::list_date;
 use crate::ui::reader::{Clock, focus_bar, lay_out};
 use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
+use bande_toolkit::Color;
+use bande_toolkit::ui::{Scroll, Size};
+use bande_toolkit::{
+    Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
+};
+use jiff::Timestamp;
 
 const FLAG_COLORS: [u32; 7] = [
     0xFF3B30, 0xFF9500, 0xFFCC00, 0x34C759, 0x007AFF, 0xAF52DE, 0x8E8E93,
@@ -127,8 +128,8 @@ impl MailView {
         let chosen = self.chosen();
         let label = match chosen.as_slice() {
             [one] if !one.subject.is_empty() => one.subject.clone(),
-            [_] => L10N.tr("no-subject"),
-            many => L10N.tr_args("messages-dragged", [("count", many.len().into())]),
+            [_] => tr!("No Subject"),
+            many => tr!("{count} messages", count = many.len()),
         };
         let palette = self.palette;
         let paragraph = self.text_line(
@@ -235,7 +236,7 @@ impl MailView {
                         });
                     if offline {
                         let paragraph = self.text_line(
-                            &L10N.tr("account-offline"),
+                            &tr!("Offline"),
                             TextStyle::role(TextRole::Callout, palette.ink3),
                             80.0,
                         );
@@ -359,8 +360,8 @@ impl MailView {
         let mut drawn = Vec::new();
         if self.messages.is_empty() {
             let message = match self.search.is_empty() {
-                true => L10N.tr("no-messages"),
-                false => L10N.tr("no-results"),
+                true => tr!("No Messages"),
+                false => tr!("No Results"),
             };
             let paragraph = self.ui.context().text.paragraph(
                 &message,
@@ -511,7 +512,7 @@ impl MailView {
             });
         }
         let sender = match summary.sender.shown() {
-            "" => L10N.tr("no-sender"),
+            "" => tr!("No Sender"),
             shown => shown.to_owned(),
         };
         let sender = self.text_line(
@@ -553,7 +554,7 @@ impl MailView {
             }
         }
         let subject = match summary.subject.as_str() {
-            "" => L10N.tr("no-subject"),
+            "" => tr!("No Subject"),
             subject => subject.to_owned(),
         };
         let subject = self.text_line(
@@ -595,8 +596,8 @@ impl MailView {
             let chosen = self.also.len() + usize::from(self.selected.is_some());
             let message = match (self.messages.len(), chosen) {
                 (0, _) => String::new(),
-                (_, 0 | 1) => L10N.tr("no-message-selected"),
-                (_, count) => L10N.tr_args("messages-selected", [("count", count.into())]),
+                (_, 0 | 1) => tr!("No Message Selected"),
+                (_, count) => tr!("{count} Messages Selected", count = count),
             };
             let paragraph = self.ui.context().text.paragraph(
                 &message,

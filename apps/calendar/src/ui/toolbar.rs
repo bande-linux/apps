@@ -1,10 +1,11 @@
+use bande_l10n::tr;
 use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, FreeLayout, SEGMENTED_HEIGHT, SearchField, SegmentedControl,
     TEXT_FIELD_HEIGHT, WidgetId,
 };
 use bande_toolkit::{HEADER_LEADING, Image, Rect, WINDOW_HEADER_HEIGHT};
 
-use super::{L10N, Mode, Signal, Signals, sender};
+use super::{Mode, Signal, Signals, sender};
 
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const SIDE: f32 = 12.0;
@@ -40,30 +41,30 @@ impl Toolbar {
     pub fn new(host: &mut FreeLayout, signals: &Signals, mode: Mode) -> Self {
         let send = sender(signals);
         let add = host.insert_in_header(
-            symbol(PLUS, &L10N.tr("add-event"), move || send(Signal::NewEvent))
-                .tooltip(&L10N.tr("add-event")),
+            symbol(PLUS, &tr!("New Event"), move || send(Signal::NewEvent))
+                .tooltip(&tr!("New Event")),
             Rect::default(),
         );
         let send = sender(signals);
         let previous = host.insert_in_header(
-            symbol(LEFT, &L10N.tr("previous"), move || send(Signal::Previous)),
+            symbol(LEFT, &tr!("Previous"), move || send(Signal::Previous)),
             Rect::default(),
         );
         let send = sender(signals);
         let today = host.insert_in_header(
-            Button::new(&L10N.tr("today"), move || send(Signal::Today)),
+            Button::new(&tr!("Today"), move || send(Signal::Today)),
             Rect::default(),
         );
         let send = sender(signals);
         let next = host.insert_in_header(
-            symbol(RIGHT, &L10N.tr("next"), move || send(Signal::Next)),
+            symbol(RIGHT, &tr!("Next"), move || send(Signal::Next)),
             Rect::default(),
         );
         let send = sender(signals);
         let titles: Vec<String> = Mode::ALL.iter().map(|mode| mode.title()).collect();
         let selected = Mode::ALL.iter().position(|shown| *shown == mode);
         let modes = host.insert_in_header(
-            SegmentedControl::new(&L10N.tr("view-mode"), &titles, selected, move |index| {
+            SegmentedControl::new(&tr!("View"), &titles, selected, move |index| {
                 send(Signal::Mode(index))
             })
             .fill_equally(),
@@ -71,14 +72,14 @@ impl Toolbar {
         );
         let send = sender(signals);
         let search = host.insert_in_header(
-            SearchField::new(&L10N.tr("search"), "", move |text| {
+            SearchField::new(&tr!("Search"), "", move |text| {
                 send(Signal::Search(text.to_owned()))
             }),
             Rect::default(),
         );
         let send = sender(signals);
         let add_account = host.insert(
-            Button::new(&L10N.tr("add-account"), move || send(Signal::AddAccount)).quiet(),
+            Button::new(&tr!("Add Account…"), move || send(Signal::AddAccount)).quiet(),
             Rect::default(),
         );
         Self {

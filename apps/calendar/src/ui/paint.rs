@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use bande_l10n::tr;
 use bande_datetime::Month;
 use bande_toolkit::{Color, Point, Radius, Rect, Scheme, Shape, TextAlign, TextRole, TextStyle};
 use jiff::Timestamp;
@@ -11,7 +12,7 @@ use super::geometry::{
     stack_rows,
 };
 use super::painter::{Painter, parse_color};
-use super::{Drag, Hit, L10N, Mode, Part, ViewModel};
+use super::{Drag, Hit, Mode, Part, ViewModel};
 use crate::store::Found;
 
 const MONTH_HEADER: f32 = 28.0;
@@ -130,7 +131,7 @@ fn summary(model: &ViewModel, found: &Found) -> String {
         .map(|event| event.summary.clone())
         .unwrap_or_default();
     match summary.trim().is_empty() {
-        true => L10N.tr("new-event"),
+        true => tr!("New Event"),
         false => summary,
     }
 }
@@ -221,7 +222,7 @@ fn day_header(model: &ViewModel, grid: &TimeGrid, painter: &mut ViewPainter) {
     let days: Vec<Date> = (0..grid.days).map(|index| grid.day(index)).collect();
     if let Some(week) = week_number(&days).filter(|_| model.week_numbers && grid.days == 7) {
         painter.label(
-            &L10N.tr_args("week-number", [("week", week.into())]),
+            &tr!("W{week}", week = week),
             TextStyle::role(TextRole::Callout, palette.ink3).tabular(),
             Rect::new(grid.area.x, grid.area.y, GUTTER - 8.0, DAY_HEADER),
             TextAlign::End,
@@ -403,7 +404,7 @@ fn paint_week(
     day_header(model, &grid, painter);
     let band = grid.all_day_area();
     painter.label(
-        &L10N.tr("all-day"),
+        &tr!("all-day"),
         TextStyle::role(TextRole::Callout, palette.ink3),
         Rect::new(grid.area.x, band.y, GUTTER - 8.0, geometry::ALL_DAY_ROW),
         TextAlign::End,
@@ -461,7 +462,7 @@ fn paint_week(
                 rect,
                 palette.accent,
                 false,
-                &L10N.tr("new-event"),
+                &tr!("New Event"),
                 None,
             );
         }
@@ -651,7 +652,7 @@ fn paint_hours(model: &ViewModel, grid: &TimeGrid, shown: &[Found], painter: &mu
                 rect,
                 palette.accent,
                 false,
-                &L10N.tr("new-event"),
+                &tr!("New Event"),
                 label.as_deref(),
             );
         }
@@ -830,7 +831,7 @@ fn paint_month(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut Vie
                 if row + 1 >= capacity && total > capacity {
                     let more = indices.len() - position;
                     painter.label(
-                        &L10N.tr_args("more-events", [("count", more.into())]),
+                        &tr!("{count} more…", count = more),
                         TextStyle::role(TextRole::Callout, palette.ink2),
                         Rect::new(
                             cell.x + 8.0,
@@ -1039,13 +1040,13 @@ fn paint_results(model: &ViewModel, area: Rect, painter: &mut ViewPainter) {
         palette.hairline,
     );
     let heading = match model.results.is_empty() {
-        true => L10N.tr_args(
-            "no-results",
-            [("text", model.search.trim().to_owned().into())],
+        true => tr!(
+            "No events match “{text}”",
+            text = model.search.trim().to_owned()
         ),
-        false => L10N.tr_args(
-            "search-results",
-            [("text", model.search.trim().to_owned().into())],
+        false => tr!(
+            "Results for “{text}”",
+            text = model.search.trim().to_owned()
         ),
     };
     painter.label(

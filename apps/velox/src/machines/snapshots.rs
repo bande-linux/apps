@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::{Duration, UNIX_EPOCH};
 
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::ui::{
     Alert, Button, Cell, Column, Form, FormLine, PopUpButton, Row, Table, TextField, Widget,
     WidgetId,
@@ -13,7 +14,6 @@ use super::backend::{Act, SnapshotOp};
 use super::fleet::{Entry, Fleet};
 use super::sheet::{CANCEL, CONTINUE, port_free, valid_name};
 use super::{Intent, Intents, push};
-use crate::L10N;
 
 const NAME_WIDTH: f32 = 260.0;
 const DATE_WIDTH: f32 = 170.0;
@@ -66,10 +66,7 @@ fn date(seconds: u64) -> String {
 
 fn row(all: &[Snapshot], current: Option<&str>, snapshot: &Snapshot) -> Row {
     let name = match current == Some(snapshot.id.as_str()) {
-        true => L10N.tr_args(
-            "machine-snapshot-current",
-            [("name", snapshot.name.clone().into())],
-        ),
+        true => tr!("{name} (current)", name = snapshot.name.clone()),
         false => snapshot.name.clone(),
     };
     let size = match snapshot.memory {
@@ -131,22 +128,20 @@ pub fn expanded(entry: &Entry) -> Vec<String> {
 pub fn table(intents: &Intents) -> Table {
     let select = Rc::clone(intents);
     Table::new(vec![
-        Column::new(&L10N.tr("machine-snapshot-column-name"), NAME_WIDTH)
+        Column::new(&tr!("Name"), NAME_WIDTH)
             .flexible()
             .unsortable(),
-        Column::new(&L10N.tr("machine-snapshot-column-date"), DATE_WIDTH).unsortable(),
-        Column::new(&L10N.tr("machine-snapshot-column-size"), SIZE_WIDTH)
+        Column::new(&tr!("Date"), DATE_WIDTH).unsortable(),
+        Column::new(&tr!("Memory"), SIZE_WIDTH)
             .numeric()
             .unsortable(),
     ])
     .on_selection(move |keys| push(&select, Intent::Snapshot(keys.to_vec())))
 }
 
-pub fn tool_button(intents: &Intents, key: &str, tool: Tool) -> Button {
+pub fn tool_button(intents: &Intents, title: &str, tool: Tool) -> Button {
     let intents = Rc::clone(intents);
-    Button::new(&L10N.tr(key), move || {
-        push(&intents, Intent::SnapshotTool(tool))
-    })
+    Button::new(title, move || push(&intents, Intent::SnapshotTool(tool)))
 }
 
 fn free_port(fleet: &Fleet) -> u16 {
@@ -156,10 +151,7 @@ fn free_port(fleet: &Fleet) -> u16 {
 }
 
 pub fn draft_clone(fleet: &Fleet, entry: &Entry, snapshot: Option<String>) -> CloneDraft {
-    let name = L10N.tr_args(
-        "machine-clone-name",
-        [("name", entry.name().to_owned().into())],
-    );
+    let name = tr!("{name}-copy", name = entry.name().to_owned());
     CloneDraft {
         name,
         port: free_port(fleet).to_string(),
@@ -170,7 +162,7 @@ pub fn draft_clone(fleet: &Fleet, entry: &Entry, snapshot: Option<String>) -> Cl
 
 pub fn next_snapshot_name(entry: &Entry) -> String {
     let count = entry.listed.manifest.snapshots.len() + 1;
-    L10N.tr_args("machine-snapshot-default", [("count", count.into())])
+    tr!("Snapshot {count}", count = count)
 }
 
 fn snapshot_named<'a>(entry: &'a Entry, id: &str) -> Option<&'a Snapshot> {
@@ -198,56 +190,46 @@ pub fn present(
     let alert = match sheet {
         Sheet::Take { name } => {
             let message = match entry.running() {
-                true => "machine-snapshot-take-running",
-                false => "machine-snapshot-take-stopped",
+                true => text!("Saves the disks and memory of the running machine."),
+                false => text!("Saves the disks of the stopped machine."),
             };
             let field = Rc::clone(intents);
             let lines = vec![FormLine::Row(
-                L10N.tr("machine-snapshot-name"),
-                Box::new(TextField::new(
-                    &L10N.tr("machine-snapshot-name"),
-                    name,
-                    move |text| push(&field, Intent::Text(text.to_owned())),
-                )) as Box<dyn Widget>,
+                tr!("Snapshot name"),
+                Box::new(TextField::new(&tr!("Snapshot name"), name, move |text| {
+                    push(&field, Intent::Text(text.to_owned()))
+                })) as Box<dyn Widget>,
             )];
-            alert(
-                intents,
-                &L10N.tr("machine-snapshot-take-title"),
-                &L10N.tr(message),
-            )
-            .accessory(Form::new(&L10N.tr("machine-snapshot-name"), lines))
-            .cancel(&L10N.tr("machine-cancel"), CANCEL)
-            .primary(&L10N.tr("machine-snapshot-take"), CONTINUE)
+            alert(intents, &tr!("Take Snapshot"), &message.tr())
+                .accessory(Form::new(&tr!("Snapshot name"), lines))
+                .cancel(&tr!("Cancel"), CANCEL)
+                .primary(&tr!("Take Snapshot"), CONTINUE)
         }
         Sheet::Revert(id) => {
             let snapshot = snapshot_named(entry, id)?;
             let message = match (entry.running(), snapshot.memory) {
-                (false, true) => "machine-revert-resume-message",
-                _ => "machine-revert-message",
+                (false, true) => {
+                    text!("Changes since it are lost. The machine starts again from that moment.")
+                }
+                _ => text!("Changes since it are lost."),
             };
             alert(
                 intents,
-                &L10N.tr_args(
-                    "machine-revert-title",
-                    [("name", snapshot.name.clone().into())],
-                ),
-                &L10N.tr(message),
+                &tr!("Revert to “{name}”?", name = snapshot.name.clone()),
+                &message.tr(),
             )
-            .cancel(&L10N.tr("machine-cancel"), CANCEL)
-            .destructive(&L10N.tr("machine-revert"), CONTINUE)
+            .cancel(&tr!("Cancel"), CANCEL)
+            .destructive(&tr!("Revert"), CONTINUE)
         }
         Sheet::Delete(id) => {
             let snapshot = snapshot_named(entry, id)?;
             alert(
                 intents,
-                &L10N.tr_args(
-                    "machine-delete-snapshot-title",
-                    [("name", snapshot.name.clone().into())],
-                ),
-                &L10N.tr("machine-delete-snapshot-message"),
+                &tr!("Delete “{name}”?", name = snapshot.name.clone()),
+                &tr!("The machine itself stays as it is. Disk space is reused by later snapshots."),
             )
-            .cancel(&L10N.tr("machine-cancel"), CANCEL)
-            .destructive(&L10N.tr("machine-delete-confirm"), CONTINUE)
+            .cancel(&tr!("Cancel"), CANCEL)
+            .destructive(&tr!("Delete"), CONTINUE)
         }
         Sheet::Clone(draft) => {
             let name_field = Rc::clone(intents);
@@ -255,31 +237,26 @@ pub fn present(
             let kind_field = Rc::clone(intents);
             let mut lines = vec![
                 FormLine::Row(
-                    L10N.tr("machine-name"),
-                    Box::new(TextField::new(
-                        &L10N.tr("machine-name"),
-                        &draft.name,
-                        move |text| push(&name_field, Intent::Text(text.to_owned())),
-                    )) as Box<dyn Widget>,
+                    tr!("Name"),
+                    Box::new(TextField::new(&tr!("Name"), &draft.name, move |text| {
+                        push(&name_field, Intent::Text(text.to_owned()))
+                    })) as Box<dyn Widget>,
                 ),
                 FormLine::Row(
-                    L10N.tr("machine-ssh-port"),
+                    tr!("SSH port on this computer"),
                     Box::new(TextField::new(
-                        &L10N.tr("machine-ssh-port"),
+                        &tr!("SSH port on this computer"),
                         &draft.port,
                         move |text| push(&port_field, Intent::Port(text.to_owned())),
                     )),
                 ),
             ];
             if draft.snapshot.is_none() && entry.listed.manifest.snapshots.is_empty() {
-                let kinds = [
-                    L10N.tr("machine-clone-full"),
-                    L10N.tr("machine-clone-linked"),
-                ];
+                let kinds = [tr!("Full copy"), tr!("Linked, saves space")];
                 lines.push(FormLine::Row(
-                    L10N.tr("machine-clone-kind"),
+                    tr!("Disk"),
                     Box::new(PopUpButton::new(
-                        &L10N.tr("machine-clone-kind"),
+                        &tr!("Disk"),
                         &kinds,
                         usize::from(draft.linked),
                         move |index| push(&kind_field, Intent::Linked(index == 1)),
@@ -288,19 +265,16 @@ pub fn present(
             }
             let message = match error {
                 Some(error) => error.to_owned(),
-                None => L10N.tr("machine-clone-message"),
+                None => tr!("The clone gets its own address, identity and disk."),
             };
             alert(
                 intents,
-                &L10N.tr_args(
-                    "machine-clone-title",
-                    [("name", entry.name().to_owned().into())],
-                ),
+                &tr!("Clone “{name}”", name = entry.name().to_owned()),
                 &message,
             )
-            .accessory(Form::new(&L10N.tr("machine-clone-kind"), lines))
-            .cancel(&L10N.tr("machine-cancel"), CANCEL)
-            .primary(&L10N.tr("machine-clone-create"), CONTINUE)
+            .accessory(Form::new(&tr!("Disk"), lines))
+            .cancel(&tr!("Cancel"), CANCEL)
+            .primary(&tr!("Clone"), CONTINUE)
         }
     };
     Some(alert)
@@ -309,12 +283,14 @@ pub fn present(
 pub fn clone_request(draft: &CloneDraft, fleet: &Fleet) -> Result<NewClone, String> {
     let name = draft.name.trim().to_owned();
     if !valid_name(&name) {
-        return Err(L10N.tr("machine-invalid-name"));
+        return Err(tr!(
+            "Use lowercase letters, digits and hyphens for the name."
+        ));
     }
     if fleet.entries.values().any(|entry| entry.name() == name)
         || fleet.jobs.values().any(|job| job.name == name)
     {
-        return Err(L10N.tr_args("machine-name-taken", [("name", name.into())]));
+        return Err(tr!("A machine named “{name}” already exists.", name = name));
     }
     let port = draft
         .port
@@ -322,9 +298,9 @@ pub fn clone_request(draft: &CloneDraft, fleet: &Fleet) -> Result<NewClone, Stri
         .parse::<u16>()
         .ok()
         .filter(|port| *port >= LOWEST_PORT)
-        .ok_or_else(|| L10N.tr("machine-invalid-port"))?;
+        .ok_or_else(|| tr!("Choose a port from 1024 to 65535."))?;
     if !port_free(fleet, port) {
-        return Err(L10N.tr_args("machine-port-taken", [("port", port.into())]));
+        return Err(tr!("Port {port} is in use.", port = port));
     }
     Ok(NewClone {
         name,

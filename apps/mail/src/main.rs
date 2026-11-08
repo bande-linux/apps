@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
+use bande_l10n::tr;
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_settings::{Stored, settings_folder};
 use bande_inbox::Inbox;
-use bande_mail::L10N;
 use bande_mail::compose::{Draft, Outgoing, from_mailto, keep_unsent, left_unsent};
 use bande_mail::message::Attachment;
 use bande_mail::portal::choose_save_path;
@@ -39,10 +39,10 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Mail"),
     keys: Keys::Standard,
     settings: Some(Settings {
-        title: || L10N.tr("settings-title"),
+        title: || tr!("Settings"),
         size: SETTINGS_SIZE,
         view: settings_window,
     }),
@@ -196,7 +196,7 @@ fn announce(summary: String, body: String, sound: bool) {
                 notify(
                     &session,
                     &Notification {
-                        app_name: &L10N.tr("app-name"),
+                        app_name: &tr!("Mail"),
                         replaces_id: 0,
                         app_icon: APP_ID,
                         summary: &summary,
@@ -221,12 +221,19 @@ fn save_attachment(name: String, data: Vec<u8>) {
     let spawned = std::thread::Builder::new()
         .name("save-attachment".to_owned())
         .spawn(
-            move || match choose_save_path(&L10N.tr("attachment-save-title"), &name) {
+            move || match choose_save_path(&tr!("Save Attachment"), &name) {
                 Ok(Some(path)) => {
                     if let Err(error) = replace_file(&path, &data) {
                         tracing::warn!("cannot save {}: {error}", path.display());
-                        let args = [("error", error.to_string().into())];
-                        announce(L10N.tr_args("attachment-save-failed", args), name, false);
+
+                        announce(
+                            tr!(
+                                "The attachment couldn’t be saved: {error}",
+                                error = error.to_string()
+                            ),
+                            name,
+                            false,
+                        );
                     }
                 }
                 Ok(None) => {}
@@ -413,12 +420,10 @@ impl Mail {
                     .file_name()
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_default();
-                view.show_error(&L10N.tr_args(
-                    "compose-too-large",
-                    [
-                        ("name", name.into()),
-                        ("limit", bande_fs::format_size(MAX_ATTACHMENT).into()),
-                    ],
+                view.show_error(&tr!(
+                    "{name} is larger than {limit} and was not attached.",
+                    name = name,
+                    limit = bande_fs::format_size(MAX_ATTACHMENT)
                 ));
             }
         }
@@ -436,7 +441,7 @@ impl Mail {
         for request in requests {
             let result = match request {
                 ComposeRequest::ChooseFiles => {
-                    self.picker.pick(token, L10N.tr("compose-attach-title"));
+                    self.picker.pick(token, tr!("Attach Files"));
                     Ok(())
                 }
                 ComposeRequest::ShowMenu(menu, at) => {

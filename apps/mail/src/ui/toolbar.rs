@@ -1,15 +1,16 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+
+use bande_l10n::{text, tr};
+
+use crate::imap::Role;
+use crate::ui::symbols::Symbol;
+use crate::ui::view::{LIST_WIDTH, MailView, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
 use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, FreeLayout, SearchField, TEXT_FIELD_HEIGHT, WidgetId,
 };
 use bande_toolkit::{Header, Image, Point, Rect};
-
-use crate::L10N;
-use crate::imap::Role;
-use crate::ui::symbols::Symbol;
-use crate::ui::view::{LIST_WIDTH, MailView, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
 
 const SYMBOL_PIXELS: u32 = 32;
 const GROUP_GAP: f32 = 14.0;
@@ -95,25 +96,25 @@ impl MailView {
 
     pub(crate) fn insert_toolbar(&mut self) {
         let buttons = [
-            (Symbol::GetMail, "action-get-mail", Signal::GetMail),
-            (Symbol::Compose, "action-compose", Signal::Compose),
-            (Symbol::Archive, "action-archive", Signal::Archive),
-            (Symbol::Trash, "action-delete", Signal::Delete),
-            (Symbol::Junk, "action-junk", Signal::Junk),
-            (Symbol::Reply, "action-reply", Signal::Reply),
-            (Symbol::ReplyAll, "action-reply-all", Signal::ReplyAll),
-            (Symbol::Forward, "action-forward", Signal::Forward),
-            (Symbol::Flag, "action-flag", Signal::Flag),
+            (Symbol::GetMail, text!("Get Mail"), Signal::GetMail),
+            (Symbol::Compose, text!("New Message"), Signal::Compose),
+            (Symbol::Archive, text!("Archive"), Signal::Archive),
+            (Symbol::Trash, text!("Delete"), Signal::Delete),
+            (Symbol::Junk, text!("Move to Junk"), Signal::Junk),
+            (Symbol::Reply, text!("Reply"), Signal::Reply),
+            (Symbol::ReplyAll, text!("Reply All"), Signal::ReplyAll),
+            (Symbol::Forward, text!("Forward"), Signal::Forward),
+            (Symbol::Flag, text!("Flag"), Signal::Flag),
         ];
         let mut ids = Vec::new();
         for (symbol, label, signal) in buttons {
-            let button = self.symbol_button(symbol, &L10N.tr(label), signal);
+            let button = self.symbol_button(symbol, &label.tr(), signal);
             if let Some(host) = self.host_mut() {
                 ids.push(host.insert(button, Rect::default()));
             }
         }
         let send = sender(&self.signals);
-        let search = SearchField::new(&L10N.tr("search-placeholder"), "", move |text| {
+        let search = SearchField::new(&tr!("Search"), "", move |text| {
             send(Signal::Search(text.to_owned()));
         });
         let search = self

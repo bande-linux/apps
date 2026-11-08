@@ -1,3 +1,6 @@
+
+use bande_l10n::{Text, text};
+
 use crate::session::ShellCommand;
 use alacritty_terminal::vte::ansi::CursorShape;
 use bande_app_settings::{Stored, flag, pairs};
@@ -30,11 +33,11 @@ impl CursorStyle {
         Self::ALL.into_iter().find(|style| style.name() == name)
     }
 
-    pub fn message(self) -> &'static str {
+    pub fn message(self) -> Text {
         match self {
-            Self::Block => "cursor-block",
-            Self::Bar => "cursor-bar",
-            Self::Underline => "cursor-underline",
+            Self::Block => text!("Block"),
+            Self::Bar => text!("Bar"),
+            Self::Underline => text!("Underline"),
         }
     }
 
@@ -66,11 +69,11 @@ impl CloseAsk {
         }
     }
 
-    pub fn message(self) -> &'static str {
+    pub fn message(self) -> Text {
         match self {
-            Self::Always => "close-ask-always",
-            Self::WhenRunning => "close-ask-running",
-            Self::Never => "close-ask-never",
+            Self::Always => text!("Always"),
+            Self::WhenRunning => text!("When a program is running"),
+            Self::Never => text!("Never"),
         }
     }
 }
@@ -92,10 +95,10 @@ impl NewTabFolder {
         }
     }
 
-    pub fn message(self) -> &'static str {
+    pub fn message(self) -> Text {
         match self {
-            Self::Same => "new-tab-same",
-            Self::Home => "new-tab-home",
+            Self::Same => text!("The same folder"),
+            Self::Home => text!("Your home folder"),
         }
     }
 }

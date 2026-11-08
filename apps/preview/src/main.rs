@@ -3,12 +3,13 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
+use bande_l10n::{Text, text, tr};
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::Entry;
 use bande_inbox::Inbox;
 use bande_preview::{
-    InfoPanel, L10N, PreviewView, Request, Row, SidebarMode, WORKER_FLAG, Zoom, argument_path,
+    InfoPanel, PreviewView, Request, Row, SidebarMode, WORKER_FLAG, Zoom, argument_path,
     document_rows, file_rows, info_ui, picture_rows,
 };
 use bande_toolkit::ui::{Ui, WidgetId};
@@ -19,7 +20,7 @@ static INFO: Info = Info {
     id: "org.bande.Preview",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Preview"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -68,7 +69,7 @@ impl Preview {
         let title = paths
             .first()
             .map(|path| bande_preview::file_name(path))
-            .unwrap_or_else(|| L10N.tr("app-name"));
+            .unwrap_or_else(|| tr!("Preview"));
         let opened = cx.open(Kind::Main, &title, WINDOW_SIZE, |appearance| {
             Pane::Main(Box::new(PreviewView::new(appearance, paths)))
         });
@@ -107,9 +108,9 @@ impl Preview {
         let Some(outbox) = self.chosen.as_ref().map(Inbox::outbox) else {
             return;
         };
-        let title = L10N.tr("open-title");
+        let title = tr!("Open");
         let filter = (
-            L10N.tr("open-filter"),
+            tr!("Images and PDF documents"),
             [
                 "image/png",
                 "image/jpeg",
@@ -177,7 +178,7 @@ impl Preview {
         }
         let opened = cx.open(
             Kind::Utility(INFO_TAG),
-            &L10N.tr("inspector-title"),
+            &tr!("Info"),
             INFO_SIZE,
             |appearance| {
                 let (ui, panel) = info_ui(appearance, sections);
@@ -288,83 +289,83 @@ impl Program for Preview {
         let copyable = view.is_some_and(PreviewView::can_copy);
         let contents = view.is_some_and(PreviewView::has_contents);
         let several = view.is_some_and(PreviewView::has_sidebar);
-        let item = |key: &str, action: &str, shortcut: Option<&str>, enabled: bool| {
-            let entry = Entry::item(&L10N.tr(key), action).enabled(enabled);
+        let item = |key: Text, action: &str, shortcut: Option<&str>, enabled: bool| {
+            let entry = Entry::item(&key.tr(), action).enabled(enabled);
             match shortcut {
                 Some(shortcut) => entry.shortcut(shortcut),
                 None => entry,
             }
         };
-        let mut file_menu = vec![item("menu-open", OPEN, Some("Ctrl+O"), true)];
+        let mut file_menu = vec![item(text!("Open…"), OPEN, Some("Ctrl+O"), true)];
         if cx.installed(FILES_APP_ID) {
-            file_menu.push(item("menu-show-in-files", SHOW_IN_FILES, None, file));
+            file_menu.push(item(text!("Show in Files"), SHOW_IN_FILES, None, file));
         }
         file_menu.extend([
-            item("menu-get-info", GET_INFO, Some("Ctrl+I"), file),
+            item(text!("Get Info"), GET_INFO, Some("Ctrl+I"), file),
             Entry::separator(),
             bande_app_menu::print_item(file),
         ]);
         let edit = vec![
-            item("menu-copy", COPY, Some("Ctrl+C"), copyable),
+            item(text!("Copy"), COPY, Some("Ctrl+C"), copyable),
             Entry::separator(),
-            item("menu-find", FIND, Some("Ctrl+F"), document),
-            item("menu-find-next", FIND_NEXT, Some("Ctrl+G"), document),
+            item(text!("Find…"), FIND, Some("Ctrl+F"), document),
+            item(text!("Find Next"), FIND_NEXT, Some("Ctrl+G"), document),
             item(
-                "menu-find-previous",
+                text!("Find Previous"),
                 FIND_PREVIOUS,
                 Some("Shift+Ctrl+G"),
                 document,
             ),
         ];
         let sidebar_key = match view.is_some_and(PreviewView::sidebar_shown) && several {
-            true => "menu-hide-sidebar",
-            false => "menu-show-sidebar",
+            true => text!("Hide Sidebar"),
+            false => text!("Show Sidebar"),
         };
         let slideshow_key = match view.is_some_and(PreviewView::in_slideshow) {
-            true => "menu-stop-slideshow",
-            false => "menu-slideshow",
+            true => text!("Stop Slideshow"),
+            false => text!("Slideshow"),
         };
         let mut view_menu = vec![item(sidebar_key, SIDEBAR, Some("F9"), several)];
         if document {
             view_menu.extend([
-                item("menu-thumbnails", THUMBNAILS, None, several),
-                item("menu-contents", CONTENTS, None, contents),
+                item(text!("Thumbnails"), THUMBNAILS, None, several),
+                item(text!("Table of Contents"), CONTENTS, None, contents),
             ]);
         }
         let zoomable = picture || document;
         view_menu.extend([
             Entry::separator(),
-            item("menu-actual-size", ACTUAL_SIZE, Some("Ctrl+0"), zoomable),
-            item("menu-zoom-to-fit", ZOOM_TO_FIT, None, zoomable),
-            item("menu-zoom-in", ZOOM_IN, Some("Ctrl+="), zoomable),
-            item("menu-zoom-out", ZOOM_OUT, Some("Ctrl+-"), zoomable),
+            item(text!("Actual Size"), ACTUAL_SIZE, Some("Ctrl+0"), zoomable),
+            item(text!("Zoom to Fit"), ZOOM_TO_FIT, None, zoomable),
+            item(text!("Zoom In"), ZOOM_IN, Some("Ctrl+="), zoomable),
+            item(text!("Zoom Out"), ZOOM_OUT, Some("Ctrl+-"), zoomable),
             Entry::separator(),
-            item("menu-play", PLAY, None, animated),
+            item(text!("Play or Pause Animation"), PLAY, None, animated),
             item(slideshow_key, SLIDESHOW, Some("F5"), file && !document),
         ]);
         let go = vec![
-            item("menu-next", NEXT, Some("Right"), file),
-            item("menu-previous", PREVIOUS, Some("Left"), file),
+            item(text!("Next"), NEXT, Some("Right"), file),
+            item(text!("Previous"), PREVIOUS, Some("Left"), file),
         ];
         let tools = vec![
             item(
-                "menu-rotate-left",
+                text!("Rotate Left"),
                 ROTATE_LEFT,
                 Some("Shift+Ctrl+R"),
                 picture,
             ),
-            item("menu-rotate-right", ROTATE_RIGHT, Some("Ctrl+R"), picture),
+            item(text!("Rotate Right"), ROTATE_RIGHT, Some("Ctrl+R"), picture),
             Entry::separator(),
-            item("menu-flip-horizontal", FLIP_HORIZONTAL, None, picture),
-            item("menu-flip-vertical", FLIP_VERTICAL, None, picture),
+            item(text!("Flip Horizontal"), FLIP_HORIZONTAL, None, picture),
+            item(text!("Flip Vertical"), FLIP_VERTICAL, None, picture),
         ];
         Menus {
             menus: vec![
-                Entry::submenu(&L10N.tr("menu-file"), file_menu),
-                Entry::submenu(&L10N.tr("menu-edit"), edit),
-                Entry::submenu(&L10N.tr("menu-view"), view_menu),
-                Entry::submenu(&L10N.tr("menu-go"), go),
-                Entry::submenu(&L10N.tr("menu-tools"), tools),
+                Entry::submenu(&tr!("File"), file_menu),
+                Entry::submenu(&tr!("Edit"), edit),
+                Entry::submenu(&tr!("View"), view_menu),
+                Entry::submenu(&tr!("Go"), go),
+                Entry::submenu(&tr!("Tools"), tools),
             ],
             window: Vec::new(),
         }

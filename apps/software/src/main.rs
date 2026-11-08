@@ -2,6 +2,7 @@ use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 use std::time::Instant;
 
+use bande_l10n::{Text, text, tr};
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWindow, settings_folder};
@@ -11,7 +12,7 @@ use bande_packages::{Client, debian_arch};
 use bande_software::settings::{SETTINGS_SIZE, SoftwareSettings, settings_form};
 use bande_software::{
     COMMAND_BACK, COMMAND_DISCOVER, COMMAND_FIND, COMMAND_INSTALLED, COMMAND_UPDATES, Finished,
-    L10N, SETTINGS_ID, Software, WINDOW_SIZE,
+    SETTINGS_ID, Software, WINDOW_SIZE,
 };
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 
@@ -21,14 +22,14 @@ const INFO: Info = Info {
     id: "org.bande.Software",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("title"),
+    name: || tr!("Software"),
     keys: Keys::Standard,
     settings: None,
 };
 
 const WITH_FLATPAK: Info = Info {
     settings: Some(Settings {
-        title: || L10N.tr("settings-title"),
+        title: || tr!("Software Settings"),
         size: SETTINGS_SIZE,
         view: settings_window,
     }),
@@ -100,7 +101,7 @@ struct Store {
 }
 
 fn open_main(cx: &mut Cx<Store>, mut pane: Pane) -> Result<WindowId, bande_toolkit::WindowError> {
-    cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
+    cx.open(Kind::Main, &tr!("Software"), WINDOW_SIZE, |appearance| {
         pane.0.ui().set_appearance(appearance);
         pane
     })
@@ -168,14 +169,14 @@ impl Program for Store {
         for done in finished {
             let summary = match &done {
                 Finished::Installed(name) => {
-                    L10N.tr_args("notify-installed", [("name", name.clone().into())])
+                    tr!("{name} is installed", name = name.clone())
                 }
                 Finished::Failed(name) => {
-                    L10N.tr_args("notify-failed", [("name", name.clone().into())])
+                    tr!("{name} couldn’t be installed", name = name.clone())
                 }
             };
             let request = Notification {
-                app_name: &L10N.tr("title"),
+                app_name: &tr!("Software"),
                 replaces_id: 0,
                 app_icon: INFO.id,
                 summary: &summary,
@@ -192,20 +193,24 @@ impl Program for Store {
     }
 
     fn menus(&self, _cx: &Cx<Self>) -> Menus {
-        let item = |label: &str, action: &str, shortcut: &str| {
-            Entry::item(&L10N.tr(label), action).shortcut(shortcut)
+        let item = |label: Text, action: &str, shortcut: &str| {
+            Entry::item(&label.tr(), action).shortcut(shortcut)
         };
         Menus {
             menus: vec![
-                edit_submenu(vec![item("menu-find", COMMAND_FIND, "Ctrl+F")]),
+                edit_submenu(vec![item(text!("Find"), COMMAND_FIND, "Ctrl+F")]),
                 Entry::submenu(
-                    &L10N.tr("menu-view"),
+                    &tr!("View"),
                     vec![
-                        item("menu-back", COMMAND_BACK, "Alt+Left"),
+                        item(text!("Back"), COMMAND_BACK, "Alt+Left"),
                         Entry::separator(),
-                        item("discover", COMMAND_DISCOVER, "Ctrl+1"),
-                        item("installed", COMMAND_INSTALLED, "Ctrl+2"),
-                        item("updates", COMMAND_UPDATES, "Ctrl+3"),
+                        item(text!("Discover"), COMMAND_DISCOVER, "Ctrl+1"),
+                        item(
+                            text!(context = "section", "Installed"),
+                            COMMAND_INSTALLED,
+                            "Ctrl+2",
+                        ),
+                        item(text!("Updates"), COMMAND_UPDATES, "Ctrl+3"),
                     ],
                 ),
             ],

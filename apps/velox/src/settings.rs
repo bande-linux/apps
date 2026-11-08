@@ -1,8 +1,7 @@
+use bande_l10n::{Text, text, tr};
 use bande_app_settings::{Shared, Stored, flag, pairs, settings_folder};
 use bande_toolkit::ui::{Context, Form, FormLine, ScrollView, Toggle, Ui, Widget};
 use bande_toolkit::{Appearance, TextSystem};
-
-use crate::L10N;
 
 pub const SETTINGS_SIZE: (u32, u32) = (520, 320);
 
@@ -40,26 +39,28 @@ impl Stored for VeloxSettings {
 
 fn toggle(
     settings: &Shared<VeloxSettings>,
-    label: &str,
+    label: Text,
     field: fn(&mut VeloxSettings) -> &mut bool,
 ) -> Box<dyn Widget> {
     let shared = settings.clone();
     let on = *field(&mut settings.borrow_mut());
-    Box::new(Toggle::new(&L10N.tr(label), on, move |on| {
+    Box::new(Toggle::new(&label.tr(), on, move |on| {
         *field(&mut shared.borrow_mut()) = on;
     }))
 }
 
 pub fn settings_form(appearance: Appearance, settings: &Shared<VeloxSettings>) -> Ui {
     let form = Form::new(
-        &L10N.tr("settings-title"),
+        &tr!("Velox Settings"),
         vec![
-            FormLine::Heading(L10N.tr("settings-notifications")),
+            FormLine::Heading(tr!("Notifications")),
             FormLine::Row(
-                L10N.tr("settings-notify-crashes"),
-                toggle(settings, "settings-notify-crashes", |settings| {
-                    &mut settings.notify_crashes
-                }),
+                tr!("Notify when a container stops unexpectedly"),
+                toggle(
+                    settings,
+                    text!("Notify when a container stops unexpectedly"),
+                    |settings| &mut settings.notify_crashes,
+                ),
             ),
         ],
     );

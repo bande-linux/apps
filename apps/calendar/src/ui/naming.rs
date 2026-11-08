@@ -1,11 +1,12 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use bande_l10n::tr;
 use accesskit::{Action, ActionRequest, TreeId};
 use bande_toolkit::ui::{Button, PopUpButton, TEXT_FIELD_HEIGHT, TextField, Ui, WidgetId};
 
 use super::panel::{Line, Panel, Width};
-use super::{L10N, Signal, Signals, sender};
+use super::{Signal, Signals, sender};
 
 const WIDTH: f32 = 380.0;
 const LABEL_WIDTH: f32 = 72.0;
@@ -35,42 +36,40 @@ impl Naming {
         chosen: usize,
     ) -> (Panel, Self) {
         let title = match target {
-            Target::New(_) => L10N.tr("new-calendar-title"),
-            Target::Rename(_) => L10N.tr("rename-calendar-title"),
+            Target::New(_) => tr!("New Calendar"),
+            Target::Rename(_) => tr!("Rename Calendar"),
         };
         let mut panel = Panel::new(Some(&title), WIDTH, LABEL_WIDTH).sheet();
         let send = sender(signals);
-        let field = panel.add(TextField::new(
-            &L10N.tr("calendar-name-placeholder"),
-            name,
-            move |text| send(Signal::NameText(text.to_owned())),
-        ));
+        let field = panel.add(TextField::new(&tr!("Untitled"), name, move |text| {
+            send(Signal::NameText(text.to_owned()))
+        }));
         panel.line(Line::new(
-            Some(&L10N.tr("calendar-name")),
+            Some(&tr!("name:")),
             vec![(field, Width::Fill)],
             ROW,
         ));
         if matches!(target, Target::New(_)) {
             let send = sender(signals);
             let account = panel.add(PopUpButton::new(
-                &L10N.tr("calendar-account"),
+                &tr!("account:"),
                 accounts,
                 chosen,
                 move |index| send(Signal::NameAccount(index)),
             ));
             panel.line(Line::new(
-                Some(&L10N.tr("calendar-account")),
+                Some(&tr!("account:")),
                 vec![(account, Width::Fill)],
                 ROW,
             ));
         }
         let send = sender(signals);
         let cancel =
-            panel.add(Button::new(&L10N.tr("cancel"), move || send(Signal::NameCancel)).cancel());
+            panel.add(Button::new(&tr!("Cancel"), move || send(Signal::NameCancel)).cancel());
         let send = sender(signals);
         let label = match target {
-            Target::New(_) => L10N.tr("create"),
-            Target::Rename(_) => L10N.tr("rename"),
+            Target::New(_) => tr!("Create"),
+            Target::Rename(_) => tr!("Rename"),
         };
         let accept = panel.add(Button::new(&label, move || send(Signal::NameSubmit)).primary());
         panel.line(

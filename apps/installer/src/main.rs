@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
+use bande_l10n::tr;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::edit_submenu;
-use bande_installer::{Installer, L10N, Machine, WINDOW_SIZE};
+use bande_installer::{Installer, Machine, WINDOW_SIZE};
 use bande_packages::Client;
 use bande_toolkit::{Appearance, Scene, TextSystem, Window, WindowEvent};
 use zbus::blocking::Connection;
@@ -14,7 +15,7 @@ static INFO: Info = Info {
     id: "org.bande.Installer",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("title"),
+    name: || tr!("Package Installer"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -71,10 +72,15 @@ struct Packages {
 }
 
 fn show(cx: &mut Cx<Packages>, mut pane: Pane) -> Result<WindowId, bande_toolkit::WindowError> {
-    cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
-        pane.0.ui().set_appearance(appearance);
-        pane
-    })
+    cx.open(
+        Kind::Main,
+        &tr!("Package Installer"),
+        WINDOW_SIZE,
+        |appearance| {
+            pane.0.ui().set_appearance(appearance);
+            pane
+        },
+    )
 }
 
 impl Packages {

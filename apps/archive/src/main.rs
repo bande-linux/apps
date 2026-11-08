@@ -5,12 +5,13 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::Entry;
 use bande_app_settings::{SettingsWindow, settings_folder};
 use bande_archive::{
-    After, ArchiveSettings, Ended, Intent, L10N, PANEL_SIZE, PROMPT_SIZE, Panel, Row,
-    SETTINGS_SIZE, Work, settings_form,
+    After, ArchiveSettings, Ended, Intent, PANEL_SIZE, PROMPT_SIZE, Panel, Row, SETTINGS_SIZE,
+    Work, settings_form,
 };
 use bande_fs::{Trash, can_extract};
 use bande_inbox::Inbox;
@@ -21,10 +22,10 @@ static INFO: Info = Info {
     id: "org.bande.ArchiveUtility",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Archive Utility"),
     keys: Keys::Standard,
     settings: Some(Settings {
-        title: || L10N.tr("settings-title"),
+        title: || tr!("Archive Utility Settings"),
         size: SETTINGS_SIZE,
         view: settings_window,
     }),
@@ -192,7 +193,10 @@ impl Utility {
                 self.next += 1;
             }
             Err(error) => self.alerts.push_back((
-                L10N.tr_args("cannot-start", [("error", error.to_string().into())]),
+                tr!(
+                    "Archive Utility could not start: {error}",
+                    error = error.to_string()
+                ),
                 String::new(),
             )),
         }
@@ -240,7 +244,7 @@ impl Utility {
             .unwrap_or_default();
         let opened = cx.open(
             Kind::Dialog("password"),
-            &L10N.tr("app-name"),
+            &tr!("Archive Utility"),
             PROMPT_SIZE,
             |appearance| Pane(Panel::password(appearance, &name, wrong)),
         );
@@ -269,7 +273,7 @@ impl Utility {
         let rows = self.rows();
         let opened = cx.open(
             Kind::Main,
-            &L10N.tr("window-progress"),
+            &tr!("Archive Utility"),
             PANEL_SIZE,
             |appearance| {
                 let mut panel = Panel::progress(appearance);
@@ -337,14 +341,18 @@ impl Utility {
             .name("choose archive".to_owned())
             .spawn(move || {
                 let filter = (
-                    L10N.tr("archives"),
+                    tr!("Archives"),
                     ARCHIVE_TYPES
                         .iter()
                         .map(|mime| (MIME_FILTER, (*mime).to_owned()))
                         .collect(),
                 );
                 let chosen = Connection::session().and_then(|session| {
-                    bande_app::choose_file(&session, &L10N.tr("choose-archive"), Some(filter))
+                    bande_app::choose_file(
+                        &session,
+                        &tr!("Choose an archive to expand"),
+                        Some(filter),
+                    )
                 });
                 match chosen {
                     Ok(Some(path)) => {
@@ -383,10 +391,10 @@ impl Program for Utility {
     }
 
     fn menus(&self, _cx: &Cx<Self>) -> Menus {
-        let expand = Entry::item(&L10N.tr("expand-archive"), EXPAND_ARCHIVE).shortcut("Ctrl+O");
+        let expand = Entry::item(&tr!("Expand Archive…"), EXPAND_ARCHIVE).shortcut("Ctrl+O");
         Menus {
-            menus: vec![Entry::submenu(&L10N.tr("menu-file"), vec![expand])],
-            window: vec![Entry::item(&L10N.tr("window-progress"), SHOW_PANEL)],
+            menus: vec![Entry::submenu(&tr!("File"), vec![expand])],
+            window: vec![Entry::item(&tr!("Archive Utility"), SHOW_PANEL)],
         }
     }
 

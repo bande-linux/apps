@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use bande_l10n::{Text, text, tr};
 use bande_app_menu::Entry;
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{
@@ -15,7 +16,6 @@ use super::readiness::Blocker;
 use super::sheet::{BACK, CANCEL, CONTINUE, Draft, Step};
 use super::widgets::{Slot, Split};
 use super::{Intent, Intents, MACHINES_SYMBOL, Request, push};
-use crate::L10N;
 use crate::ui::symbol;
 
 const START_SYMBOL: &str = include_str!("../../data/symbols/start.svg");
@@ -80,8 +80,8 @@ fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
     Box::new(widget)
 }
 
-fn menu_item(key: &str, action: &str, enabled: bool) -> MenuItem {
-    MenuItem::new(&L10N.tr(key), action).enabled(enabled)
+fn menu_item(key: Text, action: &str, enabled: bool) -> MenuItem {
+    MenuItem::new(&key.tr(), action).enabled(enabled)
 }
 
 impl MachinesPane {
@@ -113,7 +113,7 @@ impl MachinesPane {
     }
 
     pub fn title(&self) -> String {
-        L10N.tr("machine-pane")
+        tr!("Machines")
     }
 
     pub fn take_requests(&mut self) -> Vec<Request> {
@@ -129,13 +129,12 @@ impl MachinesPane {
         vec![
             Row::new(
                 "machines-heading",
-                vec![Cell::new(L10N.tr("machine-sidebar")).muted().label()],
+                vec![Cell::new(tr!("Machines")).muted().label()],
             ),
             Row::new(
                 MACHINES_KEY,
                 vec![
-                    Cell::new(L10N.tr("machine-pane"))
-                        .icon(symbol(MACHINES_SYMBOL, palette.accent)),
+                    Cell::new(tr!("Machines")).icon(symbol(MACHINES_SYMBOL, palette.accent)),
                     Cell::new(count).muted().tabular(),
                 ],
             ),
@@ -166,22 +165,22 @@ impl MachinesPane {
     }
 
     fn make_tools(&self) -> (Tools, Vec<Box<dyn Widget>>) {
-        let button = |svg: &str, label: &str, intent: Intent| {
+        let button = |svg: &str, label: Text, intent: Intent| {
             let intents = Rc::clone(&self.intents);
             let click = move || push(&intents, intent.clone());
-            let label = L10N.tr(label);
+            let label = label.tr();
             match symbol(svg, self.palette.ink) {
                 Some(image) => Button::symbol(image, &label, click).tooltip(&label),
                 None => Button::new(&label, click),
             }
         };
-        let new = button(NEW_SYMBOL, "machine-new", Intent::New);
-        let start = button(START_SYMBOL, "machine-start", Intent::Act(Act::Start));
-        let stop = button(STOP_SYMBOL, "machine-shut-down", Intent::Act(Act::ShutDown));
-        let delete = button(DELETE_SYMBOL, "machine-delete", Intent::Act(Act::Delete));
-        let inspector = button(INSPECTOR_SYMBOL, "show-inspector", Intent::Inspector);
+        let new = button(NEW_SYMBOL, text!("New Virtual Machine…"), Intent::New);
+        let start = button(START_SYMBOL, text!("Start"), Intent::Act(Act::Start));
+        let stop = button(STOP_SYMBOL, text!("Shut Down"), Intent::Act(Act::ShutDown));
+        let delete = button(DELETE_SYMBOL, text!("Delete"), Intent::Act(Act::Delete));
+        let inspector = button(INSPECTOR_SYMBOL, text!("Show Inspector"), Intent::Inspector);
         let intents = Rc::clone(&self.intents);
-        let search = SearchField::new(&L10N.tr("machine-filter"), &self.filter, move |text| {
+        let search = SearchField::new(&tr!("Filter machines"), &self.filter, move |text| {
             push(&intents, Intent::Filter(text.to_owned()));
         });
         let tools = Tools {
@@ -300,8 +299,10 @@ impl MachinesPane {
         let id = id.to_owned();
         ui.present_sheet(
             Alert::new(
-                &L10N.tr_args("machine-delete-title", [("name", name.into())]),
-                &L10N.tr("machine-delete-message"),
+                &tr!("Delete “{name}”?", name = name),
+                &tr!(
+                    "Its disk, firmware settings and snapshots are deleted. This can’t be undone."
+                ),
                 move |action| {
                     push(
                         &intents,
@@ -309,8 +310,8 @@ impl MachinesPane {
                     )
                 },
             )
-            .cancel(&L10N.tr("machine-cancel"), CANCEL)
-            .destructive(&L10N.tr("machine-delete-confirm"), CONFIRM_DELETE),
+            .cancel(&tr!("Cancel"), CANCEL)
+            .destructive(&tr!("Delete"), CONFIRM_DELETE),
         );
     }
 
@@ -330,10 +331,10 @@ impl MachinesPane {
 
     pub fn inspector_entry(&self) -> Entry {
         let label = match self.inspector {
-            true => "hide-inspector",
-            false => "show-inspector",
+            true => text!("Hide Inspector"),
+            false => text!("Show Inspector"),
         };
-        Entry::item(&L10N.tr(label), INSPECTOR_COMMAND).shortcut("Ctrl+I")
+        Entry::item(&label.tr(), INSPECTOR_COMMAND).shortcut("Ctrl+I")
     }
 
     pub fn focus_filter(&self, ui: &mut Ui) {
@@ -369,7 +370,7 @@ impl MachinesPane {
             && key.starts_with(JOB_PREFIX)
         {
             return Some(Menu::new(vec![menu_item(
-                "machine-cancel-download",
+                text!("Cancel Download"),
                 MENU_CANCEL,
                 true,
             )]));
@@ -380,41 +381,41 @@ impl MachinesPane {
         let single = entries.len() == 1;
         let ssh = single && first.running() && first.ssh_target().is_some();
         let mut items = vec![
-            menu_item("machine-start", MENU_START, any(Act::Start)),
-            menu_item("machine-shut-down", MENU_SHUT_DOWN, any(Act::ShutDown)),
-            menu_item("machine-force-stop", MENU_FORCE_STOP, any(Act::ForceStop)),
-            menu_item("machine-restart", MENU_RESTART, any(Act::Restart)),
+            menu_item(text!("Start"), MENU_START, any(Act::Start)),
+            menu_item(text!("Shut Down"), MENU_SHUT_DOWN, any(Act::ShutDown)),
+            menu_item(text!("Force Stop"), MENU_FORCE_STOP, any(Act::ForceStop)),
+            menu_item(text!("Restart"), MENU_RESTART, any(Act::Restart)),
             match any(Act::Resume) {
-                true => menu_item("machine-resume", MENU_RESUME, true),
-                false => menu_item("machine-pause", MENU_PAUSE, any(Act::Pause)),
+                true => menu_item(text!("Resume"), MENU_RESUME, true),
+                false => menu_item(text!("Pause"), MENU_PAUSE, any(Act::Pause)),
             },
-            menu_item("machine-suspend", MENU_SUSPEND, any(Act::Suspend)),
+            menu_item(text!("Suspend"), MENU_SUSPEND, any(Act::Suspend)),
             MenuItem::separator(),
         ];
         if bande_xdg::is_installed(crate::TERMINAL_APP_ID) {
-            items.push(menu_item("machine-connect", MENU_CONNECT, ssh));
+            items.push(menu_item(text!("Connect via SSH"), MENU_CONNECT, ssh));
         }
         items.extend([
-            menu_item("machine-open", MENU_OPEN, single),
-            menu_item("machine-serial", MENU_SERIAL, single && first.running()),
+            menu_item(text!("Show Machine Window"), MENU_OPEN, single),
             menu_item(
-                "machine-take-snapshot-ellipsis",
+                text!("Serial Console"),
+                MENU_SERIAL,
+                single && first.running(),
+            ),
+            menu_item(
+                text!("Take Snapshot…"),
                 MENU_SNAPSHOT,
                 single && first.can(Act::TakeSnapshot),
             ),
+            menu_item(text!("Clone…"), MENU_CLONE, single && first.can(Act::Clone)),
             menu_item(
-                "machine-clone-ellipsis",
-                MENU_CLONE,
-                single && first.can(Act::Clone),
-            ),
-            menu_item(
-                "machine-copy-ssh",
+                text!("Copy SSH Command"),
                 MENU_COPY_SSH,
                 single && first.ssh_target().is_some(),
             ),
             MenuItem::separator(),
             menu_item(
-                "machine-delete",
+                text!("Delete"),
                 MENU_DELETE,
                 single && first.can(Act::Delete),
             ),
@@ -553,7 +554,7 @@ impl MachinesPane {
         };
         let entry = fleet.entry(id)?;
         Some(boxed(ScrollView::new(Form::new(
-            &L10N.tr("machine-inspector"),
+            &tr!("Inspector"),
             present::info_lines(entry, accel),
         ))))
     }

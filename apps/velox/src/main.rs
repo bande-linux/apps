@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::time::Instant;
 
+use bande_l10n::{Text, text, tr};
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::Entry;
@@ -12,7 +13,7 @@ use bande_toolkit::{
     Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use bande_velox::{
-    Act, ContainerRequest, DisplayWindow, Effect, Hub, Informer, L10N, LogsTarget, LogsView,
+    Act, ContainerRequest, DisplayWindow, Effect, Hub, Informer, LogsTarget, LogsView,
     MACHINE_WINDOW_SIZE, MachineRequest, MachineWindow, Request, SETTINGS_SIZE, SIDEBAR_WIDTH,
     Section, ShellLink, ShellTarget, ShellWindow, TERMINAL_APP_ID, Update, VeloxSettings,
     VeloxView, Work, notify_crash, settings_form,
@@ -56,10 +57,10 @@ static INFO: Info = Info {
     id: RUNNING_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Velox"),
     keys: Keys::Standard,
     settings: Some(Settings {
-        title: || L10N.tr("settings-title"),
+        title: || tr!("Velox Settings"),
         size: SETTINGS_SIZE,
         view: settings_window,
     }),
@@ -413,7 +414,7 @@ impl Velox {
         let terminal = cx.installed(TERMINAL_APP_ID);
         let opened = cx.open(
             Kind::Secondary(MACHINE_WINDOW_TAG),
-            &L10N.tr("machine-pane"),
+            &tr!("Machines"),
             MACHINE_WINDOW_SIZE,
             |appearance| {
                 Screen::Machine(Box::new(MachineWindow::new(id, hub, appearance, terminal)))
@@ -617,9 +618,8 @@ impl Velox {
             Some(Screen::Machine(machine)) => machine.can(act),
             _ => false,
         };
-        let item = |key: &str, command: &str, act: Act| {
-            Entry::item(&L10N.tr(key), command).enabled(can(act))
-        };
+        let item =
+            |key: Text, command: &str, act: Act| Entry::item(&key.tr(), command).enabled(can(act));
         let subject = match screen {
             Some(Screen::Main(pane)) => pane.view.machines_ref().single_selected(),
             Some(Screen::Machine(machine)) => Some(machine.machine().to_owned()),
@@ -637,49 +637,46 @@ impl Velox {
             )
         });
         let usb = match usb {
-            Some(items) if !items.is_empty() => Entry::submenu(&L10N.tr("machine-usb"), items),
+            Some(items) if !items.is_empty() => Entry::submenu(&tr!("USB Devices"), items),
             Some(_) => Entry::submenu(
-                &L10N.tr("machine-usb"),
-                vec![Entry::item(&L10N.tr("machine-usb-none"), "").enabled(false)],
+                &tr!("USB Devices"),
+                vec![Entry::item(&tr!("No USB devices"), "").enabled(false)],
             ),
-            None => Entry::item(&L10N.tr("machine-usb"), "").enabled(false),
+            None => Entry::item(&tr!("USB Devices"), "").enabled(false),
         };
         let (pause_key, pause_act) = match can(Act::Resume) {
-            true => ("machine-resume", Act::Resume),
-            false => ("machine-pause", Act::Pause),
+            true => (text!("Resume"), Act::Resume),
+            false => (text!("Pause"), Act::Pause),
         };
         let mut entries = vec![
-            item("machine-start", MACHINE_START, Act::Start).shortcut("Ctrl+R"),
+            item(text!("Start"), MACHINE_START, Act::Start).shortcut("Ctrl+R"),
             item(pause_key, MACHINE_PAUSE, pause_act),
-            item("machine-suspend", MACHINE_SUSPEND, Act::Suspend),
-            item("machine-shut-down", MACHINE_SHUT_DOWN, Act::ShutDown),
-            item("machine-force-stop", MACHINE_FORCE_STOP, Act::ForceStop),
-            item("machine-restart", MACHINE_RESTART, Act::Restart),
+            item(text!("Suspend"), MACHINE_SUSPEND, Act::Suspend),
+            item(text!("Shut Down"), MACHINE_SHUT_DOWN, Act::ShutDown),
+            item(text!("Force Stop"), MACHINE_FORCE_STOP, Act::ForceStop),
+            item(text!("Restart"), MACHINE_RESTART, Act::Restart),
             Entry::separator(),
         ];
         if cx.installed(TERMINAL_APP_ID) {
-            entries
-                .push(Entry::item(&L10N.tr("machine-connect"), MACHINE_CONNECT).enabled(connect));
+            entries.push(Entry::item(&tr!("Connect via SSH"), MACHINE_CONNECT).enabled(connect));
         }
         entries.extend([
-            Entry::item(&L10N.tr("machine-open"), MACHINE_OPEN)
+            Entry::item(&tr!("Show Machine Window"), MACHINE_OPEN)
                 .shortcut("Ctrl+O")
                 .enabled(connect || single(Act::Delete)),
-            Entry::item(&L10N.tr("machine-serial"), MACHINE_SERIAL)
+            Entry::item(&tr!("Serial Console"), MACHINE_SERIAL)
                 .enabled(can(Act::ShutDown) || can(Act::Resume)),
-            Entry::item(&L10N.tr("machine-send-ctrl-alt-delete"), MACHINE_SEND_KEYS)
-                .enabled(has_console),
+            Entry::item(&tr!("Send Ctrl+Alt+Delete"), MACHINE_SEND_KEYS).enabled(has_console),
             usb,
             Entry::separator(),
-            Entry::item(&L10N.tr("machine-take-snapshot-ellipsis"), MACHINE_SNAPSHOT)
+            Entry::item(&tr!("Take Snapshot…"), MACHINE_SNAPSHOT)
                 .shortcut("Shift+Ctrl+S")
                 .enabled(single(Act::TakeSnapshot)),
-            Entry::item(&L10N.tr("machine-clone-ellipsis"), MACHINE_CLONE)
-                .enabled(single(Act::Clone)),
+            Entry::item(&tr!("Clone…"), MACHINE_CLONE).enabled(single(Act::Clone)),
             Entry::separator(),
-            item("machine-delete-ellipsis", MACHINE_DELETE, Act::Delete),
+            item(text!("Delete…"), MACHINE_DELETE, Act::Delete),
         ]);
-        Entry::submenu(&L10N.tr("machine-menu"), entries)
+        Entry::submenu(&tr!("Machine"), entries)
     }
 
     fn pane<'a>(&self, cx: &'a mut Cx<Self>) -> Option<(&'a mut Window, &'a mut Pane)> {
@@ -699,25 +696,20 @@ impl Velox {
         };
         let shared = Rc::clone(&informer);
         let hub = self.hub();
-        let opened = cx.open(
-            Kind::Main,
-            &L10N.tr("pane-containers"),
-            WINDOW_SIZE,
-            |appearance| {
-                let mut view = VeloxView::new(appearance);
-                if let Some(hub) = hub {
-                    view.set_hub(hub);
-                }
-                Screen::Main(Box::new(Pane {
-                    view,
-                    work: Work::new(Rc::clone(&shared)),
-                    informer: shared,
-                    logs: Vec::new(),
-                    shells: Vec::new(),
-                    apps: None,
-                }))
-            },
-        );
+        let opened = cx.open(Kind::Main, &tr!("Containers"), WINDOW_SIZE, |appearance| {
+            let mut view = VeloxView::new(appearance);
+            if let Some(hub) = hub {
+                view.set_hub(hub);
+            }
+            Screen::Main(Box::new(Pane {
+                view,
+                work: Work::new(Rc::clone(&shared)),
+                informer: shared,
+                logs: Vec::new(),
+                shells: Vec::new(),
+                apps: None,
+            }))
+        });
         match opened {
             Ok(window) => {
                 self.main = Some(window);
@@ -785,15 +777,15 @@ impl Program for Velox {
             })
             .collect();
         sections.push(Entry::separator());
-        sections.push(Entry::item(&L10N.tr("find"), FIND).shortcut("Ctrl+F"));
+        sections.push(Entry::item(&tr!("Find"), FIND).shortcut("Ctrl+F"));
         sections.extend(view.map(VeloxView::view_entries).unwrap_or_default());
         let pane = view.and_then(VeloxView::resource_menu).unwrap_or_else(|| {
             Entry::submenu(
-                &L10N.tr("menu-container"),
+                &tr!("Container"),
                 view.map(VeloxView::container_menu).unwrap_or_default(),
             )
         });
-        let mut window = vec![Entry::item(&L10N.tr("app-name"), SHOW_MAIN)];
+        let mut window = vec![Entry::item(&tr!("Velox"), SHOW_MAIN)];
         window.extend(cx.windows().filter_map(|id| match cx.view(id) {
             Some(Screen::Logs(logs)) => Some(Entry::item(
                 &logs.target().title(),
@@ -807,7 +799,7 @@ impl Program for Velox {
         }));
         let can_create = view.is_some_and(|view| view.machines_ref().can_create());
         let mut file = vec![
-            Entry::item(&L10N.tr("machine-new-ellipsis"), NEW_MACHINE)
+            Entry::item(&tr!("New Virtual Machine…"), NEW_MACHINE)
                 .shortcut("Ctrl+N")
                 .enabled(can_create),
             Entry::separator(),
@@ -822,8 +814,8 @@ impl Program for Velox {
         }));
         Menus {
             menus: vec![
-                Entry::submenu(&L10N.tr("menu-file"), file),
-                Entry::submenu(&L10N.tr("menu-view"), sections),
+                Entry::submenu(&tr!("File"), file),
+                Entry::submenu(&tr!("View"), sections),
                 pane,
                 self.machine_menu(cx),
             ],

@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use bande_l10n::tr;
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{Cell, Column, Row};
 
 use super::stats::{Usage, percent};
 use super::widgets::port_text;
-use crate::L10N;
 use crate::engine::{Action, Container};
 use crate::resources::size;
 use crate::ui::dot;
@@ -22,16 +22,14 @@ const MEMORY_WIDTH: f32 = 70.0;
 
 pub fn columns(compact: bool) -> Vec<Column> {
     let mut columns = vec![
-        Column::new(&L10N.tr("column-name"), NAME_WIDTH)
+        Column::new(&tr!("Name"), NAME_WIDTH)
             .flexible()
             .unsortable(),
-        Column::new(&L10N.tr("column-image"), IMAGE_WIDTH).unsortable(),
-        Column::new(&L10N.tr("column-status"), STATUS_WIDTH).unsortable(),
-        Column::new(&L10N.tr("column-ports"), PORTS_WIDTH).unsortable(),
-        Column::new(&L10N.tr("column-cpu"), CPU_WIDTH)
-            .numeric()
-            .unsortable(),
-        Column::new(&L10N.tr("column-memory"), MEMORY_WIDTH)
+        Column::new(&tr!("Image"), IMAGE_WIDTH).unsortable(),
+        Column::new(&tr!("Status"), STATUS_WIDTH).unsortable(),
+        Column::new(&tr!("Ports"), PORTS_WIDTH).unsortable(),
+        Column::new(&tr!("CPU"), CPU_WIDTH).numeric().unsortable(),
+        Column::new(&tr!("Memory"), MEMORY_WIDTH)
             .numeric()
             .unsortable(),
     ];
@@ -55,15 +53,15 @@ fn compacted(compact: bool, mut cells: Vec<Cell>) -> Vec<Cell> {
 }
 
 pub fn pending_text(action: Action) -> String {
-    L10N.tr(match action {
-        Action::Start => "pending-start",
-        Action::Stop => "pending-stop",
-        Action::Restart => "pending-restart",
-        Action::Pause => "pending-pause",
-        Action::Resume => "pending-resume",
-        Action::Kill => "pending-kill",
-        Action::Remove => "pending-remove",
-    })
+    match action {
+        Action::Start => tr!("Starting…"),
+        Action::Stop => tr!("Stopping…"),
+        Action::Restart => tr!("Restarting…"),
+        Action::Pause => tr!("Pausing…"),
+        Action::Resume => tr!("Resuming…"),
+        Action::Kill => tr!("Killing…"),
+        Action::Remove => tr!("Deleting…"),
+    }
 }
 
 pub struct Shown<'a> {
@@ -159,9 +157,10 @@ impl Shown<'_> {
         };
         let status = match shared {
             Some(action) => Cell::new(pending_text(*action)).tinted(palette.warning),
-            None => Cell::new(L10N.tr_args(
-                "project-running",
-                [("running", running.into()), ("total", members.len().into())],
+            None => Cell::new(tr!(
+                "{running} of {total} running",
+                running = running,
+                total = members.len()
             ))
             .muted(),
         };

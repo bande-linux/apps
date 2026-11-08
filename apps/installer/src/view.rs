@@ -5,6 +5,13 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
+
+use bande_l10n::{text, tr, trn};
+
+use crate::deb::{Deb, Identity, Machine};
+use crate::flow::{Action, Preview, Problem, State};
+use crate::icon::Icon;
+use crate::worker::{self, Feed, Job, Message};
 use bande_fs::format_size;
 use bande_packages::{Canceller, Client, Progress, Status};
 use bande_toolkit::ui::{
@@ -12,12 +19,6 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{Palette, TextSystem};
-
-use crate::L10N;
-use crate::deb::{Deb, Identity, Machine};
-use crate::flow::{Action, Preview, Problem, State};
-use crate::icon::Icon;
-use crate::worker::{self, Feed, Job, Message};
 
 pub const WINDOW_SIZE: (u32, u32) = (520, 480);
 const ICON_SIZE: f32 = 64.0;
@@ -45,10 +46,10 @@ fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
 
 fn arch_name(arch: &str) -> String {
     match arch {
-        "amd64" => L10N.tr("arch-amd64"),
-        "arm64" => L10N.tr("arch-arm64"),
-        "armhf" => L10N.tr("arch-armhf"),
-        "i386" => L10N.tr("arch-i386"),
+        "amd64" => tr!("Intel and AMD computers (amd64)"),
+        "arm64" => tr!("64-bit ARM (arm64)"),
+        "armhf" => tr!("32-bit ARM (armhf)"),
+        "i386" => tr!("older 32-bit Intel and AMD computers (i386)"),
         other => other.to_owned(),
     }
 }
@@ -56,12 +57,10 @@ fn arch_name(arch: &str) -> String {
 fn origin_name(origin: &str) -> String {
     let mut parts = origin.splitn(3, '-');
     match (parts.next(), parts.next(), parts.next()) {
-        (Some("debian"), Some(suite), Some(component)) => L10N.tr_args(
-            "origin-debian",
-            [
-                ("suite", suite.to_owned().into()),
-                ("component", component.to_owned().into()),
-            ],
+        (Some("debian"), Some(suite), Some(component)) => tr!(
+            "Debian {suite}, {component}",
+            suite = suite.to_owned(),
+            component = component.to_owned()
         ),
         _ => origin.to_owned(),
     }
@@ -69,12 +68,12 @@ fn origin_name(origin: &str) -> String {
 
 fn status_line(status: Status) -> String {
     match status {
-        Status::Waiting => L10N.tr("status-waiting"),
-        Status::Authorizing => L10N.tr("status-authorizing"),
-        Status::Downloading => L10N.tr("status-downloading"),
-        Status::Installing => L10N.tr("status-installing"),
-        Status::Removing => L10N.tr("status-removing"),
-        Status::Working => L10N.tr("status-working"),
+        Status::Waiting => tr!("Waiting for another installation to finish…"),
+        Status::Authorizing => tr!("Waiting for your password…"),
+        Status::Downloading => tr!("Downloading…"),
+        Status::Installing => tr!("Installing…"),
+        Status::Removing => tr!("Removing…"),
+        Status::Working => tr!("Working…"),
     }
 }
 
@@ -280,22 +279,18 @@ impl Installer {
         let Some(deb) = &self.deb else {
             return Vec::new();
         };
-        let facts = L10N.tr_args(
-            "version-size",
-            [
-                ("version", deb.version.clone().into()),
-                ("size", format_size(deb.installed_size).into()),
-            ],
+        let facts = tr!(
+            "Version {version} · {size}",
+            version = deb.version.clone(),
+            size = format_size(deb.installed_size)
         );
         let mut titles: Widgets = match &self.identity {
             Some(identity) => vec![
                 boxed(Label::heading(&identity.name)),
-                boxed(Label::new(&L10N.tr_args(
-                    "package-facts",
-                    [
-                        ("package", deb.name.clone().into()),
-                        ("facts", facts.into()),
-                    ],
+                boxed(Label::new(&tr!(
+                    "{package} · {facts}",
+                    package = deb.name.clone(),
+                    facts = facts
                 ))),
             ],
             None => vec![boxed(Label::heading(&deb.name)), boxed(Label::new(&facts))],
@@ -325,80 +320,79 @@ impl Installer {
         };
         let change = match &preview.action {
             Action::Install => None,
-            Action::Upgrade(from) => Some(("upgrade-from", from)),
-            Action::Downgrade(from) => Some(("downgrade-from", from)),
+            Action::Upgrade(from) => Some((text!("Upgrades from {from} to {to}"), from)),
+            Action::Downgrade(from) => Some((text!("Downgrades from {from} to {to}"), from)),
         };
         let mut widgets: Widgets = change
             .map(|(id, from)| {
-                boxed(Label::new(&L10N.tr_args(
-                    id,
-                    [
-                        ("from", from.clone().into()),
-                        ("to", deb.version.clone().into()),
-                    ],
-                )))
+                boxed(Label::new(&id.tr_args(&[
+                    ("from", &from.clone() as &dyn std::fmt::Display),
+                    ("to", &deb.version.clone() as &dyn std::fmt::Display),
+                ])))
             })
             .into_iter()
             .collect();
         if let Action::Downgrade(from) = &preview.action {
-            widgets.push(boxed(Label::new(
-                &L10N.tr_args("downgrade-caution", [("from", from.clone().into())]),
-            )));
+            widgets.push(boxed(Label::new(&tr!(
+                "This is older than the installed version {from}.",
+                from = from.clone()
+            ))));
         }
         if !preview.also.is_empty() {
             let title = match preview.download {
-                0 => L10N.tr_args("also-installs", [("count", preview.also.len().into())]),
-                size => L10N.tr_args(
-                    "also-installs-download",
-                    [
-                        ("count", preview.also.len().into()),
-                        ("size", format_size(size).into()),
-                    ],
+                0 => trn!(
+                    "Also installs 1 package",
+                    "Also installs {count} packages",
+                    count = preview.also.len()
+                ),
+                size => trn!(
+                    "Also installs 1 package · {size} to download",
+                    "Also installs {count} packages · {size} to download",
+                    count = preview.also.len(),
+                    size = format_size(size)
                 ),
             };
             widgets.push(disclosure(&title, &preview.also.join("\n")));
         }
         if !preview.removes.is_empty() {
-            widgets.push(boxed(Label::new(&L10N.tr_args(
-                "removes",
-                [
-                    ("count", preview.removes.len().into()),
-                    ("names", preview.removes.join(", ").into()),
-                ],
+            widgets.push(boxed(Label::new(&trn!(
+                "Removes 1 package: {names}",
+                "Removes {count} packages: {names}",
+                count = preview.removes.len(),
+                names = preview.removes.join(", ")
             ))));
         }
         match &preview.signed {
-            Some(signed) => widgets.push(boxed(Label::new(&L10N.tr_args(
-                "signed-available",
-                [("source", origin_name(&signed.origin).into())],
-            )))),
-            None => widgets.push(boxed(Label::new(&L10N.tr("trust")))),
+            Some(signed) => widgets.push(boxed(Label::new(&tr!("The same version is in your software sources ({source}), where it is signed. Installing it from there is safer than installing this file.", source = origin_name(&signed.origin))))),
+            None => widgets.push(boxed(Label::new(&tr!("This package doesn't come from your software sources. Its install scripts get full control of this computer, and it may add its own software source. Install it only if you trust where you got it.")))),
         }
         if !deb.maintainer.is_empty() {
-            widgets.push(boxed(Label::new(&L10N.tr_args(
-                "from-maintainer",
-                [("maintainer", deb.maintainer.clone().into())],
+            widgets.push(boxed(Label::new(&tr!(
+                "From {maintainer}",
+                maintainer = deb.maintainer.clone()
             ))));
         }
         if !deb.homepage.is_empty() {
             widgets.push(boxed(Label::new(&deb.homepage)));
         }
         if !deb.description.is_empty() {
-            widgets.push(disclosure(&L10N.tr("details"), &deb.description));
+            widgets.push(disclosure(&tr!("Details"), &deb.description));
         }
         let install = match preview.removes.is_empty() {
-            true => self.button(&L10N.tr("install"), Intent::Install).primary(),
+            true => self.button(&tr!("Install"), Intent::Install).primary(),
             false => self
-                .button(&L10N.tr("install-and-remove"), Intent::Install)
+                .button(&tr!("Install and Remove"), Intent::Install)
                 .destructive(),
         };
-        widgets.push(boxed(Label::new(&L10N.tr("password-hint")).secondary()));
-        let mut buttons = vec![boxed(self.button(&L10N.tr("cancel"), Intent::Close))];
+        widgets.push(boxed(
+            Label::new(&tr!("Installing asks for an administrator’s password.")).secondary(),
+        ));
+        let mut buttons = vec![boxed(self.button(&tr!("Cancel"), Intent::Close))];
         match preview.signed.is_some() && preview.removes.is_empty() {
             true => buttons.extend([
-                boxed(self.button(&L10N.tr("install-file"), Intent::Install)),
+                boxed(self.button(&tr!("Install This File"), Intent::Install)),
                 boxed(
-                    self.button(&L10N.tr("install-signed"), Intent::InstallSigned)
+                    self.button(&tr!("Install from Software Sources"), Intent::InstallSigned)
                         .primary(),
                 ),
             ]),
@@ -410,7 +404,7 @@ impl Installer {
 
     fn working(&self, progress: &Progress) -> Widgets {
         let status = status_line(progress.status);
-        let mut cancel = self.button(&L10N.tr("cancel"), Intent::Cancel);
+        let mut cancel = self.button(&tr!("Cancel"), Intent::Cancel);
         cancel.set_enabled(progress.allow_cancel);
         let fraction = match progress.status {
             Status::Authorizing | Status::Waiting => None,
@@ -421,35 +415,35 @@ impl Installer {
             boxed(ProgressBar::new(&status, fraction)),
         ];
         if progress.status == Status::Authorizing {
-            widgets.push(boxed(Label::new(&L10N.tr("authorize-hint")).secondary()));
+            widgets.push(boxed(Label::new(&tr!("Enter an administrator’s password in the dialog to continue, or cancel it to stop.")).secondary()));
         }
         widgets.push(row(vec![boxed(cancel)]));
         widgets
     }
 
     fn body(&self) -> Widgets {
-        let close = || boxed(self.button(&L10N.tr("close"), Intent::Close));
-        let done = || boxed(self.button(&L10N.tr("done"), Intent::Close).primary());
+        let close = || boxed(self.button(&tr!("Close"), Intent::Close));
+        let done = || boxed(self.button(&tr!("Done"), Intent::Close).primary());
         let name = self.name();
         match &self.state {
-            State::Reading => vec![boxed(Spinner::new(&L10N.tr("reading")))],
+            State::Reading => vec![boxed(Spinner::new(&tr!("Reading the package…")))],
             State::Invalid => vec![
-                boxed(Label::new(&L10N.tr("invalid"))),
-                boxed(Label::new(&L10N.tr("invalid-hint"))),
+                boxed(Label::new(&tr!("This file isn't a valid Debian package."))),
+                boxed(Label::new(&tr!(
+                    "The download may be incomplete. Try downloading it again."
+                ))),
                 row(vec![close()]),
             ],
             State::WrongArchitecture { arch, native } => vec![
-                boxed(Label::new(&L10N.tr_args(
-                    "wrong-architecture",
-                    [
-                        ("name", name.into()),
-                        ("arch", arch_name(arch).into()),
-                        ("native", arch_name(native).into()),
-                    ],
+                boxed(Label::new(&tr!(
+                    "“{name}” is built for {arch}. This computer needs a package for {native}.",
+                    name = name,
+                    arch = arch_name(arch),
+                    native = arch_name(native)
                 ))),
-                boxed(Label::new(&L10N.tr_args(
-                    "wrong-architecture-hint",
-                    [("native", native.clone().into())],
+                boxed(Label::new(&tr!(
+                    "Look for a download for {native} on the developer's website.",
+                    native = native.clone()
                 ))),
                 row(vec![close()]),
             ],
@@ -460,41 +454,48 @@ impl Installer {
                     .map(|deb| deb.version.clone())
                     .unwrap_or_default();
                 vec![
-                    boxed(Label::new(
-                        &L10N.tr_args("present", [("version", version.into())]),
-                    )),
+                    boxed(Label::new(&tr!(
+                        "Version {version} is installed.",
+                        version = version
+                    ))),
                     row(vec![
-                        boxed(self.button(&L10N.tr("remove"), Intent::AskRemove)),
+                        boxed(self.button(&tr!("Remove…"), Intent::AskRemove)),
                         done(),
                     ]),
                 ]
             }
             State::Ready(preview) => self.preview(preview),
             State::Blocked { missing, details } => {
-                let mut widgets = vec![boxed(Label::new(&L10N.tr("blocked")))];
+                let mut widgets = vec![boxed(Label::new(&tr!(
+                    "Can't install: it needs packages that aren't available"
+                )))];
                 if !missing.is_empty() {
-                    widgets.push(boxed(Label::new(
-                        &L10N.tr_args("needs", [("names", missing.join(", ").into())]),
-                    )));
+                    widgets.push(boxed(Label::new(&tr!(
+                        "Needs {names}",
+                        names = missing.join(", ")
+                    ))));
                 }
-                widgets.push(disclosure(&L10N.tr("details"), details));
+                widgets.push(disclosure(&tr!("Details"), details));
                 widgets.push(row(vec![close()]));
                 widgets
             }
             State::Installing(progress) | State::Removing(progress) => self.working(progress),
             State::Installed { apps, restart } => {
-                let mut widgets = vec![boxed(Label::new(
-                    &L10N.tr_args("installed", [("name", name.into())]),
-                ))];
+                let mut widgets = vec![boxed(Label::new(&tr!(
+                    "“{name}” is installed.",
+                    name = name
+                )))];
                 if *restart {
-                    widgets.push(boxed(Label::new(&L10N.tr("restart-to-finish"))));
+                    widgets.push(boxed(Label::new(&tr!(
+                        "Restart the computer to finish installing."
+                    ))));
                 }
                 let mut buttons: Widgets = apps
                     .iter()
                     .enumerate()
                     .map(|(index, app)| {
                         boxed(self.button(
-                            &L10N.tr_args("open-app", [("app", app.name.clone().into())]),
+                            &tr!("Open {app}", app = app.name.clone()),
                             Intent::Open(index),
                         ))
                     })
@@ -504,51 +505,59 @@ impl Installer {
                 widgets
             }
             State::ConfirmRemove(also) => {
-                let mut widgets = vec![boxed(Label::new(
-                    &L10N.tr_args("remove-confirm", [("name", name.into())]),
-                ))];
+                let mut widgets = vec![boxed(Label::new(&tr!("Remove “{name}”?", name = name)))];
                 if !also.is_empty() {
-                    widgets.push(boxed(Label::new(&L10N.tr_args(
-                        "remove-also",
-                        [
-                            ("count", also.len().into()),
-                            ("names", also.join(", ").into()),
-                        ],
+                    widgets.push(boxed(Label::new(&trn!(
+                        "This also removes 1 package: {names}",
+                        "This also removes {count} packages: {names}",
+                        count = also.len(),
+                        names = also.join(", ")
                     ))));
                 }
                 widgets.push(row(vec![
-                    boxed(self.button(&L10N.tr("cancel"), Intent::Back)),
-                    boxed(
-                        self.button(&L10N.tr("remove-button"), Intent::Remove)
-                            .destructive(),
-                    ),
+                    boxed(self.button(&tr!("Cancel"), Intent::Back)),
+                    boxed(self.button(&tr!("Remove"), Intent::Remove).destructive()),
                 ]));
                 widgets
             }
             State::Removed => vec![
-                boxed(Label::new(
-                    &L10N.tr_args("removed", [("name", name.into())]),
-                )),
+                boxed(Label::new(&tr!("“{name}” was removed.", name = name))),
                 row(vec![done()]),
             ],
             State::Failed { problem, details } => {
                 let sentence = match problem {
-                    Problem::Locked => L10N.tr("failed-locked"),
-                    Problem::SystemPackage => L10N.tr("failed-system"),
-                    Problem::Unavailable => L10N.tr("failed-unavailable"),
-                    Problem::NoNetwork => L10N.tr("failed-no-network"),
-                    Problem::NoSpace => L10N.tr("failed-no-space"),
-                    Problem::Dependencies => L10N.tr("failed-dependencies"),
-                    Problem::Install => L10N.tr("failed-install"),
-                    Problem::Remove => L10N.tr("failed-remove"),
+                    Problem::Locked => {
+                        tr!("Another installation is running. Try again when it finishes.")
+                    }
+                    Problem::SystemPackage => {
+                        tr!("This package is part of the system and can't be removed.")
+                    }
+                    Problem::Unavailable => {
+                        tr!("Installing packages needs PackageKit, which isn't installed.")
+                    }
+                    Problem::NoNetwork => tr!(
+                        "The packages it needs couldn't be downloaded. Check your internet connection and try again."
+                    ),
+                    Problem::NoSpace => {
+                        tr!("There isn't enough disk space. Free up some space and try again.")
+                    }
+                    Problem::Dependencies => tr!(
+                        "It needs packages that can't be installed right now. Install pending updates in Settings › Software Update, then try again."
+                    ),
+                    Problem::Install => tr!(
+                        "The package couldn't be installed. Try again, or open Details to see what went wrong."
+                    ),
+                    Problem::Remove => tr!(
+                        "The package couldn't be removed. Try again, or open Details to see what went wrong."
+                    ),
                 };
                 let mut widgets = vec![boxed(Label::new(&sentence))];
                 if !details.is_empty() {
-                    widgets.push(disclosure(&L10N.tr("details"), details));
+                    widgets.push(disclosure(&tr!("Details"), details));
                 }
                 widgets.push(row(vec![
                     close(),
-                    boxed(self.button(&L10N.tr("try-again"), Intent::Retry).primary()),
+                    boxed(self.button(&tr!("Try Again"), Intent::Retry).primary()),
                 ]));
                 widgets
             }
@@ -558,7 +567,7 @@ impl Installer {
     fn rebuild(&mut self) {
         let mut widgets = self.header();
         if self.refused {
-            widgets.push(boxed(Label::new(&L10N.tr("not-authorized"))));
+            widgets.push(boxed(Label::new(&tr!("Nothing was changed, because no administrator's password was given. If no password window appeared, log out and back in, then try again."))));
         }
         widgets.extend(self.body());
         let page = boxed(Stack::new(Axis::Vertical, SPACING, PADDING, widgets));

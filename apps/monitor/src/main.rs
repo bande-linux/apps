@@ -2,14 +2,15 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
 use accesskit::TreeUpdate;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::Entry;
 use bande_monitor::{
-    Asked, BatteryReport, Catalog, FILES_APP_ID, INSPECTOR_SIZE, Icons, InspectorView, L10N,
-    MenuCommand, Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop,
-    TOOLBAR_HEIGHT, Tab, battery_reader, list_sleep_blockers, stop_all,
+    Asked, BatteryReport, Catalog, FILES_APP_ID, INSPECTOR_SIZE, Icons, InspectorView, MenuCommand,
+    Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop, TOOLBAR_HEIGHT,
+    Tab, battery_reader, list_sleep_blockers, stop_all,
 };
 use bande_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Scene, TextSystem, Window, WindowEvent,
@@ -34,7 +35,7 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("window-title"),
+    name: || tr!("Activity Monitor"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -323,7 +324,7 @@ fn open_main(
     let mut snapshot = Snapshot::default();
     let main = cx.open(
         Kind::Main,
-        &L10N.tr("window-title"),
+        &tr!("Activity Monitor"),
         WINDOW_SIZE,
         |appearance| {
             let mut screen =
@@ -388,7 +389,7 @@ impl Program for ActivityMonitor {
                 .and_then(|main| cx.view(main))
                 .and_then(|pane| pane.0.app_menus(true, cx.installed(FILES_APP_ID)))
                 .unwrap_or_else(|| self.closed_menus.clone()),
-            window: vec![Entry::item(&L10N.tr("window-title"), SHOW_MONITOR)],
+            window: vec![Entry::item(&tr!("Activity Monitor"), SHOW_MONITOR)],
         }
     }
 

@@ -6,6 +6,15 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
+
+use bande_l10n::{text, tr, trn};
+
+use crate::catalog::{self, Block, Bundle, Category, Component, Icon, flatpak_needs_x11, search};
+use crate::media::{self, Loaded, Media, Request, ShotError};
+use crate::online;
+use crate::settings::SoftwareSettings;
+use crate::widgets::{AppRow, Grid, Picture};
+use crate::worker::{self, Facts, Failure, Job, Message, Problem, Query};
 use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_datetime::DateFormats;
 use bande_fs::format_size;
@@ -19,14 +28,6 @@ use bande_toolkit::ui::{
     SegmentedControl, Spinner, Stack, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{Image, Palette, Rect, TextSystem};
-
-use crate::L10N;
-use crate::catalog::{self, Block, Bundle, Category, Component, Icon, flatpak_needs_x11, search};
-use crate::media::{self, Loaded, Media, Request, ShotError};
-use crate::online;
-use crate::settings::SoftwareSettings;
-use crate::widgets::{AppRow, Grid, Picture};
-use crate::worker::{self, Facts, Failure, Job, Message, Problem, Query};
 
 pub const WINDOW_SIZE: (u32, u32) = (820, 680);
 const SPACING: f32 = 12.0;
@@ -122,62 +123,62 @@ fn row(children: Widgets) -> Box<dyn Widget> {
 }
 
 fn category_name(category: Category) -> String {
-    L10N.tr(match category {
-        Category::Internet => "category-internet",
-        Category::Productivity => "category-productivity",
-        Category::Graphics => "category-graphics",
-        Category::MusicAndVideo => "category-music-and-video",
-        Category::Games => "category-games",
-        Category::Education => "category-education",
-        Category::Development => "category-development",
-        Category::Utilities => "category-utilities",
-        Category::System => "category-system",
-    })
+    match category {
+        Category::Internet => tr!("Internet"),
+        Category::Productivity => tr!("Productivity"),
+        Category::Graphics => tr!("Graphics & Photography"),
+        Category::MusicAndVideo => tr!("Music & Video"),
+        Category::Games => tr!("Games"),
+        Category::Education => tr!("Education & Science"),
+        Category::Development => tr!("Developer Tools"),
+        Category::Utilities => tr!("Utilities"),
+        Category::System => tr!("System"),
+    }
 }
 
 fn place_name(place: Place) -> String {
-    L10N.tr(match place {
-        Place::Discover => "discover",
-        Place::Installed => "installed",
-        Place::Updates => "updates",
-    })
+    match place {
+        Place::Discover => tr!("Discover"),
+        Place::Installed => tr!(context = "section", "Installed"),
+        Place::Updates => tr!("Updates"),
+    }
 }
 
 fn remote_name(remote: &str) -> String {
     match remote {
-        FLATHUB => L10N.tr("flathub"),
+        FLATHUB => tr!("Flathub"),
         other => other.to_owned(),
     }
 }
 
 fn permission_text(permission: Permission) -> String {
-    L10N.tr(match permission {
-        Permission::Network => "permission-network",
-        Permission::AllFiles => "permission-all-files",
-        Permission::Home => "permission-home",
-        Permission::ReadOnlyFiles => "permission-read-files",
-        Permission::Folders => "permission-folders",
-        Permission::Devices => "permission-devices",
-        Permission::Audio => "permission-audio",
-        Permission::Bluetooth => "permission-bluetooth",
-        Permission::Printing => "permission-printing",
-        Permission::Ssh => "permission-ssh",
-        Permission::X11 => "permission-x11",
-        Permission::SessionBus => "permission-session-bus",
-        Permission::SystemBus => "permission-system-bus",
-        Permission::Settings => "permission-settings",
-    })
+    match permission {
+        Permission::Network => tr!("Uses the network"),
+        Permission::AllFiles => tr!("Can read and change all your files and the system’s"),
+        Permission::Home => tr!("Can read and change the files in your home folder"),
+        Permission::ReadOnlyFiles => tr!("Can read your files"),
+        Permission::Folders => tr!("Can read and change some of your folders"),
+        Permission::Devices => {
+            tr!("Can use devices such as cameras, USB devices and game controllers")
+        }
+        Permission::Audio => tr!("Can play and record sound"),
+        Permission::Bluetooth => tr!("Can use Bluetooth"),
+        Permission::Printing => tr!("Can print"),
+        Permission::Ssh => tr!("Can use your SSH keys"),
+        Permission::X11 => tr!("Draws through X11"),
+        Permission::SessionBus => tr!("Can talk to every app and service in your session"),
+        Permission::SystemBus => tr!("Can talk to system services"),
+        Permission::Settings => tr!("Can read and change other apps’ settings"),
+    }
 }
 
 fn origin_name(origin: &str) -> String {
     let mut parts = origin.splitn(3, '-');
     match (parts.next(), parts.next(), parts.next()) {
-        (Some("debian"), Some(suite), Some(component)) => L10N.tr_args(
-            "origin-debian",
-            [
-                ("suite", suite.to_owned().into()),
-                ("component", component.to_owned().into()),
-            ],
+        (Some("debian"), Some(suite), Some(component)) => tr!(
+            "Debian {suite} ({component})",
+            suite = suite.to_owned(),
+            component = component.to_owned()
         ),
         _ => origin.to_owned(),
     }
@@ -192,12 +193,12 @@ fn place_control(
     let names: Vec<String> = Place::ALL
         .into_iter()
         .map(|shown| match (shown, updates) {
-            (Place::Updates, 1..) => L10N.tr_args("updates-counted", [("count", updates.into())]),
+            (Place::Updates, 1..) => tr!("Updates ({count})", count = updates),
             _ => place_name(shown),
         })
         .collect();
     let selected = Place::ALL.iter().position(|shown| *shown == place);
-    SegmentedControl::new(&L10N.tr("section"), &names, selected, move |index| {
+    SegmentedControl::new(&tr!("Show"), &names, selected, move |index| {
         if let Some(place) = Place::ALL.get(index) {
             chosen.borrow_mut().push(Intent::Go(*place));
         }
@@ -266,46 +267,61 @@ fn sources(app: &Component) -> Vec<Source> {
 
 fn source_name(source: &Source) -> String {
     match source {
-        Source::Debian => L10N.tr("debian"),
+        Source::Debian => tr!("Debian"),
         Source::Flatpak(remote) => {
-            L10N.tr_args("source-flatpak", [("remote", remote_name(remote).into())])
+            tr!("Flatpak · {remote}", remote = remote_name(remote))
         }
     }
 }
 
 fn status_text(task: Task, progress: &Progress) -> String {
     let id = match (progress.status, task) {
-        (Status::Authorizing, _) => "status-authorizing",
-        (Status::Waiting, _) => "status-waiting",
-        (Status::Downloading, _) => "status-downloading",
-        (Status::Removing, _) | (_, Task::Remove) => "status-removing",
-        (Status::Installing | Status::Working, Task::Install) => "status-installing",
+        (Status::Authorizing, _) => text!("Waiting for your password…"),
+        (Status::Waiting, _) => text!("Waiting for another installation…"),
+        (Status::Downloading, _) => text!("Downloading…"),
+        (Status::Removing, _) | (_, Task::Remove) => text!("Removing…"),
+        (Status::Installing | Status::Working, Task::Install) => text!("Installing…"),
     };
     match progress.percent {
-        Some(percent) if progress.status != Status::Authorizing => L10N.tr_args(
-            "status-percent",
-            [("status", L10N.tr(id).into()), ("percent", percent.into())],
-        ),
-        _ => L10N.tr(id),
+        Some(percent) if progress.status != Status::Authorizing => {
+            tr!("{status} {percent}%", status = id.tr(), percent = percent)
+        }
+        _ => id.tr(),
     }
 }
 
 fn problem_text(problem: Problem, task: Task, name: &str) -> String {
     let id = match (problem, task) {
-        (Problem::NoNetwork, _) => "problem-no-network",
-        (Problem::Locked, _) => "problem-locked",
-        (Problem::NoSpace, _) => "problem-no-space",
-        (Problem::NotFound, _) => "problem-not-found",
-        (Problem::Dependencies, _) => "problem-dependencies",
-        (Problem::SystemPackage, _) => "problem-system-package",
-        (Problem::Unsigned, _) => "problem-unsigned",
-        (Problem::NotAuthorized, _) => "problem-not-authorized",
-        (Problem::NoPackageKit, _) => "problem-no-packagekit",
-        (Problem::NeedsX11, _) => "needs-x11",
-        (Problem::Other | Problem::Cancelled, Task::Install) => "install-failed",
-        (Problem::Other | Problem::Cancelled, Task::Remove) => "remove-failed",
+        (Problem::NoNetwork, _) => {
+            text!("Couldn’t download {name}. Check your internet connection and try again.")
+        }
+        (Problem::Locked, _) => {
+            text!("Another installation or update is running. Try again when it finishes.")
+        }
+        (Problem::NoSpace, _) => {
+            text!("There isn’t enough disk space for {name}. Free up some space and try again.")
+        }
+        (Problem::NotFound, _) => text!(
+            "{name} isn’t in the package lists any more. Check for updates in Software Update to refresh them, then try again."
+        ),
+        (Problem::Dependencies, _) => text!(
+            "{name} needs packages that can’t be installed right now. Install pending updates in Software Update, then try again."
+        ),
+        (Problem::SystemPackage, _) => text!("{name} is part of the system and can’t be removed."),
+        (Problem::Unsigned, _) => {
+            text!("{name} isn’t signed by a trusted source, so it wasn’t installed.")
+        }
+        (Problem::NotAuthorized, _) => text!(
+            "Nothing was changed, because no administrator’s password was given. If no password window appeared, log out and back in, then try again."
+        ),
+        (Problem::NoPackageKit, _) => {
+            text!("Installing apps needs PackageKit, which isn’t installed.")
+        }
+        (Problem::NeedsX11, _) => text!("This app needs X11, which Bande doesn’t run."),
+        (Problem::Other | Problem::Cancelled, Task::Install) => text!("Couldn’t install {name}."),
+        (Problem::Other | Problem::Cancelled, Task::Remove) => text!("Couldn’t remove {name}."),
     };
-    L10N.tr_args(id, [("name", name.to_owned().into())])
+    id.tr_args(&[("name", &name.to_owned() as &dyn std::fmt::Display)])
 }
 
 fn block_text(block: &Block) -> String {
@@ -421,7 +437,7 @@ impl Software {
         online::watch(workers.inbox.outbox());
         let intents: Rc<RefCell<Vec<Intent>>> = Rc::default();
         let typed = Rc::clone(&intents);
-        let search = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
+        let search = SearchField::new(&tr!("Search apps"), "", move |query: &str| {
             typed.borrow_mut().push(Intent::Search(query.to_owned()));
         });
         let places = place_control(&intents, Place::Discover, 0);
@@ -1147,12 +1163,12 @@ impl Software {
         }
         if self.is_installed(key) {
             return Some(match app.launchable.is_some() {
-                true => boxed(self.button(&L10N.tr("open"), Intent::Open(index))),
-                false => boxed(Label::new(&L10N.tr("is-installed")).secondary()),
+                true => boxed(self.button(&tr!("Open"), Intent::Open(index))),
+                false => boxed(Label::new(&tr!("Installed")).secondary()),
             });
         }
         self.source_of(app)
-            .map(|_| boxed(self.button(&L10N.tr("install"), Intent::Install(index))))
+            .map(|_| boxed(self.button(&tr!("Install"), Intent::Install(index))))
     }
 
     fn source_caption(&self, app: &Component) -> Option<String> {
@@ -1188,7 +1204,7 @@ impl Software {
         let mut widgets = vec![boxed(Grid::new(2, SPACING / 2.0, rows))];
         if indices.len() > limit && limit == self.shown {
             widgets.push(row(vec![boxed(self.button(
-                &L10N.tr_args("show-more", [("count", (indices.len() - limit).into())]),
+                &tr!("Show {count} More", count = (indices.len() - limit)),
                 Intent::More,
             ))]));
         }
@@ -1223,13 +1239,15 @@ impl Software {
         self.debian_first(&mut found);
         let query = self.query.trim().to_owned();
         if found.is_empty() {
-            return vec![boxed(Label::new(
-                &L10N.tr_args("no-results", [("query", query.into())]),
-            ))];
+            return vec![boxed(Label::new(&tr!(
+                "No apps match “{query}”.",
+                query = query
+            )))];
         }
-        let mut widgets = vec![boxed(Label::heading(
-            &L10N.tr_args("results-for", [("query", query.into())]),
-        ))];
+        let mut widgets = vec![boxed(Label::heading(&tr!(
+            "Results for “{query}”",
+            query = query
+        )))];
         let shown = self.shown;
         widgets.extend(self.rows(&found, shown));
         widgets
@@ -1258,11 +1276,11 @@ impl Software {
         });
         let mut widgets = self.flathub_status();
         widgets.extend([
-            boxed(Label::heading(&L10N.tr("categories"))),
+            boxed(Label::heading(&tr!("Categories"))),
             boxed(Grid::new(3, SPACING / 2.0, tiles)),
         ]);
         if !fresh.is_empty() {
-            widgets.push(boxed(Label::heading(&L10N.tr("new-and-updated"))));
+            widgets.push(boxed(Label::heading(&tr!("New & Updated"))));
             widgets.extend(self.rows(&fresh, NEW_ROWS));
         }
         widgets
@@ -1271,12 +1289,12 @@ impl Software {
     fn flathub_status(&self) -> Widgets {
         if self.flathub_busy {
             let id = match self.flathub_wanted {
-                Some(false) => "flathub-turning-off",
-                _ => "flathub-turning-on",
+                Some(false) => text!("Turning off Flathub…"),
+                _ => text!("Turning on Flathub…"),
             };
             return vec![row(vec![
-                boxed(Spinner::new(&L10N.tr(id))),
-                boxed(Label::new(&L10N.tr(id)).secondary()),
+                boxed(Spinner::new(&id.tr())),
+                boxed(Label::new(&id.tr()).secondary()),
             ])];
         }
         let Some(failure) = &self.flathub_failure else {
@@ -1285,11 +1303,11 @@ impl Software {
         let mut widgets = vec![boxed(Label::new(&problem_text(
             failure.problem,
             Task::Install,
-            &L10N.tr("flathub"),
+            &tr!("Flathub"),
         )))];
         if !failure.details.is_empty() {
             widgets.push(boxed(Disclosure::new(
-                &L10N.tr("details"),
+                &tr!("Details"),
                 false,
                 Label::new(&failure.details),
                 |_| {},
@@ -1302,7 +1320,7 @@ impl Software {
         let found =
             self.sorted(self.matching(|app| Category::of(&app.categories).contains(&category)));
         let mut widgets = vec![
-            row(vec![boxed(self.button(&L10N.tr("back"), Intent::Back))]),
+            row(vec![boxed(self.button(&tr!("Back"), Intent::Back))]),
             boxed(Label::heading(&category_name(category))),
         ];
         let shown = self.shown;
@@ -1312,9 +1330,14 @@ impl Software {
 
     fn installed_list(&mut self) -> Widgets {
         let found = self.sorted(self.matching(|app| self.is_installed(app.key())));
-        let mut widgets = vec![boxed(Label::heading(&L10N.tr("installed")))];
+        let mut widgets = vec![boxed(Label::heading(&tr!(
+            context = "section",
+            "Installed"
+        )))];
         if found.is_empty() {
-            widgets.push(boxed(Label::new(&L10N.tr("no-installed"))));
+            widgets.push(boxed(Label::new(&tr!(
+                "No apps from the catalogue are installed."
+            ))));
             return widgets;
         }
         let shown = self.shown;
@@ -1323,31 +1346,35 @@ impl Software {
     }
 
     fn updates_list(&mut self) -> Widgets {
-        let mut widgets = vec![boxed(Label::heading(&L10N.tr("updates")))];
+        let mut widgets = vec![boxed(Label::heading(&tr!("Updates")))];
         let count = self.update_count();
         if count == 0 {
-            widgets.push(boxed(Label::new(&L10N.tr("up-to-date"))));
+            widgets.push(boxed(Label::new(&tr!(
+                "Your apps and system are up to date."
+            ))));
             if self.settings_app {
-                widgets.push(boxed(Label::new(&L10N.tr("updates-hint")).secondary()));
+                widgets.push(boxed(Label::new(&tr!("Updates are installed in Settings › Software Update, which also restarts what needs it.")).secondary()));
                 widgets.push(row(vec![boxed(
-                    self.button(&L10N.tr("check-for-updates"), Intent::SoftwareUpdate),
+                    self.button(&tr!("Check for Updates…"), Intent::SoftwareUpdate),
                 )]));
             }
             return widgets;
         }
         let apps = self.sorted(self.matching(|app| self.has_update(app)));
-        widgets.push(boxed(Label::new(
-            &L10N.tr_args("updates-available", [("count", count.into())]),
-        )));
+        widgets.push(boxed(Label::new(&trn!(
+            "1 update is available.",
+            "{count} updates are available.",
+            count = count
+        ))));
         if self.settings_app {
-            widgets.push(boxed(Label::new(&L10N.tr("updates-hint")).secondary()));
+            widgets.push(boxed(Label::new(&tr!("Updates are installed in Settings › Software Update, which also restarts what needs it.")).secondary()));
             widgets.push(row(vec![boxed(
-                self.button(&L10N.tr("update-all"), Intent::SoftwareUpdate)
+                self.button(&tr!("Update All…"), Intent::SoftwareUpdate)
                     .primary(),
             )]));
         }
         if !apps.is_empty() {
-            widgets.push(boxed(Label::heading(&L10N.tr("app-updates"))));
+            widgets.push(boxed(Label::heading(&tr!("Apps"))));
             widgets.extend(self.rows(&apps, apps.len()));
         }
         let debian = self.flatpak_offered.then(|| source_name(&Source::Debian));
@@ -1369,23 +1396,20 @@ impl Software {
             }))
             .take(LISTED_UPDATES)
             .map(|(name, version, source)| match source {
-                Some(source) => L10N.tr_args(
-                    "update-from",
-                    [
-                        ("name", name.clone().into()),
-                        ("version", version.clone().into()),
-                        ("source", source.into()),
-                    ],
+                Some(source) => tr!(
+                    "{name} {version} · {source}",
+                    name = name.clone(),
+                    version = version.clone(),
+                    source = source
                 ),
                 None => format!("{name} {version}"),
             })
             .collect();
         if count > LISTED_UPDATES {
-            packages
-                .push(L10N.tr_args("more-updates", [("count", (count - LISTED_UPDATES).into())]));
+            packages.push(tr!("and {count} more", count = (count - LISTED_UPDATES)));
         }
         widgets.push(boxed(Disclosure::new(
-            &L10N.tr_args("all-updates", [("count", count.into())]),
+            &trn!("1 package", "All {count} packages", count = count),
             false,
             Label::new(&packages.join("\n")),
             |_| {},
@@ -1399,7 +1423,7 @@ impl Software {
             Status::Authorizing | Status::Waiting => None,
             _ => progress.percent.map(|percent| percent as f32 / 100.0),
         };
-        let mut cancel = self.button(&L10N.tr("cancel"), Intent::Cancel(key.to_owned()));
+        let mut cancel = self.button(&tr!("Cancel"), Intent::Cancel(key.to_owned()));
         cancel.set_enabled(progress.allow_cancel);
         let mut widgets = vec![
             boxed(ProgressBar::new(&status, fraction)),
@@ -1407,13 +1431,10 @@ impl Software {
         ];
         if progress.status == Status::Authorizing {
             widgets.push(boxed(
-                Label::new(&L10N.tr_args(
-                    match task {
-                        Task::Install => "authorize-hint",
-                        Task::Remove => "authorize-hint-remove",
-                    },
-                    [("name", app.name.clone().into())],
-                ))
+                Label::new(&(match task {
+                        Task::Install => text!("Enter an administrator’s password in the dialog to install {name}, or cancel it to stop."),
+                        Task::Remove => text!("Enter an administrator’s password in the dialog to remove {name}, or cancel it to stop."),
+                    }).tr_args(&[("name", &app.name.clone() as &dyn std::fmt::Display)]))
                 .secondary(),
             ));
         }
@@ -1446,9 +1467,9 @@ impl Software {
         let key = app.key().to_owned();
         let choices = offered.clone();
         let mut widgets = vec![row(vec![
-            boxed(Label::new(&L10N.tr("info-source")).secondary()),
+            boxed(Label::new(&tr!("Source")).secondary()),
             boxed(SegmentedControl::new(
-                &L10N.tr("info-source"),
+                &tr!("Source"),
                 &names,
                 selected,
                 move |index| {
@@ -1462,23 +1483,26 @@ impl Software {
         ])];
         widgets.extend(offered.iter().map(|source| {
             let name = match self.source_version(app, source) {
-                Some(version) => L10N.tr_args(
-                    "source-version",
-                    [
-                        ("source", source_name(source).into()),
-                        ("version", version.into()),
-                    ],
+                Some(version) => tr!(
+                    "{source} {version}",
+                    source = source_name(source),
+                    version = version
                 ),
                 None => source_name(source),
             };
             let note = match source {
-                Source::Debian => "source-debian-note",
-                Source::Flatpak(_) => "source-flatpak-note",
+                Source::Debian => tr!(
+                    "a system package from Debian, checked by Debian and updated with the system."
+                ),
+                Source::Flatpak(_) => tr!(
+                    "a sandboxed Flatpak, installed for you only and packaged by its developers or the community."
+                ),
             };
             boxed(
-                Label::new(&L10N.tr_args(
-                    "source-about",
-                    [("source", name.into()), ("note", L10N.tr(note).into())],
+                Label::new(&tr!(
+                    "{source}: {note}",
+                    source = name,
+                    note = note
                 ))
                 .secondary(),
             )
@@ -1510,38 +1534,40 @@ impl Software {
             let mut buttons: Widgets = Vec::new();
             if app.launchable.is_some() {
                 buttons.push(boxed(
-                    self.button(&L10N.tr("open"), Intent::Open(index)).primary(),
+                    self.button(&tr!("Open"), Intent::Open(index)).primary(),
                 ));
             }
             if self.source_of(app).is_some() {
-                buttons.push(boxed(
-                    self.button(&L10N.tr("remove"), Intent::Remove(index)),
-                ));
+                buttons.push(boxed(self.button(&tr!("Remove"), Intent::Remove(index))));
             }
             if !buttons.is_empty() {
                 widgets.push(row(buttons));
             }
             if self.has_update(app) {
-                let mut update = vec![boxed(Label::new(&L10N.tr("update-available")))];
+                let mut update = vec![boxed(Label::new(&tr!("An update is available.")))];
                 if self.settings_app {
                     update.push(boxed(
-                        self.button(&L10N.tr("update-all"), Intent::SoftwareUpdate),
+                        self.button(&tr!("Update All…"), Intent::SoftwareUpdate),
                     ));
                 }
                 widgets.push(row(update));
             }
         } else if self.needs_x11(app) {
-            widgets.push(boxed(Label::new(&L10N.tr("needs-x11"))));
+            widgets.push(boxed(Label::new(&tr!(
+                "This app needs X11, which Bande doesn’t run."
+            ))));
         } else if let Some(source) = self.source_of(app) {
             widgets.push(row(vec![boxed(
-                self.button(&L10N.tr("install"), Intent::Install(index))
+                self.button(&tr!("Install"), Intent::Install(index))
                     .primary(),
             )]));
             let hint = match source {
-                Source::Debian => "password-hint",
-                Source::Flatpak(_) => "flatpak-hint",
+                Source::Debian => text!("You’ll be asked for an administrator’s password."),
+                Source::Flatpak(_) => text!(
+                    "Installed for you only, without a password. It runs in a sandbox with the permissions below."
+                ),
             };
-            widgets.push(boxed(Label::new(&L10N.tr(hint)).secondary()));
+            widgets.push(boxed(Label::new(&hint.tr()).secondary()));
         }
         if let Some((task, failure)) = self.failed.get(key) {
             widgets.push(boxed(Label::new(&problem_text(
@@ -1551,7 +1577,7 @@ impl Software {
             ))));
             if !failure.details.is_empty() {
                 widgets.push(boxed(Disclosure::new(
-                    &L10N.tr("details"),
+                    &tr!("Details"),
                     false,
                     Label::new(&failure.details),
                     |_| {},
@@ -1562,22 +1588,26 @@ impl Software {
     }
 
     fn confirmation(&self, app: &Component, removal: &Removal) -> Widgets {
-        let mut widgets = vec![boxed(Label::new(
-            &L10N.tr_args("remove-confirm", [("name", app.name.clone().into())]),
-        ))];
+        let mut widgets = vec![boxed(Label::new(&tr!(
+            "Remove {name}?",
+            name = app.name.clone()
+        )))];
         if !removal.also.is_empty() {
-            widgets.push(boxed(Label::new(&L10N.tr_args(
-                "remove-also",
-                [("packages", removal.also.join(", ").into())],
+            widgets.push(boxed(Label::new(&tr!(
+                "This also removes {packages}.",
+                packages = removal.also.join(", ")
             ))));
         }
         if matches!(removal.source, Source::Flatpak(_)) {
-            widgets.push(boxed(Label::new(&L10N.tr("remove-runtimes")).secondary()));
+            widgets.push(boxed(
+                Label::new(&tr!("Runtimes that no other app uses are removed with it."))
+                    .secondary(),
+            ));
         }
         widgets.push(row(vec![
-            boxed(self.button(&L10N.tr("cancel"), Intent::CancelRemoval)),
+            boxed(self.button(&tr!("Cancel"), Intent::CancelRemoval)),
             boxed(
-                self.button(&L10N.tr("remove"), Intent::ConfirmRemoval)
+                self.button(&tr!("Remove"), Intent::ConfirmRemoval)
                     .destructive(),
             ),
         ]));
@@ -1590,33 +1620,34 @@ impl Software {
         };
         let url = shot.thumbnail.as_deref().unwrap_or(&shot.image);
         let mut widgets: Widgets = vec![match self.shots.get(url) {
-            None => boxed(Spinner::new(&L10N.tr("loading-screenshot"))),
+            None => boxed(Spinner::new(&tr!("Loading screenshot…"))),
             Some(Ok(image)) => boxed(Picture::fitted(
                 image.clone(),
                 SHOT_WIDTH,
                 SHOT_HEIGHT,
-                &L10N.tr_args("screenshot-of", [("name", app.name.clone().into())]),
+                &tr!("Screenshot of {name}", name = app.name.clone()),
             )),
             Some(Err(ShotError::Offline)) => {
-                boxed(Label::new(&L10N.tr("screenshot-offline")).secondary())
+                boxed(Label::new(&tr!("Screenshots appear when you’re online.")).secondary())
             }
             Some(Err(ShotError::Unreadable)) => {
-                boxed(Label::new(&L10N.tr("screenshot-unavailable")).secondary())
+                boxed(Label::new(&tr!("The screenshot couldn’t be loaded.")).secondary())
             }
         }];
         let count = app.screenshots.len();
         let mut controls: Widgets = Vec::new();
         if count > 1 {
-            let mut previous = self.button(&L10N.tr("previous"), Intent::Shot(-1));
+            let mut previous = self.button(&tr!("Previous"), Intent::Shot(-1));
             previous.set_enabled(self.shot > 0);
-            let mut next = self.button(&L10N.tr("next"), Intent::Shot(1));
+            let mut next = self.button(&tr!("Next"), Intent::Shot(1));
             next.set_enabled(self.shot + 1 < count);
             controls.push(boxed(previous));
             controls.push(boxed(next));
             controls.push(boxed(
-                Label::new(&L10N.tr_args(
-                    "screenshot-count",
-                    [("index", (self.shot + 1).into()), ("count", count.into())],
+                Label::new(&tr!(
+                    "{index} of {count}",
+                    index = (self.shot + 1),
+                    count = count
                 ))
                 .secondary(),
             ));
@@ -1650,17 +1681,15 @@ impl Software {
                     .date(&at.to_zoned(jiff::tz::TimeZone::system()), true)
             });
         let version = match date {
-            Some(date) => L10N.tr_args(
-                "release-dated",
-                [
-                    ("version", release.version.clone().into()),
-                    ("date", date.into()),
-                ],
+            Some(date) => tr!(
+                "Version {version} · {date}",
+                version = release.version.clone(),
+                date = date
             ),
-            None => L10N.tr_args("release", [("version", release.version.clone().into())]),
+            None => tr!("Version {version}", version = release.version.clone()),
         };
         let mut widgets = vec![
-            boxed(Label::heading(&L10N.tr("whats-new"))),
+            boxed(Label::heading(&tr!("What’s New"))),
             boxed(Label::new(&version).secondary()),
         ];
         widgets.extend(
@@ -1707,10 +1736,12 @@ impl Software {
         let Some(facts) = self.chosen_flatpak_facts(app) else {
             return Vec::new();
         };
-        let mut widgets = vec![boxed(Label::heading(&L10N.tr("permissions")))];
+        let mut widgets = vec![boxed(Label::heading(&tr!("Permissions")))];
         let found = permissions(&facts.metadata);
         if found.is_empty() {
-            widgets.push(boxed(Label::new(&L10N.tr("permission-none"))));
+            widgets.push(boxed(Label::new(&tr!(
+                "Runs in a sandbox with no access beyond its own files."
+            ))));
         }
         widgets.extend(
             found
@@ -1744,42 +1775,39 @@ impl Software {
             .or_else(|| installed.clone())
             .or_else(|| app.releases.first().map(|release| release.version.clone()));
         if let Some(version) = version {
-            cells.push(fact(&L10N.tr("info-version"), text(&version)));
+            cells.push(fact(&tr!("Version"), text(&version)));
         }
         if let Some(installed) = installed.filter(|installed| available.as_ref() != Some(installed))
         {
-            cells.push(fact(&L10N.tr("info-installed-version"), text(&installed)));
+            cells.push(fact(&tr!("Installed Version"), text(&installed)));
         }
         if let Some(size) = facts.map(|facts| facts.size).filter(|size| *size > 0) {
-            cells.push(fact(&L10N.tr("info-size"), text(&format_size(size))));
+            cells.push(fact(&tr!("Size"), text(&format_size(size))));
         }
         if let Some(facts) = facts.filter(|facts| facts.download > 0) {
             let size = format_size(facts.download);
             let value = match (facts.extra, runtime) {
-                (_, Some((runtime, runtime_size))) => L10N.tr_args(
-                    "download-with-runtime",
-                    [
-                        ("size", size.into()),
-                        ("runtime", runtime.into()),
-                        ("runtime_size", format_size(runtime_size).into()),
-                    ],
+                (_, Some((runtime, runtime_size))) => tr!(
+                    "{size}, and {runtime_size} for the {runtime} runtime",
+                    size = size,
+                    runtime = runtime,
+                    runtime_size = format_size(runtime_size)
                 ),
                 (0, None) => size,
-                (extra, None) => L10N.tr_args(
-                    "download-with",
-                    [("size", size.into()), ("count", extra.into())],
+                (extra, None) => trn!(
+                    "{size}, with 1 more package",
+                    "{size}, with {count} more packages",
+                    count = extra,
+                    size = size
                 ),
             };
-            cells.push(fact(&L10N.tr("info-download"), text(&value)));
+            cells.push(fact(&tr!("Download"), text(&value)));
         }
         if let Some(category) = Category::of(&app.categories).first() {
-            cells.push(fact(
-                &L10N.tr("info-category"),
-                text(&category_name(*category)),
-            ));
+            cells.push(fact(&tr!("Category"), text(&category_name(*category))));
         }
         if let Some(license) = &app.license {
-            cells.push(fact(&L10N.tr("info-license"), text(license)));
+            cells.push(fact(&tr!("Licence"), text(license)));
         }
         let origin = facts
             .map(|facts| facts.origin.as_str())
@@ -1787,25 +1815,25 @@ impl Software {
             .map(origin_name)
             .or_else(|| self.source_of(app).map(|source| source_name(&source)));
         if let Some(origin) = origin {
-            cells.push(fact(&L10N.tr("info-source"), text(&origin)));
+            cells.push(fact(&tr!("Source"), text(&origin)));
         }
         if let Some(developer) = &app.developer {
-            cells.push(fact(&L10N.tr("info-developer"), text(developer)));
+            cells.push(fact(&tr!("Developer"), text(developer)));
         }
         if let Some(url) = facts
             .map(|facts| facts.homepage.clone())
             .filter(|url| url.starts_with("https://") || url.starts_with("http://"))
         {
             let link = self
-                .button(&L10N.tr("visit-website"), Intent::Website(url))
+                .button(&tr!("Developer Website"), Intent::Website(url))
                 .link();
-            cells.push(fact(&L10N.tr("info-website"), row(vec![boxed(link)])));
+            cells.push(fact(&tr!("Website"), row(vec![boxed(link)])));
         }
         if cells.is_empty() {
             return Vec::new();
         }
         vec![
-            boxed(Label::heading(&L10N.tr("information"))),
+            boxed(Label::heading(&tr!("Information"))),
             boxed(Grid::new(3, SPACING, cells)),
         ]
     }
@@ -1826,7 +1854,7 @@ impl Software {
             heading.push(boxed(Label::new(&source_name(&source)).secondary()));
         }
         let mut widgets = vec![
-            row(vec![boxed(self.button(&L10N.tr("back"), Intent::Back))]),
+            row(vec![boxed(self.button(&tr!("Back"), Intent::Back))]),
             row(vec![
                 boxed(Picture::new(
                     remote_icon(app)
@@ -1870,9 +1898,11 @@ impl Software {
     fn rebuild(&mut self) {
         self.recount();
         let mut widgets = if self.loading {
-            vec![boxed(Spinner::new(&L10N.tr("loading")))]
+            vec![boxed(Spinner::new(&tr!("Loading apps…")))]
         } else if self.apps.is_empty() {
-            vec![boxed(Label::new(&L10N.tr("no-catalogue")))]
+            vec![boxed(Label::new(&tr!(
+                "No app catalogue is installed. Install the appstream package and refresh the package lists in Software Update."
+            )))]
         } else {
             match self.page() {
                 Page::App(index) => self.details(index),
@@ -1886,7 +1916,7 @@ impl Software {
             }
         };
         if !self.online {
-            widgets.insert(0, boxed(Label::new(&L10N.tr("offline")).secondary()));
+            widgets.insert(0, boxed(Label::new(&tr!("You’re offline. You can browse apps, but installing them and their screenshots need the internet.")).secondary()));
         }
         let page = boxed(Stack::new(Axis::Vertical, SPACING, 0.0, widgets));
         if let Some(holder) = self.ui.widget(self.content)

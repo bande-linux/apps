@@ -3,12 +3,13 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::time::Duration;
 
-use bande_toolkit::ui::{Band, GraphKind, Series, SeriesColor};
 
-use crate::L10N;
+use bande_l10n::{Text, text, tr};
+
 use crate::apps::{Catalog, Group, GroupKey};
 use bande_status::history::{ChargeSample, charging_spans, time_on_battery};
 use bande_status::status::Power;
+use bande_toolkit::ui::{Band, GraphKind, Series, SeriesColor};
 
 use crate::format::{format_bytes, format_cpu_time, format_hours, format_percent, format_rate};
 use crate::power::{BATTERY_HISTORY, BatteryReport};
@@ -95,15 +96,15 @@ pub struct Readout {
 }
 
 impl Readout {
-    fn new(message: &str, value: String) -> Self {
+    fn new(message: Text, value: String) -> Self {
         Self {
-            label: L10N.tr(message),
+            label: message.tr(),
             value,
             series: None,
         }
     }
 
-    fn keyed(message: &str, value: String, series: SeriesColor) -> Self {
+    fn keyed(message: Text, value: String, series: SeriesColor) -> Self {
         Self {
             series: Some(series),
             ..Self::new(message, value)
@@ -210,12 +211,12 @@ impl Tab {
 
     pub fn title(self) -> String {
         match self {
-            Tab::Cpu => L10N.tr("tab-cpu"),
-            Tab::Memory => L10N.tr("tab-memory"),
-            Tab::Energy => L10N.tr("tab-energy"),
-            Tab::Disk => L10N.tr("tab-disk"),
-            Tab::Network => L10N.tr("tab-network"),
-            Tab::Gpu => L10N.tr("tab-gpu"),
+            Tab::Cpu => tr!("CPU"),
+            Tab::Memory => tr!("Memory"),
+            Tab::Energy => tr!("Energy"),
+            Tab::Disk => tr!("Disk"),
+            Tab::Network => tr!("Network"),
+            Tab::Gpu => tr!("GPU"),
         }
     }
 
@@ -384,29 +385,29 @@ impl Column {
 
     pub fn title(self) -> String {
         match self {
-            Column::Name => L10N.tr("column-name"),
-            Column::Cpu => L10N.tr("column-cpu"),
-            Column::CpuTime => L10N.tr("column-cpu-time"),
-            Column::Threads => L10N.tr("column-threads"),
-            Column::Pid => L10N.tr("column-pid"),
-            Column::User => L10N.tr("column-user"),
-            Column::Memory => L10N.tr("column-memory"),
-            Column::Compressed => L10N.tr("column-compressed"),
-            Column::Resident => L10N.tr("column-resident"),
-            Column::Read => L10N.tr("column-read"),
-            Column::Written => L10N.tr("column-written"),
-            Column::ReadTotal => L10N.tr("column-read-total"),
-            Column::WrittenTotal => L10N.tr("column-written-total"),
-            Column::Received => L10N.tr("column-received"),
-            Column::Sent => L10N.tr("column-sent"),
-            Column::ReceivedTotal => L10N.tr("column-received-total"),
-            Column::SentTotal => L10N.tr("column-sent-total"),
-            Column::Gpu => L10N.tr("column-gpu"),
-            Column::GpuTime => L10N.tr("column-gpu-time"),
-            Column::GpuMemory => L10N.tr("column-gpu-memory"),
-            Column::EnergyImpact => L10N.tr("column-energy-impact"),
-            Column::Wakeups => L10N.tr("column-wakeups"),
-            Column::PreventingSleep => L10N.tr("column-preventing-sleep"),
+            Column::Name => tr!("Name"),
+            Column::Cpu => tr!("% CPU"),
+            Column::CpuTime => tr!("CPU Time"),
+            Column::Threads => tr!("Threads"),
+            Column::Pid => tr!("PID"),
+            Column::User => tr!("User"),
+            Column::Memory => tr!("Memory"),
+            Column::Compressed => tr!("Compressed"),
+            Column::Resident => tr!("Resident"),
+            Column::Read => tr!("Read/s"),
+            Column::Written => tr!("Written/s"),
+            Column::ReadTotal => tr!("Bytes Read"),
+            Column::WrittenTotal => tr!("Bytes Written"),
+            Column::Received => tr!("Received/s"),
+            Column::Sent => tr!("Sent/s"),
+            Column::ReceivedTotal => tr!("Bytes Received"),
+            Column::SentTotal => tr!("Bytes Sent"),
+            Column::Gpu => tr!("% GPU"),
+            Column::GpuTime => tr!("GPU Time"),
+            Column::GpuMemory => tr!("GPU Memory"),
+            Column::EnergyImpact => tr!("Energy Impact"),
+            Column::Wakeups => tr!("Wake-ups/s"),
+            Column::PreventingSleep => tr!("Preventing Sleep"),
         }
     }
 
@@ -485,8 +486,8 @@ impl Column {
                     .iter()
                     .any(|process| process.preventing_sleep.is_some())
                 {
-                    true => L10N.tr("preventing-sleep-yes"),
-                    false => L10N.tr("preventing-sleep-no"),
+                    true => tr!("Yes"),
+                    false => tr!("No"),
                 },
             ),
             Column::Wakeups => {
@@ -677,10 +678,12 @@ impl Frequency {
     }
 
     pub fn title(self) -> String {
-        L10N.tr_args(
-            &format!("frequency-{}", self.id()),
-            [("seconds", self.interval().as_secs().into())],
-        )
+        let seconds = self.interval().as_secs();
+        match self {
+            Frequency::VeryOften => tr!("Very Often ({seconds} sec)", seconds = seconds),
+            Frequency::Often => tr!("Often ({seconds} sec)", seconds = seconds),
+            Frequency::Normally => tr!("Normally ({seconds} sec)", seconds = seconds),
+        }
     }
 }
 
@@ -720,13 +723,13 @@ impl Filter {
 
     pub fn title(self) -> String {
         match self {
-            Filter::All => L10N.tr("filter-all"),
-            Filter::Hierarchy => L10N.tr("filter-hierarchy"),
-            Filter::Mine => L10N.tr("filter-mine"),
-            Filter::System => L10N.tr("filter-system"),
-            Filter::Active => L10N.tr("filter-active"),
-            Filter::Apps => L10N.tr("filter-apps"),
-            Filter::Selected => L10N.tr("filter-selected"),
+            Filter::All => tr!("All Processes"),
+            Filter::Hierarchy => tr!("All Processes, Hierarchically"),
+            Filter::Mine => tr!("My Processes"),
+            Filter::System => tr!("System Processes"),
+            Filter::Active => tr!("Active Processes"),
+            Filter::Apps => tr!("Apps"),
+            Filter::Selected => tr!("Selected Processes"),
         }
     }
 }
@@ -1143,7 +1146,7 @@ impl Monitor {
 
     fn group_name(&self, group: &Group) -> String {
         match group.key {
-            GroupKey::Kernel => L10N.tr("group-kernel"),
+            GroupKey::Kernel => tr!("Kernel"),
             _ => group.name.clone(),
         }
     }
@@ -1291,8 +1294,8 @@ impl Monitor {
     }
 
     pub fn graph(&self) -> Graph {
-        let titled = |message: &str| Graph {
-            title: L10N.tr(message),
+        let titled = |message: Text| Graph {
+            title: message.tr(),
             span: self.span(),
             kind: GraphKind::Area,
             samples: HISTORY,
@@ -1310,17 +1313,17 @@ impl Monitor {
                     ),
                     Series::new(SeriesColor::Primary, self.cpu.iter().map(|(_, user)| *user)),
                 ],
-                ..titled("graph-cpu-title")
+                ..titled(text!("CPU Load"))
             },
             Tab::Memory => Graph {
                 series: pressure_series(&self.memory),
-                ..titled("graph-pressure")
+                ..titled(text!("Memory Pressure"))
             },
             Tab::Energy => match self.battery_history() {
                 Some(report) => Graph {
-                    span: L10N.tr("graph-battery-span"),
+                    span: tr!("12 hr"),
                     samples: BATTERY_SAMPLES,
-                    ..battery_graph(report, titled("graph-battery"))
+                    ..battery_graph(report, titled(text!("Battery (last 12 hours)")))
                 },
                 None => {
                     let peak = self
@@ -1336,16 +1339,16 @@ impl Monitor {
                             }),
                         )],
                         scale: Some(format_percent(peak)),
-                        ..titled("graph-energy-title")
+                        ..titled(text!("Energy Impact"))
                     }
                 }
             },
-            Tab::Disk => rates_graph(&self.disk, titled("graph-disk-title")),
-            Tab::Network => rates_graph(&self.network, titled("graph-network-title")),
+            Tab::Disk => rates_graph(&self.disk, titled(text!("Data Read and Written"))),
+            Tab::Network => rates_graph(&self.network, titled(text!("Data Received and Sent"))),
             Tab::Gpu => Graph {
                 series: vec![Series::new(SeriesColor::Primary, self.gpu.iter().copied())],
                 scale: Some("100 %".to_owned()),
-                ..titled("graph-gpu-title")
+                ..titled(text!("GPU Usage"))
             },
         }
     }
@@ -1364,7 +1367,7 @@ impl Monitor {
 
     pub fn span(&self) -> String {
         let minutes = HISTORY as u64 * self.frequency.interval().as_secs() / 60;
-        L10N.tr_args("graph-span", [("minutes", minutes.into())])
+        tr!("{minutes} min", minutes = minutes)
     }
 
     pub fn set_filter(&mut self, filter: Filter) {
@@ -1451,66 +1454,50 @@ impl Monitor {
 
     pub fn graph_description(&self) -> String {
         let snapshot = &self.snapshot;
-        let percent = |share: f32| format_percent(f64::from(share) * 100.0).into();
+        let percent = |share: f32| format_percent(f64::from(share) * 100.0);
         let (received, sent) = network_rates(snapshot);
         match self.tab {
-            Tab::Cpu => L10N.tr_args(
-                "graph-cpu",
-                [
-                    ("total", percent(snapshot.cpu.user + snapshot.cpu.system)),
-                    ("user", percent(snapshot.cpu.user)),
-                    ("system", percent(snapshot.cpu.system)),
-                ],
+            Tab::Cpu => tr!(
+                "CPU {total} %, user {user} %, system {system} %",
+                total = percent(snapshot.cpu.user + snapshot.cpu.system),
+                user = percent(snapshot.cpu.user),
+                system = percent(snapshot.cpu.system)
             ),
             Tab::Memory => {
                 let memory = &snapshot.memory;
                 let level = match memory.pressure.level() {
-                    PressureLevel::Normal => L10N.tr("pressure-normal"),
-                    PressureLevel::Elevated => L10N.tr("pressure-elevated"),
-                    PressureLevel::Critical => L10N.tr("pressure-critical"),
+                    PressureLevel::Normal => tr!("normal"),
+                    PressureLevel::Elevated => tr!("elevated"),
+                    PressureLevel::Critical => tr!("critical"),
                 };
-                L10N.tr_args(
-                    "graph-memory",
-                    [
-                        ("level", level.into()),
-                        ("used", percent(share(memory.used, memory.total))),
-                    ],
+                tr!(
+                    "Memory pressure {level}, {used} % used",
+                    level = level,
+                    used = percent(share(memory.used, memory.total))
                 )
             }
             Tab::Energy => {
                 let impact = format_percent(self.energy.back().map_or(0.0, |(impact, _)| *impact));
                 match self.power.as_ref().and_then(|report| report.battery) {
-                    Some(battery) => L10N.tr_args(
-                        "graph-battery-charge",
-                        [
-                            ("charge", format!("{:.0}", battery.percent).into()),
-                            ("impact", impact.into()),
-                        ],
+                    Some(battery) => tr!(
+                        "Battery {charge} %, energy impact {impact}",
+                        charge = format!("{:.0}", battery.percent),
+                        impact = impact
                     ),
-                    None => L10N.tr_args("graph-energy", [("impact", impact.into())]),
+                    None => tr!("Energy impact {impact}", impact = impact),
                 }
             }
-            Tab::Disk => L10N.tr_args(
-                "graph-disk",
-                [
-                    ("read", format_rate(snapshot.disk.read_per_second).into()),
-                    (
-                        "written",
-                        format_rate(snapshot.disk.written_per_second).into(),
-                    ),
-                ],
+            Tab::Disk => tr!(
+                "Disk read {read}, written {written}",
+                read = format_rate(snapshot.disk.read_per_second),
+                written = format_rate(snapshot.disk.written_per_second),
             ),
-            Tab::Network => L10N.tr_args(
-                "graph-network",
-                [
-                    ("received", format_rate(received).into()),
-                    ("sent", format_rate(sent).into()),
-                ],
+            Tab::Network => tr!(
+                "Network received {received}, sent {sent}",
+                received = format_rate(received),
+                sent = format_rate(sent)
             ),
-            Tab::Gpu => L10N.tr_args(
-                "graph-gpu",
-                [("used", format_percent(gpu_percent(snapshot)).into())],
-            ),
+            Tab::Gpu => tr!("GPU {used} %", used = format_percent(gpu_percent(snapshot))),
         }
     }
 
@@ -1521,20 +1508,20 @@ impl Monitor {
             Tab::Cpu => vec![
                 vec![
                     Readout::keyed(
-                        "summary-system",
+                        text!("System"),
                         percent(snapshot.cpu.system),
                         SeriesColor::Secondary,
                     ),
                     Readout::keyed(
-                        "summary-user",
+                        text!("User"),
                         percent(snapshot.cpu.user),
                         SeriesColor::Primary,
                     ),
-                    Readout::new("summary-idle", percent(snapshot.cpu.idle)),
+                    Readout::new(text!("Idle"), percent(snapshot.cpu.idle)),
                 ],
                 vec![
                     Readout::new(
-                        "summary-threads",
+                        text!("Threads"),
                         snapshot
                             .processes
                             .iter()
@@ -1542,22 +1529,22 @@ impl Monitor {
                             .sum::<u64>()
                             .to_string(),
                     ),
-                    Readout::new("summary-processes", snapshot.processes.len().to_string()),
+                    Readout::new(text!("Processes"), snapshot.processes.len().to_string()),
                 ],
             ],
             Tab::Memory => {
                 let memory = &snapshot.memory;
                 vec![
                     vec![
-                        Readout::new("summary-physical", format_bytes(memory.total)),
-                        Readout::new("summary-used", format_bytes(memory.used)),
-                        Readout::new("summary-cached", format_bytes(memory.cached)),
-                        Readout::new("summary-swap", format_bytes(memory.swap_used)),
+                        Readout::new(text!("Physical Memory"), format_bytes(memory.total)),
+                        Readout::new(text!("Memory Used"), format_bytes(memory.used)),
+                        Readout::new(text!("Cached Files"), format_bytes(memory.cached)),
+                        Readout::new(text!("Swap Used"), format_bytes(memory.swap_used)),
                     ],
                     vec![
-                        Readout::new("summary-app", format_bytes(memory.app)),
-                        Readout::new("summary-kernel", format_bytes(memory.kernel)),
-                        Readout::new("summary-compressed", format_bytes(memory.compressed)),
+                        Readout::new(text!("App Memory"), format_bytes(memory.app)),
+                        Readout::new(text!("Wired Memory"), format_bytes(memory.kernel)),
+                        Readout::new(text!("Compressed"), format_bytes(memory.compressed)),
                     ],
                 ]
             }
@@ -1565,11 +1552,11 @@ impl Monitor {
                 let (impact, wakeups) = self.energy.back().copied().unwrap_or((0.0, 0.0));
                 let mut columns = vec![vec![
                     Readout::keyed(
-                        "summary-energy-impact",
+                        text!("Energy Impact"),
                         format_percent(impact),
                         SeriesColor::Primary,
                     ),
-                    Readout::new("summary-wakeups", format!("{wakeups:.0}")),
+                    Readout::new(text!("Wake-ups/s"), format!("{wakeups:.0}")),
                 ]];
                 let battery = self.battery_readouts();
                 if !battery.is_empty() {
@@ -1580,27 +1567,30 @@ impl Monitor {
             Tab::Disk => vec![
                 vec![
                     Readout::keyed(
-                        "summary-read-rate",
+                        text!("Data Read/s"),
                         format_rate(snapshot.disk.read_per_second),
                         SeriesColor::Primary,
                     ),
                     Readout::keyed(
-                        "summary-written-rate",
+                        text!("Data Written/s"),
                         format_rate(snapshot.disk.written_per_second),
                         SeriesColor::Secondary,
                     ),
                     Readout::new(
-                        "summary-reads",
+                        text!("Reads/s"),
                         format!("{:.0}", snapshot.disk_operations.reads_per_second),
                     ),
                     Readout::new(
-                        "summary-writes",
+                        text!("Writes/s"),
                         format!("{:.0}", snapshot.disk_operations.writes_per_second),
                     ),
                 ],
                 vec![
-                    Readout::new("summary-read", format_bytes(snapshot.disk.read_total)),
-                    Readout::new("summary-written", format_bytes(snapshot.disk.written_total)),
+                    Readout::new(text!("Data Read"), format_bytes(snapshot.disk.read_total)),
+                    Readout::new(
+                        text!("Data Written"),
+                        format_bytes(snapshot.disk.written_total),
+                    ),
                 ],
             ],
             Tab::Network => {
@@ -1611,23 +1601,23 @@ impl Monitor {
                 vec![
                     vec![
                         Readout::keyed(
-                            "summary-received-rate",
+                            text!("Data Received/s"),
                             format_rate(total(|interface| interface.received_per_second)),
                             SeriesColor::Primary,
                         ),
                         Readout::keyed(
-                            "summary-sent-rate",
+                            text!("Data Sent/s"),
                             format_rate(total(|interface| interface.sent_per_second)),
                             SeriesColor::Secondary,
                         ),
                     ],
                     vec![
                         Readout::new(
-                            "summary-received",
+                            text!("Data Received"),
                             format_bytes(total(|interface| interface.received_total as f64) as u64),
                         ),
                         Readout::new(
-                            "summary-sent",
+                            text!("Data Sent"),
                             format_bytes(total(|interface| interface.sent_total as f64) as u64),
                         ),
                     ],
@@ -1642,15 +1632,15 @@ impl Monitor {
                     .collect::<Vec<_>>();
                 vec![vec![
                     Readout::keyed(
-                        "summary-gpu",
+                        text!("GPU Usage"),
                         format!("{} %", format_percent(gpu_percent(snapshot))),
                         SeriesColor::Primary,
                     ),
                     Readout::new(
-                        "summary-gpu-memory",
+                        text!("GPU Memory"),
                         format_bytes(users.iter().map(|used| used.memory).sum()),
                     ),
-                    Readout::new("summary-gpu-processes", users.len().to_string()),
+                    Readout::new(text!("Processes Using the GPU"), users.len().to_string()),
                 ]]
             }
         }
@@ -1705,13 +1695,11 @@ impl Monitor {
             })
         };
         let time = match battery.power {
-            Power::Battery { remaining } => {
-                Readout::new("summary-time-remaining", hours(remaining))
-            }
+            Power::Battery { remaining } => Readout::new(text!("Time Remaining"), hours(remaining)),
             Power::Charging { until_full } => {
-                Readout::new("summary-time-until-full", hours(until_full))
+                Readout::new(text!("Time Until Full"), hours(until_full))
             }
-            Power::Full => Readout::new("summary-time-until-full", MISSING.to_owned()),
+            Power::Full => Readout::new(text!("Time Until Full"), MISSING.to_owned()),
         };
         let on_battery = match battery.power {
             Power::Battery { .. } => time_on_battery(&report.history, report.now)
@@ -1722,11 +1710,11 @@ impl Monitor {
         };
         vec![
             Readout::new(
-                "summary-remaining-charge",
+                text!("Remaining Charge"),
                 format!("{:.0} %", battery.percent),
             ),
             time,
-            Readout::new("summary-time-on-battery", on_battery),
+            Readout::new(text!("Time on Battery"), on_battery),
         ]
     }
 }

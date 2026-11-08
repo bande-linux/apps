@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use bande_l10n::{tr, trn};
 use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use alacritty_terminal::term::TermMode;
 use bande_app::{Detached, TabDrop, TabDropTarget, TabHost, View, move_tab};
@@ -13,8 +14,8 @@ use bande_spring::{Decay, State as SpringState};
 use bande_terminal::ShellCommand;
 use bande_terminal::{
     Axis, Banner, BannerAction, CellPoint, CloseAsk, Command, Divider, FULL_SCREEN_LEADING,
-    GridSize, L10N, Layout, Link, MenuCommand, MouseButton, MouseKind, NewTabFolder, Notice,
-    Painter, Pane, STRIP_HEIGHT, SearchDirection, SelectionKind, Session, Settings, Terminal,
+    GridSize, Layout, Link, MenuCommand, MouseButton, MouseKind, NewTabFolder, Notice, Painter,
+    Pane, STRIP_HEIGHT, SearchDirection, SelectionKind, Session, Settings, Terminal,
     TerminalContext, bracketed, dropped_text, encode_key, is_openable, look_up_text, mouse_report,
     next_font_size, reports_mouse, shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
@@ -459,7 +460,7 @@ impl TerminalWindow {
         }
         let title = tab.focused().title(self.home.as_deref());
         if title.is_empty() {
-            L10N.tr("title")
+            tr!("Terminal")
         } else {
             title
         }
@@ -508,11 +509,12 @@ impl TerminalWindow {
                     && !command.is_empty() =>
                 {
                     let summary = match code {
-                        Some(code) if code != 0 => L10N.tr_args(
-                            "command-failed",
-                            [("command", command.into()), ("code", code.into())],
+                        Some(code) if code != 0 => tr!(
+                            "{command} failed with exit code {code}",
+                            command = command,
+                            code = code
                         ),
-                        _ => L10N.tr_args("command-finished", [("command", command.into())]),
+                        _ => tr!("{command} finished", command = command),
                     };
                     let body = self
                         .tabs
@@ -673,9 +675,12 @@ impl TerminalWindow {
         }
         let message = match program {
             Some(program) => {
-                L10N.tr_args("confirm-close-tab", [("program", quoted(program).into())])
+                tr!(
+                    "Close this tab? {program} is still running in it.",
+                    program = quoted(program)
+                )
             }
-            None => L10N.tr("confirm-close-idle-tab"),
+            None => tr!("Close this tab?"),
         };
         let pending = Pending::CloseTab(tab.id);
         self.select_tab(window, index);
@@ -693,9 +698,12 @@ impl TerminalWindow {
         }
         let message = match program {
             Some(program) => {
-                L10N.tr_args("confirm-close-pane", [("program", quoted(program).into())])
+                tr!(
+                    "Close this pane? {program} is still running in it.",
+                    program = quoted(program)
+                )
             }
-            None => L10N.tr("confirm-close-idle-pane"),
+            None => tr!("Close this pane?"),
         };
         self.ask(window, &message, Pending::ClosePane(id));
     }
@@ -704,13 +712,13 @@ impl TerminalWindow {
         self.close_banner();
         let appearance = window.appearance();
         let button = match pending {
-            Pending::Quit => L10N.tr("quit"),
-            Pending::Paste(..) => L10N.tr("paste"),
-            Pending::Rename(_) => L10N.tr("rename"),
+            Pending::Quit => tr!("Quit"),
+            Pending::Paste(..) => tr!("Paste"),
+            Pending::Rename(_) => tr!("Rename"),
             Pending::CloseTab(_)
             | Pending::ClosePane(_)
             | Pending::CloseOtherTabs(_)
-            | Pending::CloseWindow => L10N.tr("close"),
+            | Pending::CloseWindow => tr!("Close"),
         };
         let text = self.painter.text_system().sharing_fonts();
         self.banner = Some(Banner::confirm(appearance, text, message, &button));
@@ -774,16 +782,24 @@ impl TerminalWindow {
         }
         self.select_tab(window, index);
         let message = match busy {
-            0 => L10N.tr("confirm-close-idle-other-tabs"),
-            busy => L10N.tr_args("confirm-close-other-tabs", [("count", busy.into())]),
+            0 => tr!("Close the other tabs?"),
+            busy => trn!(
+                "Close the other tabs? A program is still running in one of them.",
+                "Close the other tabs? Programs are still running in {count} of them.",
+                count = busy
+            ),
         };
         self.ask(window, &message, Pending::CloseOtherTabs(keep));
     }
 
     pub fn ask_to_quit(&mut self, window: &mut Window, busy: usize) {
         let message = match busy {
-            0 => L10N.tr("confirm-quit-idle"),
-            busy => L10N.tr_args("confirm-quit", [("count", busy.into())]),
+            0 => tr!("Quit Terminal?"),
+            busy => trn!(
+                "Quit Terminal? A program is still running in one tab.",
+                "Quit Terminal? Programs are still running in {count} tabs.",
+                count = busy
+            ),
         };
         self.ask(window, &message, Pending::Quit);
     }
@@ -1047,8 +1063,12 @@ impl TerminalWindow {
             return true;
         }
         let message = match busy {
-            0 => L10N.tr("confirm-close-idle-window"),
-            busy => L10N.tr_args("confirm-close-window", [("count", busy.into())]),
+            0 => tr!("Close this window?"),
+            busy => trn!(
+                "Close this window? A program is still running in one tab.",
+                "Close this window? Programs are still running in {count} tabs.",
+                count = busy
+            ),
         };
         self.ask(window, &message, Pending::CloseWindow);
         self.settle(window);
@@ -1210,7 +1230,10 @@ impl TerminalWindow {
             .count();
         let guarded = self.mode().contains(TermMode::BRACKETED_PASTE);
         if self.settings.paste_warning && lines > 1 && !guarded {
-            let message = L10N.tr_args("confirm-paste", [("count", lines.into())]);
+            let message = tr!(
+                "Paste {count} lines? The shell may run each line as a command.",
+                count = lines
+            );
             let id = self.tab().focused().id();
             return self.ask(window, &message, Pending::Paste(id, text.to_owned()));
         }
@@ -2180,7 +2203,7 @@ impl View for TerminalWindow {
         if self.has_strip() {
             let layout = self.tab_layout();
             let mut list = Node::new(Role::TabList);
-            list.set_label(L10N.tr("tabs"));
+            list.set_label(tr!("Tabs"));
             let titles = self.titles();
             let mut tabs = Vec::new();
             for (index, (rect, title)) in layout.tabs.iter().zip(&titles).enumerate() {
@@ -2194,7 +2217,7 @@ impl View for TerminalWindow {
                 nodes.push((id, tab));
             }
             let mut new_tab = Node::new(Role::Button);
-            new_tab.set_label(L10N.tr("new-tab"));
+            new_tab.set_label(tr!("New Tab"));
             new_tab.set_bounds(bounds(layout.new_tab));
             new_tab.add_action(Action::Click);
             nodes.push((NEW_TAB_NODE, new_tab));
