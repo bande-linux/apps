@@ -1,7 +1,7 @@
 [package]
 name = "bande-calculator"
 description = "Bande Calculator: basic, scientific and programmer calculations with a paper tape"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
