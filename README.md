@@ -45,7 +45,7 @@ and the Window menu names the main window (Message Viewer, Calendar, Activity Mo
 | `rust-toolchain.toml` | the Rust toolchain for every app, the same as the desktop's |
 | `ci/` | the build, the same in CI and locally |
 | `ci/gate.sh [app...]` | the local merge gate: CI's own `ci/build-app.sh` on each app in the `gate` profile, `ci/check.sh` on the libs and the template, one `target/` (default: every app, the libs and the template) |
-| `ci/setup.sh install\|check <app>...` | the toolchain, `cargo-deb` and Debian packages a build needs: CI installs them, the gate fails if one is missing |
+| `ci/setup.sh install\|check <app>... \| source` | the toolchain, `cargo-deb` and Debian packages a build needs: CI installs them, the gate fails if one is missing; apps depend on desktop packages, so both add (`source`, as root) or need the Bande archive, pinned to the Bande packages, with the key in `ci/bande-archive-key.asc` |
 | `ci/build-app.sh <app> <out> [profile]` | one app's build, the same in CI and the gate: `ci/check-app.sh`, `ci/version.sh`, `ci/check.sh`, the binaries, the `.deb` and `ci/smoke.sh` on it |
 | `ci/check.sh <package>` | fmt, clippy `--all-targets -D warnings` and the tests of one package, `--locked`, on a private session bus with software Vulkan |
 | `ci/check-app.sh <dir>...` | static checks that an app is a `bande-app` app packaged like the others (ids, `.desktop`, metainfo, fonts); fails on any problem |
@@ -91,7 +91,7 @@ any branch with a `+git` version; it is never published.
   without its slow optimisations, so a gate stays within minutes.
 - amd64: the mini is arm64; cross-checking needs every C library for amd64.
 - Installing into a clean root system (`ci/smoke.sh --install`): apt resolving the package's
-  dependencies from Debian alone, the installed files and the app's own `smoke.sh` need root in a
+  dependencies from Debian and the Bande archive, the installed files and the app's own `smoke.sh` need root in a
   fresh `debian:testing`; locally `apt-get -s` resolves them against this system only.
 - The release tag itself: it must be `<app>-vX.Y.Z` on a commit of `main`, matching `Cargo.toml`.
 

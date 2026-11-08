@@ -33,8 +33,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "utils"
 priority = "optional"
-depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, tzdata"
-recommends = "bande-notify, bande-sound"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, tzdata, bande-notify, bande-sound"
 extended-description = """\
 The clock of the Bande desktop: alarms that repeat on chosen days, with a \
 label, a sound and snooze; several timers at once, with presets; a \
