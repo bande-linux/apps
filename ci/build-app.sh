@@ -3,7 +3,7 @@
 # gate: ci/check-app.sh, the package version (ci/version.sh), ci/check.sh, then the binaries in
 # the Cargo profile (default release; the gate's `gate` profile is release without its slow
 # optimisations), bande-<app>_<version>_<arch>.deb with its name, architecture and version checked,
-# ci/smoke.sh on it, and its language packs (bande-l10n-tool debs). Leaves the .debs in <out dir>.
+# its language packs (bande-l10n-tool debs) and ci/smoke.sh on them all. Leaves the .debs in <out dir>.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 app=${1:?usage: build-app.sh <app> <out dir> [profile]} out=$(realpath -m "${2:?usage: build-app.sh <app> <out dir> [profile]}")
@@ -29,8 +29,8 @@ deb=$(cargo deb --no-build --locked -q --profile "$profile" -p "$name" --deb-ver
 [ "$(dpkg-deb -f "$deb" Package)" = "$name" ] && [ "$(dpkg-deb -f "$deb" Architecture)" = "$arch" ] &&
     [ "$(dpkg-deb -f "$deb" Version)" = "$version" ] ||
     { echo "build-app: $deb has the wrong name, architecture or version" >&2; exit 1; }
-ci/smoke.sh "$deb"
 mkdir -p "$out"
 cp "$deb" "$out/"
 ci/l10n-tool.sh debs "$target/$profile/l10n" "$out" "$version" "$name" ci/copyright
+ci/smoke.sh "$deb" "$out/$name-l10n-"*"_${version}_all.deb"
 echo "build-app: $(basename "$deb") passed"
