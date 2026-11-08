@@ -2,8 +2,8 @@ use std::cell::{Ref, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
-use bande_l10n::{Text, text, tr, trn};
 use bande_app_menu::Entry;
+use bande_l10n::{Text, text, tr, trn};
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{
     Alert, Axis, Button, Label, SearchField, Stack, Table, Ui, Widget, WidgetId,

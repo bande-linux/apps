@@ -18,7 +18,6 @@ use std::time::{Duration, Instant};
 
 pub use self::backend::Act;
 
-
 use bande_l10n::tr;
 
 use self::backend::{Backend, Change, Plan, SnapshotOp};

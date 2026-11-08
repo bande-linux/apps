@@ -1,7 +1,6 @@
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 
-
 use bande_l10n::{Text, text, tr};
 
 use super::inspector::alert_title;

@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
-use bande_l10n::tr;
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_settings::{Stored, settings_folder};
 use bande_inbox::Inbox;
+use bande_l10n::tr;
 use bande_mail::compose::{Draft, Outgoing, from_mailto, keep_unsent, left_unsent};
 use bande_mail::message::Attachment;
 use bande_mail::portal::choose_save_path;

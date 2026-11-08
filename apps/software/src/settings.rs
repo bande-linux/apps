@@ -1,5 +1,5 @@
-use bande_l10n::tr;
 use bande_app_settings::{Shared, Stored, flag, pairs};
+use bande_l10n::tr;
 use bande_toolkit::ui::{Context, Form, FormLine, Label, ScrollView, Toggle, Ui};
 use bande_toolkit::{Appearance, TextSystem};
 

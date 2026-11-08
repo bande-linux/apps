@@ -14,9 +14,9 @@ mod toolbar;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use bande_l10n::tr;
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_datetime::DateFormats;
+use bande_l10n::tr;
 use bande_toolkit::ui::{Alert, ClipboardRequest, Context, Cursor, FreeLayout, Menu, Ui, WidgetId};
 use bande_toolkit::{
     Appearance, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextSystem,

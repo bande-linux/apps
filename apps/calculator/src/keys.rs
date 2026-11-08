@@ -1,4 +1,3 @@
-
 use bande_l10n::{Text, text, tr};
 
 use crate::engine::{Angle, Base, Binary, Constant, Engine, Input, Memory, Mode, Unary};

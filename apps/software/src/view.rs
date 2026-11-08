@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
-
 use bande_l10n::{text, tr, trn};
 
 use crate::catalog::{self, Block, Bundle, Category, Component, Icon, flatpak_needs_x11, search};

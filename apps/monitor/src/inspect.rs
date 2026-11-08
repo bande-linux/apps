@@ -3,7 +3,6 @@ use std::fs;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 
-
 use bande_l10n::tr;
 
 use crate::proc::{Stat, parse_kilobytes, parse_number, parse_stat};

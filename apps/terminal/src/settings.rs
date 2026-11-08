@@ -1,4 +1,3 @@
-
 use bande_l10n::{Text, text};
 
 use crate::session::ShellCommand;

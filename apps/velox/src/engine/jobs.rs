@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-
 use bande_l10n::tr;
 
 use super::client::{Engine, Error};

@@ -2,7 +2,6 @@ use std::cell::RefCell;
 use std::process::ExitCode;
 use std::rc::Rc;
 
-use bande_l10n::{Text, text, tr};
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
@@ -10,6 +9,7 @@ use bande_calculator::{
     Angle, Base, Engine, Keypad, Mode, WORD_SIZES, base_name, mode_name, parse_base, parse_mode,
     restore, save,
 };
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::ui::{Context, Event, Key, TextView, Ui, Widget, WidgetId};
 use bande_toolkit::{
     Appearance, Rect, Scene, Sizing, TextSystem, Window, WindowError, WindowEvent,

@@ -2,7 +2,6 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
-
 use bande_l10n::{text, tr};
 
 use crate::engine::{Network, Task};

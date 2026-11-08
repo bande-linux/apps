@@ -1,8 +1,8 @@
 use std::process::ExitCode;
 
-use bande_l10n::tr;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
 use bande_app_menu::Entry;
+use bande_l10n::tr;
 use bande_toolkit::TextSystem;
 use bande_toolkit::ui::{Axis, Context, Label, Stack, Ui, Widget};
 

@@ -9,9 +9,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use bande_l10n::tr;
 use accesskit::{Node, Role, TreeUpdate};
 use bande_app::View;
+use bande_l10n::tr;
 use bande_toolkit::ui::{
     Button, CheckState, Checkbox, Context, SearchField, Size, TEXT_FIELD_HEIGHT, Ui, Widget,
     WidgetId,

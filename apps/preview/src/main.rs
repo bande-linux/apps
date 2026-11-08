@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
-use bande_l10n::{Text, text, tr};
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::Entry;
 use bande_inbox::Inbox;
+use bande_l10n::{Text, text, tr};
 use bande_preview::{
     InfoPanel, PreviewView, Request, Row, SidebarMode, WORKER_FLAG, Zoom, argument_path,
     document_rows, file_rows, info_ui, picture_rows,

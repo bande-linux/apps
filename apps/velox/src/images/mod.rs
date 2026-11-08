@@ -2,7 +2,6 @@ mod run;
 
 use std::rc::Rc;
 
-
 use bande_l10n::{text, tr};
 
 use crate::engine::{Image, Task};

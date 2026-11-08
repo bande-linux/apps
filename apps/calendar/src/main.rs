@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use bande_l10n::{Text, text, tr};
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWatch, Stored, settings_folder};
@@ -26,6 +25,7 @@ use bande_calendar::worker::{Job, Reply, Worker};
 use bande_datetime::DateFormats;
 use bande_design::{Accent, Scheme};
 use bande_inbox::Inbox;
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::{
     Appearance, FrameRegions, MenuPlacement, Rect, Scene, TextSystem, Window, WindowEvent,
 };

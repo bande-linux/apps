@@ -3,7 +3,6 @@ use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-
 use bande_l10n::{Text, text, tr};
 
 use crate::jobs::{Abilities, Erase, Failure, Format, Job, Outcome, Report};

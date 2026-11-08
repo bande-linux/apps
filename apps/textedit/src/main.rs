@@ -2,10 +2,10 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use bande_l10n::{Text, text, tr};
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, WindowId};
 use bande_app_menu::{Entry, PRINT, edit_submenu, print_item};
 use bande_inbox::Inbox;
+use bande_l10n::{Text, text, tr};
 use bande_textedit::{
     CHOICES, COLORS, DocumentView, FAMILIES, Format, LineEnding, Loaded, MAX_FILE_BYTES, Message,
     Opening, Record, Request, Session, Settings, TextEncoding, choose_files, choose_save_path,

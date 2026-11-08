@@ -2,8 +2,8 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use bande_l10n::tr;
 use accesskit::TreeUpdate;
+use bande_l10n::tr;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::Entry;

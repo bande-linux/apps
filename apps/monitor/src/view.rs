@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use bande_l10n::{tr, trn};
 use accesskit::{ActionRequest, TreeUpdate};
+use bande_l10n::{tr, trn};
 use bande_toolkit::ui::{
     Alert, Button, ClipboardRequest, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton,
 };

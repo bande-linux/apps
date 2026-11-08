@@ -1,9 +1,9 @@
 use std::os::fd::BorrowedFd;
 use std::time::Instant;
 
-use bande_l10n::{Text, text, tr};
 use accesskit::TreeUpdate;
 use bande_app::View;
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::ui::{Context, Label, Ui, Widget, WidgetId};
 use bande_toolkit::{
     Appearance, FrameRegions, HEADER_LEADING, Header, Rect, Scene, TextSystem,

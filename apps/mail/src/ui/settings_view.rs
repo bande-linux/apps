@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
-
 use bande_l10n::{Text, text, tr, trn};
 
 use crate::discover::Settings as Servers;

@@ -4,11 +4,11 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::time::Instant;
 
-use bande_l10n::{Text, text, tr};
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::Entry;
 use bande_app_settings::{SettingsWindow, settings_folder};
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::{
     Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };

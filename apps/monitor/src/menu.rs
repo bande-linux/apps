@@ -1,4 +1,3 @@
-
 use bande_l10n::{Text, text, tr};
 
 use crate::model::{Column, Filter, Frequency, Tab};

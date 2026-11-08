@@ -4,7 +4,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-
 use bande_l10n::{tr, trn};
 
 use crate::document::{Content, Format, Loaded, encode, read};

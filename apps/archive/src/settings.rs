@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use bande_l10n::{Text, text, tr};
 use bande_app_settings::{Shared, Stored, flag, pairs, settings_folder};
 use bande_fs::Format;
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::ui::{Context, Form, FormLine, PopUpButton, ScrollView, Toggle, Ui, Widget};
 use bande_toolkit::{Appearance, TextSystem};
 

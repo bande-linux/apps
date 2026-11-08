@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 
-use bande_l10n::tr;
 use bande_inbox::{Inbox, Outbox};
+use bande_l10n::tr;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::Value;
 use zbus::{MatchRule, message};

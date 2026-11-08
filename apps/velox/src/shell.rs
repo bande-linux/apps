@@ -8,7 +8,6 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Instant;
 
-
 use bande_l10n::tr;
 
 use crate::engine::Engine;

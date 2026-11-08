@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
-use bande_l10n::tr;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::edit_submenu;
 use bande_installer::{Installer, Machine, WINDOW_SIZE};
+use bande_l10n::tr;
 use bande_packages::Client;
 use bande_toolkit::{Appearance, Scene, TextSystem, Window, WindowEvent};
 use zbus::blocking::Connection;

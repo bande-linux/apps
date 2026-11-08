@@ -3,7 +3,6 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
-
 use bande_l10n::{Text, text, tr};
 
 use crate::engine::{Engine, EngineInfo, Error, Flavor};

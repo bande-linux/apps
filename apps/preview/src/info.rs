@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use bande_l10n::{text, tr};
 use accesskit::{Node, NodeId, Role};
+use bande_l10n::{text, tr};
 use bande_toolkit::ui::{Context, Parts, Size, Ui, Widget, WidgetId};
 use bande_toolkit::{
     Appearance, Item, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem,

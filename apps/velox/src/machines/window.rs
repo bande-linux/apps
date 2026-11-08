@@ -3,9 +3,9 @@ use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 use std::time::Instant;
 
-use bande_l10n::{Text, text, tr};
 use accesskit::TreeUpdate;
 use bande_app::View;
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::ui::{
     Axis, Button, Context, Form, FormLine, Label, PopUpButton, ScrollView, SegmentedControl, Stack,
     Stepper, Table, TextField, Toggle, Ui, Widget, WidgetId,

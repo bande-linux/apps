@@ -7,12 +7,12 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::rc::Rc;
 
-use bande_l10n::tr;
 use bande_app::{
     Cx, Detached, Info, Keys, Kind, Menus, Program, Saved, Settings as SettingsWindowInfo,
     TabCarry, TabDrop, View, WindowId,
 };
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
+use bande_l10n::tr;
 use bande_terminal::{
     CLOSE_WINDOW, CloseAsk, Command, GridSize, MenuCommand, Painter, SETTINGS_SIZE, Session,
     Settings, Terminal, app_menus, settings_view,

@@ -3,7 +3,6 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-
 use bande_l10n::{text, tr};
 
 use crate::settings::ArchiveSettings;

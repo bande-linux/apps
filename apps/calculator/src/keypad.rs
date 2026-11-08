@@ -2,7 +2,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-
 use bande_l10n::tr;
 
 use crate::engine::{Angle, Base, Engine, Input, Mode, WORD_SIZES};

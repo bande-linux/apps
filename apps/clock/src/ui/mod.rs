@@ -4,10 +4,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use bande_l10n::{Text, text, tr};
 use bande_app::View;
 use bande_datetime::DateFormats;
 use bande_datetime::daylight::{Sky, place_of, sky};
+use bande_l10n::{Text, text, tr};
 use bande_sound::Alert as Sound;
 use bande_toolkit::ui::{
     Alert, Axis, BUTTON_HEIGHT, Button, CheckState, Checkbox, Column, Context, Form, FormLine,

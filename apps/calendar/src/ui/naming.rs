@@ -1,8 +1,8 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use bande_l10n::tr;
 use accesskit::{Action, ActionRequest, TreeId};
+use bande_l10n::tr;
 use bande_toolkit::ui::{Button, PopUpButton, TEXT_FIELD_HEIGHT, TextField, Ui, WidgetId};
 
 use super::panel::{Line, Panel, Width};

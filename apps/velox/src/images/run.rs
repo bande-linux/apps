@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-
 use bande_l10n::{Text, text, tr};
 
 use crate::engine::{Restart, RunSpec, Task};

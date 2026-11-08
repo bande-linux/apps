@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-
 use bande_l10n::{Text, text, tr};
 
 use crate::format::{format_bytes, format_cpu_time, format_percent};

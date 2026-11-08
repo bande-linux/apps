@@ -4,7 +4,6 @@ use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use bande_l10n::tr;
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
@@ -12,6 +11,7 @@ use bande_disks::{
     ADD_PARTITION, Abilities, DELETE_PARTITION, DisksView, EJECT, ERASE, FIRST_AID, IMAGE_FROM,
     MOUNT, Model, OPEN_IMAGE, RENAME, RESIZE, RESTORE, Report, Request, SIDEBAR_WIDTH, Worker,
 };
+use bande_l10n::tr;
 use bande_toolkit::{
     Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };

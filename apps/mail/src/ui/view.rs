@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-
 use bande_l10n::{Text, text, tr, trn};
 
 use crate::compose::{Draft, Original, Outgoing, forward, reply, signed};

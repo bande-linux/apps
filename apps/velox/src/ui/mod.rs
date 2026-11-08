@@ -4,8 +4,8 @@ mod widgets;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use bande_l10n::{text, tr};
 use bande_app_menu::Entry;
+use bande_l10n::{text, tr};
 use bande_toolkit::ui::{Cell, Column, Context, Label, Row, Table, Ui, Widget, WidgetId};
 use bande_toolkit::{Appearance, Header, Palette, SHEET_INSET, TextSystem};
 

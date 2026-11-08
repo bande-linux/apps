@@ -1,7 +1,7 @@
-use bande_l10n::{Text, text};
 use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::vte::ansi::{Color as AnsiColor, NamedColor, Rgb};
 use bande_design::{Accent, Appearance, Color, Contrast, Palette, Scheme};
+use bande_l10n::{Text, text};
 
 const BRIGHTER: f32 = 0.2;
 const BRIGHTER_ON_LIGHT: f32 = 0.12;

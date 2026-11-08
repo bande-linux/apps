@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use bande_l10n::tr;
 use bande_inbox::Outbox;
+use bande_l10n::tr;
 use bande_media::Playback;
 use zbus::blocking::Connection;
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};

@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use bande_l10n::tr;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::Entry;
 use bande_app_settings::{SettingsWindow, settings_folder};
@@ -15,6 +14,7 @@ use bande_archive::{
 };
 use bande_fs::{Trash, can_extract};
 use bande_inbox::Inbox;
+use bande_l10n::tr;
 use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 use zbus::blocking::Connection;
 

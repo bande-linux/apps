@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use bande_l10n::{Text, text, tr};
 use bande_app_menu::Entry;
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{
     Alert, Button, Cell, Form, Menu, MenuItem, Row, ScrollView, SearchField, Table, Ui, Widget,

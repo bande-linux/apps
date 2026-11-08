@@ -1,5 +1,5 @@
-use bande_l10n::{Text, text, tr};
 use bande_app_menu::{Entry, edit_submenu};
+use bande_l10n::{Text, text, tr};
 use bande_mail::settings::SortBy;
 use bande_mail::ui::{MailView, SHORTCUTS};
 

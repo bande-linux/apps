@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use bande_l10n::tr;
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
+use bande_l10n::tr;
 use bande_toolkit::ui::{
     self, Animated, BUTTON_HEIGHT, Button, Cell, Column as TableColumn, Context, Cursor, Event,
     GraphKind, Key, Modifiers, Pointer, Row as TableRow, SEGMENTED_HEIGHT, SearchField,

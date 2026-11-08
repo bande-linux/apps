@@ -1,4 +1,3 @@
-
 use bande_l10n::tr;
 
 use crate::store::Summary;

@@ -1,8 +1,8 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use bande_l10n::tr;
 use accesskit::{Action, ActionRequest, TreeId};
+use bande_l10n::tr;
 
 use bande_toolkit::ui::{
     Button, Event, Key, Label, Modifiers, PopUpButton, SecureField, TEXT_FIELD_HEIGHT, TextField,

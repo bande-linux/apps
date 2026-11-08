@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use bande_l10n::{Text, text, tr};
 use bande_app::Menus;
 use bande_app_menu::Entry;
+use bande_l10n::{Text, text, tr};
 use bande_terminal_view::Command;
 use bande_toolkit::ui::{Menu, MenuItem};
 use bande_xdg::path_from_file_uri;

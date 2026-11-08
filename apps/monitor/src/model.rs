@@ -3,7 +3,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::time::Duration;
 
-
 use bande_l10n::{Text, text, tr};
 
 use crate::apps::{Catalog, Group, GroupKey};

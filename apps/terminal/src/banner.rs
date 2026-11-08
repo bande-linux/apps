@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use bande_l10n::tr;
 use accesskit::{Action, ActionRequest, Node, Role, TreeId, TreeUpdate};
+use bande_l10n::tr;
 use bande_toolkit::ui::{
     Button, ClipboardRequest, Context, Cursor, Event, Key, Modifiers, Size, TextField, Ui, Widget,
     WidgetId,

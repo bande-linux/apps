@@ -1,5 +1,5 @@
-use bande_l10n::{Text, text, tr};
 use bande_design::{Accent, Scheme};
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::Point;
 use bande_toolkit::ui::{
     Event, Key, Menu, MenuItem, Modifiers, Pointer, PointerButton, ScrollSource, past_drag_slop,

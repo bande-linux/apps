@@ -5,10 +5,10 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use bande_l10n::{Text, text, tr};
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
 use bande_app_menu::Entry;
 use bande_inbox::Inbox;
+use bande_l10n::{Text, text, tr};
 use bande_media::Track;
 
 use mpris::{Mpris, Remote};

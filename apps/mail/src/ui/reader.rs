@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
-
 use bande_l10n::{text, tr};
 
 use crate::html::{Block, BlockKind, Document};

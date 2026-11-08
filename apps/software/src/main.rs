@@ -2,10 +2,10 @@ use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use bande_l10n::{Text, text, tr};
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWindow, settings_folder};
+use bande_l10n::{Text, text, tr};
 use bande_notify::Urgency;
 use bande_notify::client::{Request as Notification, notify};
 use bande_packages::{Client, debian_arch};

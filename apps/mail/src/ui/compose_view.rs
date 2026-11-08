@@ -4,7 +4,6 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
-
 use bande_l10n::{Text, text, tr};
 
 use crate::compose::{Draft, Original, Outgoing, keep_unsent, unsent_folder};

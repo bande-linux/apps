@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use bande_l10n::{text, tr};
 use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_inbox::Inbox;
+use bande_l10n::{text, tr};
 use bande_thumbnails::{Request as ThumbRequest, ThumbnailSize, Thumbnails};
 use bande_toolkit::ui::{
     Button, Context, Event, FreeLayout, Key, SearchField, SecureField, TEXT_FIELD_HEIGHT, Ui,

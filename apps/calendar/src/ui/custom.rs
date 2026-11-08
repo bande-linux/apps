@@ -1,9 +1,9 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use bande_l10n::{text, tr};
 use accesskit::{Action, ActionRequest, TreeId};
 use bande_datetime::DateFormats;
+use bande_l10n::{text, tr};
 use bande_toolkit::ui::{
     Button, CheckState, Checkbox, PopUpButton, TEXT_FIELD_HEIGHT, TextField, Ui, WidgetId,
 };

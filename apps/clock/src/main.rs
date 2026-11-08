@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use bande_l10n::{Text, text, tr};
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, WindowId};
 use bande_app_menu::Entry;
 use bande_clock::bus::{Bus, Summary, Waker};
@@ -15,6 +14,7 @@ use bande_clock::notice::{
 use bande_clock::ui::{Change, ClockView, Page, alarm_name, clock_time, timer_name};
 use bande_datetime::DateFormats;
 use bande_inbox::{Inbox, Outbox};
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::Appearance;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;

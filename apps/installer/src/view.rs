@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
-
 use bande_l10n::{text, tr, trn};
 
 use crate::deb::{Deb, Identity, Machine};

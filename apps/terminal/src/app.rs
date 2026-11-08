@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use bande_l10n::{tr, trn};
 use accesskit::{Action, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use alacritty_terminal::term::TermMode;
 use bande_app::{Detached, TabDrop, TabDropTarget, TabHost, View, move_tab};
 use bande_app_settings::{Stored, settings_folder};
+use bande_l10n::{tr, trn};
 use bande_spring::{Decay, State as SpringState};
 use bande_terminal::ShellCommand;
 use bande_terminal::{
