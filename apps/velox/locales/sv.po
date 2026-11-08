@@ -1297,14 +1297,20 @@ msgstr "Podman, rootless"
 msgid "Show This Computer"
 msgstr "Visa den här datorn"
 
-msgid "Hosts"
-msgstr "Värdar"
-
 msgid "This Computer"
 msgstr "Den här datorn"
 
+msgid "Hosts"
+msgstr "Värdar"
+
+msgid "Add a Remote Host"
+msgstr "Lägg till en fjärrvärd"
+
 msgid "Workspaces"
 msgstr "Arbetsytor"
+
+msgid "New Workspace"
+msgstr "Ny arbetsyta"
 
 msgid "Remove Host…"
 msgstr "Ta bort värd…"
@@ -1342,9 +1348,6 @@ msgstr "projekt-a"
 msgid "Engine"
 msgstr "Motor"
 
-msgid "New Workspace"
-msgstr "Ny arbetsyta"
-
 msgid "A workspace is a Docker context: the docker command and Velox both use the engine it points to."
 msgstr "En arbetsyta är en Docker-kontext: kommandot docker och Velox använder båda motorn den pekar på."
 
@@ -1356,8 +1359,8 @@ msgid_plural "{count} volumes"
 msgstr[0] "1 volym"
 msgstr[1] "{count} volymer"
 
-msgid "no containers"
-msgstr "inga containrar"
+msgid "orphaned"
+msgstr "övergiven"
 
 msgid "Volume name"
 msgstr "Volymnamn"

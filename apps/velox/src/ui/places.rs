@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use bande_l10n::tr;
-use bande_toolkit::Palette;
-use bande_toolkit::ui::{Alert, Cell, Menu, MenuItem, PopUpButton, Row, TextField, Ui};
+use bande_toolkit::ui::{Alert, Cell, Heading, Menu, MenuItem, PopUpButton, Row, TextField, Ui};
+use bande_toolkit::{Image, Palette};
 
 use super::{Intent, Intents, push};
 use crate::engine::{DockerContext, RemoteHost, new_host_id};
@@ -42,28 +42,34 @@ impl Places {
         self.hosts.iter().find(|host| host.id == id)
     }
 
-    pub fn rows(&self, palette: &Palette, running: Option<String>) -> Vec<Row> {
+    pub fn sections(
+        &self,
+        palette: &Palette,
+        running: Option<String>,
+        add: Option<&Image>,
+    ) -> [(Heading, Vec<Row>); 2] {
+        let heading = |title: String, name: String, command: &str| {
+            let heading = Heading::new(0, title);
+            match add {
+                Some(symbol) => heading.button(symbol.clone(), &name, command),
+                None => heading,
+            }
+        };
         let marker = |on: bool| super::dot(palette.accent, on);
         let local = !self.is_remote();
-        let mut rows = vec![
-            Row::new(
-                "hosts-heading",
-                vec![Cell::new(tr!("Hosts")).muted().label()],
-            ),
-            Row::new(
-                format!("{HOST_PREFIX}{LOCAL}"),
-                vec![
-                    Cell::new(tr!("This Computer")).icon(marker(local)),
-                    Cell::new(match local {
-                        true => running.clone().unwrap_or_default(),
-                        false => String::new(),
-                    })
-                    .muted()
-                    .tabular(),
-                ],
-            ),
-        ];
-        rows.extend(self.hosts.iter().map(|host| {
+        let mut hosts = vec![Row::new(
+            format!("{HOST_PREFIX}{LOCAL}"),
+            vec![
+                Cell::new(tr!("This Computer")).icon(marker(local)),
+                Cell::new(match local {
+                    true => running.clone().unwrap_or_default(),
+                    false => String::new(),
+                })
+                .muted()
+                .tabular(),
+            ],
+        )];
+        hosts.extend(self.hosts.iter().map(|host| {
             let on = self.place == Some(Place::Host(host.id.clone()));
             Row::new(
                 format!("{HOST_PREFIX}{}", host.id),
@@ -78,11 +84,7 @@ impl Places {
                 ],
             )
         }));
-        rows.push(Row::new(
-            "workspaces-heading",
-            vec![Cell::new(tr!("Workspaces")).muted().label()],
-        ));
-        rows.extend(self.contexts.iter().map(|context| {
+        let workspaces = self.contexts.iter().map(|context| {
             let row = Row::new(
                 format!("{CONTEXT_PREFIX}{}", context.name),
                 vec![
@@ -94,8 +96,17 @@ impl Places {
                 true => row,
                 false => row.dimmed(),
             }
-        }));
-        rows
+        });
+        [
+            (
+                heading(tr!("Hosts"), tr!("Add a Remote Host"), ADD_HOST),
+                hosts,
+            ),
+            (
+                heading(tr!("Workspaces"), tr!("New Workspace"), NEW_WORKSPACE),
+                workspaces.collect(),
+            ),
+        ]
     }
 
     pub fn menu(&self, keys: &[String]) -> Option<Menu> {

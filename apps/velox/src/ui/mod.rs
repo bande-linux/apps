@@ -7,8 +7,8 @@ use std::rc::Rc;
 
 use bande_app_menu::Entry;
 use bande_l10n::{text, tr};
-use bande_toolkit::ui::{Cell, Column, Context, Label, Row, Table, Ui, Widget, WidgetId};
-use bande_toolkit::{Appearance, Header, Palette, SHEET_INSET, TextSystem};
+use bande_toolkit::ui::{Cell, Column, Context, Heading, Label, Row, Table, Ui, Widget, WidgetId};
+use bande_toolkit::{Appearance, Header, Image, Palette, SHEET_INSET, TextSystem};
 
 pub use self::places::{Place, Places};
 pub use self::widgets::SIDEBAR_WIDTH;
@@ -28,6 +28,7 @@ const NETWORKS_SYMBOL: &str = include_str!("../../data/symbols/networks.svg");
 const COUNT_WIDTH: f32 = 60.0;
 const ENGINE_LOGS: &str = "engine-logs";
 const LOGS_SYMBOL: &str = include_str!("../../data/symbols/logs.svg");
+const ADD_SYMBOL: &str = include_str!("../../data/symbols/add.svg");
 const IMAGE_ARCHIVES: [&str; 4] = [".tar", ".tar.gz", ".tgz", ".tar.zst"];
 const TITLE_INSET: f32 = 16.0;
 
@@ -168,6 +169,7 @@ pub struct VeloxView {
     places: Rc<RefCell<Places>>,
     hidden: bool,
     stats_round: std::collections::HashSet<String>,
+    add_symbol: Option<Image>,
 }
 
 fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
@@ -205,6 +207,7 @@ impl VeloxView {
         let places = Rc::new(RefCell::new(Places::default()));
         let menu_places = Rc::clone(&places);
         let chosen = Rc::clone(&intents);
+        let added = Rc::clone(&intents);
         let sidebar = Table::new(vec![
             Column::new("", SIDEBAR_WIDTH).flexible(),
             Column::new("", COUNT_WIDTH).numeric(),
@@ -214,6 +217,11 @@ impl VeloxView {
         .on_selection(move |keys| {
             if let Some(key) = keys.first() {
                 push(&navigate, Intent::Navigate(key.clone()));
+            }
+        })
+        .on_heading_button(move |command| {
+            if let Some(intent) = places::menu_intent(command, &[]) {
+                push(&added, intent);
             }
         })
         .context_menu(
@@ -252,6 +260,7 @@ impl VeloxView {
             places,
             hidden: false,
             stats_round: std::collections::HashSet::new(),
+            add_symbol: symbol(ADD_SYMBOL, palette.ink2),
         };
         view.refresh();
         view
@@ -628,7 +637,7 @@ impl VeloxView {
         true
     }
 
-    fn sidebar_rows(&self) -> Vec<Row> {
+    fn sidebar_rows(&self) -> (Vec<Row>, Vec<Heading>) {
         let (running, total) = self.containers.running();
         let ready = matches!(self.connection, Connection::Ready(_));
         let row = |section: Section| {
@@ -649,34 +658,45 @@ impl VeloxView {
                 ],
             )
         };
-        let mut rows = vec![
-            row(Section::Overview),
-            Row::new("heading", vec![Cell::new(tr!("Resources")).muted().label()]),
-            row(Section::Containers),
-            row(Section::Images),
-            row(Section::Volumes),
-            row(Section::Networks),
-        ];
+        let mut sections = vec![(
+            Heading::new(0, tr!("Resources")),
+            vec![
+                row(Section::Containers),
+                row(Section::Images),
+                row(Section::Volumes),
+                row(Section::Networks),
+            ],
+        )];
         let running = ready.then(|| running.to_string());
-        rows.extend(self.places.borrow().rows(&self.palette, running));
-        rows.extend(self.machines.sidebar_rows(&self.palette));
+        sections.extend(self.places.borrow().sections(
+            &self.palette,
+            running,
+            self.add_symbol.as_ref(),
+        ));
+        sections.push(self.machines.sidebar_section(&self.palette));
         if self.engine_logs().is_some() {
-            rows.extend([
-                Row::new(
-                    "system-heading",
-                    vec![Cell::new(tr!("System")).muted().label()],
-                ),
-                Row::new(
+            sections.push((
+                Heading::new(0, tr!("System")),
+                vec![Row::new(
                     ENGINE_LOGS,
                     vec![
                         Cell::new(tr!("Engine Logs"))
                             .icon(symbol(LOGS_SYMBOL, self.palette.accent)),
                         Cell::new(""),
                     ],
-                ),
-            ]);
+                )],
+            ));
         }
-        rows
+        let mut rows = vec![row(Section::Overview)];
+        let mut headings = Vec::new();
+        for (heading, section) in sections {
+            headings.push(Heading {
+                start: rows.len(),
+                ..heading
+            });
+            rows.extend(section);
+        }
+        (rows, headings)
     }
 
     fn pill(&self) -> Pill {
@@ -688,9 +708,10 @@ impl VeloxView {
     }
 
     fn refresh(&mut self) {
-        let rows = self.sidebar_rows();
+        let (rows, headings) = self.sidebar_rows();
         if let Some(sidebar) = self.ui.widget_as::<Table>(self.sidebar) {
             sidebar.set_rows(rows);
+            sidebar.set_headings(headings);
             sidebar.select(&[self.section.key().to_owned()]);
         }
         let pill = self.pill();

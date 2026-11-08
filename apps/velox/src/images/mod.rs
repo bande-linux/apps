@@ -80,7 +80,7 @@ fn arch(palette: &Palette, image: &Image) -> Cell {
         (None, _) => Cell::new("—").muted(),
         (Some(_), Some(_)) => Cell::new(tr!("multi")),
         (Some(arch), None) if arch == host_arch() => Cell::new(arch.as_str()),
-        (Some(arch), None) => Cell::new(arch.as_str()).tinted(palette.warning),
+        (Some(arch), None) => Cell::new(arch.as_str()).badge(palette.warning),
     }
 }
 

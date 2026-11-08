@@ -96,11 +96,11 @@ fn status_cell(palette: &Palette, container: &Container) -> Cell {
     let cell = Cell::new(container.status.as_str());
     let unhealthy = container.status.contains("unhealthy");
     match container.state.as_str() {
-        "running" if unhealthy => cell.tinted(palette.warning),
-        "running" => cell.tinted(palette.success),
-        "paused" | "restarting" => cell.tinted(palette.warning),
-        "exited" | "dead" => cell.tinted(palette.danger_text),
-        _ => cell.muted(),
+        "running" if unhealthy => cell.badge(palette.warning),
+        "running" => cell.badge(palette.success),
+        "paused" | "restarting" => cell.badge(palette.warning),
+        "exited" | "dead" => cell.badge(palette.danger_text),
+        _ => cell.badge(palette.ink2),
     }
 }
 
@@ -132,7 +132,7 @@ impl Shown<'_> {
     fn container_row(&self, container: &Container) -> Row {
         let pending = self.pending.get(&container.id).copied();
         let status = match pending {
-            Some(action) => Cell::new(pending_text(action)).tinted(self.palette.warning),
+            Some(action) => Cell::new(pending_text(action)).badge(self.palette.warning),
             None => status_cell(self.palette, container),
         };
         let [cpu, memory] = self.usage_cells(container);
@@ -168,7 +168,7 @@ impl Shown<'_> {
             (None, _) => dot(palette.success, true),
         };
         let status = match shared {
-            Some(action) => Cell::new(pending_text(*action)).tinted(palette.warning),
+            Some(action) => Cell::new(pending_text(*action)).badge(palette.warning),
             None => Cell::new(tr!(
                 "{running} of {total} running",
                 running = running,

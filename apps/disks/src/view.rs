@@ -14,8 +14,9 @@ use crate::widgets::{
 use bande_design::Accent;
 use bande_fs::format_size;
 use bande_toolkit::ui::{
-    Alert, Axis, Button, Cell, Column, Context, Form, FormLine, Label, PopUpButton, ProgressBar,
-    Row, ScrollView, SecureField, Stack, Table, TextField, Ui, Widget, WidgetId,
+    Alert, Axis, Button, Cell, Column, Context, Form, FormLine, Heading as SidebarHeading, Label,
+    PopUpButton, ProgressBar, Row, ScrollView, SecureField, Stack, Table, TextField, Ui, Widget,
+    WidgetId,
 };
 use bande_toolkit::{Appearance, Color, Header, Image, Palette, SHEET_INSET, TextSystem};
 use zeroize::Zeroizing;
@@ -1250,7 +1251,7 @@ impl DisksView {
         }
     }
 
-    fn sidebar_rows(&self) -> (Vec<Row>, Vec<(usize, String)>, Vec<String>) {
+    fn sidebar_rows(&self) -> (Vec<Row>, Vec<SidebarHeading>, Vec<String>) {
         let mut rows = Vec::new();
         let mut headings = Vec::new();
         let mut expanded = Vec::new();
@@ -1259,7 +1260,7 @@ impl DisksView {
         for disk in &self.model.disks {
             if group != Some(disk.group) {
                 group = Some(disk.group);
-                headings.push((line, location(disk.group)));
+                headings.push(SidebarHeading::new(line, location(disk.group)));
             }
             let children: Vec<Row> = disk
                 .volumes

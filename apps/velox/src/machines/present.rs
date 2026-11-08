@@ -87,11 +87,12 @@ pub fn status_cell(palette: &Palette, entry: &Entry) -> Cell {
     let text = status_text(entry);
     match (entry.pending, entry.power()) {
         (Some(_), _) | (None, Power::Starting | Power::Stopping) => {
-            Cell::new(text).tinted(palette.warning)
+            Cell::new(text).badge(palette.warning)
         }
-        (None, Power::Failed) => Cell::new(text).tinted(palette.danger),
-        (None, Power::Stopped) => Cell::new(text).muted(),
-        _ => Cell::new(text),
+        (None, Power::Failed) => Cell::new(text).badge(palette.danger_text),
+        (None, Power::Stopped) => Cell::new(text).badge(palette.ink2),
+        (None, Power::Paused) => Cell::new(text).badge(palette.warning),
+        _ => Cell::new(text).badge(palette.success),
     }
 }
 
@@ -170,7 +171,7 @@ fn job_row(palette: &Palette, key: u64, job: &Job) -> Row {
         vec![
             Cell::new(job.name.as_str()).icon(dot(palette.warning, false)),
             Cell::new(job.os.as_str()).muted(),
-            Cell::new(job_text(job)).tinted(palette.warning),
+            Cell::new(job_text(job)).badge(palette.warning),
             Cell::new(""),
             Cell::new(""),
         ],

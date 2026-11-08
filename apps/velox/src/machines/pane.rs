@@ -5,8 +5,8 @@ use bande_app_menu::Entry;
 use bande_l10n::{Text, text, tr};
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{
-    Alert, Button, Cell, Form, Menu, MenuItem, Row, ScrollView, SearchField, Table, Ui, Widget,
-    WidgetId,
+    Alert, Button, Cell, Form, Heading, Menu, MenuItem, Row, ScrollView, SearchField, Table, Ui,
+    Widget, WidgetId,
 };
 
 use super::backend::Act;
@@ -120,25 +120,22 @@ impl MachinesPane {
         std::mem::take(&mut self.requests)
     }
 
-    pub fn sidebar_rows(&self, palette: &Palette) -> Vec<Row> {
+    pub fn sidebar_section(&self, palette: &Palette) -> (Heading, Vec<Row>) {
         let fleet = self.fleet.borrow();
         let count = match fleet.ready() {
             true => format!("{}/{}", fleet.running(), fleet.entries.len()),
             false => String::new(),
         };
-        vec![
-            Row::new(
-                "machines-heading",
-                vec![Cell::new(tr!("Machines")).muted().label()],
-            ),
-            Row::new(
+        (
+            Heading::new(0, tr!("Machines")),
+            vec![Row::new(
                 MACHINES_KEY,
                 vec![
                     Cell::new(tr!("Machines")).icon(symbol(MACHINES_SYMBOL, palette.accent)),
                     Cell::new(count).muted().tabular(),
                 ],
-            ),
-        ]
+            )],
+        )
     }
 
     pub fn show(&mut self) -> (Box<dyn Widget>, Vec<Box<dyn Widget>>) {

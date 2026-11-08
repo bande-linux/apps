@@ -67,11 +67,17 @@ fn users<'a>(scope: &'a Scope, name: &str) -> Vec<&'a str> {
     users
 }
 
-fn volume_row(scope: &Scope, volume: &Volume) -> Row {
+fn volume_row(scope: &Scope, volume: &Volume, orphaned: bool) -> Row {
     let users = users(scope, &volume.name);
-    let used_by = match users.is_empty() {
-        true => Cell::new(tr!("dangling")).tinted(scope.palette.warning),
-        false => Cell::new(users.join(", ")),
+    let used_by = match (users.is_empty(), orphaned) {
+        (true, true) => Cell::new(""),
+        (true, false) => Cell::new(tr!("dangling")).badge(scope.palette.warning),
+        (false, _) => Cell::new(users.join(", ")),
+    };
+    let name = Cell::new(volume.name.as_str()).cut_in_middle();
+    let name = match users.is_empty() {
+        true => name.muted(),
+        false => name,
     };
     let size = scope
         .store
@@ -84,12 +90,7 @@ fn volume_row(scope: &Scope, volume: &Volume) -> Row {
         );
     Row::new(
         volume.name.clone(),
-        vec![
-            Cell::new(volume.name.as_str()).cut_in_middle(),
-            size,
-            used_by,
-            Cell::new(created(volume)).muted(),
-        ],
+        vec![name, size, used_by, Cell::new(created(volume)).muted()],
     )
 }
 
@@ -115,22 +116,29 @@ fn rows(scope: &Scope, filter: &str) -> Vec<Row> {
         .collect();
     let mut named: Vec<(String, Row)> = loose
         .into_iter()
-        .map(|volume| (volume.name.to_lowercase(), volume_row(scope, volume)))
+        .map(|volume| (volume.name.to_lowercase(), volume_row(scope, volume, false)))
         .collect();
     named.extend(projects.into_iter().map(|(project, mut members)| {
         members.sort_by_key(|volume| volume.name.to_lowercase());
-        let status = match live.contains(project) {
-            true => Cell::new(trn!("1 volume", "{count} volumes", count = members.len())).muted(),
-            false => Cell::new(tr!("no containers")).tinted(scope.palette.warning),
+        let orphaned = !live.contains(project);
+        let (name, status) = match orphaned {
+            false => (
+                Cell::new(project),
+                Cell::new(trn!("1 volume", "{count} volumes", count = members.len())).muted(),
+            ),
+            true => (
+                Cell::new(project).muted(),
+                Cell::new(tr!("orphaned")).badge(scope.palette.warning),
+            ),
         };
         let row = Row::new(
             format!("{PROJECT_PREFIX}{project}"),
-            vec![Cell::new(project), Cell::new(""), status, Cell::new("")],
+            vec![name, Cell::new(""), status, Cell::new("")],
         )
         .children(
             members
                 .iter()
-                .map(|volume| volume_row(scope, volume))
+                .map(|volume| volume_row(scope, volume, orphaned))
                 .collect(),
         );
         (project.to_lowercase(), row)
