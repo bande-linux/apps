@@ -211,12 +211,10 @@ impl Preview {
         };
         let title = view.title();
         let document = match view.is_document() {
-            true => Some(bande_app::Document::File(path)),
+            true => bande_app::Document::File(path),
             false => bande_app::image_document(path),
         };
-        if let Some(document) = document {
-            cx.print(&title, document);
-        }
+        cx.print(&title, document);
     }
 
     fn show_in_files(cx: &mut Cx<Self>, window: WindowId) {
