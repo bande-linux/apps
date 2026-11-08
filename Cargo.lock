@@ -450,7 +450,7 @@ dependencies = [
 
 [[package]]
 name = "bande-archive"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "bande-calculator"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -512,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "bande-calendar"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -541,7 +541,7 @@ dependencies = [
 
 [[package]]
 name = "bande-clock"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -617,7 +617,7 @@ source = "git+https://github.com/bande-linux/desktop?rev=d466583ab5bfce535b2ff05
 
 [[package]]
 name = "bande-disks"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -760,7 +760,7 @@ dependencies = [
 
 [[package]]
 name = "bande-mail"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -815,7 +815,7 @@ dependencies = [
 
 [[package]]
 name = "bande-monitor"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -875,7 +875,7 @@ dependencies = [
 
 [[package]]
 name = "bande-player"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -918,7 +918,7 @@ dependencies = [
 
 [[package]]
 name = "bande-preview"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -968,7 +968,7 @@ dependencies = [
 
 [[package]]
 name = "bande-software"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -1045,7 +1045,7 @@ dependencies = [
 
 [[package]]
 name = "bande-terminal"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "accesskit",
  "alacritty_terminal",
@@ -1083,7 +1083,7 @@ dependencies = [
 
 [[package]]
 name = "bande-textedit"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "accesskit",
  "bande-app",
