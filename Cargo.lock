@@ -1161,7 +1161,7 @@ dependencies = [
 
 [[package]]
 name = "bande-velox"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "accesskit",
  "bande-app",
