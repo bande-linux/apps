@@ -44,7 +44,7 @@ pub const COMMAND_DISCOVER: &str = "discover";
 pub const COMMAND_INSTALLED: &str = "installed";
 pub const COMMAND_UPDATES: &str = "updates";
 const SETTINGS: &str = "bande-settings";
-const SETTINGS_ID: &str = "org.bande.Settings";
+pub const SETTINGS_ID: &str = "org.bande.Settings";
 const SOFTWARE_UPDATE_PANE: &str = "software-update";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -389,6 +389,7 @@ pub struct Software {
     header: WidgetId,
     counted: usize,
     finished: Vec<Finished>,
+    settings_app: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -483,6 +484,7 @@ impl Software {
             header: header_id,
             counted: 0,
             finished: Vec::new(),
+            settings_app: false,
         };
         software.ask(Query::Updates);
         software.rebuild();
@@ -543,6 +545,13 @@ impl Software {
         }
         self.rebuild();
         true
+    }
+
+    pub fn set_settings_installed(&mut self, installed: bool) {
+        if self.settings_app != installed {
+            self.settings_app = installed;
+            self.rebuild();
+        }
     }
 
     pub fn reload(&mut self) {
@@ -1318,21 +1327,25 @@ impl Software {
         let count = self.update_count();
         if count == 0 {
             widgets.push(boxed(Label::new(&L10N.tr("up-to-date"))));
-            widgets.push(boxed(Label::new(&L10N.tr("updates-hint")).secondary()));
-            widgets.push(row(vec![boxed(
-                self.button(&L10N.tr("check-for-updates"), Intent::SoftwareUpdate),
-            )]));
+            if self.settings_app {
+                widgets.push(boxed(Label::new(&L10N.tr("updates-hint")).secondary()));
+                widgets.push(row(vec![boxed(
+                    self.button(&L10N.tr("check-for-updates"), Intent::SoftwareUpdate),
+                )]));
+            }
             return widgets;
         }
         let apps = self.sorted(self.matching(|app| self.has_update(app)));
         widgets.push(boxed(Label::new(
             &L10N.tr_args("updates-available", [("count", count.into())]),
         )));
-        widgets.push(boxed(Label::new(&L10N.tr("updates-hint")).secondary()));
-        widgets.push(row(vec![boxed(
-            self.button(&L10N.tr("update-all"), Intent::SoftwareUpdate)
-                .primary(),
-        )]));
+        if self.settings_app {
+            widgets.push(boxed(Label::new(&L10N.tr("updates-hint")).secondary()));
+            widgets.push(row(vec![boxed(
+                self.button(&L10N.tr("update-all"), Intent::SoftwareUpdate)
+                    .primary(),
+            )]));
+        }
         if !apps.is_empty() {
             widgets.push(boxed(Label::heading(&L10N.tr("app-updates"))));
             widgets.extend(self.rows(&apps, apps.len()));
@@ -1509,10 +1522,13 @@ impl Software {
                 widgets.push(row(buttons));
             }
             if self.has_update(app) {
-                widgets.push(row(vec![
-                    boxed(Label::new(&L10N.tr("update-available"))),
-                    boxed(self.button(&L10N.tr("update-all"), Intent::SoftwareUpdate)),
-                ]));
+                let mut update = vec![boxed(Label::new(&L10N.tr("update-available")))];
+                if self.settings_app {
+                    update.push(boxed(
+                        self.button(&L10N.tr("update-all"), Intent::SoftwareUpdate),
+                    ));
+                }
+                widgets.push(row(update));
             }
         } else if self.needs_x11(app) {
             widgets.push(boxed(Label::new(&L10N.tr("needs-x11"))));

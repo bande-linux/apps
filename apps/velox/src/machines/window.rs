@@ -82,6 +82,7 @@ pub struct MachineWindow {
     intents: Intents,
     requests: Vec<Request>,
     full_screen: bool,
+    terminal: bool,
 }
 
 fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
@@ -89,7 +90,7 @@ fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
 }
 
 impl MachineWindow {
-    pub fn new(id: &str, hub: &super::Hub, appearance: Appearance) -> Self {
+    pub fn new(id: &str, hub: &super::Hub, appearance: Appearance, terminal: bool) -> Self {
         let fleet = hub.fleet();
         let palette = appearance.palette();
         let intents = Intents::default();
@@ -123,6 +124,7 @@ impl MachineWindow {
             intents,
             requests: Vec::new(),
             full_screen: false,
+            terminal,
         };
         window.make_tools(palette);
         window.refresh();
@@ -289,6 +291,14 @@ impl MachineWindow {
 
     pub fn connect(&mut self) {
         self.requests.push(Request::Connect(self.id.clone()));
+    }
+
+    pub fn set_terminal(&mut self, installed: bool) {
+        if self.terminal != installed {
+            self.terminal = installed;
+            self.shown = None;
+            self.refresh();
+        }
     }
 
     pub fn present_notice(&mut self, title: &str, message: &str) {
@@ -683,10 +693,6 @@ impl MachineWindow {
             start.set_enabled(self.can(Act::Start));
             return centered(vec![row(boxed(start))]);
         }
-        let mut connect = Button::new(&L10N.tr("machine-connect"), move || {
-            push(&intents, Intent::Connect)
-        });
-        connect.set_enabled(self.can_connect());
         let message = match (&self.failure, &self.session) {
             (Some(reason), _) if !reason.is_empty() => L10N.tr_args(
                 "machine-console-failed",
@@ -698,7 +704,14 @@ impl MachineWindow {
         };
         let retry_intents = Rc::clone(&self.intents);
         let mut children = vec![boxed(Label::new(&message).secondary())];
-        let mut buttons = vec![boxed(connect)];
+        let mut buttons = Vec::new();
+        if self.terminal {
+            let mut connect = Button::new(&L10N.tr("machine-connect"), move || {
+                push(&intents, Intent::Connect)
+            });
+            connect.set_enabled(self.can_connect());
+            buttons.push(boxed(connect));
+        }
         if self.failure.is_some() {
             buttons.push(boxed(Button::new(
                 &L10N.tr("machine-console-retry"),

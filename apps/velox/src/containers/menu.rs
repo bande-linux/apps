@@ -57,6 +57,7 @@ pub struct Facts {
     pub ports: Vec<u16>,
     pub logs: bool,
     pub compose: bool,
+    pub terminal: bool,
 }
 
 fn item(label: String, action: &str) -> Item {
@@ -104,13 +105,15 @@ pub fn items(facts: &Facts) -> Vec<Item> {
         Item::Separator,
         with(item(L10N.tr(LOGS), LOGS), Some("Ctrl+L"), facts.logs),
         with(item(L10N.tr(SHELL), SHELL), None, single && facts.running),
-        with(
+    ]);
+    if facts.terminal {
+        items.push(with(
             item(L10N.tr(TERMINAL), TERMINAL),
             None,
             single && facts.running,
-        ),
-        Item::Separator,
-    ]);
+        ));
+    }
+    items.push(Item::Separator);
     let mut copies = vec![
         with(item(L10N.tr(COPY_NAME), COPY_NAME), None, single),
         with(item(L10N.tr(COPY_ID), COPY_ID), None, single),

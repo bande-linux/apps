@@ -7,9 +7,9 @@ use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::Entry;
 use bande_monitor::{
-    Asked, BatteryReport, Catalog, INSPECTOR_SIZE, Icons, InspectorView, L10N, MenuCommand,
-    Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop, TOOLBAR_HEIGHT,
-    Tab, battery_reader, list_sleep_blockers, stop_all,
+    Asked, BatteryReport, Catalog, FILES_APP_ID, INSPECTOR_SIZE, Icons, InspectorView, L10N,
+    MenuCommand, Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop,
+    TOOLBAR_HEIGHT, Tab, battery_reader, list_sleep_blockers, stop_all,
 };
 use bande_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Scene, TextSystem, Window, WindowEvent,
@@ -25,7 +25,6 @@ const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
 const ICON_PIXELS: u32 = 32;
 const FILES: &str = "bande-files";
-const FILES_APP_ID: &str = "org.bande.Files";
 const PROC_ROOT: &str = "/";
 const STATE_FILE: &str = "monitor";
 const MEMORY_FLAG: &str = "--memory";
@@ -387,7 +386,7 @@ impl Program for ActivityMonitor {
             menus: self
                 .main
                 .and_then(|main| cx.view(main))
-                .and_then(|pane| pane.0.app_menus(true))
+                .and_then(|pane| pane.0.app_menus(true, cx.installed(FILES_APP_ID)))
                 .unwrap_or_else(|| self.closed_menus.clone()),
             window: vec![Entry::item(&L10N.tr("window-title"), SHOW_MONITOR)],
         }
@@ -441,7 +440,10 @@ impl Program for ActivityMonitor {
     fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, view: Pane) {
         if self.main == Some(window) {
             self.main = None;
-            self.closed_menus = view.0.app_menus(false).unwrap_or_default();
+            self.closed_menus = view
+                .0
+                .app_menus(false, cx.installed(FILES_APP_ID))
+                .unwrap_or_default();
         }
         self.sampling = on_screen(cx);
     }

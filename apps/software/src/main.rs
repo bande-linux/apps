@@ -11,7 +11,7 @@ use bande_packages::{Client, debian_arch};
 use bande_software::settings::{SETTINGS_SIZE, SoftwareSettings, settings_form};
 use bande_software::{
     COMMAND_BACK, COMMAND_DISCOVER, COMMAND_FIND, COMMAND_INSTALLED, COMMAND_UPDATES, Finished,
-    L10N, Software, WINDOW_SIZE,
+    L10N, SETTINGS_ID, Software, WINDOW_SIZE,
 };
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 
@@ -129,6 +129,7 @@ impl Program for Store {
             return;
         };
         pane.0.reload();
+        pane.0.set_settings_installed(cx.installed(SETTINGS_ID));
         match open_main(cx, pane) {
             Ok(main) => self.main = Some(main),
             Err(error) => tracing::warn!("cannot open Software: {error}"),
@@ -140,6 +141,14 @@ impl Program for Store {
             view.0.take_finished();
             self.main = None;
             self.parked = Some(view);
+        }
+    }
+
+    fn installed_changed(&mut self, cx: &mut Cx<Self>) {
+        let settings = cx.installed(SETTINGS_ID);
+        if let Some((window, pane)) = self.main.and_then(|main| cx.window(main)) {
+            pane.0.set_settings_installed(settings);
+            window.request_redraw();
         }
     }
 
@@ -174,6 +183,7 @@ impl Program for Store {
                 actions: &[],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: Some(INFO.id),
             };
             if let Err(error) = notify(session, &request) {
                 tracing::warn!("cannot announce the installation: {error}");

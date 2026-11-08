@@ -213,6 +213,7 @@ pub struct TerminalContext {
     pub has_selection: bool,
     pub look_up: Option<String>,
     pub knows_directory: bool,
+    pub files: bool,
     pub tab: u32,
 }
 
@@ -220,14 +221,18 @@ pub fn terminal_menu(context: &TerminalContext) -> Menu {
     let mut items = Vec::new();
     if let Some(uri) = &context.link {
         match path_from_file_uri(uri) {
-            Some(path) => items.extend([
-                item("menu-open", MenuCommand::OpenLink(uri.clone())),
-                item(
-                    "menu-copy-path",
-                    MenuCommand::CopyLink(path.display().to_string()),
-                ),
-                item("menu-show-in-files", MenuCommand::Reveal(path)),
-            ]),
+            Some(path) => {
+                items.extend([
+                    item("menu-open", MenuCommand::OpenLink(uri.clone())),
+                    item(
+                        "menu-copy-path",
+                        MenuCommand::CopyLink(path.display().to_string()),
+                    ),
+                ]);
+                if context.files {
+                    items.push(item("menu-show-in-files", MenuCommand::Reveal(path)));
+                }
+            }
             None => items.extend([
                 item("menu-open-link", MenuCommand::OpenLink(uri.clone())),
                 item("menu-copy-link", MenuCommand::CopyLink(uri.clone())),
@@ -249,8 +254,14 @@ pub fn terminal_menu(context: &TerminalContext) -> Menu {
         MenuItem::separator(),
         command_item(Command::ClearScrollback),
         MenuItem::separator(),
-        item("menu-show-in-files", MenuCommand::ShowInFiles).enabled(context.knows_directory),
-        MenuItem::separator(),
+    ]);
+    if context.files {
+        items.extend([
+            item("menu-show-in-files", MenuCommand::ShowInFiles).enabled(context.knows_directory),
+            MenuItem::separator(),
+        ]);
+    }
+    items.extend([
         command_item(Command::NewTab),
         command_item(Command::NewWindow),
         MenuItem::separator(),
@@ -294,7 +305,7 @@ fn command_entries(commands: &[Option<Command>]) -> Vec<Entry> {
 
 const PRINT_SHORTCUT: &str = "Shift+Ctrl+P";
 
-pub fn app_menus(windowed: bool) -> Menus {
+pub fn app_menus(windowed: bool, files: bool) -> Menus {
     let mut shell = command_entries(&[
         Some(Command::NewWindow),
         Some(Command::NewTab),
@@ -302,12 +313,16 @@ pub fn app_menus(windowed: bool) -> Menus {
         Some(Command::EditTitle),
         None,
     ]);
+    if files {
+        shell.extend([
+            Entry::item(
+                &L10N.tr("menu-show-in-files"),
+                &MenuCommand::ShowInFiles.action(),
+            ),
+            Entry::separator(),
+        ]);
+    }
     shell.extend([
-        Entry::item(
-            &L10N.tr("menu-show-in-files"),
-            &MenuCommand::ShowInFiles.action(),
-        ),
-        Entry::separator(),
         bande_app_menu::print_item(windowed).shortcut(PRINT_SHORTCUT),
         Entry::separator(),
         Entry::item(&L10N.tr("menu-close-window"), CLOSE_WINDOW).enabled(windowed),

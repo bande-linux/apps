@@ -33,7 +33,7 @@ use crate::bus::Bus;
 
 const BADGE_GAP: Duration = Duration::from_millis(250);
 const FILES: &str = "bande-files";
-const FILES_APP_ID: &str = "org.bande.Files";
+pub(crate) const FILES_APP_ID: &str = "org.bande.Files";
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
 const TERMINAL_NODE: NodeId = NodeId(u64::MAX - 1);
 const TAB_LIST_NODE: NodeId = NodeId(u64::MAX - 2);
@@ -1123,6 +1123,7 @@ impl TerminalWindow {
             has_selection: self.terminal().selected_text().is_some(),
             look_up: look_up_text(self.terminal().selected_text()),
             knows_directory: self.session().working_directory().is_some(),
+            files: bande_xdg::is_installed(FILES_APP_ID),
             tab: self.tab().id,
         };
         self.show_menu(window, terminal_menu(&context), at);

@@ -379,7 +379,7 @@ impl MachinesPane {
         let any = |act: Act| entries.iter().any(|entry| entry.can(act));
         let single = entries.len() == 1;
         let ssh = single && first.running() && first.ssh_target().is_some();
-        Some(Menu::new(vec![
+        let mut items = vec![
             menu_item("machine-start", MENU_START, any(Act::Start)),
             menu_item("machine-shut-down", MENU_SHUT_DOWN, any(Act::ShutDown)),
             menu_item("machine-force-stop", MENU_FORCE_STOP, any(Act::ForceStop)),
@@ -390,7 +390,11 @@ impl MachinesPane {
             },
             menu_item("machine-suspend", MENU_SUSPEND, any(Act::Suspend)),
             MenuItem::separator(),
-            menu_item("machine-connect", MENU_CONNECT, ssh),
+        ];
+        if bande_xdg::is_installed(crate::TERMINAL_APP_ID) {
+            items.push(menu_item("machine-connect", MENU_CONNECT, ssh));
+        }
+        items.extend([
             menu_item("machine-open", MENU_OPEN, single),
             menu_item("machine-serial", MENU_SERIAL, single && first.running()),
             menu_item(
@@ -414,7 +418,8 @@ impl MachinesPane {
                 MENU_DELETE,
                 single && first.can(Act::Delete),
             ),
-        ]))
+        ]);
+        Some(Menu::new(items))
     }
 
     fn menu_action(&mut self, ui: &mut Ui, action: &str, keys: &[String]) {

@@ -204,6 +204,7 @@ fn announce(summary: String, body: String, sound: bool) {
                         actions: &[],
                         urgency: Urgency::Normal,
                         sound: sound.then_some(NEW_MAIL_SOUND),
+                        desktop_entry: Some(APP_ID),
                     },
                 )
             });

@@ -123,6 +123,7 @@ fn serve(app_id: &str, receiver: &Receiver<Outgoing>) {
                     actions: &[],
                     urgency: Urgency::Normal,
                     sound: None,
+                    desktop_entry: Some(app_id),
                 },
             )
             .map(|_| ()),

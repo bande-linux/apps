@@ -8,7 +8,6 @@ use super::logs::LogsTarget;
 use crate::engine::{Engine, Informer, Update};
 
 const TERMINAL: &str = "bande-terminal";
-const TERMINAL_ID: &str = "org.bande.Terminal";
 const WATCHER: &str = "containers";
 
 #[derive(Debug)]
@@ -90,7 +89,9 @@ impl Work {
                 let token = token();
                 let mut argv = vec![TERMINAL.to_owned(), "-e".to_owned()];
                 argv.extend(command);
-                if let Err(error) = spawn_detached(TERMINAL_ID, &argv, None, token.as_deref()) {
+                if let Err(error) =
+                    spawn_detached(crate::TERMINAL_APP_ID, &argv, None, token.as_deref())
+                {
                     tracing::warn!("cannot open Terminal: {error}");
                 }
             }

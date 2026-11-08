@@ -38,5 +38,7 @@ pub use signal::{SignalError, Stop, stop};
 pub use system::{Memory, Pressure, PressureLevel};
 pub use view::{Icons, Request, Screen};
 
+pub const FILES_APP_ID: &str = "org.bande.Files";
+
 pub static L10N: LazyLock<Localizer> =
     LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-monitor")));

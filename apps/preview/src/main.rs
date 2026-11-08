@@ -295,13 +295,15 @@ impl Program for Preview {
                 None => entry,
             }
         };
-        let file_menu = vec![
-            item("menu-open", OPEN, Some("Ctrl+O"), true),
-            item("menu-show-in-files", SHOW_IN_FILES, None, file),
+        let mut file_menu = vec![item("menu-open", OPEN, Some("Ctrl+O"), true)];
+        if cx.installed(FILES_APP_ID) {
+            file_menu.push(item("menu-show-in-files", SHOW_IN_FILES, None, file));
+        }
+        file_menu.extend([
             item("menu-get-info", GET_INFO, Some("Ctrl+I"), file),
             Entry::separator(),
             bande_app_menu::print_item(file),
-        ];
+        ]);
         let edit = vec![
             item("menu-copy", COPY, Some("Ctrl+C"), copyable),
             Entry::separator(),

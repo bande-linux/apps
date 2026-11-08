@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use bande_status::devices::battery;
-use bande_status::history::{ChargeSample, charge_history};
+use bande_status::history::{ChargeSample, charge_history, system_battery};
 use bande_status::status::Battery;
 use zbus::blocking::Connection;
 
@@ -29,7 +29,11 @@ pub fn battery_reader(system: Connection) -> impl FnMut() -> Option<Option<Batte
     let mut read_at: Option<Instant> = None;
     move || {
         if read_at.is_none_or(|at| at.elapsed() >= HISTORY_REFRESH) {
-            history = charge_history(&system, BATTERY_HISTORY, HISTORY_POINTS)
+            history = system_battery(&system)
+                .and_then(|source| match source {
+                    Some(source) => charge_history(&source, BATTERY_HISTORY, HISTORY_POINTS),
+                    None => Ok(Vec::new()),
+                })
                 .inspect_err(|error| tracing::debug!("no battery history: {error}"))
                 .unwrap_or_default();
             read_at = Some(Instant::now());

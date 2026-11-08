@@ -99,11 +99,12 @@ pub struct Selected {
     pub located: bool,
     pub has_pid: bool,
     pub inspectable: bool,
+    pub files: bool,
 }
 
 pub fn process_menu(selected: Selected) -> Menu {
     let force_quit = item("menu-force-quit", MenuCommand::ForceQuit).enabled(selected.stoppable);
-    Menu::new(vec![
+    let mut items = vec![
         item("menu-quit", MenuCommand::Quit)
             .shortcut("Ctrl+E")
             .enabled(selected.stoppable)
@@ -112,7 +113,11 @@ pub fn process_menu(selected: Selected) -> Menu {
         item("menu-inspect", MenuCommand::Inspect)
             .shortcut("Ctrl+I")
             .enabled(selected.inspectable),
-        item("menu-show-in-files", MenuCommand::ShowInFiles).enabled(selected.located),
+    ];
+    if selected.files {
+        items.push(item("menu-show-in-files", MenuCommand::ShowInFiles).enabled(selected.located));
+    }
+    items.extend([
         MenuItem::separator(),
         MenuItem::submenu(
             &L10N.tr("menu-send-signal"),
@@ -128,7 +133,8 @@ pub fn process_menu(selected: Selected) -> Menu {
         MenuItem::separator(),
         item("menu-copy-name", MenuCommand::CopyName),
         item("menu-copy-pid", MenuCommand::CopyPid).enabled(selected.has_pid),
-    ])
+    ]);
+    Menu::new(items)
 }
 
 pub fn columns_menu(shown: &[Column]) -> Menu {
@@ -148,7 +154,13 @@ fn entry(message: &str, command: MenuCommand) -> Entry {
     Entry::item(&L10N.tr(message), command.action())
 }
 
-pub fn app_menus(tabs: &[Tab], shown: Filter, frequency: Frequency, windowed: bool) -> Vec<Entry> {
+pub fn app_menus(
+    tabs: &[Tab],
+    shown: Filter,
+    frequency: Frequency,
+    windowed: bool,
+    files: bool,
+) -> Vec<Entry> {
     let process = |message: &str, command: MenuCommand| entry(message, command).enabled(windowed);
     let mut view = tabs
         .iter()
@@ -185,9 +197,13 @@ pub fn app_menus(tabs: &[Tab], shown: Filter, frequency: Frequency, windowed: bo
         )
         .enabled(windowed),
         process("menu-inspect", MenuCommand::Inspect).shortcut("Ctrl+I"),
-        Entry::separator(),
-        process("menu-show-in-files", MenuCommand::ShowInFiles),
     ]);
+    if files {
+        view.extend([
+            Entry::separator(),
+            process("menu-show-in-files", MenuCommand::ShowInFiles),
+        ]);
+    }
     vec![
         edit_submenu(vec![
             process("menu-copy-name", MenuCommand::CopyName),
