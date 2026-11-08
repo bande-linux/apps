@@ -47,6 +47,7 @@ and the Window menu names the main window (Message Viewer, Calendar, Activity Mo
 | `ci/gate.sh [app...]` | the local merge gate: CI's own `ci/build-app.sh` on each app in the `gate` profile, `ci/check.sh` on the libs and the template, one `target/` (default: every app, the libs and the template) |
 | `ci/setup.sh install\|check <app>... \| source` | the toolchain, `cargo-deb` and Debian packages a build needs: CI installs them, the gate fails if one is missing; apps depend on desktop packages, so both add (`source`, as root) or need the Bande archive, pinned to the Bande packages, with the key in `ci/bande-archive-key.asc` |
 | `ci/build-app.sh <app> <out> [profile]` | one app's build, the same in CI and the gate: `ci/check-app.sh`, `ci/version.sh`, `ci/check.sh`, the binaries, the `.deb` and `ci/smoke.sh` on it |
+| `ci/build-packs.sh <out>` | every released app's language packs from the translations alone, for an `l10n-YYYYMMDD` tag |
 | `ci/check.sh <package>` | fmt, clippy `--all-targets -D warnings` and the tests of one package, `--locked`, on a private session bus with software Vulkan |
 | `ci/check-app.sh <dir>...` | static checks that an app is a `bande-app` app packaged like the others (ids, `.desktop`, metainfo, fonts); fails on any problem |
 | `ci/smoke.sh [--install] <deb>` | checks a package unpacked: `desktop-file-validate`, `appstreamcli validate`, `--version`, apt resolves its dependencies; `--install` (CI) then installs it and checks its files and the app's own `smoke.sh` |
@@ -69,7 +70,7 @@ table above, and `default-apps` for a default app. Check that it compiles
 
 ## How it's built and published
 
-CI runs only for releases. To release an app, set its `version` in `apps/<name>/Cargo.toml`, run
+CI runs only for releases and translation-only tags. To release an app, set its `version` in `apps/<name>/Cargo.toml`, run
 `ci/gate.sh <name>`, merge to `main`, and tag that commit `<name>-vX.Y.Z` with the same version:
 
 ```
@@ -81,6 +82,12 @@ The tag builds that one app for arm64 and amd64 on GitHub's runners in `debian:t
 commit isn't on `main`, or whose version doesn't match `Cargo.toml`, fails. A green run uploads
 `bande-debs-arm64` and `bande-debs-amd64`; the archive's scheduled publish picks them up within 30
 minutes, taking only the package named after the tagged app and never a name the desktop publishes.
+
+Each app's release carries its language packs, `bande-<app>-l10n-<lang>`. A corrected translation
+ships without a release through a translation-only tag `l10n-YYYYMMDD` (`.N` for another the same
+day) on a commit of `main`: `.github/workflows/l10n.yml` runs `ci/build-packs.sh`, which checks the
+translations and builds the packs of every released app, each at its last release before the tag,
+`X.Y.Z+l10nYYYYMMDD`. The archive takes an app's packs only while it serves that release.
 
 A manual dispatch (`gh workflow run build.yml -f apps=<name>`) builds any app on
 any branch with a `+git` version; it is never published.

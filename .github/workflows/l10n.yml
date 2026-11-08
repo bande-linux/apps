@@ -1,0 +1,50 @@
+name: language packs
+run-name: "Language packs ${{ github.ref_name }}"
+
+on:
+  push:
+    tags: ['l10n-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]', 'l10n-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].[0-9]*']
+
+concurrency:
+  group: l10n-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  packs:
+    runs-on: ubuntu-24.04
+    container: debian:testing
+    timeout-minutes: 30
+    steps:
+      - name: Install git
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Check that the tagged commit is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Install the toolchain
+        run: |
+          ci/setup.sh install
+          apt-get install -y -qq --no-install-recommends lintian
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Build the packs from the translations alone
+        run: ci/build-packs.sh target/debian-l10n
+      - name: Lintian
+        run: |
+          chmod 755 target target/debian-l10n
+          chmod 644 target/debian-l10n/*.deb
+          runuser -u nobody -- lintian --fail-on error,warning target/debian-l10n/*.deb
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bande-debs-all
+          path: target/debian-l10n/*.deb
+          if-no-files-found: error
