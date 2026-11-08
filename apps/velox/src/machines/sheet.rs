@@ -422,8 +422,8 @@ impl Draft {
                             field(Field::Name),
                         )) as Box<dyn Widget>,
                     )];
-                    return new("machine-step-identity")
-                        .accessory(Form::new(&L10N.tr("machine-step-identity"), lines))
+                    return new("machine-step-name")
+                        .accessory(Form::new(&L10N.tr("machine-step-name"), lines))
                         .other(&L10N.tr("machine-back"), BACK)
                         .cancel(&L10N.tr("machine-cancel"), CANCEL)
                         .primary(&L10N.tr("machine-create"), CONTINUE);
