@@ -91,7 +91,7 @@ pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
                 Entry::separator(),
                 selection(text!("Apply Rules"), "apply-rules"),
                 Entry::separator(),
-                selection(text!("Archive"), "archive"),
+                selection(text!(context = "action", "Archive"), "archive"),
                 selection(text!("Move to Junk"), "junk"),
                 Entry::submenu(&tr!("Move To"), targets).enabled(viewer),
                 selection(text!("Delete"), "delete"),

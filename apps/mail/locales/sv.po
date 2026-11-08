@@ -91,6 +91,7 @@ msgstr "Flagga"
 msgid "Apply Rules"
 msgstr "Tillämpa regler"
 
+msgctxt "action"
 msgid "Archive"
 msgstr "Arkivera"
 

@@ -327,7 +327,7 @@ impl LogsView {
             Box::new(Button::new(&tr!("Copy"), move || {
                 copy.borrow_mut().push(Intent::Copy);
             })),
-            Box::new(Button::new(&tr!("Clear"), move || {
+            Box::new(Button::new(&tr!(context = "logs", "Clear"), move || {
                 clear.borrow_mut().push(Intent::Clear);
             })),
         ];

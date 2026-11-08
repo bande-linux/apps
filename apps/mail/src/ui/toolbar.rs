@@ -97,7 +97,11 @@ impl MailView {
         let buttons = [
             (Symbol::GetMail, text!("Get Mail"), Signal::GetMail),
             (Symbol::Compose, text!("New Message"), Signal::Compose),
-            (Symbol::Archive, text!("Archive"), Signal::Archive),
+            (
+                Symbol::Archive,
+                text!(context = "action", "Archive"),
+                Signal::Archive,
+            ),
             (Symbol::Trash, text!("Delete"), Signal::Delete),
             (Symbol::Junk, text!("Move to Junk"), Signal::Junk),
             (Symbol::Reply, text!("Reply"), Signal::Reply),

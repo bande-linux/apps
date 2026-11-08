@@ -72,7 +72,7 @@ impl Section {
         match self {
             Self::Overview => tr!("Overview"),
             Self::Containers => tr!("Containers"),
-            Self::Images => tr!("Images"),
+            Self::Images => tr!(context = "containers", "Images"),
             Self::Volumes => tr!("Volumes"),
             Self::Networks => tr!("Networks"),
             Self::Machines => tr!("Machines"),

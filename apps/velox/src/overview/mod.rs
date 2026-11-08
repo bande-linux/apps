@@ -248,7 +248,7 @@ impl Pane for Overview {
                 Act::Navigate(Section::Containers),
             ),
             card(
-                text!("Images"),
+                text!(context = "containers", "Images"),
                 IMAGES_SYMBOL,
                 Tone::Blue,
                 Act::Navigate(Section::Images),

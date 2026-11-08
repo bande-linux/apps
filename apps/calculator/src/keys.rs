@@ -83,7 +83,7 @@ impl Builder<'_> {
     fn clear(&self) -> KeySpec {
         let (label, message) = match self.engine.clears_all() {
             true => ("AC", text!("All Clear")),
-            false => ("C", text!("Clear")),
+            false => ("C", text!(context = "calculator key", "Clear")),
         };
         self.named(Input::Clear, label, message, Binding::Named(Key::Escape))
     }
@@ -506,7 +506,7 @@ pub fn binding_label(binding: Binding) -> String {
         Binding::Character(character) => character.to_string(),
         Binding::Named(Key::Enter) => tr!("Enter"),
         Binding::Named(Key::Escape) => tr!("Esc"),
-        Binding::Named(Key::Backspace) => tr!("Backspace"),
+        Binding::Named(Key::Backspace) => tr!(context = "calculator key", "Backspace"),
         Binding::Named(_) => String::new(),
     }
 }

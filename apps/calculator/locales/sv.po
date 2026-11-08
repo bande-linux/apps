@@ -31,6 +31,7 @@ msgstr "Resultat"
 msgid "All Clear"
 msgstr "Nollställ allt"
 
+msgctxt "calculator key"
 msgid "Clear"
 msgstr "Nollställ"
 
@@ -256,6 +257,7 @@ msgstr "BIN"
 msgid "Esc"
 msgstr "Esc"
 
+msgctxt "calculator key"
 msgid "Backspace"
 msgstr "Backspace"
 

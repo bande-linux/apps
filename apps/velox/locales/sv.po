@@ -106,6 +106,7 @@ msgstr "Radbryt"
 msgid "Copy"
 msgstr "Kopiera"
 
+msgctxt "logs"
 msgid "Clear"
 msgstr "Töm"
 
@@ -676,6 +677,7 @@ msgstr "{count} GB"
 msgid "Today"
 msgstr "Idag"
 
+msgctxt "days ago"
 msgid "Yesterday"
 msgid_plural "{count} days ago"
 msgstr[0] "Igår"
@@ -1067,6 +1069,7 @@ msgstr "Velox {version}"
 msgid "Reclaim Space…"
 msgstr "Frigör utrymme …"
 
+msgctxt "containers"
 msgid "Images"
 msgstr "Images"
 

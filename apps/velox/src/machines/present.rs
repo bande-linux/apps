@@ -215,7 +215,12 @@ fn date(seconds: u64) -> String {
         .map_or(0, |elapsed| elapsed.as_secs() / DAY);
     match days {
         0 => tr!("Today"),
-        days => trn!("Yesterday", "{count} days ago", count = days),
+        days => trn!(
+            context = "days ago",
+            "Yesterday",
+            "{count} days ago",
+            count = days
+        ),
     }
 }
 

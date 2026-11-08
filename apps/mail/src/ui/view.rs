@@ -2827,7 +2827,8 @@ impl MailView {
                 ),
             ),
             MenuItem::separator(),
-            MenuItem::new(&tr!("Archive"), "archive").enabled(self.can_move_to(Role::Archive)),
+            MenuItem::new(&tr!(context = "action", "Archive"), "archive")
+                .enabled(self.can_move_to(Role::Archive)),
             MenuItem::new(&tr!("Move to Junk"), "junk").enabled(self.can_move_to(Role::Junk)),
             MenuItem::submenu(
                 &tr!("Move To"),
