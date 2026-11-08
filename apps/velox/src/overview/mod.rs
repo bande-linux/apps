@@ -59,6 +59,7 @@ pub struct Overview {
     breakdown: Option<WidgetId>,
     live: Vec<WidgetId>,
     started: Option<SystemTime>,
+    quiet: bool,
     samples: HashMap<String, (Sample, Option<Sample>)>,
     round: HashSet<String>,
     history: VecDeque<Point>,
@@ -169,6 +170,53 @@ impl Overview {
         }
     }
 
+    pub fn fill_live(&mut self, ui: &mut Ui) {
+        let quiet = self.quiet;
+        let last = self.history.back().copied().unwrap_or_default();
+        let note = quiet.then(|| L10N.tr("no-running-containers"));
+        let value = |text: String| Readout {
+            label: None,
+            value: text,
+        };
+        let labelled = |key: &str, tone: Tone, text: String| Readout {
+            label: Some((L10N.tr(key), tone)),
+            value: text,
+        };
+        let live = [
+            (
+                vec![value(format!("{:.0}%", last.cpu))],
+                self.single(CPU_FLOOR, Tone::Green, |point| point.cpu),
+            ),
+            (
+                vec![value(size(last.memory as u64))],
+                self.single(MEMORY_FLOOR, Tone::Blue, |point| point.memory),
+            ),
+            (
+                vec![
+                    labelled("rate-read", Tone::Blue, speed(last.read)),
+                    labelled("rate-write", Tone::Red, speed(last.written)),
+                ],
+                self.mirrored(DISK_FLOOR, |point| point.read, |point| point.written),
+            ),
+            (
+                vec![
+                    labelled("rate-in", Tone::Blue, speed(last.received)),
+                    labelled("rate-out", Tone::Red, speed(last.sent)),
+                ],
+                self.mirrored(NETWORK_FLOOR, |point| point.received, |point| point.sent),
+            ),
+        ];
+        for (id, (readouts, plot)) in self.live.iter().zip(live) {
+            if let Some(card) = ui.widget_as::<Live>(*id) {
+                let readouts = match quiet {
+                    true => Vec::new(),
+                    false => readouts,
+                };
+                card.set(readouts, plot, note.as_deref());
+            }
+        }
+    }
+
     pub fn deadline(&self) -> Option<Instant> {
         let up = SystemTime::now()
             .duration_since(self.started?)
@@ -238,7 +286,7 @@ impl Pane for Overview {
         self.engine = Some(engine.id());
         let reclaim = tool(
             PRUNE_SYMBOL,
-            &L10N.tr("reclaim-space-menu"),
+            "reclaim-space-menu",
             palette,
             acts,
             Act::Command(RECLAIM),
@@ -383,50 +431,8 @@ impl Pane for Overview {
             );
         }
         let machines = self.fleet.borrow().running();
-        let last = self.history.back().copied().unwrap_or_default();
-        let quiet = running == 0 && machines == 0;
-        let note = quiet.then(|| L10N.tr("no-running-containers"));
-        let value = |text: String| Readout {
-            label: None,
-            value: text,
-        };
-        let labelled = |key: &str, tone: Tone, text: String| Readout {
-            label: Some((L10N.tr(key), tone)),
-            value: text,
-        };
-        let live = [
-            (
-                vec![value(format!("{:.0}%", last.cpu))],
-                self.single(CPU_FLOOR, Tone::Green, |point| point.cpu),
-            ),
-            (
-                vec![value(size(last.memory as u64))],
-                self.single(MEMORY_FLOOR, Tone::Blue, |point| point.memory),
-            ),
-            (
-                vec![
-                    labelled("rate-read", Tone::Blue, speed(last.read)),
-                    labelled("rate-write", Tone::Red, speed(last.written)),
-                ],
-                self.mirrored(DISK_FLOOR, |point| point.read, |point| point.written),
-            ),
-            (
-                vec![
-                    labelled("rate-in", Tone::Blue, speed(last.received)),
-                    labelled("rate-out", Tone::Red, speed(last.sent)),
-                ],
-                self.mirrored(NETWORK_FLOOR, |point| point.received, |point| point.sent),
-            ),
-        ];
-        for (id, (readouts, plot)) in self.live.iter().zip(live) {
-            if let Some(card) = ui.widget_as::<Live>(*id) {
-                let readouts = match quiet {
-                    true => Vec::new(),
-                    false => readouts,
-                };
-                card.set(readouts, plot, note.as_deref());
-            }
-        }
+        self.quiet = running == 0 && machines == 0;
+        self.fill_live(ui);
     }
 
     fn command(&mut self, _ui: &mut Ui, _acts: &Acts, _scope: &Scope, _command: &str) -> bool {

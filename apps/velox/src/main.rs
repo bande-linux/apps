@@ -1006,15 +1006,22 @@ impl Program for Velox {
                 }
             }
         }
+        let mut changed = false;
+        let mut menus = false;
         if let Some((window, pane)) = self.pane(cx) {
             for update in updates {
-                pane.view.apply(update);
+                menus |= !matches!(update, Update::Stats(..));
+                changed |= pane.view.apply(update);
             }
             pane.serve(window);
-            window.request_redraw();
+            if changed {
+                window.request_redraw();
+            }
         }
         self.open_logs(cx);
-        cx.refresh_menus();
+        if menus {
+            cx.refresh_menus();
+        }
     }
 
     fn deadline(&self) -> Option<Instant> {

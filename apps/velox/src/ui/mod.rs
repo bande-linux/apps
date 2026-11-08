@@ -145,6 +145,7 @@ pub struct VeloxView {
     resources: Resources,
     machines: MachinesPane,
     hidden: bool,
+    stats_round: std::collections::HashSet<String>,
 }
 
 fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
@@ -213,6 +214,7 @@ impl VeloxView {
             resources: Resources::new(),
             machines: MachinesPane::new(Rc::default(), palette),
             hidden: false,
+            stats_round: std::collections::HashSet::new(),
         };
         view.refresh();
         view
@@ -391,6 +393,8 @@ impl VeloxView {
     pub fn set_hidden(&mut self, hidden: bool) {
         self.hidden = hidden;
         self.containers.set_hidden(hidden);
+        let list = self.containers.list().clone();
+        self.resources.set_hidden(hidden, &list);
     }
 
     pub fn deadline(&self) -> Option<std::time::Instant> {
@@ -418,13 +422,24 @@ impl VeloxView {
         }
     }
 
-    pub fn apply(&mut self, update: Update) {
-        if let Update::Stats(id, sample) = &update {
-            self.containers.sample(&mut self.ui, id, *sample);
+    pub fn apply(&mut self, update: Update) -> bool {
+        if let Update::Stats(id, sample) = update {
+            self.containers.sample(&mut self.ui, &id, sample);
+            let closed = self.stats_round.contains(&id);
+            if closed {
+                self.stats_round.clear();
+            }
+            self.stats_round.insert(id.clone());
+            self.resources
+                .apply(&mut self.ui, Update::Stats(id, sample));
+            if closed && !self.resources.stats_round(&mut self.ui) {
+                self.refresh();
+            }
+            return closed;
         }
         let Some(update) = self.resources.apply(&mut self.ui, update) else {
             self.refresh();
-            return;
+            return true;
         };
         match update {
             Update::Blocked(readiness) => {
@@ -439,6 +454,7 @@ impl VeloxView {
             update => self.containers.apply(&mut self.ui, update),
         }
         self.refresh();
+        true
     }
 
     pub fn pump(&mut self) -> bool {

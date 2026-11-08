@@ -94,6 +94,18 @@ fn state_dot(palette: &Palette, container: &Container, pending: Option<Action>) 
     Cell::new(container.name()).icon(icon)
 }
 
+fn status_cell(palette: &Palette, container: &Container) -> Cell {
+    let cell = Cell::new(container.status.as_str());
+    let unhealthy = container.status.contains("unhealthy");
+    match container.state.as_str() {
+        "running" if unhealthy => cell.tinted(palette.warning),
+        "running" => cell.tinted(palette.success),
+        "paused" | "restarting" => cell.tinted(palette.warning),
+        "exited" | "dead" => cell.tinted(palette.danger_text),
+        _ => cell.muted(),
+    }
+}
+
 fn ports(palette: &Palette, ports: &[u16]) -> Cell {
     match ports.is_empty() {
         true => Cell::new("—").muted(),
@@ -123,7 +135,7 @@ impl Shown<'_> {
         let pending = self.pending.get(&container.id).copied();
         let status = match pending {
             Some(action) => Cell::new(pending_text(action)).tinted(self.palette.warning),
-            None => Cell::new(container.status.as_str()),
+            None => status_cell(self.palette, container),
         };
         let [cpu, memory] = self.usage_cells(container);
         Row::new(
