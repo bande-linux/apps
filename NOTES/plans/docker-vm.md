@@ -551,7 +551,8 @@ fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
 | Templates | covered by clones | a stopped machine cloned linked is a template |
 | Encryption | left out | qcow2 LUKS needs a secret store per machine; the disk sits in the user's home, which LUKS on the system disk already covers |
 | TPM and Secure Boot | done (Windows preset) | swtpm; not run without swtpm here |
-| OVF import and export | left out | OVA/VMDK carry VMware/VirtualBox hardware; a disk-only import through `qemu-img convert` is the useful part, later |
+| Disk image import | done | New Machine → Import a disk image: any format `qemu-img` reads (qcow2, raw, VMDK, VDI, VHDX) is converted to qcow2 and booted |
+| OVF/OVA import and export | left out | the OVF descriptor carries VMware/VirtualBox hardware that does not map to an arm64 QEMU machine; the disk import covers the useful part |
 | Autostart at login | left out | VMs already outlive the app; autostart needs persistent user units rather than transient ones |
 | Guest tools | done for cloud images | `qemu-guest-agent` and `spice-vdagent` through cloud-init |
 | 3D graphics | done, off by default | `virtio-gpu-gl-pci` with virgl on the host render node, dmabuf scanouts; falls back to the plain display when QEMU will not start with it |
