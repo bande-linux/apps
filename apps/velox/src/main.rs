@@ -9,7 +9,8 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::Entry;
 use bande_app_settings::{SettingsWindow, settings_folder};
 use bande_toolkit::{
-    Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
+    Appearance, DragAction, DragEvent, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window,
+    WindowEvent,
 };
 use bande_velox::{
     Act, ContainerRequest, DisplayWindow, Effect, Hub, Informer, L10N, LogsTarget, LogsView,
@@ -80,6 +81,7 @@ struct Pane {
     logs: Vec<LogsTarget>,
     shells: Vec<ShellTarget>,
     apps: Option<Apps>,
+    dragged: bool,
 }
 
 impl Pane {
@@ -215,6 +217,24 @@ impl View for Pane {
         if let WindowEvent::ToplevelChanged(state) = &event {
             self.view.set_hidden(state.suspended);
             self.view.sync_streams();
+        }
+        if let WindowEvent::Drag(drag) = &event {
+            match drag {
+                DragEvent::Entered { uris, .. } => {
+                    self.dragged = self.view.accepts_drop(uris);
+                    window.accept_drag(self.dragged.then_some(DragAction::Copy));
+                }
+                DragEvent::Moved(_) => {
+                    window.accept_drag(self.dragged.then_some(DragAction::Copy));
+                }
+                DragEvent::Dropped { transfer, .. } if self.dragged => {
+                    self.dragged = false;
+                    self.view.dropped(&transfer.uris);
+                    self.serve(window);
+                }
+                DragEvent::Left | DragEvent::Finished(_) => self.dragged = false,
+                DragEvent::Dropped { .. } => {}
+            }
         }
         let handled = View::event(self.view.ui(), window, event);
         let pumped = self.view.pump();
@@ -715,6 +735,7 @@ impl Velox {
                     logs: Vec::new(),
                     shells: Vec::new(),
                     apps: None,
+                    dragged: false,
                 }))
             },
         );

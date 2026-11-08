@@ -24,6 +24,7 @@ const IMAGES_SYMBOL: &str = include_str!("../../data/symbols/images.svg");
 const VOLUMES_SYMBOL: &str = include_str!("../../data/symbols/volumes.svg");
 const NETWORKS_SYMBOL: &str = include_str!("../../data/symbols/networks.svg");
 const COUNT_WIDTH: f32 = 60.0;
+const IMAGE_ARCHIVES: [&str; 4] = [".tar", ".tar.gz", ".tgz", ".tar.zst"];
 const TITLE_INSET: f32 = 16.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -355,6 +356,30 @@ impl VeloxView {
                 .map(Root::tool_frames)
                 .unwrap_or_default(),
             tabs: Vec::new(),
+        }
+    }
+
+    fn image_archives(&self, uris: &[String]) -> Vec<std::path::PathBuf> {
+        if self.section != Section::Images || !self.ready() {
+            return Vec::new();
+        }
+        uris.iter()
+            .filter_map(|uri| bande_xdg::path_from_file_uri(uri))
+            .filter(|path| {
+                let name = path.to_string_lossy().to_lowercase();
+                IMAGE_ARCHIVES.iter().any(|suffix| name.ends_with(suffix))
+            })
+            .collect()
+    }
+
+    pub fn accepts_drop(&self, uris: &[String]) -> bool {
+        !self.image_archives(uris).is_empty()
+    }
+
+    pub fn dropped(&mut self, uris: &[String]) {
+        let archives = self.image_archives(uris);
+        if !archives.is_empty() {
+            self.resources.add_task(Task::LoadImages(archives));
         }
     }
 

@@ -901,6 +901,30 @@ impl Engine {
         Ok(())
     }
 
+    pub fn load_images(&self, archive: &Path) -> Result<(), Error> {
+        let mut file = File::open(archive)?;
+        let length = file.metadata()?.len();
+        let mut body = self.request(
+            "POST",
+            "/images/load?quiet=1",
+            Some(Upload {
+                kind: TAR,
+                length,
+                data: &mut file,
+            }),
+        )?;
+        let mut text = String::new();
+        body.read_to_string(&mut text)?;
+        let failure = serde_json::Deserializer::from_str(&text)
+            .into_iter::<Value>()
+            .filter_map(Result::ok)
+            .find_map(|line| line.get("error").and_then(Value::as_str).map(str::to_owned));
+        match failure {
+            Some(message) => Err(Error::Status(500, message)),
+            None => Ok(()),
+        }
+    }
+
     pub fn import_volume(&self, volume: &str, archive: &Path) -> Result<(), Error> {
         let mut file = File::open(archive)?;
         let length = file.metadata()?.len();

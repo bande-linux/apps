@@ -11,16 +11,16 @@ below. Screenshots of each view sit next to the macOS ones in each stage's repor
 | # | Area | macOS Velox | Bande Velox now | Plan |
 |---|---|---|---|---|
 | 1 | Sidebar | Overview; Resources (Containers, Images, Volumes, Networks); Hosts (This Mac with running count, remote hosts, +); Workspaces (+); System (Engine Logs); engine pill at the bottom: dot, state, Start/Stop | Overview; "CONTAINERS" header over the four resources; Machines; engine name and version at the bottom, no control | Section headers Resources / Machines / Hosts / System; the engine pill with Start/Stop (rows 4 and 16) |
-| 2 | Overview: engine card | Status icon disc, "Engine Running · up 1h 36m", "8 vCPU · 8 GB RAM · 64 GB disk", app and engine versions | One text line: engine, API, rootless, socket path | The card: state, engine uptime (from the systemd unit's start), CPUs and memory from `/info`, the size of the data folder's file system, Velox and engine versions |
-| 3 | Overview: stat cards | Four cards with a tinted icon, title, 28 pt value, caption; Containers green, Images blue, Volumes orange, Disk purple | Five plain cards (with Machines), uppercase titles, no icons or colours, the Disk caption wraps | Icons and colours, title case, one-line captions; Machines stays as a fifth card |
-| 4 | Overview: Disk Breakdown | A stacked bar (images, containers, volumes, build cache) with a legend | None | Add it from `/system/df`; refresh on container and image changes only |
-| 5 | Overview: live graphs | CPU and Memory as line and fill; Disk I/O and Network mirrored around a centre line (blue up, red down); about 90 s of history; streams only while a stats view is shown | Same four graphs, plain lines, 60 s | Mirrored I/O and network, fills, 90 s; keep sampling only while shown |
-| 6 | Overview: Reclaim Space | Toolbar sparkle button, sheet with toggles and "≈ size" per row | A text button in the header, a sheet with checkboxes | A toolbar button, sizes per row, a result line |
-| 7 | Containers | Status capsules (green, yellow, orange, red), uptime that ticks, Ports and Image columns hidden by default, Ctrl+L logs, Ctrl+Delete delete, Copy → URL per port | Plain status text, all columns shown, logs and delete without shortcuts | Badges, column defaults, shortcuts, Copy URL entries |
-| 8 | Logs window | Header with icon, name, "image · id"; footer "Streaming" / "Stream ended", reattaches after a restart | Filter, auto-scroll, wrap, copy, clear, count | Header, footer state, reattach |
-| 9 | Images | Pull bar on top with progress, Arch badge, drop a `.tar` to load it | Pull from a menu, no badge, no drop | Pull bar, badge, drop to load (`/images/load`) |
+| 2 | Overview: engine card | — | Done | — |
+| 3 | Overview: stat cards | — | Done | — |
+| 4 | Overview: Disk Breakdown | — | Done | — |
+| 5 | Overview: live graphs | — | Done; one redraw per stats round, nothing while hidden | — |
+| 6 | Overview: Reclaim Space | — | Done | — |
+| 7 | Containers | Status capsules | Status coloured by state; shortcuts, Copy and Open URL were already there | Capsule badges need a badge cell in the toolkit's table |
+| 8 | Logs window | — | Footer shows Streaming / Stream ended; reattach was already there | — |
+| 9 | Images | — | Pull bar and arch tint were already there; dropping image archives (`.tar`, `.tar.gz`, `.tgz`, `.tar.zst`) loads them | — |
 | 10 | Volumes | Compose grouping, "dangling" and "orphaned" badges, inspector | Grouping and "dangling"; no "orphaned"; no inspector | "orphaned" project badge, inspector |
-| 11 | Networks | Disclosure list: driver-coloured icon, "driver · subnet", container count, members with IPs | Table with the same fields | Keep the table (Bande style); colour the driver icons |
+| 11 | Networks | — | Icons coloured by driver | — |
 | 12 | Hosts | Remote engines over SSH (`ssh -L` to the remote socket), add sheet, connect/disconnect, rename, remove, per-host counts; every pane follows the selected host | None | Build it the same way: OpenSSH, the user's keys and config, nothing stored but user, host, port and socket |
 | 13 | Workspaces | Several engine data disks, one active; new, duplicate, rename, move, delete; switching restarts the engine | None | Owner (2026-11-08): Docker contexts only. A workspace is a named group of the user's Docker contexts and endpoints (this engine or a remote one); switching one points every pane at it. No separate storage, no per-workspace engines |
 | 14 | Command palette (Ctrl+K) | Search containers, images, volumes; inline start/stop/logs/shell/ports | None | Build it, with its Settings switch, off by default |

@@ -96,7 +96,9 @@ logs-follow = Rulla automatiskt
 logs-wrap = Radbryt
 logs-copy = Kopiera
 logs-clear = Töm
-logs-count = { $shown } av { $total } rader
+logs-count = { $state } · { $shown } av { $total } rader
+logs-streaming = Strömmar
+logs-ended = Strömmen slutade
 inspector-none = Inget markerat
 inspector-many = { $count } markerade
 inspector-project-dir = Mapp
@@ -546,3 +548,8 @@ rate-read = Läs
 rate-write = Skriv
 rate-in = In
 rate-out = Ut
+loaded-images = { $count ->
+    [one] Image-arkivet lästes in
+   *[other] { $count } image-arkiv lästes in
+}
+cannot-load-images = Kan inte läsa in images

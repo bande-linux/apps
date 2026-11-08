@@ -96,7 +96,9 @@ logs-follow = Auto-scroll
 logs-wrap = Wrap
 logs-copy = Copy
 logs-clear = Clear
-logs-count = { $shown } of { $total } lines
+logs-count = { $state } · { $shown } of { $total } lines
+logs-streaming = Streaming
+logs-ended = Stream ended
 inspector-none = No Selection
 inspector-many = { $count } Selected
 inspector-project-dir = Folder
@@ -546,3 +548,8 @@ rate-read = Read
 rate-write = Write
 rate-in = In
 rate-out = Out
+loaded-images = { $count ->
+    [one] Loaded the image archive
+   *[other] Loaded { $count } image archives
+}
+cannot-load-images = Cannot load the images

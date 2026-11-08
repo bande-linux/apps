@@ -417,9 +417,17 @@ impl LogsView {
             .widget_ref::<LogText>(self.parts.text)
             .map(LogText::counts)
             .unwrap_or_default();
+        let state = match self.follow.is_some() {
+            true => L10N.tr("logs-streaming"),
+            false => L10N.tr("logs-ended"),
+        };
         let line = L10N.tr_args(
             "logs-count",
-            [("shown", shown.into()), ("total", total.into())],
+            [
+                ("state", state.into()),
+                ("shown", shown.into()),
+                ("total", total.into()),
+            ],
         );
         if let Some(footer) = self.ui.widget_as::<Text>(self.parts.footer) {
             footer.set_text(&line);

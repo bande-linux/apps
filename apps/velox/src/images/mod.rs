@@ -434,6 +434,15 @@ impl Pane for Images {
                 L10N.tr_args("cannot-run", [("name", spec.image.clone().into())])
             }
             (Task::RemoveImages(_) | Task::PruneImages, Err(_)) => L10N.tr("cannot-remove-images"),
+            (Task::LoadImages(archives), Ok(_)) => {
+                tell(
+                    ui,
+                    &L10N.tr_args("loaded-images", [("count", archives.len().into())]),
+                    "",
+                );
+                return true;
+            }
+            (Task::LoadImages(_), Err(_)) => L10N.tr("cannot-load-images"),
             _ => return false,
         };
         if let Err(message) = result {

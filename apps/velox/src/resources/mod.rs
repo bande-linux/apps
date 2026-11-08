@@ -240,6 +240,10 @@ impl Resources {
         }
     }
 
+    pub fn add_task(&mut self, task: Task) {
+        self.tasks.push(task);
+    }
+
     pub fn take_tasks(&mut self) -> Vec<Task> {
         std::mem::take(&mut self.tasks)
     }

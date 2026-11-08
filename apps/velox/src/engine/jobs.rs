@@ -20,6 +20,7 @@ pub enum Task {
     Run(RunSpec),
     RemoveImages(Vec<String>),
     PruneImages,
+    LoadImages(Vec<PathBuf>),
     RemoveVolumes(Vec<String>),
     PruneVolumes,
     ChooseArchive,
@@ -73,6 +74,11 @@ pub fn perform(engine: &Engine, api: &str, task: Task, send: impl Fn(Update) -> 
             each(references, |reference| engine.remove_image(reference))
         }
         Task::PruneImages => engine.prune_images(None).map_err(message),
+        Task::LoadImages(archives) => archives
+            .iter()
+            .try_for_each(|archive| engine.load_images(archive))
+            .map(|()| 0)
+            .map_err(message),
         Task::RemoveVolumes(names) => each(names, |name| engine.remove_volume(name)),
         Task::PruneVolumes => engine.prune_volumes(None, api).map_err(message),
         Task::ChooseArchive => {

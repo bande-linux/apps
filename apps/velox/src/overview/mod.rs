@@ -11,7 +11,8 @@ use bande_toolkit::ui::{
     Alert, Axis, CheckState, Checkbox, ScrollView, Stack, Ui, Widget, WidgetId,
 };
 
-use self::cards::{Breakdown, Card, EngineCard, EngineText, Grid, Live, Part, Plot, Readout, Tone};
+pub(crate) use self::cards::Tone;
+use self::cards::{Breakdown, Card, EngineCard, EngineText, Grid, Live, Part, Plot, Readout};
 use crate::L10N;
 use crate::engine::{EngineInfo, Flavor, Reclaim, Sample, Task};
 use crate::machines::Fleet;
