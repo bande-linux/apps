@@ -142,6 +142,7 @@ impl Model {
             ports: single.map(Container::published_ports).unwrap_or_default(),
             logs: single.is_some() || self.compose(keys).is_some(),
             compose: self.compose(keys).is_some(),
+            terminal: bande_xdg::is_installed(crate::TERMINAL_APP_ID),
         }
     }
 

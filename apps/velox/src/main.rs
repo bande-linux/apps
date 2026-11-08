@@ -14,8 +14,8 @@ use bande_toolkit::{
 use bande_velox::{
     Act, ContainerRequest, DisplayWindow, Effect, Hub, Informer, L10N, LogsTarget, LogsView,
     MACHINE_WINDOW_SIZE, MachineRequest, MachineWindow, Request, SETTINGS_SIZE, SIDEBAR_WIDTH,
-    Section, ShellLink, ShellTarget, ShellWindow, Update, VeloxSettings, VeloxView, Work,
-    notify_crash, settings_form,
+    Section, ShellLink, ShellTarget, ShellWindow, TERMINAL_APP_ID, Update, VeloxSettings,
+    VeloxView, Work, notify_crash, settings_form,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
@@ -31,7 +31,6 @@ const SHOW_MAIN: &str = "show-main";
 const SHOW_LOGS: &str = "show-logs:";
 const SHOW_MACHINE: &str = "show-machine:";
 const VIEW_KEYS: [&str; 6] = ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6"];
-const TERMINAL_APP_ID: &str = "org.bande.Terminal";
 const TERMINAL: &str = "bande-terminal";
 const NEW_MACHINE: &str = "new-machine";
 const MACHINE_START: &str = "machine-start";
@@ -407,11 +406,14 @@ impl Velox {
         let Some(hub) = self.hub.as_ref() else {
             return;
         };
+        let terminal = cx.installed(TERMINAL_APP_ID);
         let opened = cx.open(
             Kind::Secondary(MACHINE_WINDOW_TAG),
             &L10N.tr("machine-pane"),
             MACHINE_WINDOW_SIZE,
-            |appearance| Screen::Machine(Box::new(MachineWindow::new(id, hub, appearance))),
+            |appearance| {
+                Screen::Machine(Box::new(MachineWindow::new(id, hub, appearance, terminal)))
+            },
         );
         if let Err(error) = opened {
             tracing::warn!("cannot open the machine's window: {error}");
@@ -642,35 +644,38 @@ impl Velox {
             true => ("machine-resume", Act::Resume),
             false => ("machine-pause", Act::Pause),
         };
-        Entry::submenu(
-            &L10N.tr("machine-menu"),
-            vec![
-                item("machine-start", MACHINE_START, Act::Start).shortcut("Ctrl+R"),
-                item(pause_key, MACHINE_PAUSE, pause_act),
-                item("machine-suspend", MACHINE_SUSPEND, Act::Suspend),
-                item("machine-shut-down", MACHINE_SHUT_DOWN, Act::ShutDown),
-                item("machine-force-stop", MACHINE_FORCE_STOP, Act::ForceStop),
-                item("machine-restart", MACHINE_RESTART, Act::Restart),
-                Entry::separator(),
-                Entry::item(&L10N.tr("machine-connect"), MACHINE_CONNECT).enabled(connect),
-                Entry::item(&L10N.tr("machine-open"), MACHINE_OPEN)
-                    .shortcut("Ctrl+O")
-                    .enabled(connect || single(Act::Delete)),
-                Entry::item(&L10N.tr("machine-serial"), MACHINE_SERIAL)
-                    .enabled(can(Act::ShutDown) || can(Act::Resume)),
-                Entry::item(&L10N.tr("machine-send-ctrl-alt-delete"), MACHINE_SEND_KEYS)
-                    .enabled(has_console),
-                usb,
-                Entry::separator(),
-                Entry::item(&L10N.tr("machine-take-snapshot-ellipsis"), MACHINE_SNAPSHOT)
-                    .shortcut("Shift+Ctrl+S")
-                    .enabled(single(Act::TakeSnapshot)),
-                Entry::item(&L10N.tr("machine-clone-ellipsis"), MACHINE_CLONE)
-                    .enabled(single(Act::Clone)),
-                Entry::separator(),
-                item("machine-delete-ellipsis", MACHINE_DELETE, Act::Delete),
-            ],
-        )
+        let mut entries = vec![
+            item("machine-start", MACHINE_START, Act::Start).shortcut("Ctrl+R"),
+            item(pause_key, MACHINE_PAUSE, pause_act),
+            item("machine-suspend", MACHINE_SUSPEND, Act::Suspend),
+            item("machine-shut-down", MACHINE_SHUT_DOWN, Act::ShutDown),
+            item("machine-force-stop", MACHINE_FORCE_STOP, Act::ForceStop),
+            item("machine-restart", MACHINE_RESTART, Act::Restart),
+            Entry::separator(),
+        ];
+        if cx.installed(TERMINAL_APP_ID) {
+            entries
+                .push(Entry::item(&L10N.tr("machine-connect"), MACHINE_CONNECT).enabled(connect));
+        }
+        entries.extend([
+            Entry::item(&L10N.tr("machine-open"), MACHINE_OPEN)
+                .shortcut("Ctrl+O")
+                .enabled(connect || single(Act::Delete)),
+            Entry::item(&L10N.tr("machine-serial"), MACHINE_SERIAL)
+                .enabled(can(Act::ShutDown) || can(Act::Resume)),
+            Entry::item(&L10N.tr("machine-send-ctrl-alt-delete"), MACHINE_SEND_KEYS)
+                .enabled(has_console),
+            usb,
+            Entry::separator(),
+            Entry::item(&L10N.tr("machine-take-snapshot-ellipsis"), MACHINE_SNAPSHOT)
+                .shortcut("Shift+Ctrl+S")
+                .enabled(single(Act::TakeSnapshot)),
+            Entry::item(&L10N.tr("machine-clone-ellipsis"), MACHINE_CLONE)
+                .enabled(single(Act::Clone)),
+            Entry::separator(),
+            item("machine-delete-ellipsis", MACHINE_DELETE, Act::Delete),
+        ]);
+        Entry::submenu(&L10N.tr("machine-menu"), entries)
     }
 
     fn pane<'a>(&self, cx: &'a mut Cx<Self>) -> Option<(&'a mut Window, &'a mut Pane)> {
@@ -949,6 +954,17 @@ impl Program for Velox {
             .map(|informer| informer.fd())
             .chain(self.hub.iter().map(Hub::fd))
             .collect()
+    }
+
+    fn installed_changed(&mut self, cx: &mut Cx<Self>) {
+        let terminal = cx.installed(TERMINAL_APP_ID);
+        let windows: Vec<WindowId> = cx.windows().collect();
+        for id in windows {
+            if let Some((window, Screen::Machine(machine))) = cx.window(id) {
+                machine.set_terminal(terminal);
+                window.request_redraw();
+            }
+        }
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {

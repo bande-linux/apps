@@ -29,5 +29,7 @@ pub use settings::{SETTINGS_SIZE, VeloxSettings, settings_form};
 pub use shell::{ShellLink, ShellTarget, ShellWindow};
 pub use ui::{Request, SIDEBAR_WIDTH, Section, VeloxView};
 
+pub const TERMINAL_APP_ID: &str = "org.bande.Terminal";
+
 pub static L10N: LazyLock<Localizer> =
     LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-velox")));

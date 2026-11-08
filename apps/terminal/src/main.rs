@@ -18,7 +18,7 @@ use bande_terminal::{
 };
 use bande_toolkit::Appearance;
 
-use crate::app::{Arguments, Ask, CarriedTab, Opened, SavedWindow, TerminalWindow};
+use crate::app::{Arguments, Ask, CarriedTab, FILES_APP_ID, Opened, SavedWindow, TerminalWindow};
 use crate::bus::Bus;
 
 const APP_ID: &str = "org.bande.Terminal";
@@ -231,7 +231,7 @@ impl Program for Terminals {
     }
 
     fn menus(&self, cx: &Cx<Self>) -> Menus {
-        app_menus(cx.windows().next().is_some())
+        app_menus(cx.windows().next().is_some(), cx.installed(FILES_APP_ID))
     }
 
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {

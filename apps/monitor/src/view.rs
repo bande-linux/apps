@@ -262,7 +262,7 @@ pub trait Screen {
         false
     }
 
-    fn app_menus(&self, _windowed: bool) -> Option<Vec<Entry>> {
+    fn app_menus(&self, _windowed: bool, _files: bool) -> Option<Vec<Entry>> {
         None
     }
 
