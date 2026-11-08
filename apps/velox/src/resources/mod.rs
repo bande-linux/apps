@@ -162,6 +162,9 @@ pub trait Pane {
     fn menu(&self, _scope: &Scope) -> Option<Entry> {
         None
     }
+    fn view_entries(&self) -> Vec<Entry> {
+        Vec::new()
+    }
     fn command(&mut self, ui: &mut Ui, acts: &Acts, scope: &Scope, command: &str) -> bool;
     fn menu_action(
         &mut self,
@@ -442,6 +445,13 @@ impl Resources {
             Section::Volumes => self.volumes.menu(&scope),
             Section::Networks => self.networks.menu(&scope),
             _ => None,
+        }
+    }
+
+    pub fn view_entries(&self, section: Section) -> Vec<Entry> {
+        match section {
+            Section::Volumes => self.volumes.view_entries(),
+            _ => Vec::new(),
         }
     }
 

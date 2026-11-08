@@ -19,8 +19,8 @@ use bande_velox::{
     LogsView, MACHINE_WINDOW_SIZE, MachineRequest, MachineWindow, Place, Places, RemoteHost,
     Request, SETTINGS_SIZE, SIDEBAR_WIDTH, Section, ShellLink, ShellTarget, ShellWindow,
     TERMINAL_APP_ID, Target, Tunnel, Update, VeloxSettings, VeloxView, Work, context_endpoint,
-    contexts, create_context, current_context, load_hosts, notify_crash, save_hosts, settings_form,
-    tunnel_socket, use_context,
+    contexts, create_context, current_context, load_hosts, notify_crash, remove_context,
+    rename_context, save_hosts, settings_form, tunnel_socket, use_context,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
@@ -506,6 +506,27 @@ impl Velox {
                     if self.place == Place::Host(id) {
                         self.place = Place::Local;
                         reconnect = true;
+                    }
+                }
+                Request::RenameHost(id, name) => {
+                    if let Some(host) = self.hosts.iter_mut().find(|host| host.id == id) {
+                        host.name = name;
+                    }
+                }
+                Request::RenameWorkspace(old, new) => {
+                    if let Err(error) = rename_context(&old, &new) {
+                        tracing::warn!("cannot rename {old} to {new}: {error}");
+                    }
+                }
+                Request::DeleteWorkspace(name) => {
+                    let current = current_context() == name;
+                    match remove_context(&name) {
+                        Ok(()) if current => {
+                            self.place = Place::Local;
+                            reconnect = true;
+                        }
+                        Ok(()) => {}
+                        Err(error) => tracing::warn!("cannot delete {name}: {error}"),
                     }
                 }
                 Request::CreateWorkspace(name, endpoint) => {

@@ -11,8 +11,11 @@ mod table;
 mod widgets;
 mod work;
 
-pub(crate) use inspector::{GraphIds, graph_widgets, update as update_graphs};
+pub(crate) use inspector::{
+    GraphIds, WIDTH as INSPECTOR_WIDTH, graph_widgets, panel, update as update_graphs,
+};
 pub use logs::{LogsTarget, LogsView};
 pub use pane::Containers;
 pub(crate) use stats::Usage as UsageHistory;
+pub(crate) use widgets::Split;
 pub use work::{Event, Request, Work};

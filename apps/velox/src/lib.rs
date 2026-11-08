@@ -15,7 +15,8 @@ pub(crate) mod volumes;
 pub use containers::{LogsTarget, LogsView, Request as ContainerRequest, Work};
 pub use engine::{
     Action, Endpoint, Failure, Informer, RemoteHost, Target, Tunnel, Update, context_endpoint,
-    contexts, create_context, current_context, load_hosts, save_hosts, tunnel_socket, use_context,
+    contexts, create_context, current_context, load_hosts, remove_context, rename_context,
+    save_hosts, tunnel_socket, use_context,
 };
 pub use machines::{
     Act, DisplayWindow, Effect, Hub, INSPECTOR_COMMAND as MACHINE_INSPECTOR, MACHINE_WINDOW_SIZE,

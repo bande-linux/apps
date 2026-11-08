@@ -15,6 +15,10 @@ const LOCAL: &str = "local";
 const ADD_HOST: &str = "add-host";
 const NEW_WORKSPACE: &str = "new-workspace";
 const REMOVE_HOST: &str = "remove-host";
+const RENAME_HOST: &str = "rename-host";
+const RENAME_WORKSPACE: &str = "rename-workspace";
+const DELETE_WORKSPACE: &str = "delete-workspace";
+const DEFAULT_WORKSPACE: &str = "default";
 const COPY_SSH: &str = "copy-ssh";
 const SSH_PORT: u16 = 22;
 const DEFAULT_SOCKET: &str = "/var/run/docker.sock";
@@ -114,11 +118,24 @@ impl Places {
             .first()
             .and_then(|key| key.strip_prefix(HOST_PREFIX))
             .filter(|id| *id != LOCAL);
+        let workspace = keys
+            .first()
+            .and_then(|key| key.strip_prefix(CONTEXT_PREFIX))
+            .filter(|name| *name != DEFAULT_WORKSPACE);
         let mut items = Vec::new();
         if host.is_some() {
             items.extend([
                 MenuItem::new(&tr!("Copy SSH Command"), COPY_SSH),
+                MenuItem::separator(),
+                MenuItem::new(&tr!("Rename…"), RENAME_HOST),
                 MenuItem::new(&tr!("Remove Host…"), REMOVE_HOST),
+                MenuItem::separator(),
+            ]);
+        }
+        if workspace.is_some() {
+            items.extend([
+                MenuItem::new(&tr!("Rename…"), RENAME_WORKSPACE),
+                MenuItem::new(&tr!("Delete…"), DELETE_WORKSPACE),
                 MenuItem::separator(),
             ]);
         }
@@ -142,13 +159,112 @@ pub fn menu_intent(command: &str, keys: &[String]) -> Option<Intent> {
         .first()
         .and_then(|key| key.strip_prefix(HOST_PREFIX))
         .map(str::to_owned);
+    let workspace = keys
+        .first()
+        .and_then(|key| key.strip_prefix(CONTEXT_PREFIX))
+        .map(str::to_owned);
     match command {
         ADD_HOST => Some(Intent::AddHostSheet),
         NEW_WORKSPACE => Some(Intent::NewWorkspaceSheet),
         REMOVE_HOST => host.map(Intent::RemoveHostSheet),
+        RENAME_HOST => host.map(Intent::RenameHostSheet),
         COPY_SSH => host.map(Intent::CopySsh),
+        RENAME_WORKSPACE => workspace.map(Intent::RenameWorkspaceSheet),
+        DELETE_WORKSPACE => workspace.map(Intent::DeleteWorkspaceSheet),
         _ => None,
     }
+}
+
+fn valid_workspace(name: &str) -> bool {
+    !name.is_empty()
+        && name != DEFAULT_WORKSPACE
+        && name
+            .chars()
+            .all(|char| char.is_ascii_alphanumeric() || "-_.".contains(char))
+}
+
+pub fn rename_host_sheet(ui: &mut Ui, intents: &Intents, host: &RemoteHost) {
+    let id = host.id.clone();
+    rename_sheet(
+        ui,
+        intents,
+        &host.name,
+        &tr!("Only the name shown in Velox changes."),
+        move |name| Some(Intent::RenameHost(id.clone(), name)),
+    );
+}
+
+pub fn rename_workspace_sheet(ui: &mut Ui, intents: &Intents, name: &str) {
+    let old = name.to_owned();
+    rename_sheet(
+        ui,
+        intents,
+        name,
+        &tr!("The Docker context is renamed too, so the docker command sees the new name."),
+        move |name| valid_workspace(&name).then(|| Intent::RenameWorkspace(old.clone(), name)),
+    );
+}
+
+fn rename_sheet(
+    ui: &mut Ui,
+    intents: &Intents,
+    current: &str,
+    message: &str,
+    renamed: impl Fn(String) -> Option<Intent> + 'static,
+) {
+    let typed = Rc::new(RefCell::new(current.to_owned()));
+    let field = {
+        let typed = Rc::clone(&typed);
+        TextField::new(&tr!("Name"), current, move |text| {
+            *typed.borrow_mut() = text.trim().to_owned();
+        })
+    };
+    let intents = Rc::clone(intents);
+    let old = current.to_owned();
+    ui.present_sheet(
+        Alert::new(
+            &tr!("Rename “{name}”", name = current.to_owned()),
+            message,
+            move |choice| {
+                let name = typed.borrow().clone();
+                if choice != "rename" || name == old || name.is_empty() {
+                    return;
+                }
+                if let Some(intent) = renamed(name) {
+                    push(&intents, intent);
+                }
+            },
+        )
+        .accessory(field)
+        .primary(&tr!("Rename"), "rename")
+        .cancel(&tr!("Cancel"), "cancel"),
+    );
+}
+
+pub fn delete_workspace_sheet(ui: &mut Ui, intents: &Intents, name: &str, current: bool) {
+    let intents = Rc::clone(intents);
+    let owned = name.to_owned();
+    let message = match current {
+        true => tr!(
+            "The Docker context is deleted and Velox switches to the default workspace. Containers, images and volumes stay on their engine."
+        ),
+        false => tr!(
+            "The Docker context is deleted. Containers, images and volumes stay on their engine."
+        ),
+    };
+    ui.present_sheet(
+        Alert::new(
+            &tr!("Delete “{name}”?", name = name.to_owned()),
+            &message,
+            move |choice| {
+                if choice == "delete" {
+                    push(&intents, Intent::DeleteWorkspace(owned.clone()));
+                }
+            },
+        )
+        .destructive(&tr!("Delete"), "delete")
+        .cancel(&tr!("Cancel"), "cancel"),
+    );
 }
 
 #[derive(Debug, Clone, Default)]
@@ -305,11 +421,7 @@ pub fn new_workspace_sheet(ui: &mut Ui, intents: &Intents, hosts: &[RemoteHost])
             &tr!("A workspace is a Docker context: the docker command and Velox both use the engine it points to."),
             move |choice| {
                 let name = name.borrow().clone();
-                let valid = !name.is_empty()
-                    && name
-                        .chars()
-                        .all(|char| char.is_ascii_alphanumeric() || "-_.".contains(char));
-                if choice != "create" || !valid {
+                if choice != "create" || !valid_workspace(&name) {
                     return;
                 }
                 let endpoint = endpoints.get(*chosen.borrow()).cloned().unwrap_or_default();

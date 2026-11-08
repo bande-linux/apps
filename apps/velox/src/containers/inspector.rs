@@ -193,6 +193,23 @@ pub fn graph_widgets(usage: &Usage) -> (Vec<Box<dyn Widget>>, GraphIds) {
     (shown.into_iter().map(boxed).collect(), ids)
 }
 
+pub fn panel(title: &str, note_text: &str, facts: &[(String, String)]) -> Box<dyn Widget> {
+    let mut lines: Vec<Box<dyn Widget>> = Vec::new();
+    if !title.is_empty() {
+        lines.push(boxed(Text::new(title, TextRole::Heading)));
+    }
+    if !note_text.is_empty() {
+        lines.push(note(note_text));
+    }
+    lines.extend(facts.iter().map(|(key, value)| fact(key, value)));
+    boxed(ScrollView::new(Stack::new(
+        Axis::Vertical,
+        SPACING,
+        PADDING,
+        lines,
+    )))
+}
+
 pub fn build(
     subject: Subject<'_>,
     usage: Option<&Usage>,

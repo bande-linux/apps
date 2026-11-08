@@ -17,6 +17,8 @@ use bande_toolkit::ui::{
     Alert, Button, Cell, Column, Menu, MenuItem, Row, Table, TextField, Ui, Widget, WidgetId,
 };
 
+use crate::containers::{INSPECTOR_WIDTH, Split, panel};
+
 const PROJECT_PREFIX: &str = "project:";
 const IMPORT: &str = "volume-import";
 const EXPORT: &str = "volume-export";
@@ -24,6 +26,8 @@ const REMOVE: &str = "volume-remove";
 const PRUNE: &str = "volume-prune";
 const COPY_NAME: &str = "volume-copy-name";
 const COPY_MOUNTPOINT: &str = "volume-copy-mountpoint";
+const INSPECTOR: &str = "volume-inspector";
+const INSPECTOR_SYMBOL: &str = include_str!("../../data/symbols/inspector.svg");
 const IMPORT_SYMBOL: &str = include_str!("../../data/symbols/import.svg");
 const PRUNE_SYMBOL: &str = include_str!("../../data/symbols/prune.svg");
 const REMOVE_SYMBOL: &str = include_str!("../../data/symbols/remove.svg");
@@ -31,15 +35,120 @@ const NAME_WIDTH: f32 = 200.0;
 const SIZE_WIDTH: f32 = 96.0;
 const USED_BY_WIDTH: f32 = 160.0;
 const CREATED_WIDTH: f32 = 130.0;
+const INSPECTED_COLUMNS: usize = 2;
 
 #[derive(Default)]
 pub struct Volumes {
     table: Option<WidgetId>,
     remove: Option<WidgetId>,
     search: Option<WidgetId>,
+    split: Option<WidgetId>,
     selected: Vec<String>,
     collapsed: HashSet<String>,
     filter: String,
+    inspector: bool,
+    inspected: Option<Inspected>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Inspected {
+    title: String,
+    note: String,
+    facts: Vec<(String, String)>,
+}
+
+fn columns(inspector: bool) -> Vec<Column> {
+    let mut columns = vec![
+        Column::new(&tr!("Name"), NAME_WIDTH)
+            .flexible()
+            .unsortable(),
+        Column::new(&tr!("Size"), SIZE_WIDTH).numeric().unsortable(),
+        Column::new(&tr!("Used By"), USED_BY_WIDTH).unsortable(),
+        Column::new(&tr!("Created"), CREATED_WIDTH).unsortable(),
+    ];
+    if inspector {
+        columns.truncate(INSPECTED_COLUMNS);
+    }
+    columns
+}
+
+fn narrowed(rows: Vec<Row>) -> Vec<Row> {
+    rows.into_iter()
+        .map(|mut row| {
+            row.cells.truncate(INSPECTED_COLUMNS);
+            let children = narrowed(std::mem::take(&mut row.children));
+            row.children(children)
+        })
+        .collect()
+}
+
+fn inspected(scope: &Scope, selected: &[String]) -> Inspected {
+    let plain = |note: String| Inspected {
+        title: String::new(),
+        note,
+        facts: Vec::new(),
+    };
+    let key = match selected {
+        [] => return plain(tr!("No Selection")),
+        [key] => key,
+        _ => return plain(tr!("{count} Selected", count = selected.len())),
+    };
+    if let Some(project) = key.strip_prefix(PROJECT_PREFIX) {
+        let members = scope
+            .store
+            .volumes
+            .iter()
+            .filter(|volume| volume.project() == Some(project))
+            .count();
+        let live = scope
+            .containers
+            .values()
+            .any(|container| container.project() == Some(project));
+        return Inspected {
+            title: project.to_owned(),
+            note: match live {
+                true => trn!("1 volume", "{count} volumes", count = members),
+                false => tr!("This Compose project no longer has any containers."),
+            },
+            facts: Vec::new(),
+        };
+    }
+    let Some(volume) = scope
+        .store
+        .volumes
+        .iter()
+        .find(|volume| &volume.name == key)
+    else {
+        return plain(tr!("No Selection"));
+    };
+    let used = scope
+        .store
+        .usage
+        .as_ref()
+        .and_then(|usage| usage.volume_sizes.get(&volume.name))
+        .map_or_else(|| "—".to_owned(), |bytes| size(*bytes));
+    let users = users(scope, &volume.name);
+    let mut facts = vec![
+        (tr!("Driver"), volume.driver.clone()),
+        (tr!("Size"), used),
+        (tr!("Created"), created(volume)),
+        (
+            tr!("Used By"),
+            match users.is_empty() {
+                true => tr!("No container"),
+                false => users.join(", "),
+            },
+        ),
+    ];
+    if let Some(project) = volume.project() {
+        facts.push((tr!("Compose Project"), project.to_owned()));
+    }
+    facts.push((tr!("Mountpoint"), volume.mountpoint.clone()));
+    Inspected {
+        title: volume.name.clone(),
+        note: String::new(),
+        facts,
+    }
 }
 
 fn created(volume: &Volume) -> String {
@@ -222,46 +331,58 @@ impl Pane for Volumes {
             acts,
             Act::Command(REMOVE),
         );
+        let inspector = tool(
+            INSPECTOR_SYMBOL,
+            text!("Inspector"),
+            palette,
+            acts,
+            Act::Command(INSPECTOR),
+        );
         let field = search(text!("Filter volumes"), &self.filter, acts);
         self.remove = Some(remove.id());
         self.search = Some(field.id());
         let select = Rc::clone(acts);
         let expand = Rc::clone(acts);
         let menu_acts = Rc::clone(acts);
-        let table = Table::new(vec![
-            Column::new(&tr!("Name"), NAME_WIDTH)
-                .flexible()
-                .unsortable(),
-            Column::new(&tr!("Size"), SIZE_WIDTH).numeric().unsortable(),
-            Column::new(&tr!("Used By"), USED_BY_WIDTH).unsortable(),
-            Column::new(&tr!("Created"), CREATED_WIDTH).unsortable(),
-        ])
-        .on_selection(move |keys| push(&select, Act::Select(keys.to_vec())))
-        .on_expand(move |keys, expanded, _| push(&expand, Act::Expand(keys.to_vec(), expanded)))
-        .context_menu(
-            |keys| match keys {
-                [] => None,
-                [key] if !key.starts_with(PROJECT_PREFIX) => Some(Menu::new(vec![
-                    MenuItem::new(&tr!("Copy Name"), COPY_NAME),
-                    MenuItem::new(&tr!("Copy Mountpoint"), COPY_MOUNTPOINT),
-                    MenuItem::separator(),
-                    MenuItem::new(&tr!("Export as tar…"), EXPORT),
-                    MenuItem::separator(),
-                    MenuItem::new(&tr!("Remove…"), REMOVE),
-                ])),
-                _ => Some(Menu::new(vec![MenuItem::new(&tr!("Remove…"), REMOVE)])),
-            },
-            move |action, keys| push(&menu_acts, Act::Menu(action.to_owned(), keys.to_vec())),
-        );
+        let table = Table::new(columns(self.inspector))
+            .on_selection(move |keys| push(&select, Act::Select(keys.to_vec())))
+            .on_expand(move |keys, expanded, _| push(&expand, Act::Expand(keys.to_vec(), expanded)))
+            .context_menu(
+                |keys| match keys {
+                    [] => None,
+                    [key] if !key.starts_with(PROJECT_PREFIX) => Some(Menu::new(vec![
+                        MenuItem::new(&tr!("Copy Name"), COPY_NAME),
+                        MenuItem::new(&tr!("Copy Mountpoint"), COPY_MOUNTPOINT),
+                        MenuItem::separator(),
+                        MenuItem::new(&tr!("Export as tar…"), EXPORT),
+                        MenuItem::separator(),
+                        MenuItem::new(&tr!("Remove…"), REMOVE),
+                    ])),
+                    _ => Some(Menu::new(vec![MenuItem::new(&tr!("Remove…"), REMOVE)])),
+                },
+                move |action, keys| push(&menu_acts, Act::Menu(action.to_owned(), keys.to_vec())),
+            );
         self.table = Some(table.id());
+        let split = Split::new(boxed(table), INSPECTOR_WIDTH);
+        self.split = Some(split.id());
+        self.inspected = None;
         (
-            vec![boxed(import), boxed(prune), boxed(remove), boxed(field)],
-            boxed(table),
+            vec![
+                boxed(import),
+                boxed(prune),
+                boxed(remove),
+                boxed(inspector),
+                boxed(field),
+            ],
+            boxed(split),
         )
     }
 
     fn fill(&mut self, ui: &mut Ui, scope: &Scope) {
-        let rows = rows(scope, &self.filter);
+        let rows = match self.inspector {
+            true => narrowed(rows(scope, &self.filter)),
+            false => rows(scope, &self.filter),
+        };
         let expanded: Vec<String> = rows
             .iter()
             .filter(|row| !row.children.is_empty() && !self.collapsed.contains(&row.key))
@@ -274,6 +395,16 @@ impl Pane for Volumes {
         let selected = !self.selected.is_empty();
         if let Some(button) = self.remove.and_then(|id| ui.widget_as::<Button>(id)) {
             button.set_enabled(selected);
+        }
+        let shown = self.inspector.then(|| inspected(scope, &self.selected));
+        if shown != self.inspected {
+            let side = shown
+                .as_ref()
+                .map(|shown| panel(&shown.title, &shown.note, &shown.facts));
+            if let Some(split) = self.split.and_then(|id| ui.widget_as::<Split>(id)) {
+                split.set_side(side);
+            }
+            self.inspected = shown;
         }
     }
 
@@ -312,9 +443,24 @@ impl Pane for Volumes {
         ))
     }
 
+    fn view_entries(&self) -> Vec<Entry> {
+        let label = match self.inspector {
+            true => text!("Hide Inspector"),
+            false => text!("Show Inspector"),
+        };
+        vec![Entry::item(&label.tr(), INSPECTOR).shortcut("Ctrl+I")]
+    }
+
     fn command(&mut self, ui: &mut Ui, acts: &Acts, scope: &Scope, command: &str) -> bool {
         match command {
             IMPORT => push(acts, Act::Task(Task::ChooseArchive)),
+            INSPECTOR => {
+                self.inspector = !self.inspector;
+                if let Some(table) = self.table.and_then(|id| ui.widget_as::<Table>(id)) {
+                    table.set_columns(columns(self.inspector));
+                }
+                self.fill(ui, scope);
+            }
             PRUNE => confirm(
                 ui,
                 acts,

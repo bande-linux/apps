@@ -109,7 +109,10 @@ pub enum Request {
     UseContext(String),
     AddHost(RemoteHost),
     RemoveHost(String),
+    RenameHost(String, String),
     CreateWorkspace(String, String),
+    RenameWorkspace(String, String),
+    DeleteWorkspace(String),
     Reconnect,
     EngineLogs(crate::containers::LogsTarget),
 }
@@ -123,6 +126,12 @@ enum Intent {
     AddHostSheet,
     NewWorkspaceSheet,
     RemoveHostSheet(String),
+    RenameHostSheet(String),
+    RenameWorkspaceSheet(String),
+    DeleteWorkspaceSheet(String),
+    RenameHost(String, String),
+    RenameWorkspace(String, String),
+    DeleteWorkspace(String),
     CopySsh(String),
     AddHost(RemoteHost),
     RemoveHost(String),
@@ -387,7 +396,7 @@ impl VeloxView {
         match self.section {
             Section::Containers => vec![self.containers.inspector_entry()],
             Section::Machines => vec![self.machines.inspector_entry()],
-            _ => Vec::new(),
+            section => self.resources.view_entries(section),
         }
     }
 
@@ -608,6 +617,37 @@ impl VeloxView {
                         places::remove_host_sheet(&mut self.ui, &self.intents, &host);
                     }
                 }
+                Intent::RenameHostSheet(id) => {
+                    let host = self.places.borrow().host(id).cloned();
+                    if let Some(host) = host {
+                        places::rename_host_sheet(&mut self.ui, &self.intents, &host);
+                    }
+                }
+                Intent::RenameWorkspaceSheet(name) => {
+                    places::rename_workspace_sheet(&mut self.ui, &self.intents, name);
+                }
+                Intent::DeleteWorkspaceSheet(name) => {
+                    let current = self.places.borrow().current == *name;
+                    places::delete_workspace_sheet(&mut self.ui, &self.intents, name, current);
+                }
+                Intent::RenameHost(id, name) => self
+                    .requests
+                    .push(Request::RenameHost(id.clone(), name.clone())),
+                Intent::RenameWorkspace(_, new) | Intent::CreateWorkspace(new, _)
+                    if self.workspace_exists(new) =>
+                {
+                    crate::resources::tell(
+                        &mut self.ui,
+                        &tr!("“{name}” already exists", name = new.clone()),
+                        &tr!("Choose another name for the workspace."),
+                    );
+                }
+                Intent::RenameWorkspace(old, new) => self
+                    .requests
+                    .push(Request::RenameWorkspace(old.clone(), new.clone())),
+                Intent::DeleteWorkspace(name) => {
+                    self.requests.push(Request::DeleteWorkspace(name.clone()));
+                }
                 Intent::CopySsh(id) => {
                     let command = self
                         .places
@@ -635,6 +675,14 @@ impl VeloxView {
         }
         self.refresh();
         true
+    }
+
+    fn workspace_exists(&self, name: &str) -> bool {
+        self.places
+            .borrow()
+            .contexts
+            .iter()
+            .any(|context| context.name == name)
     }
 
     fn sidebar_rows(&self) -> (Vec<Row>, Vec<Heading>) {

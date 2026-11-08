@@ -1282,6 +1282,12 @@ msgstr "{engine} · rootless"
 msgid "Connecting…"
 msgstr "Ansluter …"
 
+msgid "“{name}” already exists"
+msgstr "”{name}” finns redan"
+
+msgid "Choose another name for the workspace."
+msgstr "Välj ett annat namn på arbetsytan."
+
 msgid "Resources"
 msgstr "Resurser"
 
@@ -1312,6 +1318,9 @@ msgstr "Arbetsytor"
 msgid "New Workspace"
 msgstr "Ny arbetsyta"
 
+msgid "Rename…"
+msgstr "Byt namn…"
+
 msgid "Remove Host…"
 msgstr "Ta bort värd…"
 
@@ -1320,6 +1329,24 @@ msgstr "Lägg till fjärrvärd…"
 
 msgid "New Workspace…"
 msgstr "Ny arbetsyta…"
+
+msgid "Only the name shown in Velox changes."
+msgstr "Bara namnet som visas i Velox ändras."
+
+msgid "The Docker context is renamed too, so the docker command sees the new name."
+msgstr "Docker-kontexten byter också namn, så kommandot docker ser det nya namnet."
+
+msgid "Rename “{name}”"
+msgstr "Byt namn på ”{name}”"
+
+msgid "Rename"
+msgstr "Byt namn"
+
+msgid "The Docker context is deleted and Velox switches to the default workspace. Containers, images and volumes stay on their engine."
+msgstr "Docker-kontexten raderas och Velox byter till standardarbetsytan. Containrar, images och volymer finns kvar på sin motor."
+
+msgid "The Docker context is deleted. Containers, images and volumes stay on their engine."
+msgstr "Docker-kontexten raderas. Containrar, images och volymer finns kvar på sin motor."
 
 msgid "Host"
 msgstr "Värd"
@@ -1351,13 +1378,28 @@ msgstr "Motor"
 msgid "A workspace is a Docker context: the docker command and Velox both use the engine it points to."
 msgstr "En arbetsyta är en Docker-kontext: kommandot docker och Velox använder båda motorn den pekar på."
 
-msgid "dangling"
-msgstr "fristående"
+msgid "Used By"
+msgstr "Används av"
 
 msgid "1 volume"
 msgid_plural "{count} volumes"
 msgstr[0] "1 volym"
 msgstr[1] "{count} volymer"
+
+msgid "This Compose project no longer has any containers."
+msgstr "Det här Compose-projektet har inga containrar längre."
+
+msgid "No container"
+msgstr "Ingen container"
+
+msgid "Compose Project"
+msgstr "Compose-projekt"
+
+msgid "Mountpoint"
+msgstr "Monteringspunkt"
+
+msgid "dangling"
+msgstr "fristående"
 
 msgid "orphaned"
 msgstr "övergiven"
@@ -1376,9 +1418,6 @@ msgstr "Rensa oanvända volymer"
 
 msgid "Filter volumes"
 msgstr "Filtrera volymer"
-
-msgid "Used By"
-msgstr "Används av"
 
 msgid "Copy Mountpoint"
 msgstr "Kopiera monteringspunkt"

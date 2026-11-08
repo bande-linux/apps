@@ -189,7 +189,7 @@ pub fn contexts() -> Vec<DockerContext> {
 }
 
 pub fn use_context(name: &str) -> io::Result<()> {
-    let folder = docker_config().ok_or_else(|| io::Error::other("no Docker configuration"))?;
+    let folder = configured()?;
     let mut config = config_json(&folder);
     match name == DEFAULT_CONTEXT {
         true => config.remove(CURRENT_CONTEXT),
@@ -202,11 +202,19 @@ pub fn use_context(name: &str) -> io::Result<()> {
     )
 }
 
-pub fn create_context(name: &str, host: &str) -> io::Result<()> {
-    let folder = docker_config().ok_or_else(|| io::Error::other("no Docker configuration"))?;
+fn context_folder(folder: &Path, kind: &str, name: &str) -> PathBuf {
     let digest = Sha256::digest(name.as_bytes());
     let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
-    let meta = folder.join("contexts/meta").join(hex);
+    folder.join("contexts").join(kind).join(hex)
+}
+
+fn configured() -> io::Result<PathBuf> {
+    docker_config().ok_or_else(|| io::Error::other("no Docker configuration"))
+}
+
+pub fn create_context(name: &str, host: &str) -> io::Result<()> {
+    let folder = configured()?;
+    let meta = context_folder(&folder, "meta", name);
     fs::create_dir_all(&meta)?;
     let body = serde_json::json!({
         "Name": name,
@@ -214,6 +222,46 @@ pub fn create_context(name: &str, host: &str) -> io::Result<()> {
         "Endpoints": {"docker": {"Host": host, "SkipTLSVerify": false}},
     });
     bande_xdg::replace_file(&meta.join("meta.json"), serde_json::to_vec_pretty(&body)?)
+}
+
+pub fn rename_context(old: &str, new: &str) -> io::Result<()> {
+    let folder = configured()?;
+    let (from, to) = (
+        context_folder(&folder, "meta", old),
+        context_folder(&folder, "meta", new),
+    );
+    if new == DEFAULT_CONTEXT || to.exists() {
+        return Err(io::Error::from(io::ErrorKind::AlreadyExists));
+    }
+    let mut meta: Value = serde_json::from_slice(&fs::read(from.join("meta.json"))?)?;
+    meta.as_object_mut()
+        .ok_or_else(|| io::Error::other("the context's meta.json is not an object"))?
+        .insert("Name".to_owned(), Value::from(new));
+    fs::create_dir_all(&to)?;
+    bande_xdg::replace_file(&to.join("meta.json"), serde_json::to_vec_pretty(&meta)?)?;
+    let tls = context_folder(&folder, "tls", old);
+    if tls.exists() {
+        fs::rename(&tls, context_folder(&folder, "tls", new))?;
+    }
+    fs::remove_dir_all(&from)?;
+    match current_context() == old {
+        true => use_context(new),
+        false => Ok(()),
+    }
+}
+
+pub fn remove_context(name: &str) -> io::Result<()> {
+    let folder = configured()?;
+    if current_context() == name {
+        use_context(DEFAULT_CONTEXT)?;
+    }
+    for kind in ["meta", "tls"] {
+        match fs::remove_dir_all(context_folder(&folder, kind, name)) {
+            Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 pub fn context_endpoint(name: &str) -> Endpoint {
