@@ -10,7 +10,7 @@ cargo_deb=3.8.0
 channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
 packages=(build-essential pkg-config jq libxkbcommon-dev libfontconfig1 libwayland-client0 libvulkan1
     mesa-vulkan-drivers dbus-daemon fonts-inter fonts-manrope fonts-jetbrains-mono desktop-file-utils
-    appstream)
+    appstream python3)
 for app in "$@"; do
     [ -f "apps/$app/Cargo.toml" ] || { echo "setup: no app apps/$app" >&2; exit 1; }
     mapfile -t -O ${#packages[@]} packages < <(grep -v '^#' "apps/$app/build-depends" 2>/dev/null | xargs -rn1)
