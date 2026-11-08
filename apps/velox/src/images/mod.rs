@@ -2,7 +2,13 @@ mod run;
 
 use std::rc::Rc;
 
-use bande_l10n::{text, tr};
+use bande_app_menu::Entry;
+use bande_l10n::{text, tr, trn};
+use bande_toolkit::Palette;
+use bande_toolkit::ui::{
+    Button, Cell, Column, Label, Menu, MenuItem, ProgressBar, Row, Table, TextField, Ui, Widget,
+    WidgetId,
+};
 
 use crate::engine::{Image, Task};
 use crate::resources::{
@@ -10,12 +16,6 @@ use crate::resources::{
     tool,
 };
 use crate::ui::dot;
-use bande_app_menu::Entry;
-use bande_toolkit::Palette;
-use bande_toolkit::ui::{
-    Button, Cell, Column, Label, Menu, MenuItem, ProgressBar, Row, Table, TextField, Ui, Widget,
-    WidgetId,
-};
 
 pub const PULL: &str = "pull-image";
 pub const RUN: &str = "run-image";
@@ -432,6 +432,19 @@ impl Pane for Images {
                 tr!("Cannot run “{name}”", name = spec.image.clone())
             }
             (Task::RemoveImages(_) | Task::PruneImages, Err(_)) => tr!("Cannot remove every image"),
+            (Task::LoadImages(archives), Ok(_)) => {
+                tell(
+                    ui,
+                    &trn!(
+                        "Loaded the image archive",
+                        "Loaded {count} image archives",
+                        count = archives.len()
+                    ),
+                    "",
+                );
+                return true;
+            }
+            (Task::LoadImages(_), Err(_)) => tr!("Cannot load the images"),
             _ => return false,
         };
         if let Err(message) = result {

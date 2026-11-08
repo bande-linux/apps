@@ -60,6 +60,23 @@ pub(super) fn page(readiness: &Readiness, intents: &Intents, alternative: bool) 
             move |open| push(&toggled, Intent::Alternative(open)),
         )));
     }
+    if let Readiness::Unreachable { .. } = readiness {
+        let retry = Rc::clone(intents);
+        let local = Rc::clone(intents);
+        children.push(boxed(Stack::new(
+            Axis::Horizontal,
+            8.0,
+            0.0,
+            vec![
+                boxed(Button::new(&tr!("Try Again"), move || {
+                    push(&retry, Intent::Reconnect);
+                })),
+                boxed(Button::new(&tr!("Show This Computer"), move || {
+                    push(&local, Intent::ShowLocal);
+                })),
+            ],
+        )));
+    }
     boxed(ScrollView::new(Centered::new(
         boxed(Stack::new(Axis::Vertical, SPACING, PADDING, children)),
         PAGE_WIDTH,

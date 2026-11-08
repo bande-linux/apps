@@ -2,17 +2,19 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use bande_l10n::{text, tr};
-
-use crate::engine::{Network, Task};
-use crate::resources::{
-    Act, Acts, Field, Fields, Pane, Scope, boxed, confirm, matches, push, search, tell, tool,
-};
 use bande_app_menu::Entry;
+use bande_l10n::{text, tr};
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{
     Alert, Button, Cell, Column, Menu, MenuItem, Row, Table, TextField, Ui, Widget, WidgetId,
 };
+
+use crate::engine::{Network, Task};
+use crate::overview::Tone;
+use crate::resources::{
+    Act, Acts, Field, Fields, Pane, Scope, boxed, confirm, matches, push, search, tell, tool,
+};
+use crate::ui::symbol;
 
 const USER_PREFIX: &str = "net:";
 const BUILTIN_PREFIX: &str = "builtin:";
@@ -22,6 +24,7 @@ const REMOVE: &str = "network-remove";
 const COPY_NAME: &str = "network-copy-name";
 const CREATE_SYMBOL: &str = include_str!("../../data/symbols/add.svg");
 const REMOVE_SYMBOL: &str = include_str!("../../data/symbols/remove.svg");
+const NETWORKS_SYMBOL: &str = include_str!("../../data/symbols/networks.svg");
 const NAME_WIDTH: f32 = 220.0;
 const DRIVER_WIDTH: f32 = 90.0;
 const SUBNET_WIDTH: f32 = 160.0;
@@ -41,6 +44,15 @@ fn key(network: &Network) -> String {
     match network.predefined() {
         true => format!("{BUILTIN_PREFIX}{}", network.id),
         false => format!("{USER_PREFIX}{}", network.id),
+    }
+}
+
+fn driver_tone(driver: &str) -> Tone {
+    match driver {
+        "bridge" => Tone::Blue,
+        "host" => Tone::Purple,
+        "null" | "none" => Tone::Grey,
+        _ => Tone::Teal,
     }
 }
 
@@ -90,7 +102,10 @@ fn row(scope: &Scope, network: &Network) -> Row {
     Row::new(
         key(network),
         vec![
-            Cell::new(network.name.as_str()),
+            Cell::new(network.name.as_str()).icon(symbol(
+                NETWORKS_SYMBOL,
+                driver_tone(&network.driver).color(scope.palette),
+            )),
             Cell::new(network.driver.as_str()).muted(),
             subnet,
             Cell::new(members.len().to_string()).tabular(),

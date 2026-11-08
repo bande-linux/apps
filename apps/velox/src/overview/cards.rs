@@ -30,6 +30,8 @@ pub enum Tone {
     Orange,
     Purple,
     Red,
+    Teal,
+    Grey,
 }
 
 impl Tone {
@@ -44,6 +46,8 @@ impl Tone {
             Self::Orange => Color::oklch(lightness + 0.04, chroma, 60.0),
             Self::Purple => Color::oklch(lightness, chroma, 310.0),
             Self::Red => Color::oklch(lightness, chroma + 0.02, 25.0),
+            Self::Teal => Color::oklch(lightness, chroma, 195.0),
+            Self::Grey => palette.ink3,
         }
     }
 }

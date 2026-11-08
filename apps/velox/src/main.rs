@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
@@ -10,13 +11,16 @@ use bande_app_menu::Entry;
 use bande_app_settings::{SettingsWindow, settings_folder};
 use bande_l10n::{Text, text, tr};
 use bande_toolkit::{
-    Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
+    Appearance, DragAction, DragEvent, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window,
+    WindowEvent,
 };
 use bande_velox::{
-    Act, ContainerRequest, DisplayWindow, Effect, Hub, Informer, LogsTarget, LogsView,
-    MACHINE_WINDOW_SIZE, MachineRequest, MachineWindow, Request, SETTINGS_SIZE, SIDEBAR_WIDTH,
-    Section, ShellLink, ShellTarget, ShellWindow, TERMINAL_APP_ID, Update, VeloxSettings,
-    VeloxView, Work, notify_crash, settings_form,
+    Act, ContainerRequest, DisplayWindow, Effect, Endpoint, Failure, Hub, Informer, LogsTarget,
+    LogsView, MACHINE_WINDOW_SIZE, MachineRequest, MachineWindow, Place, Places, RemoteHost,
+    Request, SETTINGS_SIZE, SIDEBAR_WIDTH, Section, ShellLink, ShellTarget, ShellWindow,
+    TERMINAL_APP_ID, Target, Tunnel, Update, VeloxSettings, VeloxView, Work, context_endpoint,
+    contexts, create_context, current_context, load_hosts, notify_crash, save_hosts, settings_form,
+    tunnel_socket, use_context,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
@@ -81,6 +85,8 @@ struct Pane {
     logs: Vec<LogsTarget>,
     shells: Vec<ShellTarget>,
     apps: Option<Apps>,
+    dragged: bool,
+    places: Vec<Request>,
 }
 
 impl Pane {
@@ -102,6 +108,7 @@ impl Pane {
                     let token = || window.activation_token(RUNNING_ID).ok();
                     self.logs.extend(self.work.serve(request, token));
                 }
+                request => self.places.push(request),
             }
         }
     }
@@ -216,6 +223,24 @@ impl View for Pane {
         if let WindowEvent::ToplevelChanged(state) = &event {
             self.view.set_hidden(state.suspended);
             self.view.sync_streams();
+        }
+        if let WindowEvent::Drag(drag) = &event {
+            match drag {
+                DragEvent::Entered { uris, .. } => {
+                    self.dragged = self.view.accepts_drop(uris);
+                    window.accept_drag(self.dragged.then_some(DragAction::Copy));
+                }
+                DragEvent::Moved(_) => {
+                    window.accept_drag(self.dragged.then_some(DragAction::Copy));
+                }
+                DragEvent::Dropped { transfer, .. } if self.dragged => {
+                    self.dragged = false;
+                    self.view.dropped(&transfer.uris);
+                    self.serve(window);
+                }
+                DragEvent::Left | DragEvent::Finished(_) => self.dragged = false,
+                DragEvent::Dropped { .. } => {}
+            }
         }
         let handled = View::event(self.view.ui(), window, event);
         let pumped = self.view.pump();
@@ -385,9 +410,137 @@ struct Velox {
     informer: Option<Rc<Informer>>,
     hub: Option<Hub>,
     dismissed: HashSet<(String, u32)>,
+    place: Place,
+    hosts: Vec<RemoteHost>,
+    tunnel: Option<Tunnel>,
 }
 
 impl Velox {
+    fn places(&self) -> Places {
+        Places {
+            hosts: self.hosts.clone(),
+            contexts: contexts(),
+            current: current_context(),
+            place: Some(self.place.clone()),
+        }
+    }
+
+    fn open_engine(&mut self) -> std::io::Result<Rc<Informer>> {
+        self.tunnel = None;
+        let remote = match &self.place {
+            Place::Host(id) => self.hosts.iter().find(|host| host.id == *id).cloned(),
+            Place::Local => match context_endpoint(&current_context()) {
+                Endpoint::Ssh(host) => Some(host),
+                Endpoint::Local(_) | Endpoint::Unsupported(_) => None,
+            },
+        };
+        let Some(host) = remote else {
+            return Informer::start(Target::default()).map(Rc::new);
+        };
+        let socket = tunnel_socket(&host.id);
+        if let Some(folder) = socket.as_ref().and_then(|socket| socket.parent()) {
+            std::fs::create_dir_all(folder)?;
+        }
+        let failure = Failure::default();
+        let informer = Informer::start(Target {
+            socket: tunnel_socket(&host.id),
+            remote: Some((host.name.clone(), Arc::clone(&failure))),
+        })?;
+        let recheck = informer.rechecker();
+        match Tunnel::open(&host, failure, move || {
+            let _ = recheck.send(());
+        }) {
+            Ok(tunnel) => self.tunnel = Some(tunnel),
+            Err(error) => tracing::warn!("cannot reach {}: {error}", host.name),
+        }
+        Ok(Rc::new(informer))
+    }
+
+    fn reconnect(&mut self, cx: &mut Cx<Self>) {
+        let informer = match self.open_engine() {
+            Ok(informer) => informer,
+            Err(error) => return tracing::warn!("cannot follow the engine: {error}"),
+        };
+        self.informer = Some(Rc::clone(&informer));
+        let places = self.places();
+        if let Some((window, pane)) = self.pane(cx) {
+            pane.work = Work::new(Rc::clone(&informer));
+            pane.informer = informer;
+            pane.view.set_places(places);
+            pane.view.reset_engine();
+            window.request_redraw();
+        }
+    }
+
+    fn serve_places(&mut self, cx: &mut Cx<Self>) {
+        let requests = self
+            .pane(cx)
+            .map(|(_, pane)| std::mem::take(&mut pane.places))
+            .unwrap_or_default();
+        if requests.is_empty() {
+            return;
+        }
+        let local_socket = self.pane(cx).and_then(|(_, pane)| pane.view.local_socket());
+        let mut reconnect = false;
+        for request in requests {
+            match request {
+                Request::Place(place) if place != self.place => {
+                    self.place = place;
+                    reconnect = true;
+                }
+                Request::UseContext(name) => match use_context(&name) {
+                    Ok(()) => {
+                        self.place = Place::Local;
+                        reconnect = true;
+                    }
+                    Err(error) => tracing::warn!("cannot switch to {name}: {error}"),
+                },
+                Request::AddHost(host) => {
+                    self.place = Place::Host(host.id.clone());
+                    self.hosts.push(host);
+                    reconnect = true;
+                }
+                Request::RemoveHost(id) => {
+                    self.hosts.retain(|host| host.id != id);
+                    if self.place == Place::Host(id) {
+                        self.place = Place::Local;
+                        reconnect = true;
+                    }
+                }
+                Request::CreateWorkspace(name, endpoint) => {
+                    let endpoint = match endpoint.is_empty() {
+                        true => local_socket
+                            .as_ref()
+                            .map(|socket| format!("unix://{}", socket.display()))
+                            .unwrap_or_default(),
+                        false => endpoint,
+                    };
+                    match create_context(&name, &endpoint).and_then(|()| use_context(&name)) {
+                        Ok(()) => {
+                            self.place = Place::Local;
+                            reconnect = true;
+                        }
+                        Err(error) => tracing::warn!("cannot create {name}: {error}"),
+                    }
+                }
+                Request::Reconnect => reconnect = true,
+                _ => {}
+            }
+        }
+        if let Err(error) = save_hosts(&self.hosts) {
+            tracing::warn!("cannot save the hosts: {error}");
+        }
+        match reconnect {
+            true => self.reconnect(cx),
+            false => {
+                let places = self.places();
+                if let Some((window, pane)) = self.pane(cx) {
+                    pane.view.set_places(places);
+                    window.request_redraw();
+                }
+            }
+        }
+    }
     fn hub(&mut self) -> Option<&Hub> {
         if self.hub.is_none() {
             match Hub::start() {
@@ -690,10 +843,12 @@ impl Velox {
         if let Some(main) = self.main {
             return cx.raise(main, None);
         }
-        let informer = match Informer::start() {
-            Ok(informer) => Rc::new(informer),
+        self.hosts = load_hosts();
+        let informer = match self.open_engine() {
+            Ok(informer) => informer,
             Err(error) => return tracing::warn!("cannot follow the engine: {error}"),
         };
+        let places = self.places();
         let shared = Rc::clone(&informer);
         let hub = self.hub();
         let opened = cx.open(Kind::Main, &tr!("Containers"), WINDOW_SIZE, |appearance| {
@@ -701,6 +856,7 @@ impl Velox {
             if let Some(hub) = hub {
                 view.set_hub(hub);
             }
+            view.set_places(places);
             Screen::Main(Box::new(Pane {
                 view,
                 work: Work::new(Rc::clone(&shared)),
@@ -708,6 +864,8 @@ impl Velox {
                 logs: Vec::new(),
                 shells: Vec::new(),
                 apps: None,
+                dragged: false,
+                places: Vec::new(),
             }))
         });
         match opened {
@@ -758,6 +916,9 @@ impl Program for Velox {
             informer: None,
             hub: None,
             dismissed: HashSet::new(),
+            place: Place::Local,
+            hosts: Vec::new(),
+            tunnel: None,
         })
     }
 
@@ -938,6 +1099,7 @@ impl Program for Velox {
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
+        self.serve_places(cx);
         self.open_logs(cx);
         self.serve_machines(cx, window);
         self.update_sampling(cx);
@@ -998,15 +1160,22 @@ impl Program for Velox {
                 }
             }
         }
+        let mut changed = false;
+        let mut menus = false;
         if let Some((window, pane)) = self.pane(cx) {
             for update in updates {
-                pane.view.apply(update);
+                menus |= !matches!(update, Update::Stats(..));
+                changed |= pane.view.apply(update);
             }
             pane.serve(window);
-            window.request_redraw();
+            if changed {
+                window.request_redraw();
+            }
         }
         self.open_logs(cx);
-        cx.refresh_menus();
+        if menus {
+            cx.refresh_menus();
+        }
     }
 
     fn deadline(&self) -> Option<Instant> {

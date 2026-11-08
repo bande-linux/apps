@@ -11,6 +11,7 @@ use serde::de::DeserializeOwned;
 use super::http::{self, Body, Upload};
 use super::informer::Action;
 
+const SSH_PROGRAM: &str = "ssh";
 const COMPOSE_PROJECT: &str = "com.docker.compose.project";
 const MIN_API: (u32, u32) = (1, 41);
 const PODMAN_COMPONENT: &str = "Podman Engine";
@@ -221,6 +222,12 @@ fn disk_size(root: &Path) -> Option<u64> {
     })
 }
 
+fn local_engine(pid: Option<rustix::process::Pid>) -> Option<rustix::process::Pid> {
+    let pid = pid?;
+    let name = std::fs::read_to_string(format!("/proc/{}/comm", pid.as_raw_nonzero())).ok()?;
+    (name.trim() != SSH_PROGRAM).then_some(pid)
+}
+
 fn started(pid: Option<rustix::process::Pid>) -> Option<SystemTime> {
     let pid = pid?;
     let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid.as_raw_nonzero())).ok()?;
@@ -339,6 +346,7 @@ impl Engine {
         let server = rustix::net::sockopt::socket_peercred(&stream)
             .ok()
             .map(|credentials| credentials.pid);
+        let server = local_engine(server);
         let mut bytes = Vec::new();
         self.request_on(stream, "GET", "/info", None)?
             .read_to_end(&mut bytes)?;
@@ -364,7 +372,9 @@ impl Engine {
             socket: self.socket.clone(),
             cpus: info.cpus,
             memory: info.mem_total,
-            disk: info.docker_root_dir.as_deref().and_then(disk_size),
+            disk: server
+                .and(info.docker_root_dir.as_deref())
+                .and_then(disk_size),
             started: started(server),
         })
     }

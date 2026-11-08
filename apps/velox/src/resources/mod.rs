@@ -196,6 +196,7 @@ pub struct Resources {
     watch: Option<Vec<String>>,
     navigate: Option<Section>,
     reclaim: bool,
+    hidden: bool,
 }
 
 impl Default for Resources {
@@ -220,6 +221,7 @@ impl Resources {
             watch: None,
             navigate: None,
             reclaim: false,
+            hidden: false,
         }
     }
 
@@ -257,6 +259,10 @@ impl Resources {
                 self.tasks.push(Task::Usage);
             }
         }
+    }
+
+    pub fn add_task(&mut self, task: Task) {
+        self.tasks.push(task);
     }
 
     pub fn take_tasks(&mut self) -> Vec<Task> {
@@ -479,8 +485,27 @@ impl Resources {
         self.refresh_watch(&BTreeMap::new());
     }
 
+    pub fn stats_round(&mut self, ui: &mut Ui) -> bool {
+        match self.shown {
+            Some(Section::Overview) => {
+                self.overview.fill_live(ui);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn set_hidden(&mut self, hidden: bool, containers: &BTreeMap<String, Container>) {
+        self.hidden = hidden;
+        self.refresh_watch(containers);
+    }
+
     fn refresh_watch(&mut self, containers: &BTreeMap<String, Container>) {
-        let wanted: Vec<String> = match self.shown {
+        let shown = match self.hidden {
+            true => None,
+            false => self.shown,
+        };
+        let wanted: Vec<String> = match shown {
             Some(Section::Overview) => containers
                 .values()
                 .filter(|container| container.running())

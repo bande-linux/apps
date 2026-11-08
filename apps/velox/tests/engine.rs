@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use bande_toolkit::Appearance;
-use bande_velox::{Informer, Update, VeloxView};
+use bande_velox::{Informer, Target, Update, VeloxView};
 
 const CONTAINER: &str = r#"{"Id":"c1","Names":["/shop-web-1"],"Image":"web","State":"running","Status":"Up","Labels":{"com.docker.compose.project":"shop"}}"#;
 
@@ -59,7 +59,7 @@ fn the_list_follows_events_and_reconciles_when_the_engine_stops_and_returns() {
     let folder = tempfile::tempdir().unwrap();
     let socket = folder.path().join("engine.sock");
     unsafe { std::env::set_var("DOCKER_HOST", format!("unix://{}", socket.display())) };
-    let informer = Informer::start().unwrap();
+    let informer = Informer::start(Target::default()).unwrap();
     let queue = &mut Vec::new();
     let blocked = next(&informer, queue, |u| matches!(u, Update::Blocked(_)));
     let mut view = VeloxView::new(Appearance::default());

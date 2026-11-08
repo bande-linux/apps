@@ -46,6 +46,10 @@ pub enum Readiness {
     NoAccess,
     Relogin,
     TooOld,
+    Unreachable {
+        host: String,
+        reason: Option<String>,
+    },
 }
 
 pub enum Probe {
@@ -144,6 +148,21 @@ impl Readiness {
                 link: Some(INSTALL_LINK),
                 ..advice(text!("Update Docker to continue"))
             },
+            Self::Unreachable { host, reason } => {
+                let reason = reason.clone().filter(|reason| !reason.is_empty());
+                let headline = match reason {
+                    Some(_) => text!("Cannot reach {host}"),
+                    None => text!("Connecting to {host} over SSH…"),
+                };
+                Advice {
+                    headline: headline
+                        .tr_args(&[("host", &host.clone() as &dyn std::fmt::Display)]),
+                    steps: None,
+                    note: reason,
+                    link: None,
+                    alternative: None,
+                }
+            }
         }
     }
 }
