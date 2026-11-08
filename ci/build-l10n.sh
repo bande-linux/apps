@@ -23,8 +23,7 @@ for folder in "$catalogs"/packs/*/; do
         cp -r "$folder/$program" "$root/usr/share/bande/l10n/"
     done
     [ -d "$root" ] || continue
-    team=$(sed -n 's/^"Language-Team: \(.*\)\\n"$/\1/p' "apps/$app/locales/$language.po" 2>/dev/null | head -n1)
-    [ -n "$team" ] || team=$(find apps libs -path "*/locales/$language.po" -exec sed -n 's/^"Language-Team: \(.*\)\\n"$/\1/p' {} + | head -n1)
+    team=$(cat "$root"/usr/share/bande/l10n/*/"$language.mo" | grep -aoh 'Language-Team: [^[:cntrl:]]*' | head -n1 | cut -d' ' -f2-)
     [ -n "$team" ] || { echo "build-l10n: no Language-Team for $language" >&2; exit 1; }
     mkdir -p "$root/DEBIAN" "$root/usr/share/doc/$package"
     printf 'Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\nUpstream-Name: Bande\nSource: https://github.com/bande-linux/apps\n\nFiles: *\nCopyright: 2026 %s\nLicense: Apache-2.0 or MIT\n On Debian systems, the full text of the Apache License, Version 2.0 can be\n found in /usr/share/common-licenses/Apache-2.0.\n' "$maintainer" > "$root/usr/share/doc/$package/copyright"
@@ -44,7 +43,7 @@ Priority: optional
 Multi-Arch: foreign
 Description: $team translations for $name
 CONTROL
-    echo "The $team text of $name, read when it starts in a $team session. Without it the app shows English." |
+    echo "The $team text of $name, read when it starts in a $team session. Without it the app shows the English it was written in." |
         fold -s -w 78 | sed 's/ *$//; s/^/ /' >> "$root/DEBIAN/control"
     (cd "$root" && find usr -type f -print0 | sort -z | xargs -0 md5sum) > "$root/DEBIAN/md5sums"
     dpkg-deb --root-owner-group -Zxz --build "$root" "$out/${package}_${version}_all.deb" > /dev/null
