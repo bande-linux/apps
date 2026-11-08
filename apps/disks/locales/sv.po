@@ -50,31 +50,31 @@ msgid "Mount"
 msgstr "Montera"
 
 msgid "Open Disk Image…"
-msgstr "Öppna skivavbildning …"
+msgstr "Öppna skivavbildning…"
 
 msgid "Image from Selection…"
-msgstr "Avbildning från markering …"
+msgstr "Avbildning från markering…"
 
 msgid "First Aid…"
-msgstr "Första hjälpen …"
+msgstr "Första hjälpen…"
 
 msgid "Add Partition…"
-msgstr "Lägg till partition …"
+msgstr "Lägg till partition…"
 
 msgid "Delete Partition…"
-msgstr "Radera partition …"
+msgstr "Radera partition…"
 
 msgid "Resize Partition…"
-msgstr "Ändra storlek på partition …"
+msgstr "Ändra storlek på partition…"
 
 msgid "Erase…"
-msgstr "Radera …"
+msgstr "Radera…"
 
 msgid "Restore…"
-msgstr "Återställ …"
+msgstr "Återställ…"
 
 msgid "Rename…"
-msgstr "Byt namn …"
+msgstr "Byt namn…"
 
 msgid "Eject"
 msgstr "Mata ut"
@@ -182,7 +182,7 @@ msgid "First Aid process has completed."
 msgstr "Första hjälpen är klar."
 
 msgid "Creating an image of {name}…"
-msgstr "Skapar en avbildning av {name} …"
+msgstr "Skapar en avbildning av {name}…"
 
 msgid "Image created."
 msgstr "Avbildningen har skapats."
@@ -320,7 +320,7 @@ msgid "Choose"
 msgstr "Välj"
 
 msgid "Erasing {name}…"
-msgstr "Raderar {name} …"
+msgstr "Raderar {name}…"
 
 msgid "Erase process is complete."
 msgstr "Raderingen är klar."
@@ -332,7 +332,7 @@ msgid "Erase process has failed."
 msgstr "Raderingen misslyckades."
 
 msgid "Adding {name}…"
-msgstr "Lägger till {name} …"
+msgstr "Lägger till {name}…"
 
 msgid "Partition process is complete."
 msgstr "Partitioneringen är klar."
@@ -350,7 +350,7 @@ msgid "Enter a size of at least 16 MB and at most {largest}."
 msgstr "Ange en storlek på minst 16 MB och högst {largest}."
 
 msgid "Deleting the partition…"
-msgstr "Raderar partitionen …"
+msgstr "Raderar partitionen…"
 
 msgid "This format can’t grow."
 msgstr "Det här formatet kan inte bli större."
@@ -359,10 +359,10 @@ msgid "This format can’t shrink."
 msgstr "Det här formatet kan inte bli mindre."
 
 msgid "Resizing {name}…"
-msgstr "Ändrar storlek på {name} …"
+msgstr "Ändrar storlek på {name}…"
 
 msgid "Checking the file system…"
-msgstr "Kontrollerar filsystemet …"
+msgstr "Kontrollerar filsystemet…"
 
 msgid "First Aid process has failed."
 msgstr "Första hjälpen misslyckades."
@@ -374,7 +374,7 @@ msgid "Couldn’t unlock the volume."
 msgstr "Det gick inte att låsa upp volymen."
 
 msgid "Restoring {name}…"
-msgstr "Återställer {name} …"
+msgstr "Återställer {name}…"
 
 msgid "Restore process is complete."
 msgstr "Återställningen är klar."

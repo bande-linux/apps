@@ -1,0 +1,17 @@
+msgid ""
+msgstr ""
+"Language: en-GB\n"
+"Language-Team: English (United Kingdom)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "No apps from the catalog are installed."
+msgstr "No apps from the catalogue are installed."
+
+msgid "License"
+msgstr "Licence"
+
+msgid "No app catalog is installed. Install the appstream package and refresh the package lists in Software Update."
+msgstr "No app catalogue is installed. Install the appstream package and refresh the package lists in Software Update."

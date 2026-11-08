@@ -188,7 +188,7 @@ fn describe(error: bande_vm::Error) -> String {
                 tr!("The Velox helper refused: {reason}", reason = reason)
             }
         },
-        bande_vm::Error::Cancelled => tr!("The password prompt was cancelled."),
+        bande_vm::Error::Cancelled => tr!("The password prompt was canceled."),
         error => error.to_string(),
     }
 }

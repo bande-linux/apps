@@ -59,25 +59,25 @@ msgid "New Event"
 msgstr "Ny händelse"
 
 msgid "New Calendar…"
-msgstr "Ny kalender …"
+msgstr "Ny kalender…"
 
 msgid "Add Account…"
-msgstr "Lägg till konto …"
+msgstr "Lägg till konto…"
 
 msgid "Refresh Calendars"
 msgstr "Uppdatera kalendrar"
 
 msgid "Import…"
-msgstr "Importera …"
+msgstr "Importera…"
 
 msgid "Export…"
-msgstr "Exportera …"
+msgstr "Exportera…"
 
 msgid "View"
 msgstr "Visa"
 
 msgid "Updating…"
-msgstr "Uppdaterar …"
+msgstr "Uppdaterar…"
 
 msgid "{url} is not a calendar."
 msgstr "{url} är inte en kalender."
@@ -179,7 +179,7 @@ msgid "Graphite"
 msgstr "Grafit"
 
 msgid "Rename…"
-msgstr "Byt namn …"
+msgstr "Byt namn…"
 
 msgid "Delete Calendar"
 msgstr "Radera kalender"
@@ -212,7 +212,7 @@ msgid "Every Year"
 msgstr "Varje år"
 
 msgid "Custom…"
-msgstr "Anpassa …"
+msgstr "Anpassa…"
 
 msgid "None"
 msgstr "Ingen"
@@ -401,7 +401,7 @@ msgid "all-day"
 msgstr "heldag"
 
 msgid "{count} more…"
-msgstr "{count} till …"
+msgstr "{count} till…"
 
 msgid "No events match “{text}”"
 msgstr "Inga händelser matchar ”{text}”"
@@ -488,13 +488,13 @@ msgid "CalDAV on {server}"
 msgstr "CalDAV på {server}"
 
 msgid "Password…"
-msgstr "Lösenord …"
+msgstr "Lösenord…"
 
 msgid "Subscribed to {url}"
 msgstr "Prenumererar på {url}"
 
 msgid "Remove…"
-msgstr "Ta bort …"
+msgstr "Ta bort…"
 
 msgid "iCloud and Fastmail sign in with an app password, Nextcloud with your password or an app password. Google needs OAuth, which Calendar cannot do yet."
 msgstr "iCloud och Fastmail loggar du in på med ett applösenord, Nextcloud med ditt lösenord eller ett applösenord. Google kräver OAuth, vilket Kalender inte kan hantera ännu."

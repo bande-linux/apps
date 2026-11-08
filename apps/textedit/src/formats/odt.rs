@@ -363,7 +363,7 @@ pub fn write(rich: &RichText) -> Result<Vec<u8>, String> {
         }
         let alignment = match attributes.alignment {
             Alignment::Start => "P",
-            Alignment::Center => "Centre",
+            Alignment::Center => "Center",
             Alignment::End => "Right",
             Alignment::Justify => "Justify",
         };
@@ -440,7 +440,7 @@ pub fn write(rich: &RichText) -> Result<Vec<u8>, String> {
     let numbers: String = (1..=10)
         .map(|level| format!("<text:list-level-style-number text:level=\"{level}\" style:num-format=\"1\" style:num-suffix=\".\"/>"))
         .collect();
-    let paragraph_styles: String = [("P", "start"), ("Centre", "center"), ("Right", "end"), ("Justify", "justify")]
+    let paragraph_styles: String = [("P", "start"), ("Center", "center"), ("Right", "end"), ("Justify", "justify")]
         .iter()
         .map(|(name, align)| {
             format!("<style:style style:name=\"{name}\" style:family=\"paragraph\"><style:paragraph-properties fo:text-align=\"{align}\"/></style:style>")

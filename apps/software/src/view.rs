@@ -1335,7 +1335,7 @@ impl Software {
         )))];
         if found.is_empty() {
             widgets.push(boxed(Label::new(&tr!(
-                "No apps from the catalogue are installed."
+                "No apps from the catalog are installed."
             ))));
             return widgets;
         }
@@ -1806,7 +1806,7 @@ impl Software {
             cells.push(fact(&tr!("Category"), text(&category_name(*category))));
         }
         if let Some(license) = &app.license {
-            cells.push(fact(&tr!("Licence"), text(license)));
+            cells.push(fact(&tr!("License"), text(license)));
         }
         let origin = facts
             .map(|facts| facts.origin.as_str())
@@ -1900,7 +1900,7 @@ impl Software {
             vec![boxed(Spinner::new(&tr!("Loading apps…")))]
         } else if self.apps.is_empty() {
             vec![boxed(Label::new(&tr!(
-                "No app catalogue is installed. Install the appstream package and refresh the package lists in Software Update."
+                "No app catalog is installed. Install the appstream package and refresh the package lists in Software Update."
             )))]
         } else {
             match self.page() {

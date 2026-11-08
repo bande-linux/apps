@@ -138,7 +138,7 @@ msgid "Kill {count} Containers"
 msgstr "Avbryt {count} containrar tvärt"
 
 msgid "Delete {count} Containers…"
-msgstr "Radera {count} containrar …"
+msgstr "Radera {count} containrar…"
 
 msgid "Start"
 msgstr "Starta"
@@ -159,7 +159,7 @@ msgid "Kill"
 msgstr "Avbryt tvärt"
 
 msgid "Delete…"
-msgstr "Radera …"
+msgstr "Radera…"
 
 msgid "Show Logs"
 msgstr "Visa loggar"
@@ -186,7 +186,7 @@ msgid "Restart Project"
 msgstr "Starta om projekt"
 
 msgid "Down Project…"
-msgstr "Ta ned projekt …"
+msgstr "Ta ned projekt…"
 
 msgid "Open {url}"
 msgstr "Öppna {url}"
@@ -278,25 +278,25 @@ msgid "Ports"
 msgstr "Portar"
 
 msgid "Starting…"
-msgstr "Startar …"
+msgstr "Startar…"
 
 msgid "Stopping…"
-msgstr "Stoppar …"
+msgstr "Stoppar…"
 
 msgid "Restarting…"
-msgstr "Startar om …"
+msgstr "Startar om…"
 
 msgid "Pausing…"
-msgstr "Pausar …"
+msgstr "Pausar…"
 
 msgid "Resuming…"
-msgstr "Återupptar …"
+msgstr "Återupptar…"
 
 msgid "Killing…"
-msgstr "Avbryter tvärt …"
+msgstr "Avbryter tvärt…"
 
 msgid "Deleting…"
-msgstr "Raderar …"
+msgstr "Raderar…"
 
 msgid "Import Volume"
 msgstr "Importera volym"
@@ -317,7 +317,7 @@ msgid "Pull"
 msgstr "Hämta"
 
 msgid "Pulling {reference}… {percent}%"
-msgstr "Hämtar {reference} … {percent} %"
+msgstr "Hämtar {reference}… {percent} %"
 
 msgid "Pulling {reference}: {status}"
 msgstr "Hämtar {reference}: {status}"
@@ -341,7 +341,7 @@ msgid "Remove Selected"
 msgstr "Ta bort markerade"
 
 msgid "Run…"
-msgstr "Kör …"
+msgstr "Kör…"
 
 msgid "Filter images"
 msgstr "Filtrera images"
@@ -368,13 +368,13 @@ msgid "Copy Image ID"
 msgstr "Kopiera image-ID"
 
 msgid "Remove…"
-msgstr "Ta bort …"
+msgstr "Ta bort…"
 
 msgid "Remove {count} Images"
 msgstr "Ta bort {count} images"
 
 msgid "Prune Unused…"
-msgstr "Rensa oanvända …"
+msgstr "Rensa oanvända…"
 
 msgid "Prune unused images?"
 msgstr "Vill du rensa oanvända images?"
@@ -466,7 +466,7 @@ msgstr "Administratörslösenordet angavs inte, eller så får det här kontot i
 msgid "The Velox helper refused: {reason}"
 msgstr "Velox hjälpprogram vägrade: {reason}"
 
-msgid "The password prompt was cancelled."
+msgid "The password prompt was canceled."
 msgstr "Lösenordsfrågan avbröts."
 
 msgid "Guest display"
@@ -476,7 +476,7 @@ msgid "this display cannot show the 3D picture; turn 3D graphics off in Settings
 msgstr "skärmen kan inte visa 3D-bilden; stäng av 3D-grafik i Inställningar"
 
 msgid "Connecting to the display…"
-msgstr "Ansluter till skärmen …"
+msgstr "Ansluter till skärmen…"
 
 msgid "{name} — Display {number}"
 msgstr "{name} — skärm {number}"
@@ -521,10 +521,10 @@ msgid "Cannot suspend “{name}”"
 msgstr "Det går inte att försätta ”{name}” i vila"
 
 msgid "Choose Disk Image…"
-msgstr "Välj diskavbild …"
+msgstr "Välj diskavbild…"
 
 msgid "Choose Disc Image…"
-msgstr "Välj skivavbild …"
+msgstr "Välj skivavbild…"
 
 msgid "Choose a Folder to Share"
 msgstr "Välj en mapp att dela"
@@ -572,7 +572,7 @@ msgid "Make one from a Debian, Ubuntu or Fedora cloud image."
 msgstr "Skapa en från en molnimage för Debian, Ubuntu eller Fedora."
 
 msgid "New Virtual Machine…"
-msgstr "Ny virtuell maskin …"
+msgstr "Ny virtuell maskin…"
 
 msgid "Machines"
 msgstr "Maskiner"
@@ -605,10 +605,10 @@ msgid "Serial Console"
 msgstr "Seriekonsol"
 
 msgid "Take Snapshot…"
-msgstr "Ta ögonblicksbild …"
+msgstr "Ta ögonblicksbild…"
 
 msgid "Clone…"
-msgstr "Klona …"
+msgstr "Klona…"
 
 msgid "Copy SSH Command"
 msgstr "Kopiera SSH-kommando"
@@ -623,22 +623,22 @@ msgid "CPU / MEM"
 msgstr "CPU / MINNE"
 
 msgid "Shutting Down…"
-msgstr "Stänger av …"
+msgstr "Stänger av…"
 
 msgid "Saving…"
-msgstr "Sparar …"
+msgstr "Sparar…"
 
 msgid "Reverting…"
-msgstr "Återställer …"
+msgstr "Återställer…"
 
 msgid "Deleting Snapshot…"
-msgstr "Raderar ögonblicksbild …"
+msgstr "Raderar ögonblicksbild…"
 
 msgid "Cloning…"
-msgstr "Klonar …"
+msgstr "Klonar…"
 
 msgid "Suspending…"
-msgstr "Försätter i vila …"
+msgstr "Försätter i vila…"
 
 msgid "just started"
 msgstr "nyss startad"
@@ -677,13 +677,13 @@ msgid "Failed"
 msgstr "Misslyckades"
 
 msgid "Downloading… {percent} %"
-msgstr "Hämtar … {percent} %"
+msgstr "Hämtar… {percent} %"
 
 msgid "Downloading…"
-msgstr "Hämtar …"
+msgstr "Hämtar…"
 
 msgid "Creating…"
-msgstr "Skapar …"
+msgstr "Skapar…"
 
 msgid "{count} GB"
 msgstr "{count} GB"
@@ -743,10 +743,10 @@ msgid "New Virtual Machine"
 msgstr "Ny virtuell maskin"
 
 msgid "Install from a disc image…"
-msgstr "Installera från en skivavbild …"
+msgstr "Installera från en skivavbild…"
 
 msgid "Import a disk image…"
-msgstr "Importera en diskavbild …"
+msgstr "Importera en diskavbild…"
 
 msgid "Choose what the machine starts from."
 msgstr "Välj vad maskinen startar från."
@@ -908,7 +908,7 @@ msgid "{name} — {status}"
 msgstr "{name} — {status}"
 
 msgid "Revert…"
-msgstr "Återställ …"
+msgstr "Återställ…"
 
 msgid "Cannot show the display: {reason}"
 msgstr "Det går inte att visa skärmen: {reason}"
@@ -953,7 +953,7 @@ msgid "In the guest: sudo mount -t virtiofs {tag} /mnt"
 msgstr "I gästen: sudo mount -t virtiofs {tag} /mnt"
 
 msgid "Add Folder…"
-msgstr "Lägg till mapp …"
+msgstr "Lägg till mapp…"
 
 msgid "Velox"
 msgstr "Velox"
@@ -1013,7 +1013,7 @@ msgid "Copy Name"
 msgstr "Kopiera namn"
 
 msgid "New Network…"
-msgstr "Nytt nätverk …"
+msgstr "Nytt nätverk…"
 
 msgid "Remove {count} networks?"
 msgstr "Vill du ta bort {count} nätverk?"
@@ -1099,7 +1099,7 @@ msgid "Velox {version}"
 msgstr "Velox {version}"
 
 msgid "Reclaim Space…"
-msgstr "Frigör utrymme …"
+msgstr "Frigör utrymme…"
 
 msgctxt "containers"
 msgid "Images"
@@ -1244,10 +1244,10 @@ msgid "Just now"
 msgstr "Nyss"
 
 msgid "Pull Image…"
-msgstr "Hämta image …"
+msgstr "Hämta image…"
 
 msgid "Run Image…"
-msgstr "Kör image …"
+msgstr "Kör image…"
 
 msgid "Action failed"
 msgstr "Åtgärden misslyckades"
@@ -1280,7 +1280,7 @@ msgid "{engine} · rootless"
 msgstr "{engine} · rootless"
 
 msgid "Connecting…"
-msgstr "Ansluter …"
+msgstr "Ansluter…"
 
 msgid "“{name}” already exists"
 msgstr "”{name}” finns redan"
@@ -1423,13 +1423,13 @@ msgid "Copy Mountpoint"
 msgstr "Kopiera monteringspunkt"
 
 msgid "Export as tar…"
-msgstr "Exportera som tar …"
+msgstr "Exportera som tar…"
 
 msgid "Volume"
 msgstr "Volym"
 
 msgid "Import Volume…"
-msgstr "Importera volym …"
+msgstr "Importera volym…"
 
 msgid "Prune unused volumes?"
 msgstr "Vill du rensa oanvända volymer?"

@@ -1130,7 +1130,7 @@ impl DocumentView {
             return self.ask(
                 Asking::MakePlain,
                 &tr!("Convert this document to plain text?"),
-                &tr!("Its fonts, styles, colours and lists will be lost. The converted document is saved as a new plain text file."),
+                &tr!("Its fonts, styles, colors and lists will be lost. The converted document is saved as a new plain text file."),
                 &[("make-plain-confirm", true), ("cancel", false)],
             );
         }

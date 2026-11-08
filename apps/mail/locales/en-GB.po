@@ -10,5 +10,8 @@ msgstr ""
 msgid "Organize by conversation"
 msgstr "Organise by conversation"
 
+msgid "Trash"
+msgstr "Bin"
+
 msgid "Gray"
 msgstr "Grey"

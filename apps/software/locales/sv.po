@@ -224,7 +224,7 @@ msgstr "Slår på Flathub…"
 msgid "Details"
 msgstr "Detaljer"
 
-msgid "No apps from the catalogue are installed."
+msgid "No apps from the catalog are installed."
 msgstr "Inga appar från katalogen är installerade."
 
 msgid "Your apps and system are up to date."
@@ -362,7 +362,7 @@ msgstr "Hämtning"
 msgid "Category"
 msgstr "Kategori"
 
-msgid "Licence"
+msgid "License"
 msgstr "Licens"
 
 msgid "Developer"
@@ -380,7 +380,7 @@ msgstr "Information"
 msgid "Loading apps…"
 msgstr "Läser in appar…"
 
-msgid "No app catalogue is installed. Install the appstream package and refresh the package lists in Software Update."
+msgid "No app catalog is installed. Install the appstream package and refresh the package lists in Software Update."
 msgstr "Ingen appkatalog är installerad. Installera paketet appstream och uppdatera paketlistorna i Programuppdatering."
 
 msgid "You’re offline. You can browse apps, but installing them and their screenshots need the internet."
