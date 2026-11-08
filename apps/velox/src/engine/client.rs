@@ -221,9 +221,8 @@ fn disk_size(root: &Path) -> Option<u64> {
     })
 }
 
-fn started(socket: &Path) -> Option<SystemTime> {
-    let stream = UnixStream::connect(socket).ok()?;
-    let pid = rustix::net::sockopt::socket_peercred(&stream).ok()?.pid;
+fn started(pid: Option<rustix::process::Pid>) -> Option<SystemTime> {
+    let pid = pid?;
     let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid.as_raw_nonzero())).ok()?;
     let after_name = stat.rsplit_once(')')?.1;
     let ticks: u64 = after_name.split_whitespace().nth(19)?.parse().ok()?;
@@ -305,7 +304,17 @@ impl Engine {
         path: &str,
         upload: Option<Upload<'_>>,
     ) -> Result<Body<UnixStream>, Error> {
-        let response = http::send(UnixStream::connect(&self.socket)?, method, path, upload)?;
+        self.request_on(UnixStream::connect(&self.socket)?, method, path, upload)
+    }
+
+    fn request_on(
+        &self,
+        stream: UnixStream,
+        method: &str,
+        path: &str,
+        upload: Option<Upload<'_>>,
+    ) -> Result<Body<UnixStream>, Error> {
+        let response = http::send(stream, method, path, upload)?;
         let mut body = response.body;
         if (200..300).contains(&response.status) || response.status == 304 {
             return Ok(body);
@@ -326,7 +335,14 @@ impl Engine {
 
     pub fn info(&self) -> Result<EngineInfo, Error> {
         let version: Version = self.get("/version")?;
-        let info: Info = self.get("/info")?;
+        let stream = UnixStream::connect(&self.socket)?;
+        let server = rustix::net::sockopt::socket_peercred(&stream)
+            .ok()
+            .map(|credentials| credentials.pid);
+        let mut bytes = Vec::new();
+        self.request_on(stream, "GET", "/info", None)?
+            .read_to_end(&mut bytes)?;
+        let info: Info = serde_json::from_slice(&bytes)?;
         let podman = version
             .components
             .iter()
@@ -349,7 +365,7 @@ impl Engine {
             cpus: info.cpus,
             memory: info.mem_total,
             disk: info.docker_root_dir.as_deref().and_then(disk_size),
-            started: started(&self.socket),
+            started: started(server),
         })
     }
 
