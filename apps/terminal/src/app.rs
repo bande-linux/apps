@@ -330,14 +330,12 @@ impl TerminalWindow {
                 let tab = tab.and_then(|index| self.tabs.get(index)).map(|tab| tab.id);
                 self.show_menu(window, tab_menu(tab, self.tabs.len()), at);
             }
-            TabAction::Moved { from, to } => self.move_tab(from, to),
+            TabAction::Moved { from, to } => {
+                move_tab(&mut self.tabs, &mut self.active, from, to);
+            }
             TabAction::Detach { index, grab } => self.detach_tab(window, index, grab),
         }
         window.request_redraw();
-    }
-
-    fn move_tab(&mut self, from: usize, to: usize) {
-        if move_tab(&mut self.tabs, &mut self.active, from, to) {}
     }
 
     fn frame_window(&self, window: &mut Window) {

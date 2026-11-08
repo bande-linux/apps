@@ -9,8 +9,12 @@ use bande_toolkit::ui::{
     ClipboardRequest, Cursor, PointerButton, PointerCapture, SurfaceInput, SurfaceScaling,
     SurfaceView, Ui, Widget, WidgetId,
 };
-use bande_toolkit::{CursorImage, ExternalSurface, Point, Rect, Region, ShmLayout, Window};
-use bande_vm::{Damage, Display, DisplayEvent, DisplayInput, Library, MouseButton, Scanout, Wheel};
+use bande_toolkit::{
+    CursorImage, Dmabuf, DmabufPlane, ExternalSurface, Point, Rect, Region, ShmLayout, Window,
+};
+use bande_vm::{
+    Damage, Display, DisplayEvent, DisplayInput, GuestDmabuf, Library, MouseButton, Scanout, Wheel,
+};
 
 use crate::L10N;
 
@@ -31,6 +35,7 @@ pub struct Console {
     wake: UnixStream,
     surface: Option<ExternalSurface>,
     _memory: Option<OwnedFd>,
+    _planes: Vec<OwnedFd>,
     picture: Option<(u32, u32)>,
     view: Option<WidgetId>,
     cursor: Cursor,
@@ -98,6 +103,7 @@ impl Console {
             wake,
             surface: None,
             _memory: None,
+            _planes: Vec::new(),
             picture: None,
             view: None,
             cursor: Cursor::Default,
@@ -182,6 +188,44 @@ impl Console {
         }
     }
 
+    fn show_dmabuf(&mut self, window: &mut Window, dmabuf: GuestDmabuf) -> Result<(), String> {
+        if self.surface.is_none() {
+            self.surface = Some(
+                window
+                    .create_external_surface()
+                    .map_err(|error| error.to_string())?,
+            );
+        }
+        if !window.supports_dmabuf(dmabuf.fourcc, dmabuf.modifier) {
+            return Err(L10N.tr("machine-console-no-3d"));
+        }
+        let Some(surface) = self.surface.as_mut() else {
+            return Ok(());
+        };
+        let planes: Vec<DmabufPlane<'_>> = dmabuf
+            .planes
+            .iter()
+            .map(|(fd, offset, stride)| DmabufPlane {
+                fd: fd.as_fd(),
+                offset: *offset,
+                stride: *stride,
+            })
+            .collect();
+        surface
+            .show_dmabuf(&Dmabuf {
+                planes: &planes,
+                width: dmabuf.width,
+                height: dmabuf.height,
+                fourcc: dmabuf.fourcc,
+                modifier: dmabuf.modifier,
+                flipped: !dmabuf.y0_top,
+            })
+            .map_err(|error| error.to_string())?;
+        self.picture = Some((dmabuf.width, dmabuf.height));
+        self._planes = dmabuf.planes.into_iter().map(|(fd, _, _)| fd).collect();
+        Ok(())
+    }
+
     fn show(&mut self, window: &mut Window, scanout: Scanout) -> Result<bool, String> {
         if self.surface.is_none() {
             self.surface = Some(
@@ -235,6 +279,22 @@ impl Console {
                             self.clipboard_changed(window);
                             self.view().map_or(Outcome::Nothing, Outcome::Show)
                         }
+                    };
+                }
+                DisplayEvent::Dmabuf(dmabuf) => {
+                    if let Err(reason) = self.show_dmabuf(window, dmabuf) {
+                        return Outcome::Closed(Some(reason));
+                    }
+                    damage.clear();
+                    let shown = self
+                        .picture
+                        .zip(self.view.and_then(|view| ui.widget_as::<SurfaceView>(view)));
+                    outcome = match shown {
+                        Some(((width, height), view)) => {
+                            view.set_size(width, height);
+                            Outcome::Redraw
+                        }
+                        None => self.view().map_or(Outcome::Nothing, Outcome::Show),
                     };
                 }
                 DisplayEvent::Damage(area) => damage.push(region(area)),

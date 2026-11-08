@@ -146,7 +146,16 @@ pub struct Painter {
 
 impl Painter {
     pub fn new(appearance: Appearance, profile: Profile, font_size: f32, scale: f64) -> Self {
-        let mut text = TextSystem::new();
+        Self::with_text(TextSystem::new(), appearance, profile, font_size, scale)
+    }
+
+    pub fn with_text(
+        mut text: TextSystem,
+        appearance: Appearance,
+        profile: Profile,
+        font_size: f32,
+        scale: f64,
+    ) -> Self {
         let metrics = Metrics::measure(&mut text, font_size, scale);
         Self {
             text,

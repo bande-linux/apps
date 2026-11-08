@@ -59,6 +59,7 @@ pub enum Act {
     Delete,
     Pause,
     Resume,
+    Suspend,
     TakeSnapshot,
     Revert,
     DeleteSnapshot,
@@ -89,6 +90,7 @@ pub enum Change {
     Memory(u64),
     SshPort(u16),
     Eject,
+    Graphics3d(bool),
     AddShare(PathBuf),
     RemoveShare(String),
 }
@@ -118,7 +120,9 @@ pub enum Update {
     Unit(String, ActiveState),
     Paused(String, bool),
     Address(String, Option<std::net::Ipv4Addr>),
+    Network(String, bande_vm::GuestNetwork),
     Opened(String),
+    Without3d(String),
     IsoChosen(PathBuf),
     FolderChosen(String, PathBuf),
     Settled(String),
@@ -346,10 +350,21 @@ impl Worker {
         let (Some(host), Some(units)) = (self.host(), self.units()) else {
             return Err("virtualization is not ready".to_owned());
         };
-        let started = units.start(&host, machine).and_then(|mut qmp| {
+        let mut started = units.start(&host, machine).and_then(|mut qmp| {
             machine.resume_snapshot(&mut qmp)?;
             Ok(qmp)
         });
+        if started.is_err() && host.uses_3d(machine) && machine.manifest.resume_from.is_none() {
+            let flat = Host {
+                allow_3d: false,
+                ..host.clone()
+            };
+            started = units.start(&flat, machine);
+            if started.is_ok() {
+                self.out
+                    .send(Update::Without3d(machine.manifest.id.clone()));
+            }
+        }
         if machine.manifest.resume_from.is_some() {
             let mut resumed = Self::machine(&machine.manifest.id)?;
             resumed.manifest.resume_from = None;
@@ -452,6 +467,14 @@ impl Worker {
             Act::Resume => Qmp::connect(&machine.control_socket())
                 .and_then(|mut qmp| qmp.resume())
                 .map_err(|error| error.to_string()),
+            Act::Suspend => self.until_stopped(&machine, || {
+                let mut suspended = Self::machine(id)?;
+                let mut qmp =
+                    Qmp::connect(&suspended.control_socket()).map_err(|error| error.to_string())?;
+                suspended
+                    .suspend(&mut qmp)
+                    .map_err(|error| error.to_string())
+            }),
             Act::TakeSnapshot | Act::Revert | Act::DeleteSnapshot | Act::Clone => Ok(()),
         }
     }
@@ -464,6 +487,7 @@ impl Worker {
             Change::Cpus(cpus) => manifest.cpus = cpus,
             Change::Memory(memory) => manifest.memory_mib = memory,
             Change::Eject => manifest.installer = None,
+            Change::Graphics3d(on) => manifest.graphics_3d = on,
             Change::AddShare(path) => {
                 let tag = share_tag(&path, &manifest.shares);
                 manifest.shares.push(Share {
@@ -734,6 +758,20 @@ impl Backend {
             }
         });
         job
+    }
+
+    pub fn sample_network(&self, ids: Vec<String>) {
+        let worker = self.worker();
+        spawn("velox-vm-network", move || {
+            for id in ids {
+                let Ok(machine) = Worker::machine(&id) else {
+                    continue;
+                };
+                if let Ok(network) = bande_vm::guest_network(&machine.agent_socket()) {
+                    worker.out.send(Update::Network(id, network));
+                }
+            }
+        });
     }
 
     pub fn choose_iso(&self, title: String) {

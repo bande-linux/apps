@@ -8,6 +8,7 @@ use crate::qmp::Qmp;
 use crate::{Error, Result};
 
 const STATE_NODE: &str = "disk";
+pub const SUSPENDED: &str = "velox-suspended";
 const DEVICES: [&str; 2] = ["disk", "vars"];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,9 +64,23 @@ impl Machine {
     pub fn resume_snapshot(&self, qmp: &mut Qmp) -> Result<()> {
         if let Some(tag) = &self.manifest.resume_from {
             qmp.snapshot_load(tag, STATE_NODE, &DEVICES)?;
+            if tag == SUSPENDED {
+                qmp.snapshot_delete(SUSPENDED, &DEVICES)?;
+            }
             qmp.resume()?;
         }
         Ok(())
+    }
+
+    pub fn suspend(&mut self, qmp: &mut Qmp) -> Result<()> {
+        qmp.snapshot_save(SUSPENDED, STATE_NODE, &DEVICES)?;
+        self.manifest.resume_from = Some(SUSPENDED.to_owned());
+        self.save()?;
+        qmp.quit()
+    }
+
+    pub fn is_suspended(&self) -> bool {
+        self.manifest.resume_from.as_deref() == Some(SUSPENDED)
     }
 
     pub fn delete_snapshot(&mut self, host: &Host, qmp: Option<&mut Qmp>, id: &str) -> Result<()> {

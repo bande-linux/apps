@@ -347,7 +347,7 @@ impl TextEdit {
         }
         let zone = bande_datetime::local_zone();
         let formats = bande_datetime::DateFormats::from_env();
-        for version in versions {
+        for &version in versions {
             let label = jiff::Timestamp::from_second(version as i64).map_or_else(
                 |_| version.to_string(),
                 |at| {
@@ -597,6 +597,7 @@ impl TextEdit {
             Message::Loaded { token, .. }
             | Message::Written { token, .. }
             | Message::Counted { token, .. }
+            | Message::Versions { token, .. }
             | Message::SaveTo { token, .. } => *token,
         };
         let Some(window) = self.find(cx, token) else {
@@ -633,6 +634,7 @@ impl TextEdit {
             Message::SaveTo {
                 path: Some(path), ..
             } => view.save_to(path),
+            Message::Versions { versions, .. } => view.set_versions(versions),
             Message::SaveTo { path: None, .. } => view.cancel_save(),
             Message::Chosen(_) => {}
         }

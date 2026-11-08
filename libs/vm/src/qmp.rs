@@ -184,6 +184,13 @@ impl Qmp {
         self.execute("system_powerdown", json!({})).map(drop)
     }
 
+    pub fn quit(&mut self) -> Result<()> {
+        match self.execute("quit", json!({})) {
+            Err(Error::Protocol(_)) => Ok(()),
+            result => result.map(drop),
+        }
+    }
+
     pub fn reset(&mut self) -> Result<()> {
         self.execute("system_reset", json!({})).map(drop)
     }

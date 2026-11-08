@@ -83,10 +83,7 @@ impl NowPlaying {
             );
         }
         if let Some(path) = &self.path {
-            put(
-                "xesam:url",
-                Value::from(format!("file://{}", path.display())),
-            );
+            put("xesam:url", Value::from(bande_xdg::file_uri(path)));
         }
         metadata
     }
@@ -300,7 +297,11 @@ impl Mpris {
             && playing.playback == now.playback
             && playing.position.abs_diff(now.position) > SEEK_DRIFT;
         let changed = now.status() != playing.status()
-            || now.metadata() != playing.metadata()
+            || now.title != playing.title
+            || now.artist != playing.artist
+            || now.album != playing.album
+            || now.path != playing.path
+            || now.duration_ms != playing.duration_ms
             || now.rate != playing.rate
             || now.volume != playing.volume
             || now.seekable != playing.seekable

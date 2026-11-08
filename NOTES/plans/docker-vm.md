@@ -515,13 +515,46 @@ swtpm and Secure Boot firmware for Windows, and gpgv-checked vendor checksums.
   `gpgv` against the vendor keys in `libs/vm/data`. Debian publishes no signature beside
   `latest/SHA512SUMS`, so Debian stays HTTPS-only.
 
-Left from V1: the ≤ 8 s boot. Debian `generic` under KVM reaches SSH about 13 s after the unit starts;
-the guest's own part is 5.5 s, so 7–8 s go to QEMU, AAVMF and GRUB.
-V3 not measured yet: 1080p at 60 fps and a release build's cost (a debug build used about 1.7 % of a core with
-a still guest and the main window open).
+Measured on the mini (KVM, Debian 13 generic, 4 vCPU, 4 GiB):
+- **Boot to SSH: 8.4 s** from the unit's start (firmware 0.7 s, GRUB and kernel load 1.6 s, Linux to
+  login 5.8 s). AAVMF waited 5 s for a boot key until `-boot menu=on,splash-time=0`.
+- **Snapshots:** saving 2.3 GB of dirty memory took 4.6 s, loading it 8.8 s; Suspend took 8.7 s and
+  resuming to SSH 10.2 s with 2.7 GB in use.
+- **3D:** glmark2-es2 (off-screen, DRM) scores 899 with virgl on the M2 GPU against 127 with the guest's
+  llvmpipe, about 7×. Showing the 3D picture needs a compositor that imports the host GPU's dmabufs;
+  the headless lab (lavapipe) cannot, so Velox says so instead of being dropped by the compositor.
+- Not measured: 1080p at 60 fps and a release build's cost (a debug build used about 1.7 % of a core
+  with a still guest and the main window open).
+- **Guest resize:** the guest is offered the window's size as its preferred mode (`SetUIInfo`);
+  GNOME and KDE apply it, Xfce needs `xrandr --auto`. QEMU's own vdagent sends no monitor
+  configuration, so `spice-vdagent` cannot apply it either.
 
 D3 (desktop): the theme icon, with A1; the app ships the same SVG for hicolor. **Kernel: none.** If V0 hits a guest timer, PMU or vGIC
 fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
+
+## Audit against macOS Velox and VMware Workstation Pro (2026-11-07)
+
+| Feature | State | Why |
+|---|---|---|
+| macOS Velox: dashboard, containers, images, volumes, networks, logs, inspector, Compose, Reclaim Space | done (A1–A4) | |
+| macOS Velox: menu-bar panel, ⌘K palette, crash notifications | not done (A7) | each needs a Settings switch, and Velox has no Settings window yet |
+| Built-in monitor | done | per container (inspector) and per machine (Info tab): CPU, memory, disk and network graphs, sampled every 2 s only while shown; network comes from the guest agent |
+| NAT networking with port forwards | done | passt, unprivileged |
+| Bridged, host-only, network editor | left out | bridges need root or a setuid helper (decision 4: Velox never configures the system); passt cannot isolate yet |
+| Shared folders | done | virtiofs; disables snapshots (vhost-user-fs does not migrate) |
+| USB passthrough | not done | `usb-host` needs write access to `/dev/bus/usb`, which seat ACLs give only for some devices; untestable here without taking a device from the owner's session |
+| Clipboard | done | qemu-vdagent + spice-vdagent, text only |
+| Drag and drop of files | left out | QEMU's vdagent has no file transfer; shared folders cover it |
+| Several guest displays | left out | needs a window per `Console_N`; later |
+| Suspend to disk and resume | done | an internal snapshot `velox-suspended`, loaded and deleted on the next start |
+| Snapshots and clones (full, linked) | done (V4) | |
+| Templates | covered by clones | a stopped machine cloned linked is a template |
+| Encryption | left out | qcow2 LUKS needs a secret store per machine; the disk sits in the user's home, which LUKS on the system disk already covers |
+| TPM and Secure Boot | done (Windows preset) | swtpm; not run without swtpm here |
+| OVF import and export | left out | OVA/VMDK carry VMware/VirtualBox hardware; a disk-only import through `qemu-img convert` is the useful part, later |
+| Autostart at login | left out | VMs already outlive the app; autostart needs persistent user units rather than transient ones |
+| Guest tools | done for cloud images | `qemu-guest-agent` and `spice-vdagent` through cloud-init |
+| 3D graphics | done, off by default | `virtio-gpu-gl-pci` with virgl on the host render node, dmabuf scanouts; falls back to the plain display when QEMU will not start with it |
 
 ## Risks
 

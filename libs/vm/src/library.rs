@@ -119,6 +119,7 @@ impl Library {
             preset: Preset::Linux,
             installer: None,
             shares: Vec::new(),
+            graphics_3d: false,
         });
         fs::create_dir_all(&machine.dir)?;
         let made = host
@@ -173,6 +174,7 @@ impl Library {
             preset: installer.preset,
             installer: Some(utf8(&installer.iso)?.to_owned()),
             shares: Vec::new(),
+            graphics_3d: false,
         });
         fs::create_dir_all(&machine.dir)?;
         let made = host
@@ -317,7 +319,7 @@ fn private_folder(folder: &Path) -> Result<()> {
     Ok(())
 }
 
-fn random_bytes<const N: usize>() -> Result<[u8; N]> {
+pub(crate) fn random_bytes<const N: usize>() -> Result<[u8; N]> {
     let mut bytes = [0; N];
     let mut filled = 0;
     while filled < N {

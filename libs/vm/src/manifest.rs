@@ -50,6 +50,8 @@ pub struct Manifest {
     pub installer: Option<String>,
     #[serde(default)]
     pub shares: Vec<Share>,
+    #[serde(default)]
+    pub graphics_3d: bool,
 }
 
 impl Manifest {
@@ -62,6 +64,10 @@ impl Manifest {
         let mut file = File::create(&staging)?;
         file.write_all(&serde_json::to_vec_pretty(self)?)?;
         persist(&file, &staging, path)
+    }
+
+    pub fn is_suspended(&self) -> bool {
+        self.resume_from.as_deref() == Some(crate::snapshot::SUSPENDED)
     }
 
     pub fn ssh_port(&self) -> Option<u16> {

@@ -7,7 +7,7 @@ use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_toolkit::ui::{
     Axis, Button, Context, Form, FormLine, Label, ScrollView, SegmentedControl, Stack, Stepper,
-    Table, TextField, Ui, Widget, WidgetId,
+    Table, TextField, Toggle, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
     Appearance, FrameRegions, HEADER_LEADING, Header, Palette, Rect, Scene, TextSystem,
@@ -76,6 +76,7 @@ pub struct MachineWindow {
     failure: Option<String>,
     hidden: bool,
     snapshot_tools: Option<ToolIds>,
+    graphs: Option<crate::containers::GraphIds>,
     selected_snapshot: Option<String>,
     sheet: Option<Sheet>,
     intents: Intents,
@@ -116,6 +117,7 @@ impl MachineWindow {
             failure: None,
             hidden: false,
             snapshot_tools: None,
+            graphs: None,
             selected_snapshot: None,
             sheet: None,
             intents,
@@ -261,6 +263,10 @@ impl MachineWindow {
                     }
                 }
                 Intent::Choice(choice) => self.sheet_choice(&choice),
+                Intent::Graphics3d(on) => {
+                    self.requests
+                        .push(Request::Change(self.id.clone(), Change::Graphics3d(on)));
+                }
                 Intent::Eject => {
                     self.requests
                         .push(Request::Change(self.id.clone(), Change::Eject));
@@ -293,10 +299,7 @@ impl MachineWindow {
             })
         };
         self.sync_console();
-        let rebuild = match self.tab {
-            Tab::Info => true,
-            _ => shown != self.shown,
-        };
+        let rebuild = shown != self.shown;
         if rebuild {
             let content = self.content(shown.as_ref());
             if let Some(bar) = self.ui.widget_as::<Bar>(self.bar) {
@@ -305,6 +308,7 @@ impl MachineWindow {
             self.shown = shown;
         }
         self.fill_snapshots();
+        self.fill_graphs();
         let states = [
             (self.start, self.can(Act::Start) || self.can(Act::Resume)),
             (self.stop, self.can(Act::ShutDown)),
@@ -386,6 +390,20 @@ impl MachineWindow {
 
     pub fn has_console(&self) -> bool {
         self.session.is_some()
+    }
+
+    fn fill_graphs(&mut self) {
+        let Some(ids) = self.graphs.filter(|_| self.tab == Tab::Info) else {
+            return;
+        };
+        let graphs = self
+            .fleet
+            .borrow()
+            .entry(&self.id)
+            .map(|entry| entry.history.graphs());
+        if let Some(graphs) = graphs {
+            crate::containers::update_graphs(&mut self.ui, ids, graphs);
+        }
     }
 
     fn fill_snapshots(&mut self) {
@@ -506,6 +524,10 @@ impl MachineWindow {
         self.requests.push(Request::Serial(self.id.clone()));
     }
 
+    pub fn suspend(&mut self) {
+        self.act(Act::Suspend);
+    }
+
     pub fn toggle_pause(&mut self) {
         match self.can(Act::Resume) {
             true => self.act(Act::Resume),
@@ -516,6 +538,7 @@ impl MachineWindow {
     fn content(&mut self, shown: Option<&Shown>) -> Box<dyn Widget> {
         self.slot = None;
         self.snapshot_tools = None;
+        self.graphs = None;
         let Some(shown) = shown else {
             return centered(vec![boxed(
                 Label::new(&L10N.tr("machine-gone")).secondary(),
@@ -534,11 +557,25 @@ impl MachineWindow {
                     Status::Ready(accel) => Some(accel),
                     _ => None,
                 };
-                let lines = fleet
-                    .entry(&self.id)
-                    .map(|entry| present::info_lines(entry, accel))
-                    .unwrap_or_default();
-                boxed(ScrollView::new(Form::new(&Tab::Info.title(), lines)))
+                let Some(entry) = fleet.entry(&self.id) else {
+                    return super::page::blank();
+                };
+                let mut children: Vec<Box<dyn Widget>> = Vec::new();
+                if entry.running() {
+                    let (graphs, ids) = crate::containers::graph_widgets(&entry.history);
+                    self.graphs = Some(ids);
+                    children.push(boxed(Stack::new(Axis::Vertical, 8.0, 16.0, graphs)));
+                }
+                children.push(boxed(Form::new(
+                    &Tab::Info.title(),
+                    present::info_lines(entry, accel),
+                )));
+                boxed(ScrollView::new(Stack::new(
+                    Axis::Vertical,
+                    0.0,
+                    0.0,
+                    children,
+                )))
             }
             Tab::Snapshots => {
                 let table = snapshots::table(&self.intents);
@@ -719,6 +756,36 @@ impl MachineWindow {
                 )),
             ));
         }
+        lines.push(FormLine::Heading(L10N.tr("machine-section-display")));
+        let has_memory =
+            manifest.snapshots.iter().any(|snapshot| snapshot.memory) || manifest.is_suspended();
+        let available =
+            bande_vm::Host::render_node().is_some() && manifest.preset != bande_vm::Preset::Windows;
+        let toggle_intents = Rc::clone(&self.intents);
+        let changeable = !locked && !has_memory && available;
+        let toggle: Box<dyn Widget> = match changeable {
+            true => boxed(Toggle::new(
+                &L10N.tr("machine-graphics-3d"),
+                manifest.graphics_3d,
+                move |on| push(&toggle_intents, Intent::Graphics3d(on)),
+            )),
+            false => boxed(Label::new(&L10N.tr(match manifest.graphics_3d {
+                true => "machine-on",
+                false => "machine-off",
+            }))),
+        };
+        let hint = match (available, has_memory, locked) {
+            (false, _, _) => Some("machine-graphics-3d-unavailable"),
+            (true, true, _) => Some("machine-graphics-3d-snapshots"),
+            (true, false, true) => Some("machine-shut-down-to-change"),
+            (true, false, false) => None,
+        };
+        let mut column: Vec<Box<dyn Widget>> = vec![toggle];
+        column.extend(hint.map(|key| boxed(Label::new(&L10N.tr(key)).secondary())));
+        lines.push(FormLine::Row(
+            L10N.tr("machine-graphics-3d"),
+            boxed(Stack::new(Axis::Vertical, 2.0, 0.0, column)),
+        ));
         lines.push(FormLine::Heading(L10N.tr("machine-section-shares")));
         for share in &manifest.shares {
             let intents = Rc::clone(&self.intents);

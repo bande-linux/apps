@@ -43,6 +43,7 @@ const MACHINE_SNAPSHOT: &str = "machine-take-snapshot";
 const MACHINE_CLONE: &str = "machine-clone";
 const MACHINE_OPEN: &str = "machine-open-console";
 const MACHINE_SERIAL: &str = "machine-serial";
+const MACHINE_SUSPEND: &str = "machine-suspend";
 const SHOW_SHELL: &str = "show-shell:";
 const SHELL_SIZE: (u32, u32) = (760, 480);
 const MACHINE_WINDOW_TAG: &str = "machine";
@@ -170,6 +171,7 @@ fn machine_act(command: &str) -> Option<Act> {
         MACHINE_FORCE_STOP => Act::ForceStop,
         MACHINE_RESTART => Act::Restart,
         MACHINE_DELETE => Act::Delete,
+        MACHINE_SUSPEND => Act::Suspend,
         _ => return None,
     })
 }
@@ -545,6 +547,7 @@ impl Velox {
             vec![
                 item("machine-start", MACHINE_START, Act::Start).shortcut("Ctrl+R"),
                 item(pause_key, MACHINE_PAUSE, pause_act),
+                item("machine-suspend", MACHINE_SUSPEND, Act::Suspend),
                 item("machine-shut-down", MACHINE_SHUT_DOWN, Act::ShutDown),
                 item("machine-force-stop", MACHINE_FORCE_STOP, Act::ForceStop),
                 item("machine-restart", MACHINE_RESTART, Act::Restart),

@@ -47,6 +47,7 @@ pub fn pending_text(act: Act) -> String {
         Act::Revert => "machine-pending-revert",
         Act::DeleteSnapshot => "machine-pending-delete-snapshot",
         Act::Clone => "machine-pending-clone",
+        Act::Suspend => "machine-pending-suspend",
     })
 }
 
@@ -75,6 +76,7 @@ pub fn status_text(entry: &Entry) -> String {
         Power::Paused => L10N.tr("machine-paused"),
         Power::Starting => L10N.tr("pending-start"),
         Power::Stopping => L10N.tr("pending-stop"),
+        Power::Stopped if entry.listed.manifest.is_suspended() => L10N.tr("machine-suspended"),
         Power::Stopped => L10N.tr("machine-stopped"),
         Power::Failed => L10N.tr("machine-failed"),
     }

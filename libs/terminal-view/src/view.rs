@@ -20,7 +20,8 @@ type InputSink = Box<dyn FnMut(&[u8])>;
 pub struct TerminalView {
     id: WidgetId,
     label: String,
-    painter: RefCell<Painter>,
+    painter: Option<RefCell<Painter>>,
+    appearance: Appearance,
     terminal: RefCell<Terminal>,
     frame: Rect,
     scroll: f32,
@@ -39,12 +40,8 @@ impl TerminalView {
         Self {
             id: WidgetId::next(),
             label: label.to_owned(),
-            painter: RefCell::new(Painter::new(
-                appearance,
-                Profile::default(),
-                DEFAULT_FONT_SIZE,
-                1.0,
-            )),
+            painter: None,
+            appearance,
             terminal: RefCell::new(Terminal::new(INITIAL_GRID)),
             frame: Rect::default(),
             scroll: 0.0,
@@ -61,7 +58,10 @@ impl TerminalView {
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
-        self.painter.get_mut().set_appearance(appearance);
+        self.appearance = appearance;
+        if let Some(painter) = &mut self.painter {
+            painter.get_mut().set_appearance(appearance);
+        }
     }
 
     fn command(&mut self, cx: &mut Context, command: Command) -> bool {
@@ -134,7 +134,19 @@ impl Widget for TerminalView {
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
-        let painter = self.painter.get_mut();
+        let appearance = self.appearance;
+        let painter = self
+            .painter
+            .get_or_insert_with(|| {
+                RefCell::new(Painter::with_text(
+                    cx.text.sharing_fonts(),
+                    appearance,
+                    Profile::default(),
+                    DEFAULT_FONT_SIZE,
+                    cx.display_scale,
+                ))
+            })
+            .get_mut();
         let scale = cx.display_scale;
         let size = painter.font_size();
         painter.set_metrics(size, scale);
@@ -150,7 +162,10 @@ impl Widget for TerminalView {
     }
 
     fn paint(&self, _cx: &Context, items: &mut Vec<Item>) {
-        let mut painter = self.painter.borrow_mut();
+        let Some(painter) = &self.painter else {
+            return;
+        };
+        let mut painter = painter.borrow_mut();
         items.push(Item::Fill {
             shape: Shape::rect(self.frame),
             paint: painter.theme.background.into(),
@@ -181,7 +196,9 @@ impl Widget for TerminalView {
         let inside = |view: &Self, point: bande_toolkit::Point| view.frame.contains(point);
         let cell = |view: &Self, point: bande_toolkit::Point| {
             let local = bande_toolkit::Point::new(point.x - view.frame.x, point.y - view.frame.y);
-            view.painter.borrow().metrics.cell_at(local)
+            view.painter
+                .as_ref()
+                .map(|painter| painter.borrow().metrics.cell_at(local))
         };
         match event {
             Event::Key { key, modifiers } => self.key(cx, *key, *modifiers),
@@ -191,7 +208,9 @@ impl Widget for TerminalView {
                 true
             }
             Event::PointerDown(pointer) if inside(self, pointer.position) => {
-                let at = cell(self, pointer.position);
+                let Some(at) = cell(self, pointer.position) else {
+                    return false;
+                };
                 let terminal = self.terminal.get_mut();
                 terminal.clear_selection();
                 terminal.start_selection(at, SelectionKind::for_clicks(pointer.count, false));
@@ -199,8 +218,9 @@ impl Widget for TerminalView {
                 true
             }
             Event::PointerMove(pointer) if self.selecting => {
-                let at = cell(self, pointer.position);
-                self.terminal.get_mut().extend_selection(at);
+                if let Some(at) = cell(self, pointer.position) {
+                    self.terminal.get_mut().extend_selection(at);
+                }
                 true
             }
             Event::PointerUp(_) if self.selecting => {

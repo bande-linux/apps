@@ -18,7 +18,18 @@ fn send(stream: &mut UnixStream, command: &str, arguments: Value) -> Result<()> 
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct GuestNetwork {
+    pub address: Option<Ipv4Addr>,
+    pub received: u64,
+    pub sent: u64,
+}
+
 pub fn guest_address(agent_socket: &Path) -> Result<Option<Ipv4Addr>> {
+    guest_network(agent_socket).map(|network| network.address)
+}
+
+pub fn guest_network(agent_socket: &Path) -> Result<GuestNetwork> {
     let mut stream = UnixStream::connect(agent_socket)?;
     stream.set_read_timeout(Some(ANSWER_TIME))?;
     let mut reader = BufReader::new(stream.try_clone()?);
@@ -42,7 +53,21 @@ pub fn guest_address(agent_socket: &Path) -> Result<Option<Ipv4Addr>> {
     line.clear();
     reader.read_until(b'\n', &mut line)?;
     let reply: Value = serde_json::from_slice(&line)?;
-    Ok(first_address(&reply["return"]))
+    let interfaces = &reply["return"];
+    let total = |key: &str| {
+        interfaces
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|interface| interface["name"] != "lo")
+            .filter_map(|interface| interface["statistics"][key].as_u64())
+            .sum()
+    };
+    Ok(GuestNetwork {
+        address: first_address(interfaces),
+        received: total("rx-bytes"),
+        sent: total("tx-bytes"),
+    })
 }
 
 fn first_address(interfaces: &Value) -> Option<Ipv4Addr> {

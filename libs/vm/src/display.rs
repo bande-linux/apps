@@ -27,6 +27,7 @@ const KEYBOARD: &str = "org.qemu.Display1.Keyboard";
 const MOUSE: &str = "org.qemu.Display1.Mouse";
 const CLIPBOARD: &str = "org.qemu.Display1.Clipboard";
 const LISTENER_MAP: &str = "org.qemu.Display1.Listener.Unix.Map";
+const LISTENER_DMABUF: &str = "org.qemu.Display1.Listener.Unix.ScanoutDMABUF2";
 const TEXT: &str = "text/plain;charset=utf-8";
 const CLIPBOARD_SELECTION: u32 = 0;
 const FD_NAME: &str = "velox-display";
@@ -71,6 +72,16 @@ pub struct Scanout {
     pub fourcc: u32,
 }
 
+#[derive(Debug)]
+pub struct GuestDmabuf {
+    pub planes: Vec<(OwnedFd, u32, u32)>,
+    pub width: u32,
+    pub height: u32,
+    pub fourcc: u32,
+    pub modifier: u64,
+    pub y0_top: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Damage {
     pub x: i32,
@@ -82,6 +93,7 @@ pub struct Damage {
 #[derive(Debug)]
 pub enum DisplayEvent {
     Scanout(Scanout),
+    Dmabuf(GuestDmabuf),
     Damage(Damage),
     Disabled,
     Cursor {
@@ -276,6 +288,12 @@ impl Session {
             .serve_at(
                 LISTENER_PATH,
                 ListenerMap {
+                    sink: Arc::clone(&self.sink),
+                },
+            )?
+            .serve_at(
+                LISTENER_PATH,
+                ListenerDmabuf {
                     sink: Arc::clone(&self.sink),
                 },
             )?
@@ -514,6 +532,38 @@ impl Listener {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[zbus(name = "ScanoutDMABUF")]
+    async fn scanout_dmabuf(
+        &self,
+        dmabuf: zbus::zvariant::OwnedFd,
+        width: u32,
+        height: u32,
+        stride: u32,
+        fourcc: u32,
+        modifier: u64,
+        y0_top: bool,
+    ) {
+        (self.sink)(DisplayEvent::Dmabuf(GuestDmabuf {
+            planes: vec![(dmabuf.into(), 0, stride)],
+            width,
+            height,
+            fourcc,
+            modifier,
+            y0_top,
+        }));
+    }
+
+    #[zbus(name = "UpdateDMABUF")]
+    async fn update_dmabuf(&self, x: i32, y: i32, width: i32, height: i32) {
+        (self.sink)(DisplayEvent::Damage(Damage {
+            x,
+            y,
+            width,
+            height,
+        }));
+    }
+
     async fn disable(&mut self) {
         self.bytes = None;
         (self.sink)(DisplayEvent::Disabled);
@@ -535,7 +585,7 @@ impl Listener {
 
     #[zbus(property)]
     async fn interfaces(&self) -> Vec<String> {
-        vec![LISTENER_MAP.to_owned()]
+        vec![LISTENER_MAP.to_owned(), LISTENER_DMABUF.to_owned()]
     }
 }
 
@@ -573,6 +623,48 @@ impl ListenerMap {
             y,
             width,
             height,
+        }));
+    }
+}
+
+struct ListenerDmabuf {
+    sink: Sink,
+}
+
+#[interface(name = "org.qemu.Display1.Listener.Unix.ScanoutDMABUF2")]
+impl ListenerDmabuf {
+    #[allow(clippy::too_many_arguments)]
+    #[zbus(name = "ScanoutDMABUF2")]
+    async fn scanout_dmabuf2(
+        &self,
+        dmabuf: Vec<zbus::zvariant::OwnedFd>,
+        _x: u32,
+        _y: u32,
+        width: u32,
+        height: u32,
+        offset: Vec<u32>,
+        stride: Vec<u32>,
+        num_planes: u32,
+        fourcc: u32,
+        _backing_width: u32,
+        _backing_height: u32,
+        modifier: u64,
+        y0_top: bool,
+    ) {
+        let planes = dmabuf
+            .into_iter()
+            .zip(offset)
+            .zip(stride)
+            .take(num_planes as usize)
+            .map(|((fd, offset), stride)| (OwnedFd::from(fd), offset, stride))
+            .collect();
+        (self.sink)(DisplayEvent::Dmabuf(GuestDmabuf {
+            planes,
+            width,
+            height,
+            fourcc,
+            modifier,
+            y0_top,
         }));
     }
 }

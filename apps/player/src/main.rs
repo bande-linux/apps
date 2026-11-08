@@ -186,9 +186,8 @@ fn paths(arguments: &[String], directory: &Path) -> Vec<PathBuf> {
     arguments
         .iter()
         .filter(|argument| !argument.starts_with('-'))
-        .map(|argument| match argument.strip_prefix("file://") {
-            Some(path) => PathBuf::from(pane::percent_decoded(path)),
-            None => directory.join(argument),
+        .map(|argument| {
+            bande_xdg::path_from_file_uri(argument).unwrap_or_else(|| directory.join(argument))
         })
         .collect()
 }

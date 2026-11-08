@@ -8,6 +8,8 @@ use bande_vm::{Accel, ActiveState};
 use super::backend::{Act, Listed, Phase, Update};
 use super::readiness::Blocker;
 use crate::L10N;
+use crate::containers::UsageHistory;
+use crate::engine::Sample;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
@@ -38,6 +40,8 @@ pub struct Entry {
     pub paused: bool,
     pub pending: Option<Act>,
     pub usage: Option<Usage>,
+    pub history: UsageHistory,
+    pub network: (u64, u64),
     pub address: Option<std::net::Ipv4Addr>,
     cpu_sample: Option<(Instant, u64)>,
 }
@@ -103,6 +107,11 @@ impl Entry {
             }
             Act::Delete | Act::Clone => pending.is_none() && !self.running(),
             Act::Pause => pending.is_none() && self.power() == Power::Running,
+            Act::Suspend => {
+                pending.is_none()
+                    && self.power() == Power::Running
+                    && self.listed.manifest.shares.is_empty()
+            }
             Act::Resume => pending.is_none() && self.power() == Power::Paused,
             Act::TakeSnapshot => {
                 pending.is_none()
@@ -163,8 +172,38 @@ impl Entry {
             };
             Some(Usage { cpu, memory })
         });
+        let disk = cgroup(&bande_vm::unit_name(self.id()))
+            .and_then(|folder| fs::read_to_string(folder.join("io.stat")).ok())
+            .map(|stat| io_totals(&stat))
+            .unwrap_or_default();
+        if let Some(usage) = usage {
+            self.history.push(Sample {
+                at: now,
+                cpu: f64::from(usage.cpu),
+                memory: usage.memory,
+                read: disk.0,
+                written: disk.1,
+                received: self.network.0,
+                sent: self.network.1,
+            });
+        }
         self.usage = usage;
     }
+}
+
+fn io_totals(stat: &str) -> (u64, u64) {
+    let field = |line: &str, key: &str| -> u64 {
+        line.split_whitespace()
+            .find_map(|pair| pair.strip_prefix(key))
+            .and_then(|value| value.parse().ok())
+            .unwrap_or_default()
+    };
+    stat.lines().fold((0, 0), |(read, written), line| {
+        (
+            read + field(line, "rbytes="),
+            written + field(line, "wbytes="),
+        )
+    })
 }
 
 fn cgroup(unit: &str) -> Option<PathBuf> {
@@ -276,6 +315,8 @@ impl Fleet {
                             paused: false,
                             pending: None,
                             usage: None,
+                            history: UsageHistory::default(),
+                            network: (0, 0),
                             address: None,
                             cpu_sample: None,
                         },
@@ -297,6 +338,7 @@ impl Fleet {
                     if !state.is_running() {
                         entry.paused = false;
                         entry.usage = None;
+                        entry.history = UsageHistory::default();
                         entry.address = None;
                         entry.cpu_sample = None;
                         entry.listed.since = None;
@@ -319,6 +361,25 @@ impl Fleet {
                 }
             }
             Update::Opened(id) => self.to_open.push(id),
+            Update::Without3d(id) => {
+                let name = self
+                    .entries
+                    .get(&id)
+                    .map_or_else(|| id.clone(), |entry| entry.name().to_owned());
+                self.notices.push(Notice {
+                    id: Some(id),
+                    title: L10N.tr_args("machine-without-3d", [("name", name.into())]),
+                    message: L10N.tr("machine-without-3d-message"),
+                });
+            }
+            Update::Network(id, network) => {
+                if let Some(entry) = self.entries.get_mut(&id) {
+                    entry.network = (network.received, network.sent);
+                    if network.address.is_some() {
+                        entry.address = network.address;
+                    }
+                }
+            }
             Update::IsoChosen(path) => self.chosen_iso = Some(path),
             Update::FolderChosen(..) => {}
             Update::Settled(id) => {
@@ -363,6 +424,7 @@ impl Fleet {
                     Act::Revert => "machine-cannot-revert",
                     Act::DeleteSnapshot => "machine-cannot-delete-snapshot",
                     Act::Clone => "machine-cannot-clone",
+                    Act::Suspend => "machine-cannot-suspend",
                 };
                 self.notices.push(Notice {
                     id: Some(id),
