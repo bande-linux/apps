@@ -21,7 +21,7 @@ pub use clone::{CloneKind, NewClone};
 pub use display::{
     Damage, Display, DisplayEvent, DisplayInput, GuestDmabuf, MouseButton, Scanout, Wheel,
 };
-pub use error::{Error, Result};
+pub use error::{Error, HelperFailure, Result};
 pub use guest_agent::{GuestNetwork, guest_address, guest_network};
 pub use image::{Algorithm, CloudImage, ImageStore, catalog};
 pub use library::{Installer, Library, Machine, NewMachine, unit_name};

@@ -10,12 +10,14 @@ use std::process::{Command, Stdio};
 use rustix::net::{RecvAncillaryBuffer, RecvAncillaryMessage, RecvFlags, recvmsg};
 use serde_json::json;
 
+use crate::error::HelperFailure;
 use crate::qmp::Qmp;
 use crate::{Error, Result};
 
 pub const HELPER: &str = "/usr/libexec/bande-velox/velox-helper";
 const PKEXEC: &str = "pkexec";
 const DISMISSED: i32 = 126;
+const NOT_AUTHORIZED: i32 = 127;
 const USB_DEVICES: &str = "/sys/bus/usb/devices";
 const NET: &str = "/sys/class/net";
 const HUB_CLASS: &str = "09";
@@ -96,6 +98,9 @@ pub fn usb_devices() -> Vec<UsbDevice> {
 }
 
 fn run_helper(arguments: &[String]) -> Result<UnixStream> {
+    if !Path::new(HELPER).is_file() {
+        return Err(Error::Helper(HelperFailure::NoHelper));
+    }
     let (ours, theirs) = UnixStream::pair()?;
     let output = Command::new(PKEXEC)
         .arg(HELPER)
@@ -105,17 +110,16 @@ fn run_helper(arguments: &[String]) -> Result<UnixStream> {
         .stderr(Stdio::piped())
         .output()
         .map_err(|error| match error.kind() {
-            ErrorKind::NotFound => Error::Missing(PKEXEC.into()),
+            ErrorKind::NotFound => Error::Helper(HelperFailure::NoPkexec),
             _ => error.into(),
         })?;
     match output.status.code() {
         Some(0) => Ok(ours),
         Some(DISMISSED) => Err(Error::Cancelled),
-        _ => Err(Error::Tool {
-            program: HELPER.into(),
-            status: output.status,
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        }),
+        Some(NOT_AUTHORIZED) => Err(Error::Helper(HelperFailure::NotAuthorized)),
+        _ => Err(Error::Helper(HelperFailure::Refused(
+            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        ))),
     }
 }
 

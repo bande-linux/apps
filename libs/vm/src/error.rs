@@ -5,6 +5,14 @@ use std::process::ExitStatus;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HelperFailure {
+    NoPkexec,
+    NoHelper,
+    NotAuthorized,
+    Refused(String),
+}
+
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
@@ -33,6 +41,7 @@ pub enum Error {
     Missing(String),
     NotUtf8(PathBuf),
     Cancelled,
+    Helper(HelperFailure),
     NeedsShutDown,
     Signature(String),
     HasSnapshots,
@@ -70,6 +79,10 @@ impl fmt::Display for Error {
                 write!(f, "a machine with snapshots can only be cloned in full")
             }
             Self::Cancelled => f.write_str("cancelled"),
+            Self::Helper(HelperFailure::NoPkexec) => f.write_str("pkexec is not installed"),
+            Self::Helper(HelperFailure::NoHelper) => f.write_str("velox-helper is not installed"),
+            Self::Helper(HelperFailure::NotAuthorized) => f.write_str("not authorized"),
+            Self::Helper(HelperFailure::Refused(reason)) => f.write_str(reason),
         }
     }
 }

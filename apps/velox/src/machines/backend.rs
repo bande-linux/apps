@@ -12,13 +12,14 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime};
 
 use bande_vm::{
-    ActiveState, CloudImage, CloudInit, Forward, Host, ImageStore, Installer, Library, Machine,
-    Manifest, Network, NewClone, NewMachine, Qmp, Share, Units, UsbDevice,
+    ActiveState, CloudImage, CloudInit, Forward, HelperFailure, Host, ImageStore, Installer,
+    Library, Machine, Manifest, Network, NewClone, NewMachine, Qmp, Share, Units, UsbDevice,
 };
 use bande_watch::{Changes, FolderWatch};
 use serde::{Deserialize, Serialize};
 
 use super::readiness::{self, Blocker};
+use crate::L10N;
 
 const LOGIN_FILE: &str = "velox.json";
 const SSH_PORT: u16 = 22;
@@ -171,6 +172,21 @@ struct Shared {
     watched: Mutex<HashSet<String>>,
     monitors: Mutex<HashMap<String, UnixStream>>,
     jobs: Mutex<HashMap<u64, Arc<AtomicBool>>>,
+}
+
+fn describe(error: bande_vm::Error) -> String {
+    match error {
+        bande_vm::Error::Helper(failure) => match failure {
+            HelperFailure::NoPkexec => L10N.tr("machine-helper-no-pkexec"),
+            HelperFailure::NoHelper => L10N.tr("machine-helper-missing"),
+            HelperFailure::NotAuthorized => L10N.tr("machine-helper-not-authorized"),
+            HelperFailure::Refused(reason) => {
+                L10N.tr_args("machine-helper-refused", [("reason", reason.into())])
+            }
+        },
+        bande_vm::Error::Cancelled => L10N.tr("machine-helper-cancelled"),
+        error => error.to_string(),
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -343,7 +359,7 @@ impl Worker {
     }
 
     fn usb(&self, id: &str, key: &str) -> Result<(), String> {
-        let text = |error: bande_vm::Error| error.to_string();
+        let text = describe;
         let machine = Self::machine(id)?;
         let units = self.units().ok_or("virtualization is not ready")?;
         let mut qmp = Qmp::connect(&machine.control_socket()).map_err(text)?;
@@ -450,9 +466,7 @@ impl Worker {
         let (Some(host), Some(units)) = (self.host(), self.units()) else {
             return Err("virtualization is not ready".to_owned());
         };
-        let (qmp, without_3d) = units
-            .boot(&host, machine)
-            .map_err(|error| error.to_string())?;
+        let (qmp, without_3d) = units.boot(&host, machine).map_err(describe)?;
         if without_3d {
             self.out
                 .send(Update::Without3d(machine.manifest.id.clone()));
