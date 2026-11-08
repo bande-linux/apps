@@ -53,6 +53,7 @@ enum Intent {
     ChooseIso(bool),
     Eject,
     Graphics3d(bool),
+    StartAtLogin(bool),
     AddShare,
     RemoveShare(String),
 }

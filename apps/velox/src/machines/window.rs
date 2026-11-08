@@ -267,6 +267,10 @@ impl MachineWindow {
                     self.requests
                         .push(Request::Change(self.id.clone(), Change::Graphics3d(on)));
                 }
+                Intent::StartAtLogin(on) => {
+                    self.requests
+                        .push(Request::Change(self.id.clone(), Change::StartAtLogin(on)));
+                }
                 Intent::Eject => {
                     self.requests
                         .push(Request::Change(self.id.clone(), Change::Eject));
@@ -785,6 +789,16 @@ impl MachineWindow {
         lines.push(FormLine::Row(
             L10N.tr("machine-graphics-3d"),
             boxed(Stack::new(Axis::Vertical, 2.0, 0.0, column)),
+        ));
+        lines.push(FormLine::Heading(L10N.tr("machine-section-startup")));
+        let login_intents = Rc::clone(&self.intents);
+        lines.push(FormLine::Row(
+            L10N.tr("machine-start-at-login"),
+            boxed(Toggle::new(
+                &L10N.tr("machine-start-at-login"),
+                entry.listed.starts_at_login,
+                move |on| push(&login_intents, Intent::StartAtLogin(on)),
+            )),
         ));
         lines.push(FormLine::Heading(L10N.tr("machine-section-shares")));
         for share in &manifest.shares {

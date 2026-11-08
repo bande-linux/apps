@@ -22,6 +22,10 @@ const UNIT_PREFIX: &str = match option_env!("VELOX_TEST_UNIT_PREFIX") {
 pub fn unit_name(id: &str) -> String {
     format!("{UNIT_PREFIX}-{id}.service")
 }
+
+pub(crate) fn autostart_unit_name(id: &str) -> String {
+    format!("{UNIT_PREFIX}-{id}-autostart.service")
+}
 const CONTROL_SOCKET: &str = "control.sock";
 const SERIAL_SOCKET: &str = "serial.sock";
 

@@ -48,6 +48,7 @@ pub struct Listed {
     pub unit: ActiveState,
     pub since: Option<SystemTime>,
     pub dir: PathBuf,
+    pub starts_at_login: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,6 +92,7 @@ pub enum Change {
     SshPort(u16),
     Eject,
     Graphics3d(bool),
+    StartAtLogin(bool),
     AddShare(PathBuf),
     RemoveShare(String),
 }
@@ -260,6 +262,7 @@ impl Worker {
                     .then(|| fs::metadata(machine.qmp_socket()).and_then(|meta| meta.modified()))
                     .and_then(Result::ok),
                 dir: machine.dir().to_path_buf(),
+                starts_at_login: machine.starts_at_login(),
                 manifest: machine.manifest,
                 unit,
             });
@@ -350,27 +353,13 @@ impl Worker {
         let (Some(host), Some(units)) = (self.host(), self.units()) else {
             return Err("virtualization is not ready".to_owned());
         };
-        let mut started = units.start(&host, machine).and_then(|mut qmp| {
-            machine.resume_snapshot(&mut qmp)?;
-            Ok(qmp)
-        });
-        if started.is_err() && host.uses_3d(machine) && machine.manifest.resume_from.is_none() {
-            let flat = Host {
-                allow_3d: false,
-                ..host.clone()
-            };
-            started = units.start(&flat, machine);
-            if started.is_ok() {
-                self.out
-                    .send(Update::Without3d(machine.manifest.id.clone()));
-            }
+        let (qmp, without_3d) = units
+            .boot(&host, machine)
+            .map_err(|error| error.to_string())?;
+        if without_3d {
+            self.out
+                .send(Update::Without3d(machine.manifest.id.clone()));
         }
-        if machine.manifest.resume_from.is_some() {
-            let mut resumed = Self::machine(&machine.manifest.id)?;
-            resumed.manifest.resume_from = None;
-            resumed.save().map_err(|error| error.to_string())?;
-        }
-        let qmp = started.map_err(|error| error.to_string())?;
         self.watch(machine, Some(qmp));
         Ok(())
     }
@@ -457,6 +446,9 @@ impl Worker {
                     return Err("shut the machine down first".to_owned());
                 }
                 let host = self.host().ok_or("virtualization is not ready")?;
+                if let Err(error) = units.remove_autostart(&machine) {
+                    tracing::warn!("cannot remove the login start: {error}");
+                }
                 Self::library()?
                     .delete(&host, machine)
                     .map_err(|error| error.to_string())
@@ -479,8 +471,15 @@ impl Worker {
         }
     }
 
-    fn change(id: &str, change: Change) -> Result<(), String> {
+    fn change(&self, id: &str, change: Change) -> Result<(), String> {
         let mut machine = Self::machine(id)?;
+        if let Change::StartAtLogin(on) = change {
+            let units = self.units().ok_or("virtualization is not ready")?;
+            let program = std::env::current_exe().map_err(|error| error.to_string())?;
+            return units
+                .set_starts_at_login(&machine, &program, on)
+                .map_err(|error| error.to_string());
+        }
         let manifest = &mut machine.manifest;
         match change {
             Change::Name(name) => manifest.name = name,
@@ -488,6 +487,7 @@ impl Worker {
             Change::Memory(memory) => manifest.memory_mib = memory,
             Change::Eject => manifest.installer = None,
             Change::Graphics3d(on) => manifest.graphics_3d = on,
+            Change::StartAtLogin(_) => {}
             Change::AddShare(path) => {
                 let tag = share_tag(&path, &manifest.shares);
                 manifest.shares.push(Share {
@@ -722,7 +722,7 @@ impl Backend {
     pub fn change(&self, id: String, change: Change) {
         let worker = self.worker();
         spawn("velox-vm-change", move || {
-            if let Err(message) = Worker::change(&id, change) {
+            if let Err(message) = worker.change(&id, change) {
                 tracing::warn!("cannot change the machine: {message}");
             }
             let _ = worker.recheck.send(Recheck::Relist);

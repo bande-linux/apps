@@ -508,6 +508,7 @@ impl MachinesPane {
                 | Intent::Linked(_)
                 | Intent::Eject
                 | Intent::Graphics3d(_)
+                | Intent::StartAtLogin(_)
                 | Intent::AddShare
                 | Intent::RemoveShare(_) => {}
                 Intent::ChooseIso(disk) => self.requests.push(Request::ChooseIso(disk)),

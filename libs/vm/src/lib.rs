@@ -1,3 +1,4 @@
+mod autostart;
 mod clone;
 mod display;
 mod error;
@@ -14,6 +15,7 @@ mod seed;
 mod snapshot;
 mod unit;
 
+pub use autostart::{START_FLAG, start_at_login};
 pub use clone::{CloneKind, NewClone};
 pub use display::{
     Damage, Display, DisplayEvent, DisplayInput, GuestDmabuf, MouseButton, Scanout, Wheel,

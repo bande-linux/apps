@@ -903,5 +903,18 @@ impl Program for Velox {
 }
 
 fn main() -> ExitCode {
+    let mut arguments = std::env::args().skip(1);
+    if arguments.next().as_deref() == Some(bande_vm::START_FLAG) {
+        let Some(id) = arguments.next() else {
+            return ExitCode::FAILURE;
+        };
+        return match bande_vm::start_at_login(&id) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("cannot start the machine {id}: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     bande_app::run::<Velox>(&INFO)
 }

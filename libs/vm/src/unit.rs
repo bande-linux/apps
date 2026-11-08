@@ -289,6 +289,34 @@ impl Units {
         Err(Error::Protocol("the session bus closed".into()))
     }
 
+    pub(crate) fn reload(&self) -> Result<()> {
+        self.bus
+            .call_method(Some(SYSTEMD), SYSTEMD_PATH, Some(MANAGER), "Reload", &())?;
+        Ok(())
+    }
+
+    pub(crate) fn enable(&self, unit: &str) -> Result<()> {
+        self.bus.call_method(
+            Some(SYSTEMD),
+            SYSTEMD_PATH,
+            Some(MANAGER),
+            "EnableUnitFiles",
+            &(vec![unit], false, true),
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn disable(&self, unit: &str) -> Result<()> {
+        self.bus.call_method(
+            Some(SYSTEMD),
+            SYSTEMD_PATH,
+            Some(MANAGER),
+            "DisableUnitFiles",
+            &(vec![unit], false),
+        )?;
+        Ok(())
+    }
+
     fn main_pid(&self, unit: &str) -> Result<i32> {
         let path: OwnedObjectPath = self
             .bus
