@@ -35,6 +35,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "graphics"
 depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+recommends = "bande-files"
 extended-description = """\
 The image and PDF viewer of the Bande desktop: opens photos and pictures \
 from Files, zooms, rotates and flips them, steps through a folder, plays \

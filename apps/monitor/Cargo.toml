@@ -28,6 +28,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "misc"
 depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+recommends = "bande-files"
 extended-description = """\
 The activity monitor of the Bande desktop: lists running apps with their \
 processes and shows CPU, memory, disk and network use, and quits or force \
