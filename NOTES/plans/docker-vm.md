@@ -546,7 +546,7 @@ fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
 | USB passthrough | design only | `velox-helpers.md`: a polkit-authorised helper hands QEMU the device's file descriptor |
 | Clipboard | done | qemu-vdagent + spice-vdagent, text only |
 | Drag and drop of files | left out | QEMU's vdagent has no file transfer; shared folders cover it |
-| Several guest displays | left out | needs a window per `Console_N`; later |
+| Several guest displays | done | Settings → Displays (1–4) sets `max_outputs`; each extra display opens in its own window while the machine runs, and a closed one stays closed until the next start. Not for the Windows preset (ramfb) |
 | Suspend to disk and resume | done | an internal snapshot `velox-suspended`, loaded and deleted on the next start |
 | Snapshots and clones (full, linked) | done (V4) | |
 | Templates | covered by clones | a stopped machine cloned linked is a template |
