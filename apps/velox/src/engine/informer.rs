@@ -14,6 +14,7 @@ use bande_watch::{Changes, FolderWatch};
 
 use super::client::{Container, Engine, EngineInfo, Event};
 use super::jobs::{self, Task};
+use super::places::Failure;
 use super::resources::{DiskUsage, Image, Network, Pulling, Sample, Volume};
 use super::socket;
 use crate::readiness::{self, Probe, Readiness};
@@ -226,8 +227,15 @@ fn relist(engine: &Engine, kind: Kind, out: &Updates) -> bool {
     }
 }
 
+#[derive(Default)]
+pub struct Target {
+    pub socket: Option<PathBuf>,
+    pub remote: Option<(String, Failure)>,
+}
+
 fn run(
     candidates: &[PathBuf],
+    remote: Option<&(String, Failure)>,
     recheck: &Receiver<()>,
     events: &Stream,
     stopped: &AtomicBool,
@@ -256,6 +264,16 @@ fn run(
                 }
             }
             Probe::Blocked(state) => {
+                let state = match remote {
+                    Some((host, failure)) => Readiness::Unreachable {
+                        host: host.clone(),
+                        reason: failure
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .clone(),
+                    },
+                    None => state,
+                };
                 if !out.send(Update::Blocked(state)) || recheck.recv().is_err() {
                     return;
                 }
@@ -265,7 +283,7 @@ fn run(
 }
 
 impl Informer {
-    pub fn start() -> io::Result<Self> {
+    pub fn start(target: Target) -> io::Result<Self> {
         let (reader, writer) = UnixStream::pair()?;
         reader.set_nonblocking(true)?;
         let (sender, updates) = mpsc::channel();
@@ -274,7 +292,11 @@ impl Informer {
             wake: Arc::new(writer),
         };
         let (recheck, rechecks) = mpsc::channel();
-        let candidates = socket::candidates();
+        let candidates = match target.socket {
+            Some(socket) => vec![socket],
+            None => socket::candidates(),
+        };
+        let remote = target.remote;
         let notify = recheck.clone();
         let watch = FolderWatch::spawn(Changes::Any, move |_| {
             let _ = notify.send(());
@@ -295,7 +317,14 @@ impl Informer {
             .name("velox-informer".to_owned())
             .spawn(move || {
                 let (stopped, events, out) = thread;
-                run(&candidates, &rechecks, &events, &stopped, &out);
+                run(
+                    &candidates,
+                    remote.as_ref(),
+                    &rechecks,
+                    &events,
+                    &stopped,
+                    &out,
+                );
             })?;
         Ok(Self {
             updates,
@@ -311,6 +340,10 @@ impl Informer {
 
     pub fn fd(&self) -> BorrowedFd<'_> {
         self.wake.as_fd()
+    }
+
+    pub fn rechecker(&self) -> Sender<()> {
+        self.recheck.clone()
     }
 
     pub fn drain(&self) -> Vec<Update> {

@@ -45,6 +45,10 @@ pub enum Readiness {
     NoAccess,
     Relogin,
     TooOld,
+    Unreachable {
+        host: String,
+        reason: Option<String>,
+    },
 }
 
 pub enum Probe {
@@ -135,6 +139,20 @@ impl Readiness {
                 link: Some(INSTALL_LINK),
                 ..advice("too-old")
             },
+            Self::Unreachable { host, reason } => {
+                let reason = reason.clone().filter(|reason| !reason.is_empty());
+                let headline = match reason {
+                    Some(_) => "host-unreachable",
+                    None => "host-connecting",
+                };
+                Advice {
+                    headline: L10N.tr_args(headline, [("host", host.clone().into())]),
+                    steps: None,
+                    note: reason,
+                    link: None,
+                    alternative: None,
+                }
+            }
         }
     }
 }

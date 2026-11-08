@@ -1,4 +1,5 @@
 mod not_ready;
+mod places;
 mod widgets;
 
 use std::cell::RefCell;
@@ -8,12 +9,13 @@ use bande_app_menu::Entry;
 use bande_toolkit::ui::{Cell, Column, Context, Label, Row, Table, Ui, Widget, WidgetId};
 use bande_toolkit::{Appearance, Header, Palette, SHEET_INSET, TextSystem};
 
+pub use self::places::{Place, Places};
 pub use self::widgets::SIDEBAR_WIDTH;
 pub(crate) use self::widgets::{Centered, Code, Ends, Root, dot, symbol};
 use self::widgets::{Light, Pill};
 use crate::L10N;
 use crate::containers::{self, Containers};
-use crate::engine::{Action, Engine, EngineInfo, Flavor, Task, Update};
+use crate::engine::{Action, Engine, EngineInfo, Flavor, RemoteHost, Task, Update};
 use crate::machines::{Hub, MACHINES_KEY, MACHINES_SYMBOL, MachinesPane};
 use crate::readiness::Readiness;
 use crate::resources::Resources;
@@ -100,6 +102,12 @@ pub enum Request {
     Task(Engine, String, Task),
     Watch(Engine, Vec<String>),
     Containers(containers::Request),
+    Place(Place),
+    UseContext(String),
+    AddHost(RemoteHost),
+    RemoveHost(String),
+    CreateWorkspace(String, String),
+    Reconnect,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,6 +116,15 @@ enum Intent {
     Copy(&'static str),
     Open(&'static str),
     Alternative(bool),
+    AddHostSheet,
+    NewWorkspaceSheet,
+    RemoveHostSheet(String),
+    CopySsh(String),
+    AddHost(RemoteHost),
+    RemoveHost(String),
+    CreateWorkspace(String, String),
+    Reconnect,
+    ShowLocal,
 }
 
 type Intents = Rc<RefCell<Vec<Intent>>>;
@@ -145,6 +162,7 @@ pub struct VeloxView {
     section: Section,
     resources: Resources,
     machines: MachinesPane,
+    places: Rc<RefCell<Places>>,
     hidden: bool,
     stats_round: std::collections::HashSet<String>,
 }
@@ -178,6 +196,9 @@ impl VeloxView {
         let palette = appearance.palette();
         let intents = Intents::default();
         let navigate = Rc::clone(&intents);
+        let places = Rc::new(RefCell::new(Places::default()));
+        let menu_places = Rc::clone(&places);
+        let chosen = Rc::clone(&intents);
         let sidebar = Table::new(vec![
             Column::new("", SIDEBAR_WIDTH).flexible(),
             Column::new("", COUNT_WIDTH).numeric(),
@@ -188,7 +209,15 @@ impl VeloxView {
             if let Some(key) = keys.first() {
                 push(&navigate, Intent::Navigate(key.clone()));
             }
-        });
+        })
+        .context_menu(
+            move |keys| menu_places.borrow().menu(keys),
+            move |command, keys| {
+                if let Some(intent) = places::menu_intent(command, keys) {
+                    push(&chosen, intent);
+                }
+            },
+        );
         let sidebar_id = sidebar.id();
         let root = Root::new(
             boxed(sidebar),
@@ -214,6 +243,7 @@ impl VeloxView {
             section: Section::Containers,
             resources: Resources::new(),
             machines: MachinesPane::new(Rc::default(), palette),
+            places,
             hidden: false,
             stats_round: std::collections::HashSet::new(),
         };
@@ -415,6 +445,28 @@ impl VeloxView {
         }
     }
 
+    pub fn set_places(&mut self, places: Places) {
+        if *self.places.borrow() != places {
+            *self.places.borrow_mut() = places;
+            self.refresh();
+        }
+    }
+
+    pub fn reset_engine(&mut self) {
+        self.connection = Connection::Connecting;
+        self.containers.set_engine(None);
+        self.resources.clear();
+        self.stats_round.clear();
+        self.refresh();
+    }
+
+    pub fn local_socket(&self) -> Option<std::path::PathBuf> {
+        match (&self.connection, self.places.borrow().is_remote()) {
+            (Connection::Ready(info), false) => Some(info.socket.clone()),
+            _ => None,
+        }
+    }
+
     pub fn set_hidden(&mut self, hidden: bool) {
         self.hidden = hidden;
         self.containers.set_hidden(hidden);
@@ -503,8 +555,40 @@ impl VeloxView {
                         .find(|section| section.key() == key)
                     {
                         self.section = section;
+                    } else if let Some(place) = places::place_of(key) {
+                        self.requests.push(Request::Place(place));
+                    } else if let Some(name) = key.strip_prefix(places::CONTEXT_PREFIX) {
+                        self.requests.push(Request::UseContext(name.to_owned()));
                     }
                 }
+                Intent::AddHostSheet => places::add_host_sheet(&mut self.ui, &self.intents),
+                Intent::NewWorkspaceSheet => {
+                    let hosts = self.places.borrow().hosts.clone();
+                    places::new_workspace_sheet(&mut self.ui, &self.intents, &hosts);
+                }
+                Intent::RemoveHostSheet(id) => {
+                    let host = self.places.borrow().host(id).cloned();
+                    if let Some(host) = host {
+                        places::remove_host_sheet(&mut self.ui, &self.intents, &host);
+                    }
+                }
+                Intent::CopySsh(id) => {
+                    let command = self
+                        .places
+                        .borrow()
+                        .host(id)
+                        .map(|host| host.ssh_command().join(" "));
+                    if let Some(command) = command {
+                        self.ui.context().copy(&command);
+                    }
+                }
+                Intent::AddHost(host) => self.requests.push(Request::AddHost(host.clone())),
+                Intent::RemoveHost(id) => self.requests.push(Request::RemoveHost(id.clone())),
+                Intent::CreateWorkspace(name, endpoint) => self
+                    .requests
+                    .push(Request::CreateWorkspace(name.clone(), endpoint.clone())),
+                Intent::Reconnect => self.requests.push(Request::Reconnect),
+                Intent::ShowLocal => self.requests.push(Request::Place(Place::Local)),
                 Intent::Copy(text) => self.ui.context().copy(text),
                 Intent::Open(link) => self.requests.push(Request::OpenLink((*link).to_owned())),
                 Intent::Alternative(open) => self.alternative = *open,
@@ -549,6 +633,8 @@ impl VeloxView {
             row(Section::Volumes),
             row(Section::Networks),
         ];
+        let running = ready.then(|| running.to_string());
+        rows.extend(self.places.borrow().rows(&self.palette, running));
         rows.extend(self.machines.sidebar_rows(&self.palette));
         rows
     }
