@@ -1,7 +1,7 @@
 [package]
 name = "bande-velox"
 description = "Velox: containers and virtual machines on Bande"
-version = "0.1.6"
+version = "0.1.7"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
