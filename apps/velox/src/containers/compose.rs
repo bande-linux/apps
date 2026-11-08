@@ -48,7 +48,7 @@ impl Compose {
                 .map(PathBuf::from)
                 .collect(),
             host: format!("unix://{}", info.socket.display()),
-            flavor: info.flavor.clone(),
+            flavor: info.flavor,
         })
     }
 
