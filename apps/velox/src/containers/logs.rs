@@ -44,6 +44,11 @@ pub enum LogsTarget {
         name: String,
     },
     Project(Compose),
+    Engine {
+        name: String,
+        user: bool,
+        unit: String,
+    },
 }
 
 impl LogsTarget {
@@ -51,16 +56,51 @@ impl LogsTarget {
         match self {
             Self::Container { id, .. } => id,
             Self::Project(compose) => &compose.project,
+            Self::Engine { unit, .. } => unit,
         }
     }
 
     pub fn title(&self) -> String {
         let name = match self {
-            Self::Container { name, .. } => name,
+            Self::Container { name, .. } | Self::Engine { name, .. } => name,
             Self::Project(compose) => &compose.project,
         };
         L10N.tr_args("logs-title", [("name", name.as_str().into())])
     }
+}
+
+fn follow_engine(user: bool, unit: &str, handle: &Handle, out: &Out) -> io::Result<()> {
+    let (reader, writer) = io::pipe()?;
+    let mut command = Command::new("journalctl");
+    if user {
+        command.arg("--user");
+    }
+    command
+        .args([
+            "--unit",
+            unit,
+            "--follow",
+            "--no-pager",
+            "--output=short-iso",
+        ])
+        .args(["--lines", &TAIL.to_string()])
+        .stdin(Stdio::null())
+        .stdout(writer.try_clone()?)
+        .stderr(writer);
+    {
+        let mut held = held(handle);
+        if held.stopped {
+            return Ok(());
+        }
+        held.child = Some(command.spawn()?);
+    }
+    drop(command);
+    let pumped = pump(reader, out);
+    if let Some(mut child) = held(handle).child.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    pumped
 }
 
 enum Chunk {
@@ -241,6 +281,9 @@ impl Follow {
                     }
                     LogsTarget::Project(compose) => follow_project(compose, since, &shared, &out)
                         .map_err(|error| error.to_string()),
+                    LogsTarget::Engine { user, unit, .. } => {
+                        follow_engine(*user, unit, &shared, &out).map_err(|error| error.to_string())
+                    }
                 };
                 if let Err(error) = result
                     && !held(&shared).stopped
@@ -383,6 +426,7 @@ impl LogsView {
         let watched = match &self.target {
             LogsTarget::Container { id, .. } => *id == container.id,
             LogsTarget::Project(compose) => container.project() == Some(compose.project.as_str()),
+            LogsTarget::Engine { .. } => false,
         };
         if !watched || !container.running() || self.following || self.hidden {
             return false;

@@ -107,6 +107,7 @@ impl Pane {
                     let token = || window.activation_token(RUNNING_ID).ok();
                     self.logs.extend(self.work.serve(request, token));
                 }
+                Request::EngineLogs(target) => self.logs.push(target),
                 request => self.places.push(request),
             }
         }

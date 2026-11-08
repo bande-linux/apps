@@ -5,6 +5,7 @@ use zbus::zvariant::Value;
 
 use crate::L10N;
 
+const KILLED: i64 = 137;
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
 const DEFAULT_TIMEOUT: i32 = -1;
@@ -36,7 +37,11 @@ fn send(app_id: &str, title: &str, body: &str) -> zbus::Result<()> {
 
 pub fn notify_crash(app_id: &'static str, name: &str, code: i64) {
     let title = L10N.tr_args("crash-title", [("name", name.to_owned().into())]);
-    let body = L10N.tr_args("crash-body", [("code", code.into())]);
+    let key = match code {
+        KILLED => "crash-body-killed",
+        _ => "crash-body",
+    };
+    let body = L10N.tr_args(key, [("code", code.into())]);
     let sent = std::thread::Builder::new()
         .name("crash notice".to_owned())
         .spawn(move || {
