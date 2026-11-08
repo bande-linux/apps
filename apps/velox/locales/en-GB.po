@@ -7,5 +7,8 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "The password prompt was canceled."
+msgstr "The password prompt was cancelled."
+
 msgid "Install virtualization to continue"
 msgstr "Install virtualisation to continue"

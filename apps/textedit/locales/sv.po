@@ -175,7 +175,7 @@ msgstr "Genomstruken"
 msgid "Typeface"
 msgstr "Typsnittsfamilj"
 
-msgid "Colour"
+msgid "Color"
 msgstr "Färg"
 
 msgid "Alignment"
@@ -238,13 +238,13 @@ msgstr "Lila"
 msgid "Brown"
 msgstr "Brun"
 
-msgid "Grey"
+msgid "Gray"
 msgstr "Grå"
 
 msgid "Align Left"
 msgstr "Vänsterjustera"
 
-msgid "Centre"
+msgid "Center"
 msgstr "Centrera"
 
 msgid "Align Right"
@@ -351,7 +351,7 @@ msgstr[1] "{count} ersatta"
 msgid "Convert this document to plain text?"
 msgstr "Vill du konvertera dokumentet till oformaterad text?"
 
-msgid "Its fonts, styles, colours and lists will be lost. The converted document is saved as a new plain text file."
+msgid "Its fonts, styles, colors and lists will be lost. The converted document is saved as a new plain text file."
 msgstr "Typsnitt, stilar, färger och listor går förlorade. Det konverterade dokumentet sparas som en ny fil med oformaterad text."
 
 msgid "Opening…"

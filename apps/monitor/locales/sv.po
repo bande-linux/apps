@@ -208,13 +208,13 @@ msgid "User 2 (SIGUSR2)"
 msgstr "Användare 2 (SIGUSR2)"
 
 msgid "{signal}…"
-msgstr "{signal} …"
+msgstr "{signal}…"
 
 msgid "Force Quit…"
-msgstr "Tvinga avslut …"
+msgstr "Tvinga avslut…"
 
 msgid "Quit…"
-msgstr "Avsluta …"
+msgstr "Avsluta…"
 
 msgid "Inspect"
 msgstr "Granska"
@@ -238,10 +238,10 @@ msgid "Show CPU Cores"
 msgstr "Visa CPU-kärnor"
 
 msgid "Quit Process…"
-msgstr "Avsluta process …"
+msgstr "Avsluta process…"
 
 msgid "Force Quit Process…"
-msgstr "Tvinga processen att avsluta …"
+msgstr "Tvinga processen att avsluta…"
 
 msgid "Find"
 msgstr "Sök"

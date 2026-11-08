@@ -35,7 +35,7 @@ msgid "New Message"
 msgstr "Nytt meddelande"
 
 msgid "Add Account…"
-msgstr "Lägg till konto …"
+msgstr "Lägg till konto…"
 
 msgid "Find"
 msgstr "Sök"
@@ -62,7 +62,7 @@ msgid "Mark All as Read"
 msgstr "Markera alla som lästa"
 
 msgid "New Mailbox…"
-msgstr "Ny brevlåda …"
+msgstr "Ny brevlåda…"
 
 msgid "Message"
 msgstr "Meddelande"
@@ -192,7 +192,7 @@ msgid "Show Quoted Text"
 msgstr "Visa citerad text"
 
 msgid "Downloading the message…"
-msgstr "Hämtar meddelandet …"
+msgstr "Hämtar meddelandet…"
 
 msgid "Remote content in this message was not loaded, to protect your privacy."
 msgstr "Externt innehåll i det här meddelandet laddades inte, för att skydda din integritet."
@@ -201,7 +201,7 @@ msgid "Load Remote Content"
 msgstr "Ladda externt innehåll"
 
 msgid "Loading remote content…"
-msgstr "Laddar externt innehåll …"
+msgstr "Laddar externt innehåll…"
 
 msgid "General"
 msgstr "Allmänt"
@@ -400,7 +400,7 @@ msgid "Account"
 msgstr "Konto"
 
 msgid "Remove…"
-msgstr "Ta bort …"
+msgstr "Ta bort…"
 
 msgid "Ann Lee"
 msgstr "Anna Lind"
@@ -454,7 +454,7 @@ msgid "Enter both server names."
 msgstr "Ange båda servernamnen."
 
 msgid "Checking the account…"
-msgstr "Kontrollerar kontot …"
+msgstr "Kontrollerar kontot…"
 
 msgid "The server settings were saved."
 msgstr "Serverinställningarna har sparats."
@@ -624,16 +624,16 @@ msgid "Open Attachment"
 msgstr "Öppna bilaga"
 
 msgid "Save Attachment…"
-msgstr "Spara bilaga …"
+msgstr "Spara bilaga…"
 
 msgid "Save to Downloads Folder"
 msgstr "Spara i mappen Hämtningar"
 
 msgid "Rename Mailbox…"
-msgstr "Byt namn på brevlåda …"
+msgstr "Byt namn på brevlåda…"
 
 msgid "Delete Mailbox…"
-msgstr "Radera brevlåda …"
+msgstr "Radera brevlåda…"
 
 msgid "Name"
 msgstr "Namn"
