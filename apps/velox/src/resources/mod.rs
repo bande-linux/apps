@@ -434,6 +434,13 @@ impl Resources {
         self.overview.set_fleet(fleet);
     }
 
+    pub fn deadline(&self) -> Option<std::time::Instant> {
+        match self.shown {
+            Some(Section::Overview) => self.overview.deadline(),
+            _ => None,
+        }
+    }
+
     pub fn machines_sampled(&mut self) {
         if self.shown == Some(Section::Overview) {
             self.overview.machines_sampled();

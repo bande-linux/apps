@@ -4,26 +4,37 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 
+use std::time::{Duration, Instant, SystemTime};
+
 use bande_toolkit::Palette;
 use bande_toolkit::ui::{
-    Alert, Axis, Button, CheckState, Checkbox, ScrollView, Series, SeriesColor, Stack, Ui, Widget,
-    WidgetId,
+    Alert, Axis, CheckState, Checkbox, ScrollView, Stack, Ui, Widget, WidgetId,
 };
 
-use self::cards::{Caption, Card, Grid, Live};
+use self::cards::{Breakdown, Card, EngineCard, EngineText, Grid, Live, Part, Plot, Readout, Tone};
 use crate::L10N;
-use crate::engine::{Flavor, Reclaim, Sample, Task};
+use crate::engine::{EngineInfo, Flavor, Reclaim, Sample, Task};
 use crate::machines::Fleet;
 use crate::resources::{
-    Act, Acts, Field, Fields, Pane, Scope, Store, Strip, boxed, push, size, tell,
+    Act, Acts, Field, Fields, Pane, Scope, Store, boxed, push, size, tell, tool,
 };
-use crate::ui::Section;
+use crate::ui::{Section, symbol};
 
 pub const RECLAIM: &str = "reclaim-space";
-const SPAN: usize = 60;
+const CONTAINERS_SYMBOL: &str = include_str!("../../data/symbols/containers.svg");
+const IMAGES_SYMBOL: &str = include_str!("../../data/symbols/images.svg");
+const VOLUMES_SYMBOL: &str = include_str!("../../data/symbols/volumes.svg");
+const DISK_SYMBOL: &str = include_str!("../../data/symbols/disk.svg");
+const ENGINE_SYMBOL: &str = include_str!("../../data/symbols/engine.svg");
+const PRUNE_SYMBOL: &str = include_str!("../../data/symbols/prune.svg");
+const SPAN: usize = 90;
+const MINUTE: u64 = 60;
+const HOUR: u64 = 60 * MINUTE;
+const DAY: u64 = 24 * HOUR;
+const GIGABYTE: f64 = 1e9;
 const SPACING: f32 = 12.0;
 const PADDING: f32 = 20.0;
-const HEADROOM: f64 = 1.15;
+const HEADROOM: f64 = 1.3;
 const CPU_FLOOR: f64 = 5.0;
 const MEMORY_FLOOR: f64 = 64e6;
 const DISK_FLOOR: f64 = 1e6;
@@ -39,13 +50,15 @@ struct Point {
     sent: f64,
 }
 
-type Line = (SeriesColor, fn(&Point) -> f64);
+type Value = fn(&Point) -> f64;
 
 #[derive(Default)]
 pub struct Overview {
     engine: Option<WidgetId>,
     cards: Vec<WidgetId>,
+    breakdown: Option<WidgetId>,
     live: Vec<WidgetId>,
+    started: Option<SystemTime>,
     samples: HashMap<String, (Sample, Option<Sample>)>,
     round: HashSet<String>,
     history: VecDeque<Point>,
@@ -125,70 +138,148 @@ impl Overview {
         self.history.push_back(point);
     }
 
-    fn series(&self, floor: f64, values: &[Line]) -> Vec<Series> {
+    fn scaled(&self, floor: f64, values: &[Value]) -> Vec<Vec<f32>> {
         let peak = self
             .history
             .iter()
-            .flat_map(|point| values.iter().map(move |(_, value)| value(point)))
+            .flat_map(|point| values.iter().map(move |value| value(point)))
             .fold(floor, f64::max)
             * HEADROOM;
         values
             .iter()
-            .map(|(color, value)| {
-                Series::new(
-                    *color,
-                    self.history
-                        .iter()
-                        .map(|point| (value(point) / peak) as f32),
-                )
+            .map(|value| {
+                self.history
+                    .iter()
+                    .map(|point| (value(point) / peak) as f32)
+                    .collect()
             })
             .collect()
     }
 
-    fn engine_line(scope: &Scope) -> String {
-        let info = scope.info;
-        let flavor = match info.flavor {
-            Flavor::Docker => "engine-docker",
-            Flavor::Podman => "engine-podman",
-        };
-        let mut parts = vec![
-            L10N.tr_args(flavor, [("version", info.version.clone().into())]),
-            L10N.tr_args("engine-api", [("version", info.api.clone().into())]),
-        ];
-        if info.rootless {
-            parts.push(L10N.tr("rootless"));
+    fn single(&self, floor: f64, tone: Tone, value: Value) -> Plot {
+        let mut scaled = self.scaled(floor, &[value]);
+        Plot::Single(tone, scaled.pop().unwrap_or_default())
+    }
+
+    fn mirrored(&self, floor: f64, up: Value, down: Value) -> Plot {
+        let mut scaled = self.scaled(floor, &[up, down]).into_iter();
+        Plot::Mirrored {
+            up: (Tone::Blue, scaled.next().unwrap_or_default()),
+            down: (Tone::Red, scaled.next().unwrap_or_default()),
         }
-        parts.push(info.socket.display().to_string());
-        parts.join(" · ")
+    }
+
+    pub fn deadline(&self) -> Option<Instant> {
+        let up = SystemTime::now()
+            .duration_since(self.started?)
+            .ok()?
+            .as_secs();
+        Some(Instant::now() + Duration::from_secs(MINUTE - up % MINUTE))
+    }
+}
+
+fn uptime(started: SystemTime) -> String {
+    let seconds = SystemTime::now()
+        .duration_since(started)
+        .map_or(0, |up| up.as_secs());
+    let (days, hours, minutes) = (seconds / DAY, seconds % DAY / HOUR, seconds % HOUR / MINUTE);
+    let time = match (days, hours, minutes) {
+        (0, 0, 0) => return L10N.tr("engine-up-now"),
+        (0, 0, minutes) => L10N.tr_args("duration-minutes", [("minutes", minutes.into())]),
+        (0, hours, minutes) => L10N.tr_args(
+            "duration-hours",
+            [("hours", hours.into()), ("minutes", minutes.into())],
+        ),
+        (days, hours, _) => L10N.tr_args(
+            "duration-days",
+            [("days", days.into()), ("hours", hours.into())],
+        ),
+    };
+    L10N.tr_args("engine-up", [("time", time.into())])
+}
+
+fn gigabytes(bytes: u64) -> String {
+    format!("{:.0}", bytes as f64 / GIGABYTE)
+}
+
+fn engine_text(info: &EngineInfo) -> EngineText {
+    let flavor = match info.flavor {
+        Flavor::Docker => "engine-docker",
+        Flavor::Podman => "engine-podman",
+    };
+    let engine = L10N.tr_args(flavor, [("version", info.version.clone().into())]);
+    let mut detail = vec![
+        L10N.tr_args("engine-cpus", [("count", info.cpus.into())]),
+        L10N.tr_args("engine-memory", [("size", gigabytes(info.memory).into())]),
+    ];
+    if let Some(disk) = info.disk {
+        detail.push(L10N.tr_args("engine-disk", [("size", gigabytes(disk).into())]));
+    }
+    let mut versions = vec![L10N.tr_args("engine-api", [("version", info.api.clone().into())])];
+    if info.rootless {
+        versions.push(L10N.tr("rootless"));
+    }
+    EngineText {
+        headline: L10N.tr_args("engine-running", [("engine", engine.into())]),
+        uptime: info.started.map(uptime).unwrap_or_default(),
+        detail: detail.join(" · "),
+        app: L10N.tr_args(
+            "velox-version",
+            [("version", env!("CARGO_PKG_VERSION").into())],
+        ),
+        engine: versions.join(" · "),
+        running: true,
     }
 }
 
 impl Pane for Overview {
-    fn build(
-        &mut self,
-        acts: &Acts,
-        _palette: &Palette,
-    ) -> (Vec<Box<dyn Widget>>, Box<dyn Widget>) {
-        let caption = Caption::new();
-        self.engine = Some(caption.id());
-        let reclaim = {
+    fn build(&mut self, acts: &Acts, palette: &Palette) -> (Vec<Box<dyn Widget>>, Box<dyn Widget>) {
+        let engine = EngineCard::new(symbol(ENGINE_SYMBOL, palette.success));
+        self.engine = Some(engine.id());
+        let reclaim = tool(
+            PRUNE_SYMBOL,
+            &L10N.tr("reclaim-space-menu"),
+            palette,
+            acts,
+            Act::Command(RECLAIM),
+        );
+        let card = |title: &str, svg: &str, tone: Tone, act: Act| {
             let acts = Rc::clone(acts);
-            Button::new(&L10N.tr("reclaim-space-menu"), move || {
-                push(&acts, Act::Command(RECLAIM));
-            })
-        };
-        let card = |title: &str, act: Act| {
-            let acts = Rc::clone(acts);
-            Card::new(&L10N.tr(title), move || push(&acts, act.clone()))
+            Card::new(
+                &L10N.tr(title),
+                symbol(svg, tone.color(palette)),
+                move || push(&acts, act.clone()),
+            )
         };
         let stats = [
-            card("pane-containers", Act::Navigate(Section::Containers)),
-            card("pane-images", Act::Navigate(Section::Images)),
-            card("pane-volumes", Act::Navigate(Section::Volumes)),
-            card("card-disk", Act::Command(RECLAIM)),
-            card("machine-pane", Act::Navigate(Section::Machines)),
+            card(
+                "pane-containers",
+                CONTAINERS_SYMBOL,
+                Tone::Green,
+                Act::Navigate(Section::Containers),
+            ),
+            card(
+                "pane-images",
+                IMAGES_SYMBOL,
+                Tone::Blue,
+                Act::Navigate(Section::Images),
+            ),
+            card(
+                "pane-volumes",
+                VOLUMES_SYMBOL,
+                Tone::Orange,
+                Act::Navigate(Section::Volumes),
+            ),
+            card(
+                "card-disk",
+                DISK_SYMBOL,
+                Tone::Purple,
+                Act::Command(RECLAIM),
+            ),
         ];
         self.cards = stats.iter().map(Widget::id).collect();
+        let breakdown = Breakdown::new(&L10N.tr("card-disk-breakdown"));
+        self.breakdown = Some(breakdown.id());
         let live = [
             Live::new(&L10N.tr("card-cpu"), SPAN),
             Live::new(&L10N.tr("card-memory"), SPAN),
@@ -201,21 +292,23 @@ impl Pane for Overview {
             SPACING,
             PADDING,
             vec![
-                boxed(Strip::new(vec![boxed(caption), boxed(reclaim)])),
+                boxed(engine),
                 boxed(Grid::new(
-                    5,
+                    4,
                     SPACING,
                     stats.into_iter().map(boxed).collect(),
                 )),
+                boxed(breakdown),
                 boxed(Grid::new(2, SPACING, live.into_iter().map(boxed).collect())),
             ],
         );
-        (Vec::new(), boxed(ScrollView::new(content)))
+        (vec![boxed(reclaim)], boxed(ScrollView::new(content)))
     }
 
     fn fill(&mut self, ui: &mut Ui, scope: &Scope) {
-        if let Some(caption) = self.engine.and_then(|id| ui.widget_as::<Caption>(id)) {
-            caption.set_text(&Self::engine_line(scope));
+        self.started = scope.info.started;
+        if let Some(card) = self.engine.and_then(|id| ui.widget_as::<EngineCard>(id)) {
+            card.set(engine_text(scope.info));
         }
         let containers = scope.containers.len();
         let running = scope
@@ -225,111 +318,113 @@ impl Pane for Overview {
             .count();
         let usage = scope.store.usage.as_ref();
         let known = |bytes: Option<u64>| bytes.map_or_else(|| "—".to_owned(), size);
-        let images = scope.store.images.len();
-        let volumes = scope.store.volumes.len();
-        let machines = (
-            self.fleet.borrow().running(),
-            self.fleet.borrow().entries.len(),
-        );
+        let disk_caption = match scope.info.disk {
+            Some(disk) => L10N.tr_args("card-of-disk", [("size", gigabytes(disk).into())]),
+            None => L10N.tr_args(
+                "card-reclaimable",
+                [(
+                    "size",
+                    known(usage.map(|usage| {
+                        usage.images.reclaimable
+                            + usage.containers.reclaimable
+                            + usage.build_cache.reclaimable
+                    }))
+                    .into(),
+                )],
+            ),
+        };
         let values = [
             (
                 running.to_string(),
                 L10N.tr_args("card-of-total", [("total", containers.into())]),
             ),
             (
-                images.to_string(),
+                scope.store.images.len().to_string(),
                 L10N.tr_args(
                     "card-total",
                     [("size", known(usage.map(|usage| usage.images.total)).into())],
                 ),
             ),
             (
-                volumes.to_string(),
+                scope.store.volumes.len().to_string(),
                 L10N.tr_args(
                     "card-stored",
                     [("size", known(usage.map(|usage| usage.volumes.total)).into())],
                 ),
             ),
-            (
-                known(usage.map(|usage| usage.total())),
-                L10N.tr_args(
-                    "card-reclaimable",
-                    [(
-                        "size",
-                        known(usage.map(|usage| {
-                            usage.images.reclaimable
-                                + usage.containers.reclaimable
-                                + usage.build_cache.reclaimable
-                        }))
-                        .into(),
-                    )],
-                ),
-            ),
-            (
-                machines.0.to_string(),
-                L10N.tr_args("card-of-total", [("total", machines.1.into())]),
-            ),
+            (known(usage.map(|usage| usage.total())), disk_caption),
         ];
         for (id, (value, caption)) in self.cards.iter().zip(values) {
             if let Some(card) = ui.widget_as::<Card>(*id) {
                 card.set(&value, &caption);
             }
         }
+        if let Some(breakdown) = self.breakdown.and_then(|id| ui.widget_as::<Breakdown>(id)) {
+            let part = |key: &str, bytes: u64, tone: Tone| Part {
+                label: L10N.tr_args(key, [("size", size(bytes).into())]),
+                bytes,
+                tone,
+            };
+            breakdown.set(
+                usage
+                    .map(|usage| {
+                        vec![
+                            part("breakdown-images", usage.images.total, Tone::Blue),
+                            part("breakdown-containers", usage.containers.total, Tone::Green),
+                            part("breakdown-volumes", usage.volumes.total, Tone::Purple),
+                            part(
+                                "breakdown-build-cache",
+                                usage.build_cache.total,
+                                Tone::Orange,
+                            ),
+                        ]
+                    })
+                    .unwrap_or_default(),
+            );
+        }
+        let machines = self.fleet.borrow().running();
         let last = self.history.back().copied().unwrap_or_default();
-        let quiet = running == 0 && machines.0 == 0;
+        let quiet = running == 0 && machines == 0;
         let note = quiet.then(|| L10N.tr("no-running-containers"));
+        let value = |text: String| Readout {
+            label: None,
+            value: text,
+        };
+        let labelled = |key: &str, tone: Tone, text: String| Readout {
+            label: Some((L10N.tr(key), tone)),
+            value: text,
+        };
         let live = [
             (
-                format!("{:.0}%", last.cpu),
-                self.series(CPU_FLOOR, &[(SeriesColor::Success, |point| point.cpu)]),
+                vec![value(format!("{:.0}%", last.cpu))],
+                self.single(CPU_FLOOR, Tone::Green, |point| point.cpu),
             ),
             (
-                size(last.memory as u64),
-                self.series(
-                    MEMORY_FLOOR,
-                    &[(SeriesColor::Primary, |point| point.memory)],
-                ),
+                vec![value(size(last.memory as u64))],
+                self.single(MEMORY_FLOOR, Tone::Blue, |point| point.memory),
             ),
             (
-                L10N.tr_args(
-                    "disk-rates",
-                    [
-                        ("read", speed(last.read).into()),
-                        ("written", speed(last.written).into()),
-                    ],
-                ),
-                self.series(
-                    DISK_FLOOR,
-                    &[
-                        (SeriesColor::Primary, |point| point.read),
-                        (SeriesColor::Secondary, |point| point.written),
-                    ],
-                ),
+                vec![
+                    labelled("rate-read", Tone::Blue, speed(last.read)),
+                    labelled("rate-write", Tone::Red, speed(last.written)),
+                ],
+                self.mirrored(DISK_FLOOR, |point| point.read, |point| point.written),
             ),
             (
-                L10N.tr_args(
-                    "network-rates",
-                    [
-                        ("received", speed(last.received).into()),
-                        ("sent", speed(last.sent).into()),
-                    ],
-                ),
-                self.series(
-                    NETWORK_FLOOR,
-                    &[
-                        (SeriesColor::Primary, |point| point.received),
-                        (SeriesColor::Secondary, |point| point.sent),
-                    ],
-                ),
+                vec![
+                    labelled("rate-in", Tone::Blue, speed(last.received)),
+                    labelled("rate-out", Tone::Red, speed(last.sent)),
+                ],
+                self.mirrored(NETWORK_FLOOR, |point| point.received, |point| point.sent),
             ),
         ];
-        for (id, (value, series)) in self.live.iter().zip(live) {
+        for (id, (readouts, plot)) in self.live.iter().zip(live) {
             if let Some(card) = ui.widget_as::<Live>(*id) {
-                let value = match quiet {
-                    true => String::new(),
-                    false => value,
+                let readouts = match quiet {
+                    true => Vec::new(),
+                    false => readouts,
                 };
-                card.set(&value, series, note.as_deref());
+                card.set(readouts, plot, note.as_deref());
             }
         }
     }

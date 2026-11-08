@@ -3,6 +3,7 @@ use std::fmt;
 use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -177,6 +178,10 @@ pub struct EngineInfo {
     pub rootless: bool,
     pub supported: bool,
     pub socket: PathBuf,
+    pub cpus: u32,
+    pub memory: u64,
+    pub disk: Option<u64>,
+    pub started: Option<SystemTime>,
 }
 
 #[derive(Deserialize)]
@@ -200,6 +205,37 @@ struct Version {
 struct Info {
     #[serde(default)]
     security_options: Option<Vec<String>>,
+    #[serde(default, rename = "NCPU")]
+    cpus: u32,
+    #[serde(default)]
+    mem_total: u64,
+    #[serde(default)]
+    docker_root_dir: Option<PathBuf>,
+}
+
+fn disk_size(root: &Path) -> Option<u64> {
+    root.ancestors().find_map(|folder| {
+        rustix::fs::statvfs(folder)
+            .ok()
+            .map(|stat| stat.f_blocks * stat.f_frsize)
+    })
+}
+
+fn started(socket: &Path) -> Option<SystemTime> {
+    let stream = UnixStream::connect(socket).ok()?;
+    let pid = rustix::net::sockopt::socket_peercred(&stream).ok()?.pid;
+    let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid.as_raw_nonzero())).ok()?;
+    let after_name = stat.rsplit_once(')')?.1;
+    let ticks: u64 = after_name.split_whitespace().nth(19)?.parse().ok()?;
+    let booted: f64 = std::fs::read_to_string("/proc/uptime")
+        .ok()?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()?;
+    let per_second = rustix::param::clock_ticks_per_second() as f64;
+    let running = (booted - ticks as f64 / per_second).max(0.0);
+    SystemTime::now().checked_sub(Duration::from_secs_f64(running))
 }
 
 #[derive(Deserialize)]
@@ -310,6 +346,10 @@ impl Engine {
                 .any(|option| option == ROOTLESS_OPTION),
             supported: api_at_least(&version.api_version, MIN_API),
             socket: self.socket.clone(),
+            cpus: info.cpus,
+            memory: info.mem_total,
+            disk: info.docker_root_dir.as_deref().and_then(disk_size),
+            started: started(&self.socket),
         })
     }
 

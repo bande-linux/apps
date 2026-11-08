@@ -144,6 +144,7 @@ pub struct VeloxView {
     section: Section,
     resources: Resources,
     machines: MachinesPane,
+    hidden: bool,
 }
 
 fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
@@ -211,6 +212,7 @@ impl VeloxView {
             section: Section::Containers,
             resources: Resources::new(),
             machines: MachinesPane::new(Rc::default(), palette),
+            hidden: false,
         };
         view.refresh();
         view
@@ -387,7 +389,23 @@ impl VeloxView {
     }
 
     pub fn set_hidden(&mut self, hidden: bool) {
+        self.hidden = hidden;
         self.containers.set_hidden(hidden);
+    }
+
+    pub fn deadline(&self) -> Option<std::time::Instant> {
+        match self.hidden {
+            true => None,
+            false => self.resources.deadline(),
+        }
+    }
+
+    pub fn tick(&mut self, now: std::time::Instant) -> bool {
+        let due = self.deadline().is_some_and(|at| at <= now);
+        if due {
+            self.refresh();
+        }
+        due
     }
 
     pub fn sync_streams(&mut self) {
@@ -483,7 +501,7 @@ impl VeloxView {
             row(Section::Overview),
             Row::new(
                 "heading",
-                vec![Cell::new(L10N.tr("sidebar-containers")).muted().label()],
+                vec![Cell::new(L10N.tr("sidebar-resources")).muted().label()],
             ),
             row(Section::Containers),
             row(Section::Images),

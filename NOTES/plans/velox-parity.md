@@ -22,14 +22,15 @@ below. Screenshots of each view sit next to the macOS ones in each stage's repor
 | 10 | Volumes | Compose grouping, "dangling" and "orphaned" badges, inspector | Grouping and "dangling"; no "orphaned"; no inspector | "orphaned" project badge, inspector |
 | 11 | Networks | Disclosure list: driver-coloured icon, "driver · subnet", container count, members with IPs | Table with the same fields | Keep the table (Bande style); colour the driver icons |
 | 12 | Hosts | Remote engines over SSH (`ssh -L` to the remote socket), add sheet, connect/disconnect, rename, remove, per-host counts; every pane follows the selected host | None | Build it the same way: OpenSSH, the user's keys and config, nothing stored but user, host, port and socket |
-| 13 | Workspaces | Several engine data disks, one active; new, duplicate, rename, move, delete; switching restarts the engine | None | Needs a decision: Docker's data root belongs to the system. Rootless Podman can run one user service per workspace with its own `--root`, without root. Proposed: workspaces for rootless Podman only; with Docker the section explains why it's missing |
+| 13 | Workspaces | Several engine data disks, one active; new, duplicate, rename, move, delete; switching restarts the engine | None | Owner (2026-11-08): Docker contexts only. A workspace is a named group of the user's Docker contexts and endpoints (this engine or a remote one); switching one points every pane at it. No separate storage, no per-workspace engines |
 | 14 | Command palette (Ctrl+K) | Search containers, images, volumes; inline start/stop/logs/shell/ports | None | Build it, with its Settings switch, off by default |
 | 15 | Menu-bar panel | Engine state, running containers with ports and stop buttons, CPU/RAM line, Dashboard/Settings/Quit | None | A tray item through the desktop's StatusNotifierItem host, with its Settings switch, off by default |
-| 16 | Engine lifecycle | Start/Stop/Resume, Resource Saver | Shows setup steps when no engine | Start/Stop for the user's Podman socket unit; for the system Docker service through systemd's own polkit action (needs the owner's yes, like the USB helper) |
+| 16 | Engine lifecycle | Start/Stop/Resume, Resource Saver | Shows setup steps when no engine | Owner (2026-11-08): use the user's own rights first: no prompt for rootless Podman or for a member of the docker group; start and stop the unit when systemd allows it. Only when that is denied, ask through systemd's polkit prompt |
 | 17 | Engine Logs | Guest console, filter, auto-scroll, count | None | The engine unit's journal (system `docker.service` or the user's `podman.service`), with the same controls; explains when the journal isn't readable |
 | 18 | Settings | Launch at login, crash notifications, updates, Docker context, about/diagnostics, CPU/memory/disk/swap, Resource Saver, file sharing | Crash notifications | Launch at login (XDG autostart), Copy Diagnostics. Engine resources, Resource Saver, file sharing, updates and contexts belong to macOS Velox's own engine and apt; left out |
 | 19 | Notifications | "Container crashed", 137 noted as possibly OOM | Done; 137 has no note | Add the OOM wording |
 | 20 | Onboarding | Three-step sheet | The not-ready page with setup steps | Keep Bande's page |
+| 21 | Packaging | — | No list of the programs and files the apps run or read | Port the desktop's `ci/runtime-deps` and its check to the apps repo, as its own task |
 
 Not carried over: `.velox.local` names and links, VS Code, Rosetta, nested virtualization (macOS VM
 features).
@@ -39,5 +40,6 @@ features).
 1. Sidebar sections and engine pill; Overview (rows 1–6). Screenshots next to the macOS ones;
    idle CPU and memory measured.
 2. Containers, logs, images, volumes, networks (rows 7–11).
-3. Hosts (row 12), then workspaces once decided (row 13).
+3. Hosts (row 12) and workspaces as Docker contexts (row 13).
 4. Palette, tray, engine lifecycle and logs, Settings (rows 14–19).
+5. The runtime-deps check (row 21).

@@ -1,6 +1,5 @@
 app-name = Velox
 pane-containers = Containrar
-sidebar-containers = Containrar
 menu-container = Container
 menu-view = Visa
 find = Sök
@@ -287,8 +286,6 @@ card-stored = { $size } lagrat
 card-reclaimable = { $size } kan frigöras
 no-running-containers = Inga containrar körs
 per-second = { $size }/s
-disk-rates = Läsning { $read } · Skrivning { $written }
-network-rates = In { $received } · Ut { $sent }
 pulling-percent = Hämtar { $reference } … { $percent } %
 pull-downloading = Hämtar
 idle-rate = 0 KB/s
@@ -525,3 +522,27 @@ settings-notifications = Notiser
 settings-notify-crashes = Meddela när en container stoppas oväntat
 crash-title = ”{ $name }” stoppades oväntat
 crash-body = Containern avslutades med kod { $code }.
+sidebar-resources = Resurser
+engine-running = { $engine } körs
+engine-up = · igång { $time }
+engine-up-now = · igång nyss
+duration-minutes = { $minutes } min
+duration-hours = { $hours } h { $minutes } min
+duration-days = { $days } d { $hours } h
+engine-cpus = { $count ->
+    [one] 1 processor
+   *[other] { $count } processorer
+}
+engine-memory = { $size } GB minne
+engine-disk = { $size } GB disk
+velox-version = Velox { $version }
+card-disk-breakdown = Diskfördelning
+card-of-disk = av { $size } GB disk
+breakdown-images = Images { $size }
+breakdown-containers = Containrar { $size }
+breakdown-volumes = Volymer { $size }
+breakdown-build-cache = Byggcache { $size }
+rate-read = Läs
+rate-write = Skriv
+rate-in = In
+rate-out = Ut

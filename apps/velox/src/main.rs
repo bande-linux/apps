@@ -241,10 +241,14 @@ impl View for Pane {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.view.ui_ref().deadline()
+        match (self.view.ui_ref().deadline(), self.view.deadline()) {
+            (Some(ui), Some(view)) => Some(ui.min(view)),
+            (ui, view) => ui.or(view),
+        }
     }
 
-    fn tick(&mut self, _window: &mut Window, _now: Instant) -> bool {
+    fn tick(&mut self, _window: &mut Window, now: Instant) -> bool {
+        self.view.tick(now);
         true
     }
 

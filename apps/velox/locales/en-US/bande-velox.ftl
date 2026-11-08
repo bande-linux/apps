@@ -1,6 +1,5 @@
 app-name = Velox
 pane-containers = Containers
-sidebar-containers = Containers
 menu-container = Container
 menu-view = View
 find = Find
@@ -287,8 +286,6 @@ card-stored = { $size } stored
 card-reclaimable = { $size } reclaimable
 no-running-containers = No running containers
 per-second = { $size }/s
-disk-rates = Read { $read } · Write { $written }
-network-rates = In { $received } · Out { $sent }
 pulling-percent = Pulling { $reference }… { $percent }%
 pull-downloading = Downloading
 idle-rate = 0 KB/s
@@ -525,3 +522,27 @@ settings-notifications = Notifications
 settings-notify-crashes = Notify when a container stops unexpectedly
 crash-title = “{ $name }” stopped unexpectedly
 crash-body = The container exited with code { $code }.
+sidebar-resources = Resources
+engine-running = { $engine } running
+engine-up = · up { $time }
+engine-up-now = · up just now
+duration-minutes = { $minutes } min
+duration-hours = { $hours } h { $minutes } min
+duration-days = { $days } d { $hours } h
+engine-cpus = { $count ->
+    [one] 1 CPU
+   *[other] { $count } CPUs
+}
+engine-memory = { $size } GB memory
+engine-disk = { $size } GB disk
+velox-version = Velox { $version }
+card-disk-breakdown = Disk Breakdown
+card-of-disk = of { $size } GB disk
+breakdown-images = Images { $size }
+breakdown-containers = Containers { $size }
+breakdown-volumes = Volumes { $size }
+breakdown-build-cache = Build cache { $size }
+rate-read = Read
+rate-write = Write
+rate-in = In
+rate-out = Out
