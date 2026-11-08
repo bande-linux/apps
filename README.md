@@ -95,6 +95,16 @@ any branch with a `+git` version; it is never published.
   fresh `debian:testing`; locally `apt-get -s` resolves them against this system only.
 - The release tag itself: it must be `<app>-vX.Y.Z` on a commit of `main`, matching `Cargo.toml`.
 
+## Runtime dependencies
+
+`ci/runtime-deps` lists every program the apps run (`Command::new`) and every system path they
+read (`/usr/...`, `/bin`, `/sbin`), each with the Debian package that ships it and a kind:
+`required` (Debian priority required), `depends` (the app's package declares it in Depends),
+`optional` (the code checks first and shows why a feature is off) or `image` (put in place by the
+`images` repository's system images). `ci/check-runtime-deps.py`, run by `ci/check.sh`, fails on a
+path or program missing from the list and on a `depends` entry the app's package does not
+declare, as the desktop's check does (its `docs/architecture/ci.md`).
+
 ## Licence
 
 MIT OR Apache-2.0, unless an app says otherwise.

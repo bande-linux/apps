@@ -9,6 +9,7 @@ unset WAYLAND_DISPLAY DISPLAY DBUS_SESSION_BUS_ADDRESS
 export CARGO_TERM_COLOR=never VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json
 cargo fmt --all --check
 ci/l10n-tool.sh check ci/l10n-complete
+ci/check-runtime-deps.py
 cargo clippy --locked --all-targets -q -p "$package" -- -D warnings
 dbus-run-session --config-file=ci/test-bus.conf -- cargo test --locked -q -p "$package"
 echo "check: $package passed"
