@@ -221,7 +221,11 @@ impl Worker {
         };
         if self.units().is_none() {
             match Units::connect() {
-                Ok(units) => *lock(&self.shared.units) = Some(Arc::new(units)),
+                Ok(units) => {
+                    let units = Arc::new(units);
+                    self.follow_new_units(&units);
+                    *lock(&self.shared.units) = Some(units);
+                }
                 Err(error) => {
                     tracing::warn!("cannot reach the systemd user manager: {error}");
                     self.out.send(Update::Blocked(Blocker::NoManager));
@@ -234,6 +238,23 @@ impl Worker {
         if self.out.send(Update::Ready(accel)) {
             self.relist();
         }
+    }
+
+    fn follow_new_units(&self, units: &Arc<Units>) {
+        let started = match units.machine_jobs() {
+            Ok(started) => started,
+            Err(error) => return tracing::warn!("cannot follow new machines: {error}"),
+        };
+        let worker = self.clone();
+        spawn("velox-vm-units", move || {
+            for _ in started {
+                if worker.shared.stopped.load(Ordering::SeqCst)
+                    || worker.recheck.send(Recheck::Relist).is_err()
+                {
+                    return;
+                }
+            }
+        });
     }
 
     fn relist(&self) {

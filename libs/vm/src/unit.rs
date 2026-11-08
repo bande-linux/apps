@@ -289,6 +289,26 @@ impl Units {
         Err(Error::Protocol("the session bus closed".into()))
     }
 
+    pub fn machine_jobs(&self) -> Result<impl Iterator<Item = String> + use<>> {
+        let rule = MatchRule::builder()
+            .msg_type(Type::Signal)
+            .sender(SYSTEMD)?
+            .interface(MANAGER)?
+            .member("JobRemoved")?
+            .build();
+        let messages = MessageIterator::for_match_rule(rule, &self.bus, None)?;
+        Ok(messages
+            .map_while(std::result::Result::ok)
+            .filter_map(|message| {
+                message
+                    .body()
+                    .deserialize::<(u32, OwnedObjectPath, String, String)>()
+                    .ok()
+            })
+            .map(|(_, _, name, _)| name)
+            .filter(|name| crate::library::is_machine_unit(name)))
+    }
+
     pub(crate) fn reload(&self) -> Result<()> {
         self.bus
             .call_method(Some(SYSTEMD), SYSTEMD_PATH, Some(MANAGER), "Reload", &())?;

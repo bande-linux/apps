@@ -52,6 +52,14 @@ pub struct Manifest {
     pub shares: Vec<Share>,
     #[serde(default)]
     pub graphics_3d: bool,
+    #[serde(default = "one_display")]
+    pub displays: u32,
+}
+
+pub const MAX_DISPLAYS: u32 = 4;
+
+fn one_display() -> u32 {
+    1
 }
 
 impl Manifest {

@@ -83,13 +83,13 @@ fn pass_to_guest(input: &DisplayInput, gathered: &Cell<Point>, event: SurfaceInp
 }
 
 impl Console {
-    pub fn open(machine: &str) -> Result<Self, bande_vm::Error> {
+    pub fn open(machine: &str, display: u32) -> Result<Self, bande_vm::Error> {
         let control = Library::open()?.control_socket(machine);
         let (wake, ring) = UnixStream::pair()?;
         wake.set_nonblocking(true)?;
         ring.set_nonblocking(true)?;
         let (sender, events) = mpsc::channel();
-        let display = Display::open(control, move |event| {
+        let display = Display::open(control, display, move |event| {
             if sender.send(event).is_ok()
                 && let Err(error) = (&ring).write_all(&[1])
                 && error.kind() != ErrorKind::WouldBlock

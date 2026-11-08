@@ -6,7 +6,7 @@ use bande_xdg::find_executable;
 use serde_json::{Value, json};
 
 use crate::library::Machine;
-use crate::manifest::Preset;
+use crate::manifest::{MAX_DISPLAYS, Preset};
 use crate::{Error, Result};
 
 const FIRMWARE_CODE: &str = "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd";
@@ -238,10 +238,14 @@ impl Host {
         ]);
         push(&["-serial", "chardev:serial"]);
         let accelerated = self.uses_3d(machine);
+        let gpu = |device: &str| match manifest.displays {
+            0 | 1 => device.to_owned(),
+            displays => format!("{device},max_outputs={}", displays.min(MAX_DISPLAYS)),
+        };
         match (windows, accelerated) {
             (true, _) => push(&["-device", "ramfb"]),
-            (false, true) => push(&["-device", "virtio-gpu-gl-pci"]),
-            (false, false) => push(&["-device", "virtio-gpu-pci"]),
+            (false, true) => push(&["-device", &gpu("virtio-gpu-gl-pci")]),
+            (false, false) => push(&["-device", &gpu("virtio-gpu-pci")]),
         }
         push(&["-device", "qemu-xhci,id=usb"]);
         push(&["-device", "usb-kbd,bus=usb.0"]);

@@ -14,6 +14,7 @@ use crate::seed::CloudInit;
 use crate::{Error, Result};
 
 const NETWORK_ROOT: &str = "/tmp";
+const MACHINE_ID_LENGTH: usize = 36;
 const UNIT_PREFIX: &str = match option_env!("VELOX_TEST_UNIT_PREFIX") {
     Some(prefix) => prefix,
     None => "velox-vm",
@@ -21,6 +22,13 @@ const UNIT_PREFIX: &str = match option_env!("VELOX_TEST_UNIT_PREFIX") {
 
 pub fn unit_name(id: &str) -> String {
     format!("{UNIT_PREFIX}-{id}.service")
+}
+
+pub(crate) fn is_machine_unit(name: &str) -> bool {
+    name.strip_prefix(UNIT_PREFIX)
+        .and_then(|rest| rest.strip_prefix('-'))
+        .and_then(|rest| rest.strip_suffix(".service"))
+        .is_some_and(|id| id.len() == MACHINE_ID_LENGTH)
 }
 
 pub(crate) fn autostart_unit_name(id: &str) -> String {
@@ -125,6 +133,7 @@ impl Library {
             installer: None,
             shares: Vec::new(),
             graphics_3d: false,
+            displays: 1,
         });
         fs::create_dir_all(&machine.dir)?;
         let made = host
@@ -183,6 +192,7 @@ impl Library {
             },
             shares: Vec::new(),
             graphics_3d: false,
+            displays: 1,
         });
         fs::create_dir_all(&machine.dir)?;
         let disk = match installer.import {

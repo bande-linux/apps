@@ -32,10 +32,22 @@ fn description(name: &str) -> String {
         .replace('%', "%%")
 }
 
-pub(crate) fn unit_text(name: &str, program: &Path, id: &str) -> Result<String> {
+pub(crate) fn unit_text(
+    name: &str,
+    program: &Path,
+    id: &str,
+    data_home: Option<&Path>,
+) -> Result<String> {
+    let environment = match data_home {
+        Some(data) => format!(
+            "Environment={}\n",
+            quoted(&format!("XDG_DATA_HOME={}", utf8(data)?))
+        ),
+        None => String::new(),
+    };
     Ok(format!(
         "[Unit]\nDescription=Start the Velox virtual machine {}\n\n\
-         [Service]\nType=oneshot\nExecStart={} {START_FLAG} {}\n\n\
+         [Service]\nType=oneshot\n{environment}ExecStart={} {START_FLAG} {}\n\n\
          [Install]\nWantedBy={WANTED_BY}\n",
         description(name),
         quoted(utf8(program)?),
@@ -63,7 +75,13 @@ impl Units {
             return self.remove_autostart(machine);
         }
         let path = machine.autostart_file();
-        let text = unit_text(&machine.manifest.name, program, &machine.manifest.id)?;
+        let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+        let text = unit_text(
+            &machine.manifest.name,
+            program,
+            &machine.manifest.id,
+            data_home.as_deref(),
+        )?;
         bande_xdg::replace_file(&path, text)?;
         self.enable(utf8(&path)?)?;
         self.reload()
@@ -110,7 +128,12 @@ fn find(library: &Library, id: &str) -> Result<Machine> {
         .machines()?
         .into_iter()
         .find(|machine| machine.manifest.id == id)
-        .ok_or_else(|| Error::Io(io::Error::new(ErrorKind::NotFound, format!("no machine {id}"))))
+        .ok_or_else(|| {
+            Error::Io(io::Error::new(
+                ErrorKind::NotFound,
+                format!("no machine {id}"),
+            ))
+        })
 }
 
 pub fn start_at_login(id: &str) -> Result<()> {
@@ -128,12 +151,17 @@ mod tests {
 
     #[test]
     fn autostart_units_quote_what_systemd_would_expand() {
-        let text = unit_text("web 100%\nx", Path::new("/opt/my apps/velox"), "abc");
+        let text = unit_text(
+            "web 100%\nx",
+            Path::new("/opt/my apps/velox"),
+            "abc",
+            Some(Path::new("/var/lab")),
+        );
         assert_eq!(
             text.ok().as_deref(),
             Some(
                 "[Unit]\nDescription=Start the Velox virtual machine web 100%% x\n\n\
-                 [Service]\nType=oneshot\nExecStart=\"/opt/my apps/velox\" --start-machine \"abc\"\n\n\
+                 [Service]\nType=oneshot\nEnvironment=\"XDG_DATA_HOME=/var/lab\"\nExecStart=\"/opt/my apps/velox\" --start-machine \"abc\"\n\n\
                  [Install]\nWantedBy=default.target\n"
             )
         );

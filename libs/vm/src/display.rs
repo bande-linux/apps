@@ -19,7 +19,7 @@ use crate::keycodes::qemu_keycode;
 use crate::qmp::Qmp;
 
 const QEMU: &str = "org.qemu";
-const CONSOLE_PATH: &str = "/org/qemu/Display1/Console_0";
+const CONSOLE_PATH: &str = "/org/qemu/Display1/Console_";
 const CLIPBOARD_PATH: &str = "/org/qemu/Display1/Clipboard";
 const LISTENER_PATH: &str = "/org/qemu/Display1/Listener";
 const CONSOLE: &str = "org.qemu.Display1.Console";
@@ -136,12 +136,17 @@ pub struct DisplayInput {
 }
 
 impl Display {
-    pub fn open(control: PathBuf, sink: impl Fn(DisplayEvent) + Send + Sync + 'static) -> Self {
+    pub fn open(
+        control: PathBuf,
+        console: u32,
+        sink: impl Fn(DisplayEvent) + Send + Sync + 'static,
+    ) -> Self {
         let (commands, received) = mpsc::channel();
         let clipboard = Arc::new(ClipboardState::default());
         let sink: Sink = Arc::new(sink);
         let session = Session {
             control,
+            console,
             sink: Arc::clone(&sink),
             clipboard: Arc::clone(&clipboard),
             commands: commands.clone(),
@@ -231,6 +236,7 @@ impl DisplayInput {
 
 struct Session {
     control: PathBuf,
+    console: u32,
     sink: Sink,
     clipboard: Arc<ClipboardState>,
     commands: Sender<Command>,
@@ -268,9 +274,10 @@ impl Session {
             .build()?;
         let (ours, theirs) = UnixStream::pair()?;
         let listener_socket = ours.try_clone()?;
+        let console = format!("{CONSOLE_PATH}{}", self.console);
         connection.call_method(
             Some(QEMU),
-            CONSOLE_PATH,
+            console.as_str(),
             Some(CONSOLE),
             "RegisterListener",
             &Fd::from(theirs.as_fd()),
@@ -298,8 +305,9 @@ impl Session {
                 },
             )?
             .build()?;
-        if let Err(error) =
-            connection.call_method(Some(QEMU), CLIPBOARD_PATH, Some(CLIPBOARD), "Register", &())
+        if self.console == 0
+            && let Err(error) =
+                connection.call_method(Some(QEMU), CLIPBOARD_PATH, Some(CLIPBOARD), "Register", &())
         {
             tracing::warn!("the guest's clipboard is not shared: {error}");
         }
@@ -315,22 +323,32 @@ impl Session {
                 }
                 sink(DisplayEvent::Closed(None));
             })?;
-        self.forward(&connection, commands);
+        self.forward(&connection, &console, commands);
         let _ = display_socket.shutdown(std::net::Shutdown::Both);
         let _ = listener_socket.shutdown(std::net::Shutdown::Both);
         drop(listener);
         Ok(())
     }
 
-    fn forward(&self, connection: &Connection, commands: &Receiver<Command>) {
+    fn forward(&self, connection: &Connection, console: &str, commands: &Receiver<Command>) {
         while let Ok(command) = commands.recv() {
             let sent = match command {
                 Command::Close => return,
-                Command::Key(code, true) => notify(connection, KEYBOARD, "Press", &(code,)),
-                Command::Key(code, false) => notify(connection, KEYBOARD, "Release", &(code,)),
-                Command::Button(button, true) => notify(connection, MOUSE, "Press", &(button,)),
-                Command::Button(button, false) => notify(connection, MOUSE, "Release", &(button,)),
-                Command::Pointer(x, y) => notify(connection, MOUSE, "SetAbsPosition", &(x, y)),
+                Command::Key(code, true) => {
+                    notify(connection, console, KEYBOARD, "Press", &(code,))
+                }
+                Command::Key(code, false) => {
+                    notify(connection, console, KEYBOARD, "Release", &(code,))
+                }
+                Command::Button(button, true) => {
+                    notify(connection, console, MOUSE, "Press", &(button,))
+                }
+                Command::Button(button, false) => {
+                    notify(connection, console, MOUSE, "Release", &(button,))
+                }
+                Command::Pointer(x, y) => {
+                    notify(connection, console, MOUSE, "SetAbsPosition", &(x, y))
+                }
                 Command::Resize {
                     width,
                     height,
@@ -341,6 +359,7 @@ impl Session {
                     };
                     notify(
                         connection,
+                        console,
                         CONSOLE,
                         "SetUIInfo",
                         &(
@@ -407,11 +426,17 @@ impl Session {
     }
 }
 
-fn notify<B>(connection: &Connection, interface: &str, method: &str, body: &B) -> zbus::Result<()>
+fn notify<B>(
+    connection: &Connection,
+    console: &str,
+    interface: &str,
+    method: &str,
+    body: &B,
+) -> zbus::Result<()>
 where
     B: serde::Serialize + zbus::zvariant::DynamicType,
 {
-    let message = zbus::Message::method_call(CONSOLE_PATH, method)?
+    let message = zbus::Message::method_call(console, method)?
         .destination(QEMU)?
         .interface(interface)?
         .with_flags(zbus::message::Flags::NoReplyExpected)?

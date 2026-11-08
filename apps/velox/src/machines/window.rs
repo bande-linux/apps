@@ -344,7 +344,7 @@ impl MachineWindow {
             return;
         }
         if self.session.is_none() && settled && self.failure.is_none() {
-            match Console::open(&self.id) {
+            match Console::open(&self.id, 0) {
                 Ok(console) => {
                     self.session = Some(console);
                     self.shown = None;

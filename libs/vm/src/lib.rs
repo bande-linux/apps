@@ -24,7 +24,7 @@ pub use error::{Error, Result};
 pub use guest_agent::{GuestNetwork, guest_address, guest_network};
 pub use image::{Algorithm, CloudImage, ImageStore, catalog};
 pub use library::{Installer, Library, Machine, NewMachine, unit_name};
-pub use manifest::{Forward, Manifest, Preset, Share};
+pub use manifest::{Forward, MAX_DISPLAYS, Manifest, Preset, Share};
 pub use password::sha512_crypt;
 pub use qemu::{Accel, Host};
 pub use qmp::{Event, Qmp, RunState};
