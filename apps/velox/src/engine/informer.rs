@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{self, Read, Write};
 use std::net::Shutdown;
 use std::os::fd::{AsFd, BorrowedFd};
@@ -23,6 +23,7 @@ const IGNORED_PREFIX: &str = "exec_";
 const CONTAINER_ATTRIBUTE: &str = "container";
 const RETRY: Duration = Duration::from_secs(1);
 const LONGEST_RETRY: Duration = Duration::from_secs(60);
+const STOP_SIGNALS: [i64; 2] = [130, 143];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -60,6 +61,10 @@ pub enum Update {
     Chosen(PathBuf),
     Finished(Task, Result<u64, String>),
     Stats(String, Sample),
+    Crashed {
+        name: String,
+        code: i64,
+    },
 }
 
 #[derive(Clone)]
@@ -128,8 +133,14 @@ fn follow(engine: &Engine, events: &Stream, stopped: &AtomicBool, out: &Updates)
             return Ok(());
         }
     }
+    let mut stopping = HashSet::new();
     for event in serde_json::Deserializer::from_reader(body).into_iter::<Event>() {
         let event = event.map_err(io::Error::other)?;
+        if let Some((name, code)) = crashed(&event, &mut stopping)
+            && !out.send(Update::Crashed { name, code })
+        {
+            return Ok(());
+        }
         let Some(actor) = event.actor else {
             continue;
         };
@@ -167,6 +178,30 @@ fn follow(engine: &Engine, events: &Stream, stopped: &AtomicBool, out: &Updates)
         }
     }
     Ok(())
+}
+
+fn crashed(event: &Event, stopping: &mut HashSet<String>) -> Option<(String, i64)> {
+    let actor = event.actor.as_ref()?;
+    if event.kind != "container" {
+        return None;
+    }
+    match event.action.as_str() {
+        "kill" | "stop" => {
+            stopping.insert(actor.id.clone());
+            None
+        }
+        "start" => {
+            stopping.remove(&actor.id);
+            None
+        }
+        "die" => {
+            let stopped = stopping.remove(&actor.id);
+            let code = actor.attributes.get("exitCode")?.parse::<i64>().ok()?;
+            let name = actor.attributes.get("name").unwrap_or(&actor.id).clone();
+            (code != 0 && !stopped && !STOP_SIGNALS.contains(&code)).then_some((name, code))
+        }
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -393,5 +428,37 @@ impl Drop for Informer {
         self.stopped.store(true, Ordering::SeqCst);
         shut(&self.events);
         let _ = self.recheck.send(());
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn event(action: &str, code: &str) -> Event {
+        serde_json::from_value(serde_json::json!({
+            "Type": "container",
+            "Action": action,
+            "Actor": {"ID": "c1", "Attributes": {"name": "web", "exitCode": code}},
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn only_unasked_failures_are_crashes() {
+        let mut stopping = HashSet::new();
+        assert_eq!(
+            crashed(&event("die", "1"), &mut stopping),
+            Some(("web".to_owned(), 1))
+        );
+        assert_eq!(crashed(&event("die", "0"), &mut stopping), None);
+        assert_eq!(crashed(&event("die", "143"), &mut stopping), None);
+        assert_eq!(crashed(&event("kill", ""), &mut stopping), None);
+        assert_eq!(crashed(&event("die", "137"), &mut stopping), None);
+        assert_eq!(
+            crashed(&event("die", "137"), &mut stopping),
+            Some(("web".to_owned(), 137))
+        );
     }
 }

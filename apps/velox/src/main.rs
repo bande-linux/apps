@@ -4,15 +4,16 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::Entry;
+use bande_app_settings::{SettingsWindow, settings_folder};
 use bande_toolkit::{
     Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use bande_velox::{
     Act, ContainerRequest, Effect, Hub, Informer, L10N, LogsTarget, LogsView, MACHINE_WINDOW_SIZE,
-    MachineRequest, MachineWindow, Request, SIDEBAR_WIDTH, Section, ShellLink, ShellTarget,
-    ShellWindow, Update, VeloxView, Work,
+    MachineRequest, MachineWindow, Request, SETTINGS_SIZE, SIDEBAR_WIDTH, Section, ShellLink,
+    ShellTarget, ShellWindow, Update, VeloxSettings, VeloxView, Work, notify_crash, settings_form,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
@@ -54,8 +55,20 @@ static INFO: Info = Info {
     version: env!("CARGO_PKG_VERSION"),
     name: || L10N.tr("app-name"),
     keys: Keys::Standard,
-    settings: None,
+    settings: Some(Settings {
+        title: || L10N.tr("settings-title"),
+        size: SETTINGS_SIZE,
+        view: settings_window,
+    }),
 };
+
+fn settings_window(appearance: Appearance) -> Box<dyn View> {
+    Box::new(SettingsWindow::<VeloxSettings>::new(
+        appearance,
+        settings_folder(),
+        settings_form,
+    ))
+}
 
 struct Pane {
     view: VeloxView,
@@ -843,7 +856,17 @@ impl Program for Velox {
             }
             return;
         };
-        let updates = informer.drain();
+        let (crashes, updates): (Vec<Update>, Vec<Update>) = informer
+            .drain()
+            .into_iter()
+            .partition(|update| matches!(update, Update::Crashed { .. }));
+        if !crashes.is_empty() && VeloxSettings::current().notify_crashes {
+            for crash in crashes {
+                if let Update::Crashed { name, code } = crash {
+                    notify_crash(RUNNING_ID, &name, code);
+                }
+            }
+        }
         let windows: Vec<WindowId> = cx.windows().collect();
         for update in &updates {
             let Update::Changed(container) = update else {

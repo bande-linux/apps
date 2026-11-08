@@ -19,6 +19,7 @@ sha2.workspace = true
 tracing.workspace = true
 bande-app.workspace = true
 bande-app-menu.workspace = true
+bande-app-settings.workspace = true
 bande-fs.workspace = true
 bande-l10n.workspace = true
 bande-terminal-view.workspace = true

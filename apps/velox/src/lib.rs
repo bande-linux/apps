@@ -3,9 +3,11 @@ mod engine;
 mod images;
 mod machines;
 mod networks;
+mod notify;
 mod overview;
 mod readiness;
 mod resources;
+mod settings;
 mod shell;
 mod ui;
 pub(crate) mod volumes;
@@ -20,8 +22,10 @@ pub use machines::{
     Act, Effect, Hub, INSPECTOR_COMMAND as MACHINE_INSPECTOR, MACHINE_WINDOW_SIZE, MachineWindow,
     MachinesPane, Notice, Request as MachineRequest,
 };
+pub use notify::notify_crash;
 pub use readiness::Readiness;
 pub use resources::file_menu;
+pub use settings::{SETTINGS_SIZE, VeloxSettings, settings_form};
 pub use shell::{ShellLink, ShellTarget, ShellWindow};
 pub use ui::{Request, SIDEBAR_WIDTH, Section, VeloxView};
 
