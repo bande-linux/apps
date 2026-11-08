@@ -19,7 +19,7 @@ use bande_toolkit::{
 use crate::L10N;
 use crate::document::{Content, Format, Loaded, encode, read};
 use crate::encoding::{LineEnding, TextEncoding};
-use crate::file::{MAX_FILE_BYTES, read_bounded, write_atomically};
+use crate::file::{MAX_FILE_BYTES, read_bounded};
 use crate::find::{self, Query};
 use crate::formats::{heading, markdown, rtf};
 use crate::session::seconds_now;
@@ -600,7 +600,7 @@ impl DocumentView {
                     {
                         tracing::warn!("cannot keep the old version: {error}");
                     }
-                    write_atomically(&path, &bytes)
+                    bande_xdg::replace_file(&path, &bytes)
                         .map_err(|error| WriteError::Io(error.to_string()))
                 });
             outbox.send(Message::Written {
