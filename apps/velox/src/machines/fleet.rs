@@ -3,7 +3,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
 
-use bande_vm::{Accel, ActiveState};
+use bande_vm::{Accel, ActiveState, Network, UsbDevice};
+
+const SSH_PORT: u16 = 22;
 
 use super::backend::{Act, Listed, Phase, Update};
 use super::readiness::Blocker;
@@ -67,6 +69,8 @@ pub struct Fleet {
     pub focus: Option<String>,
     pub to_open: Vec<String>,
     pub chosen_iso: Option<PathBuf>,
+    pub usb_devices: Vec<UsbDevice>,
+    pub usb: BTreeMap<String, Vec<String>>,
 }
 
 impl Entry {
@@ -93,8 +97,15 @@ impl Entry {
         self.unit.is_running()
     }
 
-    pub fn ssh_port(&self) -> Option<u16> {
-        self.listed.manifest.ssh_port()
+    pub fn ssh_target(&self) -> Option<(String, u16)> {
+        match &self.listed.manifest.network {
+            Network::Shared => self
+                .listed
+                .manifest
+                .ssh_port()
+                .map(|port| ("localhost".to_owned(), port)),
+            Network::Bridged(_) => self.address.map(|address| (address.to_string(), SSH_PORT)),
+        }
     }
 
     pub fn can(&self, act: Act) -> bool {
@@ -125,7 +136,7 @@ impl Entry {
     }
 
     pub fn ssh_command(&self) -> Option<Vec<String>> {
-        let port = self.ssh_port()?;
+        let (host, port) = self.ssh_target()?;
         let login = &self.listed.login;
         let mut command = vec![
             "ssh".to_owned(),
@@ -144,7 +155,7 @@ impl Entry {
             true => String::new(),
             false => format!("{}@", login.user),
         };
-        command.push(format!("{user}localhost"));
+        command.push(format!("{user}{host}"));
         Some(command)
     }
 
@@ -234,6 +245,8 @@ impl Default for Fleet {
             focus: None,
             to_open: Vec::new(),
             chosen_iso: None,
+            usb_devices: Vec::new(),
+            usb: BTreeMap::new(),
         }
     }
 }
@@ -332,7 +345,25 @@ impl Fleet {
                 let entries = &self.entries;
                 self.created.retain(|(_, id)| !entries.contains_key(id));
             }
+            Update::UsbDevices(devices) => self.usb_devices = devices,
+            Update::Usb(id, attached) => {
+                self.usb.insert(id, attached);
+            }
+            Update::UsbFailed(id, message) => {
+                let name = self
+                    .entries
+                    .get(&id)
+                    .map_or_else(|| id.clone(), |entry| entry.name().to_owned());
+                self.notices.push(Notice {
+                    id: Some(id),
+                    title: L10N.tr_args("machine-usb-failed", [("name", name.into())]),
+                    message,
+                });
+            }
             Update::Unit(id, state) => {
+                if !state.is_running() {
+                    self.usb.remove(&id);
+                }
                 if let Some(entry) = self.entries.get_mut(&id) {
                     entry.unit = state;
                     if !state.is_running() {

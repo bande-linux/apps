@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rustix::process::getuid;
 use rustix::rand::{GetRandomFlags, getrandom};
 
-use crate::manifest::{Forward, Manifest, Preset};
+use crate::manifest::{Forward, Manifest, Network, Preset};
 use crate::qemu::{Host, utf8};
 use crate::seed::CloudInit;
 use crate::{Error, Result};
@@ -134,6 +134,7 @@ impl Library {
             shares: Vec::new(),
             graphics_3d: false,
             displays: 1,
+            network: Network::Shared,
         });
         fs::create_dir_all(&machine.dir)?;
         let made = host
@@ -193,6 +194,7 @@ impl Library {
             shares: Vec::new(),
             graphics_3d: false,
             displays: 1,
+            network: Network::Shared,
         });
         fs::create_dir_all(&machine.dir)?;
         let disk = match installer.import {

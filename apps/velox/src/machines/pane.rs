@@ -229,6 +229,11 @@ impl MachinesPane {
         }
     }
 
+    pub fn single_selected(&self) -> Option<String> {
+        let [id] = self.selected_ids().try_into().ok()?;
+        Some(id)
+    }
+
     pub fn single_can(&self, act: Act) -> bool {
         let [id] = self.selected_ids().try_into().unwrap_or_default();
         !id.is_empty()
@@ -252,7 +257,7 @@ impl MachinesPane {
             && ids
                 .first()
                 .and_then(|id| fleet.entry(id))
-                .is_some_and(|entry| entry.running() && entry.ssh_port().is_some())
+                .is_some_and(|entry| entry.running() && entry.ssh_target().is_some())
     }
 
     pub fn can_create(&self) -> bool {
@@ -373,7 +378,7 @@ impl MachinesPane {
         let first = entries.first()?;
         let any = |act: Act| entries.iter().any(|entry| entry.can(act));
         let single = entries.len() == 1;
-        let ssh = single && first.running() && first.ssh_port().is_some();
+        let ssh = single && first.running() && first.ssh_target().is_some();
         Some(Menu::new(vec![
             menu_item("machine-start", MENU_START, any(Act::Start)),
             menu_item("machine-shut-down", MENU_SHUT_DOWN, any(Act::ShutDown)),
@@ -401,7 +406,7 @@ impl MachinesPane {
             menu_item(
                 "machine-copy-ssh",
                 MENU_COPY_SSH,
-                single && first.ssh_port().is_some(),
+                single && first.ssh_target().is_some(),
             ),
             MenuItem::separator(),
             menu_item(
@@ -438,8 +443,8 @@ impl MachinesPane {
             MENU_SERIAL => self.requests.push(Request::Serial(key)),
             MENU_COPY_SSH => {
                 let command = self.fleet.borrow().entry(&key).and_then(|entry| {
-                    let port = entry.ssh_port()?;
-                    Some(present::short_ssh(&entry.listed.login.user, port))
+                    let (host, port) = entry.ssh_target()?;
+                    Some(present::short_ssh(&entry.listed.login.user, &host, port))
                 });
                 if let Some(command) = command {
                     ui.context().copy(&command);

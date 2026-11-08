@@ -20,6 +20,13 @@ pub enum Preset {
     Windows,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Network {
+    #[default]
+    Shared,
+    Bridged(String),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Share {
     pub tag: String,
@@ -54,6 +61,8 @@ pub struct Manifest {
     pub graphics_3d: bool,
     #[serde(default = "one_display")]
     pub displays: u32,
+    #[serde(default)]
+    pub network: Network,
 }
 
 pub const MAX_DISPLAYS: u32 = 4;

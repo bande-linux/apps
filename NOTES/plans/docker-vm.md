@@ -16,7 +16,7 @@ App `apps/velox`, package `bande-velox`, id `org.bande.Velox`, name "Velox".
 | 1 | Name: **Velox** (`bande-velox`, `org.bande.Velox`) |
 | 2 | **One app**, two areas (Containers and Virtual Machines), each gated on its own |
 | 3 | **Any working Docker Engine API**: Docker CE (preferred), Debian's `docker.io`, rootless Docker, Podman's compatible socket |
-| 4 | **The app never installs or configures an engine** and never runs `sudo`. When nothing is found it shows copyable setup steps, Docker CE first, Podman as the alternative. The same applies to the QEMU stack |
+| 4 | **The app never installs or configures an engine** and never runs `sudo`. When nothing is found it shows copyable setup steps, Docker CE first, Podman as the alternative. The same applies to the QEMU stack. The one exception (owner, 2026-11-08): USB passthrough and bridged networking ask for an administrator's password through polkit, as VMware does, and run only `velox-helper` as root (see Passthrough below) |
 | 5 | **Direct QEMU** + QMP + transient systemd user units: no libvirt, no runner, no daemon of our own |
 | 6 | Images verified by **HTTPS + vendor checksums** now, signed SUMS (`gpgv`) at V5 |
 | 7 | Tests follow the apps budget of **~80–100 lines per app** (apps `CLAUDE.md` 1ac2b62) |
@@ -492,7 +492,7 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 
 | # | Repo | What | Done when |
 |---|---|---|---|
-| V5 | apps | Left of V5: USB passthrough (`usb-host` through QMP `device_add`), and a Windows 11 ARM install checked end to end | a Windows 11 ARM ISO installs with no manual flags |
+| V5 | apps | Left of V5: a Windows 11 ARM install checked end to end | a Windows 11 ARM ISO installs with no manual flags |
 | A7 | apps | Velox extras: Ctrl+K palette, crash notifications (`bande-notify`), optional status item via the tray with the background mode (as Calendar's) | each off by default and measured at 0 wake-ups while idle |
 
 Done and merged: A1–A4, V0, V1, D1 (`SurfaceView`), D2 (`Graph`), V3 and V4. D4 needs no widget of
@@ -541,9 +541,9 @@ fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
 | macOS Velox: menu-bar panel, ⌘K palette | not done (A7) | each gets its own Settings switch, off by default |
 | Built-in monitor | done | per container (inspector) and per machine (Info tab): CPU, memory, disk and network graphs, sampled every 2 s only while shown; network comes from the guest agent |
 | NAT networking with port forwards | done | passt, unprivileged |
-| Bridged, host-only, network editor | design only | `velox-helpers.md`: needs the owner to narrow decision 4 |
+| Bridged networking | done | Settings → Network → Bridged to an existing bridge; the machine gets its own address on that network. Host-only and a bridge editor are left out: bridges are made in the system's network settings |
 | Shared folders | done | virtiofs; disables snapshots (vhost-user-fs does not migrate) |
-| USB passthrough | design only | `velox-helpers.md`: a polkit-authorised helper hands QEMU the device's file descriptor |
+| USB passthrough | done | Machine → USB Devices, while the machine runs; see Passthrough below |
 | Clipboard | done | qemu-vdagent + spice-vdagent, text only |
 | Drag and drop of files | left out | QEMU's vdagent has no file transfer; shared folders cover it |
 | Several guest displays | done | Settings → Displays (1–4) sets `max_outputs`; each extra display opens in its own window while the machine runs, and a closed one stays closed until the next start. Not for the Windows preset (ramfb) |
@@ -573,3 +573,27 @@ fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
 - **The GUI is large:** four widgets the desktop lacks (source list, graph, external surface,
   and the inspector split, done in-app) gate the polish. A1–A3 use in-app versions where needed
   and switch when D2/D4 land.
+
+## Passthrough
+
+- **Helper:** `/usr/libexec/bande-velox/velox-helper`, started with `pkexec`. The polkit actions are
+  `org.bande.velox.usb-device` and `org.bande.velox.bridge`, both `auth_admin_keep` for the active
+  session; `exec.argv1` keeps them apart. There is no setuid bit and no daemon. QEMU and Velox stay
+  unprivileged.
+  - Debian's `qemu-bridge-helper` was not chosen. It would need setuid root for every local user,
+    it covers bridging only, and it asks no one.
+- **USB, `usb <bus> <address> <QEMU pid>`:**
+  - The helper refuses hubs, devices that hold a mounted or in-use disk, and QEMU processes of
+    another user.
+  - It opens `/dev/bus/usb/BBB/DDD` and sends the descriptor back over its stdout socket.
+    Velox hands it to QEMU with QMP `add-fd`, then `device_add usb-host,hostdevice=/dev/fdset/N`.
+  - A forked copy waits on the QEMU process (a pidfd, no polling) and gives the interfaces back to
+    their host drivers (`drivers_probe`) when QEMU exits.
+  - QEMU itself gives devices back on `device_del` and on a clean exit. The waiting copy covers a
+    crash or SIGKILL; checked on a builder with a `dummy_hcd` gadget.
+  - Velox removes a device from the guest when it is unplugged, following `/dev/bus/usb`.
+- **Bridge, `tap <vxNNNNNNNN> <bridge>`:**
+  - The helper makes a persistent tap owned by the user, joins it to an existing bridge and sets
+    it up. QEMU opens it as `-netdev tap,ifname=…,script=no` without privileges.
+  - The tap stays while the machine is bridged, so later starts in the same boot don't ask again.
+  - Velox, as the tap's owner, deletes it when the machine goes back to Shared or is deleted.

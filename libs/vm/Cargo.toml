@@ -19,6 +19,7 @@ tracing.workspace = true
 rustls.workspace = true
 ureq.workspace = true
 zbus = { workspace = true, features = ["p2p"] }
+libc.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

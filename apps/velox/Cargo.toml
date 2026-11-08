@@ -11,7 +11,8 @@ publish = false
 [dependencies]
 accesskit.workspace = true
 httparse.workspace = true
-rustix = { workspace = true, features = ["fs", "process"] }
+rustix = { workspace = true, features = ["event", "fs", "net", "process"] }
+libc.workspace = true
 jiff.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -40,17 +41,20 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 copyright = "2026 Mikael Hug"
 section = "admin"
 depends = "$auto, gpgv, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
-recommends = "bande-terminal"
+recommends = "bande-terminal, pkexec"
 suggests = "docker-compose, podman, qemu-system-arm, qemu-efi-aarch64, qemu-system-modules-opengl, qemu-utils, passt, swtpm, virtiofsd"
 extended-description = """\
 Velox shows the containers of the computer's Docker Engine or Podman, grouped \
 by Compose project, and starts and stops them. It also makes and runs virtual \
 machines from Debian, Ubuntu and Fedora cloud images on QEMU. It follows the \
-engine and the machines live and never installs or configures anything: when \
-something is missing it shows the steps to set it up."""
+engine and the machines live and never installs anything: when something is \
+missing it shows the steps to set it up. Passing a USB device to a machine or \
+bridging it onto the local network asks for an administrator's password."""
 assets = [
     ["target/release/bande-velox", "usr/bin/", "755"],
     ["data/org.bande.Velox.desktop", "usr/share/applications/", "644"],
     ["data/org.bande.Velox.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Velox.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["target/release/velox-helper", "usr/libexec/bande-velox/", "755"],
+    ["data/org.bande.velox.policy", "usr/share/polkit-1/actions/", "644"],
 ]
