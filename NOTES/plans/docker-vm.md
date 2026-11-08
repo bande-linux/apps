@@ -537,12 +537,13 @@ fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
 | Feature | State | Why |
 |---|---|---|
 | macOS Velox: dashboard, containers, images, volumes, networks, logs, inspector, Compose, Reclaim Space | done (A1–A4) | |
-| macOS Velox: menu-bar panel, ⌘K palette, crash notifications | not done (A7) | each needs a Settings switch, and Velox has no Settings window yet |
+| Velox Settings, crash notifications | done | a container that exits with a failure code it was not asked to stop with raises a notification; off by default |
+| macOS Velox: menu-bar panel, ⌘K palette | not done (A7) | each gets its own Settings switch, off by default |
 | Built-in monitor | done | per container (inspector) and per machine (Info tab): CPU, memory, disk and network graphs, sampled every 2 s only while shown; network comes from the guest agent |
 | NAT networking with port forwards | done | passt, unprivileged |
-| Bridged, host-only, network editor | left out | bridges need root or a setuid helper (decision 4: Velox never configures the system); passt cannot isolate yet |
+| Bridged, host-only, network editor | design only | `velox-helpers.md`: needs the owner to narrow decision 4 |
 | Shared folders | done | virtiofs; disables snapshots (vhost-user-fs does not migrate) |
-| USB passthrough | not done | `usb-host` needs write access to `/dev/bus/usb`, which seat ACLs give only for some devices; untestable here without taking a device from the owner's session |
+| USB passthrough | design only | `velox-helpers.md`: a polkit-authorised helper hands QEMU the device's file descriptor |
 | Clipboard | done | qemu-vdagent + spice-vdagent, text only |
 | Drag and drop of files | left out | QEMU's vdagent has no file transfer; shared folders cover it |
 | Several guest displays | left out | needs a window per `Console_N`; later |
@@ -553,7 +554,7 @@ fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
 | TPM and Secure Boot | done (Windows preset) | swtpm; not run without swtpm here |
 | Disk image import | done | New Machine → Import a disk image: any format `qemu-img` reads (qcow2, raw, VMDK, VDI, VHDX) is converted to qcow2 and booted |
 | OVF/OVA import and export | left out | the OVF descriptor carries VMware/VirtualBox hardware that does not map to an arm64 QEMU machine; the disk import covers the useful part |
-| Autostart at login | left out | VMs already outlive the app; autostart needs persistent user units rather than transient ones |
+| Autostart at login | done | Settings → Start when you log in: a unit file in the machine's folder, linked into the user's `default.target` only while on; it runs `bande-velox --start-machine` |
 | Guest tools | done for cloud images | `qemu-guest-agent` and `spice-vdagent` through cloud-init |
 | 3D graphics | done, off by default | `virtio-gpu-gl-pci` with virgl on the host render node, dmabuf scanouts; falls back to the plain display when QEMU will not start with it |
 
