@@ -174,6 +174,7 @@ impl Program for Store {
                 actions: &[],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: Some(INFO.id),
             };
             if let Err(error) = notify(session, &request) {
                 tracing::warn!("cannot announce the installation: {error}");
