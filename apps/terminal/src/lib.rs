@@ -18,7 +18,9 @@ pub use bande_terminal_view::{
     wants_scroll_as_arrows,
 };
 pub use banner::{Banner, BannerAction};
-pub use menu::{CLOSE_WINDOW, MenuCommand, TerminalContext, app_menus, tab_menu, terminal_menu};
+pub use menu::{
+    CLOSE_WINDOW, MenuCommand, TerminalContext, app_menus, look_up_text, tab_menu, terminal_menu,
+};
 pub use panes::{Axis, Divider, Layout, Side};
 pub use process::{Report, Reports};
 pub use session::{Notice, Session, ShellCommand};

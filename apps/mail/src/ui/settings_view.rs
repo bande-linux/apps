@@ -189,7 +189,7 @@ fn edited(
 }
 
 fn field(state: &Shared, text: &str, placeholder: &str, set: fn(&mut Editing, &str)) -> TextField {
-    TextField::new(&L10N.tr(placeholder), text, edited(state, None, set))
+    TextField::new(&L10N.tr(placeholder), text, edited(state, None, set)).without_text_checking()
 }
 
 fn security(state: &Shared, chosen: usize, set: fn(&mut Editing, usize)) -> PopUpButton {

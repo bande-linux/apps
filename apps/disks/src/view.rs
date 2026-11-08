@@ -794,7 +794,8 @@ impl DisksView {
         self.fields = Fields::default();
         let title = L10N.tr_args("add-title", [("name", quoted(&disk.name).into())]);
         let message = L10N.tr_args("add-message", [("free", format_size(free).into())]);
-        let size = TextField::new(&L10N.tr("field-size"), &format_size(free), |_| {});
+        let size = TextField::new(&L10N.tr("field-size"), &format_size(free), |_| {})
+            .without_text_checking();
         self.fields.size = Some(size.id());
         let lines = vec![
             FormLine::Row(
@@ -850,7 +851,8 @@ impl DisksView {
                 ("largest", format_size(largest).into()),
             ],
         );
-        let size = TextField::new(&L10N.tr("field-size"), &format_size(volume.size), |_| {});
+        let size = TextField::new(&L10N.tr("field-size"), &format_size(volume.size), |_| {})
+            .without_text_checking();
         self.fields.size = Some(size.id());
         let lines = vec![FormLine::Row(L10N.tr("field-size"), boxed(size))];
         self.ui.present_sheet(

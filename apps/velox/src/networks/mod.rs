@@ -112,6 +112,7 @@ fn create_sheet(ui: &mut Ui, acts: &Acts) {
         TextField::new(&L10N.tr("network-subnet-placeholder"), "", move |text| {
             typed.borrow_mut().1 = text.trim().to_owned();
         })
+        .without_text_checking()
     };
     let acts = Rc::clone(acts);
     ui.present_sheet(
