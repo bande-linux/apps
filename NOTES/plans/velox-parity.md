@@ -10,19 +10,19 @@ below. Screenshots of each view sit next to the macOS ones in each stage's repor
 
 | # | Area | macOS Velox | Bande Velox now | Plan |
 |---|---|---|---|---|
-| 1 | Sidebar | — | Resources, Hosts, Workspaces and Machines sections; the engine pill's Start/Stop waits on row 16 | — |
+| 1 | Sidebar | — | Section headings (the toolkit's sidebar headings), + beside Hosts and Workspaces; the engine pill's Start/Stop waits on row 16 | — |
 | 2 | Overview: engine card | — | Done | — |
 | 3 | Overview: stat cards | — | Done | — |
 | 4 | Overview: Disk Breakdown | — | Done | — |
 | 5 | Overview: live graphs | — | Done; one redraw per stats round, nothing while hidden | — |
 | 6 | Overview: Reclaim Space | — | Done | — |
-| 7 | Containers | Status capsules | Status coloured by state; shortcuts, Copy and Open URL were already there | Capsule badges need a badge cell in the toolkit's table |
+| 7 | Containers | — | Done: status capsules (`Cell::badge`) | — |
 | 8 | Logs window | — | Footer shows Streaming / Stream ended; reattach was already there | — |
 | 9 | Images | — | Pull bar and arch tint were already there; dropping image archives (`.tar`, `.tar.gz`, `.tgz`, `.tar.zst`) loads them | — |
-| 10 | Volumes | Compose grouping, "dangling" and "orphaned" badges, inspector | Grouping and "dangling"; no "orphaned"; no inspector | "orphaned" project badge, inspector |
+| 10 | Volumes | — | Done: "dangling" and "orphaned" badges, inspector (Ctrl+I) | — |
 | 11 | Networks | — | Icons coloured by driver | — |
-| 12 | Hosts | — | Done: remote engines over OpenSSH (`ssh -L` to the remote socket, the user's keys and config, nothing stored but user, host, port and socket); add, remove, copy the SSH command; a connecting/unreachable page with Try Again | Rename and an edit sheet |
-| 13 | Workspaces | — | Done: the user's Docker contexts; switching one runs the equivalent of `docker context use` and every pane follows; New Workspace makes a context for this computer or a host | Rename and delete contexts |
+| 12 | Hosts | — | Done: remote engines over OpenSSH (`ssh -L` to the remote socket, the user's keys and config, nothing stored but user, host, port and socket); add, remove, copy the SSH command; a connecting/unreachable page with Try Again | Rename done; an edit sheet for the address |
+| 13 | Workspaces | — | Done: the user's Docker contexts; switching one runs the equivalent of `docker context use` and every pane follows; New Workspace makes a context for this computer or a host | Rename and delete done |
 | 14 | Command palette (Ctrl+K) | Search containers, images, volumes; inline start/stop/logs/shell/ports | None | Build it, with its Settings switch, off by default |
 | 15 | Menu-bar panel | Engine state, running containers with ports and stop buttons, CPU/RAM line, Dashboard/Settings/Quit | None | A tray item through the desktop's StatusNotifierItem host, with its Settings switch, off by default |
 | 16 | Engine lifecycle | Start/Stop/Resume, Resource Saver | Shows setup steps when no engine | Owner (2026-11-08): use the user's own rights first: no prompt for rootless Podman or for a member of the docker group; start and stop the unit when systemd allows it. Only when that is denied, ask through systemd's polkit prompt |
