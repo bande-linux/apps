@@ -3,7 +3,7 @@
 # package ships a .desktop file and metainfo that validate, its binary's --version names it, and apt
 # can resolve its dependencies here. A language pack (<app>-l10n-<lang>) ships only catalogs under
 # /usr/share/bande/l10n and depends on its app (any version: a translation matches its English text). With --install (as root, in
-# CI's clean debian:forky) it then installs them all with apt and checks every installed path
+# CI's clean debian:<suite>) it then installs them all with apt and checks every installed path
 # exists, `<package> --version` names the app, and the app's own apps/<app>/smoke.sh, if any, passes.
 set -euo pipefail
 cd "$(dirname "$0")/.."

@@ -18,6 +18,9 @@ permissions:
   contents: read
 
 jobs:
+  suites:
+    uses: bande-linux/apt/.github/workflows/suites.yml@main
+
   plan:
     runs-on: ubuntu-24.04
     outputs:
@@ -36,12 +39,13 @@ jobs:
           echo "apps=$apps" >> "$GITHUB_OUTPUT"
 
   app:
-    needs: plan
+    needs: [suites, plan]
     if: needs.plan.outputs.apps != '[]'
-    name: ${{ matrix.app }} (${{ matrix.arch }})
+    name: ${{ matrix.app }} (${{ matrix.suite }}, ${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
+        suite: ${{ fromJSON(needs.suites.outputs.list) }}
         app: ${{ fromJSON(needs.plan.outputs.apps) }}
         arch: [arm64, amd64]
         include:
@@ -51,7 +55,7 @@ jobs:
             runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
     container:
-      image: debian:forky
+      image: debian:${{ matrix.suite }}
     timeout-minutes: 120
     steps:
       - name: Install git
@@ -68,7 +72,7 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.app }}-${{ matrix.arch }}
+          key: ${{ matrix.app }}-${{ matrix.suite }}-${{ matrix.arch }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build and check
         run: ci/build-app.sh "${{ matrix.app }}" out
@@ -76,25 +80,27 @@ jobs:
         run: ci/smoke.sh --install out/*.deb
       - uses: actions/upload-artifact@v7
         with:
-          name: app-${{ matrix.app }}-${{ matrix.arch }}
+          name: app-${{ matrix.app }}-${{ matrix.suite }}-${{ matrix.arch }}
           path: out/*.deb
           if-no-files-found: error
 
   debs:
-    needs: app
+    needs: [suites, app]
+    name: debs (${{ matrix.suite }}, ${{ matrix.arch }})
     runs-on: ubuntu-24.04
     strategy:
       matrix:
+        suite: ${{ fromJSON(needs.suites.outputs.list) }}
         arch: [arm64, amd64]
     steps:
       - uses: actions/download-artifact@v7
         with:
-          pattern: app-*-${{ matrix.arch }}
+          pattern: app-*-${{ matrix.suite }}-${{ matrix.arch }}
           path: debs
           merge-multiple: true
       - run: ls -l debs
       - uses: actions/upload-artifact@v7
         with:
-          name: bande-debs-${{ matrix.arch }}
+          name: bande-debs-${{ matrix.suite }}-${{ matrix.arch }}
           path: debs/*.deb
           if-no-files-found: error

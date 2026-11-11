@@ -1,7 +1,7 @@
 # Bande apps
 
 Apps for the Bande desktop. They install from the same apt archive as the desktop
-(`forky main`), but live here so that changing one app rebuilds only that app, not the desktop,
+(`<suite> main`, now `forky`), but live here so that changing one app rebuilds only that app, not the desktop,
 and each is released on its own. `bande-desktop` recommends the default ones (listed in the
 desktop's `packaging/bande-desktop/default-apps`) unversioned, so any of them can be removed or
 replaced.
@@ -77,17 +77,20 @@ CI runs only for releases and translation-only tags. To release an app, set its 
 git tag mail-v0.1.0 && git push origin mail-v0.1.0
 ```
 
-The tag builds that one app for arm64 and amd64 on GitHub's runners in `debian:forky`:
+The tag builds that one app for arm64 and amd64, once per Debian release the archive supports
+(its `conf/suites`, now `forky`), on GitHub's runners in `debian:<suite>`:
 `ci/setup.sh install`, `ci/build-app.sh` (release profile) and `ci/smoke.sh --install`. A tag whose
-commit isn't on `main`, or whose version doesn't match `Cargo.toml`, fails. A green run uploads
-`bande-debs-arm64` and `bande-debs-amd64`; the archive's scheduled publish picks them up within 30
+commit isn't on `main`, or whose version doesn't match `Cargo.toml`, fails. The package version is
+`X.Y.Z~debNN`, the Debian release suffix of the release it was built on (`ci/debian-release.sh`;
+forky is `~deb14`), so upgrading Debian upgrades the app. A green run uploads
+`bande-debs-<suite>-arm64` and `bande-debs-<suite>-amd64`; the archive's scheduled publish picks them up within 30
 minutes, taking only the package named after the tagged app and never a name the desktop publishes.
 
 Each app's release carries its language packs, `bande-<app>-l10n-<lang>`. A corrected translation
 ships without a release through a translation-only tag `l10n-YYYYMMDD` (`.N` for another the same
 day) on a commit of `main`: `.github/workflows/l10n.yml` runs `ci/build-packs.sh`, which checks the
 translations and builds the packs of every released app, each at its last release before the tag,
-`X.Y.Z+l10nYYYYMMDD`. The archive takes an app's packs only while it serves that release.
+`X.Y.Z~debNN+l10nYYYYMMDD`. The archive takes an app's packs only while it serves that release.
 
 A manual dispatch (`gh workflow run build.yml -f apps=<name>`) builds any app on
 any branch with a `+git` version; it is never published.
@@ -99,7 +102,7 @@ any branch with a `+git` version; it is never published.
 - amd64: the mini is arm64; cross-checking needs every C library for amd64.
 - Installing into a clean root system (`ci/smoke.sh --install`): apt resolving the package's
   dependencies from Debian and the Bande archive, the installed files and the app's own `smoke.sh` need root in a
-  fresh `debian:forky`; locally `apt-get -s` resolves them against this system only.
+  fresh `debian:<suite>`; locally `apt-get -s` resolves them against this system only.
 - The release tag itself: it must be `<app>-vX.Y.Z` on a commit of `main`, matching `Cargo.toml`.
 
 ## Runtime dependencies

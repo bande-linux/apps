@@ -1,6 +1,6 @@
 #!/bin/bash
 # setup.sh install|check <app>... | source: the toolchain, cargo-deb and Debian packages the build of
-# the named apps needs, from one list: install (as root, in CI's debian:forky) installs them; check
+# the named apps needs, from one list: install (as root, in CI's debian:<suite>) installs them; check
 # (the local gate) fails, naming what to install, if any is missing. Apps depend on desktop packages,
 # so apt needs the Bande archive: source (as root) adds it, pinned to the Bande packages, with the
 # archive key in ci/bande-archive-key.asc, unless apt already knows the archive.
@@ -12,7 +12,7 @@ cargo_deb=3.8.0
 channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
 packages=(build-essential pkg-config jq libxkbcommon-dev libfontconfig1 libwayland-client0 libvulkan1
     mesa-vulkan-drivers dbus-daemon fonts-inter fonts-manrope fonts-jetbrains-mono desktop-file-utils
-    appstream python3)
+    appstream python3 distro-info-data)
 for app in "$@"; do
     [ -f "apps/$app/Cargo.toml" ] || { echo "setup: no app apps/$app" >&2; exit 1; }
     mapfile -t -O ${#packages[@]} packages < <(grep -v '^#' "apps/$app/build-depends" 2>/dev/null | xargs -rn1)
@@ -23,8 +23,8 @@ knows_archive() { [[ $(apt-cache policy bande-sound 2>/dev/null) == *"Candidate:
 add_source() {
     knows_archive && return
     install -D -m 644 ci/bande-archive-key.asc /etc/apt/keyrings/bande-archive-key.asc
-    printf 'Types: deb\nURIs: https://%s/apt\nSuites: forky\nComponents: main\nSigned-By: %s\n' \
-        "$archive" /etc/apt/keyrings/bande-archive-key.asc > /etc/apt/sources.list.d/bande-build.sources
+    printf 'Types: deb\nURIs: https://%s/apt\nSuites: %s\nComponents: main\nSigned-By: %s\n' \
+        "$archive" "$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release | tr -d '"')" /etc/apt/keyrings/bande-archive-key.asc > /etc/apt/sources.list.d/bande-build.sources
     printf 'Package: *\nPin: origin %s\nPin-Priority: -1\n\nPackage: bande-* xdg-desktop-portal-bande libpam-bande-secrets\nPin: origin %s\nPin-Priority: 500\n' \
         "$archive" "$archive" > /etc/apt/preferences.d/bande-build.pref
     apt-get update -qq
