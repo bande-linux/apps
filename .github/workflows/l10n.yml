@@ -19,7 +19,7 @@ defaults:
 jobs:
   packs:
     runs-on: ubuntu-24.04
-    container: debian:testing
+    container: debian:forky
     timeout-minutes: 30
     steps:
       - name: Install git

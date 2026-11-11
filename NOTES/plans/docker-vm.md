@@ -34,7 +34,7 @@ App `apps/velox`, package `bande-velox`, id `org.bande.Velox`, name "Velox".
   -accel kvm -cpu host`. Guests are arm64 only.
 - **Installed:** QEMU 11.1, AAVMF (with secboot/ms variants), `virtiofsd`, and
   `qemu-system-modules-opengl`, which ships `ui-dbus.so`.
-- **In testing, not installed:** `podman` 5.8, `docker.io` 28.5, `docker-compose` 2.40,
+- **In forky, not installed:** `podman` 5.8, `docker.io` 28.5, `docker-compose` 2.40,
   `passt`, `swtpm`.
 - **Host pages are 16K.** Some arm64 images built with a 4K-page jemalloc crash in native
   containers.

@@ -1,7 +1,7 @@
 # Bande apps
 
 Apps for the Bande desktop. They install from the same apt archive as the desktop
-(`rolling main`), but live here so that changing one app rebuilds only that app, not the desktop,
+(`forky main`), but live here so that changing one app rebuilds only that app, not the desktop,
 and each is released on its own. `bande-desktop` recommends the default ones (listed in the
 desktop's `packaging/bande-desktop/default-apps`) unversioned, so any of them can be removed or
 replaced.
@@ -77,7 +77,7 @@ CI runs only for releases and translation-only tags. To release an app, set its 
 git tag mail-v0.1.0 && git push origin mail-v0.1.0
 ```
 
-The tag builds that one app for arm64 and amd64 on GitHub's runners in `debian:testing`:
+The tag builds that one app for arm64 and amd64 on GitHub's runners in `debian:forky`:
 `ci/setup.sh install`, `ci/build-app.sh` (release profile) and `ci/smoke.sh --install`. A tag whose
 commit isn't on `main`, or whose version doesn't match `Cargo.toml`, fails. A green run uploads
 `bande-debs-arm64` and `bande-debs-amd64`; the archive's scheduled publish picks them up within 30
@@ -99,7 +99,7 @@ any branch with a `+git` version; it is never published.
 - amd64: the mini is arm64; cross-checking needs every C library for amd64.
 - Installing into a clean root system (`ci/smoke.sh --install`): apt resolving the package's
   dependencies from Debian and the Bande archive, the installed files and the app's own `smoke.sh` need root in a
-  fresh `debian:testing`; locally `apt-get -s` resolves them against this system only.
+  fresh `debian:forky`; locally `apt-get -s` resolves them against this system only.
 - The release tag itself: it must be `<app>-vX.Y.Z` on a commit of `main`, matching `Cargo.toml`.
 
 ## Runtime dependencies

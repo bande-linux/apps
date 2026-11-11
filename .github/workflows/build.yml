@@ -51,7 +51,7 @@ jobs:
             runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
     container:
-      image: debian:testing
+      image: debian:forky
     timeout-minutes: 120
     steps:
       - name: Install git

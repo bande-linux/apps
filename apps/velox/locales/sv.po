@@ -1177,8 +1177,8 @@ msgstr "Eller Podman (rootless, från Debian)"
 msgid "Docker Engine (recommended)"
 msgstr "Docker Engine (rekommenderas)"
 
-msgid "Docker publishes no packages for Debian testing, so these steps use trixie's."
-msgstr "Docker publicerar inga paket för Debian testing, så de här stegen använder paketen från trixie."
+msgid "Docker publishes no packages for this Debian release yet, so these steps use trixie's."
+msgstr "Docker publicerar inga paket för den här Debian-versionen än, så de här stegen använder paketen från trixie."
 
 msgid "Install a container engine to continue"
 msgstr "Installera en containermotor för att fortsätta"

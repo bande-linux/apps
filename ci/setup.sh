@@ -1,6 +1,6 @@
 #!/bin/bash
 # setup.sh install|check <app>... | source: the toolchain, cargo-deb and Debian packages the build of
-# the named apps needs, from one list: install (as root, in CI's debian:testing) installs them; check
+# the named apps needs, from one list: install (as root, in CI's debian:forky) installs them; check
 # (the local gate) fails, naming what to install, if any is missing. Apps depend on desktop packages,
 # so apt needs the Bande archive: source (as root) adds it, pinned to the Bande packages, with the
 # archive key in ci/bande-archive-key.asc, unless apt already knows the archive.
@@ -23,7 +23,7 @@ knows_archive() { [[ $(apt-cache policy bande-sound 2>/dev/null) == *"Candidate:
 add_source() {
     knows_archive && return
     install -D -m 644 ci/bande-archive-key.asc /etc/apt/keyrings/bande-archive-key.asc
-    printf 'Types: deb\nURIs: https://%s/apt\nSuites: rolling\nComponents: main\nSigned-By: %s\n' \
+    printf 'Types: deb\nURIs: https://%s/apt\nSuites: forky\nComponents: main\nSigned-By: %s\n' \
         "$archive" /etc/apt/keyrings/bande-archive-key.asc > /etc/apt/sources.list.d/bande-build.sources
     printf 'Package: *\nPin: origin %s\nPin-Priority: -1\n\nPackage: bande-* xdg-desktop-portal-bande libpam-bande-secrets\nPin: origin %s\nPin-Priority: 500\n' \
         "$archive" "$archive" > /etc/apt/preferences.d/bande-build.pref

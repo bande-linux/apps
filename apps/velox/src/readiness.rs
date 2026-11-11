@@ -27,7 +27,7 @@ const CODENAME: &str = "$(. /etc/os-release && echo \"$VERSION_CODENAME\")";
 const STABLE_SUITE: &str = "trixie";
 const DOCKER_SUITES: [&str; 4] = ["buster", "bullseye", "bookworm", "trixie"];
 const OS_RELEASE: &str = "/etc/os-release";
-static DOCKER_INSTALL_TESTING: LazyLock<String> =
+static DOCKER_INSTALL_FALLBACK: LazyLock<String> =
     LazyLock::new(|| DOCKER_INSTALL.replace(CODENAME, STABLE_SUITE));
 const PODMAN_INSTALL: &str = "\
 sudo apt install podman
@@ -77,7 +77,7 @@ fn podman_alternative() -> Steps {
     }
 }
 
-fn debian_testing() -> bool {
+fn debian_without_docker() -> bool {
     let release = std::fs::read_to_string(OS_RELEASE).unwrap_or_default();
     let field = |name: &str| {
         release.lines().find_map(|line| {
@@ -107,13 +107,13 @@ impl Readiness {
             })
         };
         match self {
-            Self::NotInstalled if debian_testing() => Advice {
+            Self::NotInstalled if debian_without_docker() => Advice {
                 steps: steps(
                     text!("Docker Engine (recommended)"),
-                    DOCKER_INSTALL_TESTING.as_str(),
+                    DOCKER_INSTALL_FALLBACK.as_str(),
                 ),
                 note: Some(tr!(
-                    "Docker publishes no packages for Debian testing, so these steps use trixie's."
+                    "Docker publishes no packages for this Debian release yet, so these steps use trixie's."
                 )),
                 link: Some(INSTALL_LINK),
                 alternative: Some(podman_alternative()),

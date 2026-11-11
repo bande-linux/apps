@@ -15,7 +15,7 @@
 >
 > The two parts are independent. Either one works while the other is gated.
 >
-> **Primary host:** Debian stable (13 "trixie"), amd64. arm64 and Ubuntu LTS come second.
+> **Primary host:** Debian 14 "forky", amd64. arm64 and Ubuntu LTS come second.
 > **How to use this brief:** read all of it once. Then run Phase 0, which turns this brief into
 > the new repo's `CLAUDE.md` and ADRs. After that, work phase by phase and stop at every **exit
 > gate**. Section 11 lists the decisions you must hand back to the human.

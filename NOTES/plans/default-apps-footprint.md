@@ -1,6 +1,6 @@
 # Default apps footprint
 
-What `apt install bande-desktop` 0.1.1 pulls into a clean Debian testing, what to cut, and which
+What `apt install bande-desktop` 0.1.1 pulls into a clean Debian forky, what to cut, and which
 cut apps to build as Bande apps. Measured 2026-11-02 in a rootless minbase chroot (mmdebstrap,
 unshare) with `bande-apt-source` 1.3, by `apt-get install -s`; sizes are Debian's
 `Installed-Size`. A cut is measured by simulating the install without it.
