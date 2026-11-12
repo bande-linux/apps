@@ -12,6 +12,7 @@ const LIBEXEC: &str = "/usr/libexec/bande-browser";
 const RENDERER: &str = "bande-browser-renderer";
 const NETWORK: &str = "bande-browser-network";
 const MEMORY_MAX: u64 = 512 << 20;
+const UNRESPONSIVE_AFTER: std::time::Duration = std::time::Duration::from_secs(15);
 const SYSTEMD: &str = "org.freedesktop.systemd1";
 const SYSTEMD_PATH: &str = "/org/freedesktop/systemd1";
 const MANAGER: &str = "org.freedesktop.systemd1.Manager";
@@ -48,6 +49,7 @@ pub(crate) fn start() -> io::Result<Renderer> {
     let helpers = Helpers {
         renderer: helper(RENDERER)?,
         network,
+        unresponsive_after: UNRESPONSIVE_AFTER,
     };
     let mut bus = None;
     Renderer::new(

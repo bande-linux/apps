@@ -43,3 +43,7 @@ open-in-system-browser = Open in System Browser
 insecure-title = This site can’t be reached securely
 insecure-body = HOST didn’t answer over an encrypted connection. If you continue, what you send and see there can be read and changed by others on the network.
 continue-insecure = Continue Without Encryption
+page-unresponsive = This page isn’t responding
+page-unresponsive-body = You can wait for it to respond or stop the page.
+wait = Wait
+stop-page = Stop Page

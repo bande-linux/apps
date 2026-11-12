@@ -44,3 +44,6 @@ assets = [
     ["data/org.bande.Browser.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Browser.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
 ]
+
+[dev-dependencies]
+image.workspace = true
